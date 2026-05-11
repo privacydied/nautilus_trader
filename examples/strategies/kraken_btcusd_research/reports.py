@@ -112,92 +112,154 @@ class BacktestReportGenerator:
         print(f"Equity curve saved to {output_path}")
 
 
+def parse_pnl(val) -> float:
+    """Parse PnL value from Nautilus position report. Returns 0.0 if unavailable."""
+    if val is None or val == "":
+        return 0.0
+    s = str(val).strip().replace(",", "")
+    # Handle formats like "-20.41 USD", "140.71 USD", or "['24.01 USD']"
+    # Strip python list repr if present
+    if s.startswith("['") and s.endswith("']"):
+        s = s[2:-2].strip()
+    elif s.startswith("[") and s.endswith("]"):
+        s = s[1:-1].strip()
+    # Remove " USD" suffix
+    s = s.replace(" USD", "").replace("USD", "").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+def parse_commission(val) -> float:
+    """Parse commission/fee value from Nautilus position report."""
+    if val is None or val == "":
+        return 0.0
+    s = str(val).strip().replace(",", "")
+    # Handle formats like "['24.01 USD']", "[24.01 USD]"
+    if s.startswith("['") and s.endswith("']"):
+        s = s[2:-2].strip()
+    elif s.startswith("[") and s.endswith("]"):
+        s = s[1:-1].strip()
+    s = s.replace(" USD", "").replace("USD", "").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
 def generate_reports(
     backtest_result: "BacktestResult",
     output_dir: Path,
-    trades: Optional[List[Dict]] = None,
-    equity_curve: Optional[List[Dict]] = None,
+    engine=None,  # Pass engine for fills/positions reports when available
+    *,
+    trades=None,  # legacy
+    equity_curve=None,  # legacy
 ) -> Dict:
-    """Generate reports directly from a BacktestResult object.
-
-    Args:
-        backtest_result: BacktestResult instance (from engine.run_result).
-        output_dir: Output directory for generated files.
-        trades: Optional list of trade dictionaries.
-        equity_curve: Optional equity curve data.
-
-    Returns:
-        Summary dictionary.
-    """
+    """Generate reports from a BacktestResult, using engine trade/position data when available."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    stats_pnls = backtest_result.stats_pnls.get("stats", {})
-    stats_returns = backtest_result.stats_returns
+    # --- Extract stats from Nautilus reports (the real data) ---
+    fills_df = None
+    positions_df = None
+    if engine is not None:
+        try:
+            fills_df = engine.trader.generate_order_fills_report()
+        except Exception:
+            pass
+        try:
+            positions_df = engine.trader.generate_positions_report()
+        except Exception:
+            pass
 
-    total_pnl = stats_pnls.get("total_pnl", 0.0)
-    total_fees = stats_pnls.get("total_fees", 0.0)
     total_trades = backtest_result.total_positions
-    winning_trades = stats_pnls.get("winning_trades", 0)
-    losing_trades = stats_pnls.get("losing_trades", 0)
-    win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0.0
-    avg_win = stats_pnls.get("average_win", 0.0)
-    avg_loss = stats_pnls.get("average_loss", 0.0)
-    sharpe_ratio = stats_returns.get("sharpe_ratio", 0.0)
-    final_equity = backtest_result.stats_returns.get("final_equity", STARTING_BALANCE_USD)
+    total_orders = backtest_result.total_orders
+
+    # Calculate PnL metrics from position report
+    total_pnl = 0.0
+    total_fees = 0.0
+    win_count = 0
+    loss_count = 0
+    win_total = 0.0
+    loss_total = 0.0
+
+    if positions_df is not None and len(positions_df) > 0 and "realized_pnl" in positions_df.columns:
+        for _, row in positions_df.iterrows():
+            pnl = row.get("realized_pnl", None)
+            pnl_val = parse_pnl(pnl)
+            total_pnl += pnl_val
+            if pnl_val > 0:
+                win_count += 1
+                win_total += pnl_val
+            elif pnl_val < 0:
+                loss_count += 1
+                loss_total += pnl_val
+
+            # Commission
+            comm = row.get("commissions", None)
+            comm_val = parse_commission(comm)
+            total_fees += comm_val
+
+    avg_win = win_total / win_count if win_count > 0 else 0.0
+    avg_loss = loss_total / loss_count if loss_count > 0 else 0.0
+    win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0.0
+
+    stats_returns = backtest_result.stats_returns
+    sharpe = stats_returns.get("sharpe_ratio", 0.0) if stats_returns else 0.0
+    final_eq = stats_returns.get("final_equity", STARTING_BALANCE_USD) if stats_returns else STARTING_BALANCE_USD
 
     summary = {
         "starting_balance": STARTING_BALANCE_USD,
         "total_trades": total_trades,
-        "winning_trades": winning_trades,
-        "losing_trades": losing_trades,
+        "winning_trades": win_count,
+        "losing_trades": loss_count,
         "win_rate_percent": round(win_rate, 2),
         "average_win": round(avg_win, 2),
         "average_loss": round(avg_loss, 2),
         "total_pnl": round(total_pnl, 2),
         "total_fees": round(total_fees, 2),
-        "sharpe_ratio": round(sharpe_ratio, 2),
-        "final_equity": round(final_equity, 2),
+        "sharpe_ratio": round(sharpe, 2),
+        "final_equity": round(final_eq, 2),
         "backtest_start": backtest_result.backtest_start,
         "backtest_end": backtest_result.backtest_end,
-        "instrument_id": str(backtest_result.trader_id).split("-")[-1] if hasattr(backtest_result, 'trader_id') else "BTC/USD.KRAKEN",
+        "instrument_id": str(backtest_result.trader_id).split("-")[0] if hasattr(backtest_result, 'trader_id') else "BTC/USD.KRAKEN",
+        "total_orders": total_orders,
+        "average_holding_time": "",
+        "largest_losing_streak": "",
     }
 
-    # Save trades CSV
-    if trades:
-        with open(output_dir / "trades.csv", "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=trades[0].keys())
-            writer.writeheader()
-            writer.writerows(trades)
-    else:
-        # Write a minimal CSV with one row if trades exist in result
-        if total_trades > 0:
-            with open(output_dir / "trades.csv", "w", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=["trade_num", "side", "entry_price", "exit_price", "pnl"])
-                writer.writeheader()
-                writer.writerow({
-                    "trade_num": 1,
-                    "side": "BUY",
-                    "entry_price": stats_pnls.get("average_entry_price", 0.0),
-                    "exit_price": stats_pnls.get("average_exit_price", 0.0),
-                    "pnl": stats_pnls.get("average_pnl", 0.0),
-                })
+    # Write positions CSV
+    if positions_df is not None and len(positions_df) > 0:
+        positions_df.to_csv(output_dir / "positions.csv")
+        print(f"Position report written: {output_dir / 'positions.csv'} ({len(positions_df)} rows)")
+
+    # Write fills CSV
+    if fills_df is not None and len(fills_df) > 0:
+        fills_df.to_csv(output_dir / "fills.csv")
+        print(f"Fills report written: {output_dir / 'fills.csv'} ({len(fills_df)} rows)")
+
+    # Legacy trades.csv
+    with open(output_dir / "trades.csv", "w", newline="") as f:
+        if positions_df is not None and len(positions_df) > 0:
+            f.write("trade_num,side,entry_price,exit_price,realized_pnl,commissions\n")
+            for i, (_, row) in enumerate(positions_df.iterrows(), 1):
+                pnl = row.get("realized_pnl", "")
+                comm = row.get("commissions", "")
+                avg_open = row.get("avg_px_open", "")
+                avg_close = row.get("avg_px_close", "")
+                side = row.get("side", "")
+                f.write(f"{i},{side},{avg_open},{avg_close},{pnl},{comm}\n")
         else:
-            with open(output_dir / "trades.csv", "w", newline="") as f:
-                f.write("trade_num,side,entry_price,exit_price,pnl\n")
+            f.write("trade_num,side,entry_price,exit_price,realized_pnl,commissions\n")
 
-    # Save equity curve
-    if equity_curve:
-        with open(output_dir / "equity_curve.csv", "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=equity_curve[0].keys())
-            writer.writeheader()
-            writer.writerows(equity_curve)
-    else:
-        with open(output_dir / "equity_curve.csv", "w", newline="") as f:
-            f.write("date,equity\n")
-            f.write(f"{datetime.now()},{final_equity}\n")
+    # Legacy equity_curve.csv
+    with open(output_dir / "equity_curve.csv", "w", newline="") as f:
+        f.write("date,equity\n")
+        if final_eq is not None:
+            from datetime import datetime
+            f.write(f"{datetime.now()},{final_eq}\n")
 
-    # Save summary JSON
+    # Write summary JSON
     with open(output_dir / "backtest_summary.json", "w") as f:
         json.dump(summary, f, indent=2, default=str)
 

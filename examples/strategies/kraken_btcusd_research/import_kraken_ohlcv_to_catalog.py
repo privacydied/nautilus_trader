@@ -1,123 +1,101 @@
 #!/usr/bin/env python3
 """
 Import historical OHLCV data from CSV to Nautilus ParquetDataCatalog.
+
+Usage:
+    python import_kraken_ohlcv_to_catalog.py \
+      --csv data/kraken/BTCUSD_5m_2024h1.csv \
+      --catalog data/catalog/kraken_btcusd_2024h1
 """
 
-import csv
+import argparse
 import os
+import sys
+from decimal import Decimal
 from pathlib import Path
-from typing import List
 
-from pyarrow import csv as pa_csv
-from pyarrow import dataset as ds
-from pyarrow import ipc
-from pyarrow import Table
-from pyarrow import compute as pc
+# Import config using direct path manipulation
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from examples.strategies.kraken_btcusd_research.config import (
+    INSTRUMENT_ID,
+    TIMEFRAME_BARS,
+    MAKER_FEE,
+    TAKER_FEE,
+)
+
+import pandas as pd
+from nautilus_trader.model.currencies import BTC, USD
+from nautilus_trader.model.data import Bar, BarType, BarSpecification, BarAggregation
+from nautilus_trader.model.enums import PriceType
+from nautilus_trader.model.identifiers import InstrumentId, Symbol
+from nautilus_trader.model.instruments import CurrencyPair
+from nautilus_trader.model.objects import Price, Quantity
+from nautilus_trader.persistence.catalog.parquet import ParquetDataCatalog
 
 
-def csv_to_bars(csv_path: Path) -> List:
-    """Convert CSV file to Nautilus Bar objects."""
-    import pandas as pd
-    from nautilus_trader.model.identifiers import InstrumentId
-    from nautilus_trader.model.data import Bar, BarType, BarSpecification, BarAggregation
-    from nautilus_trader.model.enums import PriceType
-    from nautilus_trader.model.objects import Price, Quantity
-    from nautilus_trader.model.functions import currency_type_from_str
-    from examples.strategies.kraken_btcusd_research.config import (
-        INSTRUMENT_ID,
-        TIMEFRAME_BARS,
-        FAST_EMA_PERIODS,
-        SLOW_EMA_PERIODS,
-        DONCHIAN_WINDOW,
-        ATR_PERIOD,
-        RISK_PER_TRADE,
-        MAX_NOTIONAL_EXPOSURE_PCT,
-        MIN_POSITION_SIZE_BTC,
-        COOLDOWN_BARS,
-        MAKER_FEE,
-        TAKER_FEE,
-    )
-
-    # Read CSV using pandas
-    df = pd.read_csv(csv_path)
-    
-    # Parse timestamps (CSV timestamps are strings)
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    
-    bars = []
+def csv_to_bars(csv_path: Path) -> list[Bar]:
+    iid = InstrumentId.from_str(INSTRUMENT_ID)
     spec = BarSpecification(TIMEFRAME_BARS, BarAggregation.MINUTE, PriceType.LAST)
-    bar_type = BarType(InstrumentId.from_str(INSTRUMENT_ID), spec)
+    bar_type = BarType(iid, spec)
 
-    # Determine price precision from the data (default 2)
-    price_precision = 2
-    size_precision = 8
+    df = pd.read_csv(csv_path)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
 
+    bars: list[Bar] = []
     for _, row in df.iterrows():
         ts_event = int(row["timestamp"].timestamp() * 1e9)
-        ts_init = ts_event
-        open_price = Price(float(row["open"]), price_precision)
-        high_price = Price(float(row["high"]), price_precision)
-        low_price = Price(float(row["low"]), price_precision)
-        close_price = Price(float(row["close"]), price_precision)
-        volume_qty = Quantity(float(row["volume"]), size_precision)
-        bar = Bar(
-            bar_type=bar_type,
-            open=open_price,
-            high=high_price,
-            low=low_price,
-            close=close_price,
-            volume=volume_qty,
-            ts_event=ts_event,
-            ts_init=ts_init,
+        bars.append(
+            Bar(
+                bar_type=bar_type,
+                open=Price(float(row["open"]), 2),
+                high=Price(float(row["high"]), 2),
+                low=Price(float(row["low"]), 2),
+                close=Price(float(row["close"]), 2),
+                volume=Quantity(float(row["volume"]), 8),
+                ts_event=ts_event,
+                ts_init=ts_event,
+            )
         )
-        bars.append(bar)
-    
     return bars
 
 
-def write_to_catalog(csv_path: Path, catalog_path: Path) -> None:
-    """Import CSV data to ParquetDataCatalog."""
-    # Read CSV and convert to Bar objects
-    bars = csv_to_bars(csv_path)
-    
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", type=str, required=True, help="Path to CSV file")
+    parser.add_argument("--catalog", type=str, required=True, help="Path to catalog directory")
+    args = parser.parse_args()
+
+    bars = csv_to_bars(Path(args.csv))
     if not bars:
         raise ValueError("No bars generated from CSV")
-    
-    # Create catalog
-    catalog = ParquetDataCatalog(path=catalog_path)
-    
-    # Create instrument (simplified - in practice you'd load from config)
-    from nautilus_trader.model.identifiers import InstrumentId
-    from nautilus_trader.model.instruments import CurrencyPair
-    from nautilus_trader.model.objects import Currency
-    
+
+    iid = InstrumentId.from_str(INSTRUMENT_ID)
     instrument = CurrencyPair(
-        instrument_id=InstrumentId.from_str(INSTRUMENT_ID),
-        raw_symbol="BTC/USD",
-        asset_class=Currency,
-        quote_currency=Currency(
-            code="USD",
-            precision=2,
-            iso4217=840,
-            name="USD",
-            currency_type=currency_type_from_str("fiat"),
-        ),
-        is_inverse=False,
+        instrument_id=iid,
+        raw_symbol=Symbol("BTCUSD"),
+        base_currency=BTC,
+        quote_currency=USD,
         price_precision=2,
         size_precision=8,
-        price_increment=0.01,
-        size_increment=0.00000001,
-        multiplier=1.0,
+        price_increment=Price(0.01, 2),
+        size_increment=Quantity(0.00000001, 8),
+        multiplier=Quantity(1, 0),
         maker_fee=Decimal("0.0025"),
-        taker_fee=Decimal("0.0040"),
-        margin_init=0.0,
-        margin_maint=0.0,
+        taker_fee=Decimal("0.004"),
+        margin_init=Decimal(0),
+        margin_maint=Decimal(0),
         ts_event=0,
         ts_init=0,
     )
-    
-    # Write to catalog
+
+    catalog = ParquetDataCatalog(path=str(args.catalog))
     catalog.write_data([instrument])
     catalog.write_data(bars)
-    
-    print(f"✅ Imported {len(bars)} bars to catalog at {catalog_path}")
+    print(f"Imported {len(bars)} bars to catalog at {args.catalog}")
+
+
+if __name__ == "__main__":
+    main()

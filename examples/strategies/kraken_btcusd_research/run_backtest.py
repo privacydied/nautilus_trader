@@ -3,186 +3,196 @@
 Run backtest for Kraken BTC/USD strategy.
 
 Usage:
-    python run_backtest.py --catalog data/catalog/kraken_btcusd --start 2024-01-01 --end 2024-06-01 --starting-balance 10000
+    python run_backtest.py \
+      --catalog data/catalog/kraken_btcusd \
+      --start 2024-01-01 \
+      --end 2024-06-01 \
+      --starting-balance 10000 \
+      --reports-dir reports/kraken_2024h1
 """
 
 import argparse
 import json
-import logging
-from datetime import datetime
+import sys
+from decimal import Decimal
 from pathlib import Path
-from typing import Dict, Any
+# Import config using direct path manipulation
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from decimal import Decimal
 
 from nautilus_trader.backtest.engine import BacktestEngine, BacktestEngineConfig
 from nautilus_trader.config import LoggingConfig
-from nautilus_trader.core.nautilus_pyo3 import BarType
-from nautilus_trader.model.identifiers import InstrumentId
+from nautilus_trader.model.data import BarType, BarSpecification, BarAggregation
+from nautilus_trader.model.enums import PriceType, OmsType, AccountType
+from nautilus_trader.model.identifiers import InstrumentId, Symbol
 from nautilus_trader.model.instruments import CurrencyPair
-from nautilus_trader.model.objects import Currency
+from nautilus_trader.model.objects import Currency, Money, Price, Quantity
 from nautilus_trader.model.functions import currency_type_from_str
+from nautilus_trader.model.currencies import BTC, USD
 from nautilus_trader.persistence.catalog.parquet import ParquetDataCatalog
 
-from .config import (
+from examples.strategies.kraken_btcusd_research.config import (
     INSTRUMENT_ID,
     STARTING_BALANCE_USD,
+    TIMEFRAME_BARS,
     MAKER_FEE,
     TAKER_FEE,
 )
-from .strategy import create_strategy
+from examples.strategies.kraken_btcusd_research.strategy import (
+    KrakenBTCUSDResearchStrategy,
+    KrakenBTCUSDResearchConfig,
+)
+from examples.strategies.kraken_btcusd_research.reports import generate_reports
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run backtest for Kraken BTC/USD strategy")
-    parser.add_argument(
-        "--catalog",
-        type=str,
-        required=True,
-        help="Path to ParquetDataCatalog",
-    )
-    parser.add_argument(
-        "--start",
-        type=str,
-        required=True,
-        help="Start date (YYYY-MM-DD)",
-    )
-    parser.add_argument(
-        "--end",
-        type=str,
-        required=True,
-        help="End date (YYYY-MM-DD)",
-    )
-    parser.add_argument(
-        "--starting-balance",
-        type=float,
-        default=STARTING_BALANCE_USD,
-        help="Starting balance in USD",
-    )
+    parser.add_argument("--catalog", type=str, required=True, help="Path to ParquetDataCatalog")
+    parser.add_argument("--start", type=str, required=True, help="Start date (YYYY-MM-DD)")
+    parser.add_argument("--end", type=str, required=True, help="End date (YYYY-MM-DD)")
+    parser.add_argument("--starting-balance", type=float, default=STARTING_BALANCE_USD, help="Starting balance in USD")
+    parser.add_argument("--reports-dir", type=str, default=None, help="Directory for report output (default: None)")
     return parser.parse_args()
 
 
-def create_kraken_instrument() -> CurrencyPair:
-    """Create Kraken BTC/USD instrument."""
-    instrument_id = InstrumentId.from_str(INSTRUMENT_ID)
+def _create_instrument() -> CurrencyPair:
+    """Create Kraken BTC/USD spot instrument."""
+    iid = InstrumentId.from_str(INSTRUMENT_ID)
     return CurrencyPair(
-        instrument_id=instrument_id,
-        raw_symbol="BTC/USD",
-        asset_class=Currency,
-        quote_currency=Currency(
-            code="USD",
-            precision=2,
-            iso4217=840,
-            name="USD",
-            currency_type=currency_type_from_str("fiat"),
-        ),
-        is_inverse=False,
+        instrument_id=iid,
+        raw_symbol=Symbol("BTCUSD"),
+        base_currency=BTC,
+        quote_currency=USD,
         price_precision=2,
         size_precision=8,
-        price_increment=0.01,
-        size_increment=0.00000001,
-        multiplier=1.0,
-        maker_fee=MAKER_FEE,
-        taker_fee=TAKER_FEE,
-        margin_init=0.0,
-        margin_maint=0.0,
+        price_increment=Price(0.01, 2),
+        size_increment=Quantity(0.00000001, 8),
+        multiplier=Quantity(1, 0),
+        maker_fee=Decimal("0.0025"),
+        taker_fee=Decimal("0.004"),
+        margin_init=Decimal(0),
+        margin_maint=Decimal(0),
         ts_event=0,
         ts_init=0,
     )
 
 
-def generate_reports(backtest_result_path: Path, output_dir: Path) -> None:
-    """Generate reports from backtest results.
-    
-    Args:
-        backtest_result_path: Path to backtest results
-        output_dir: Output directory for reports
-    """
-    from .reports import BacktestReportGenerator
-    
-    generator = BacktestReportGenerator(backtest_result_path, output_dir)
-    summary = generator.generate_summary()
-    
-    print(f"Reports generated in {output_dir}")
+def _create_strategy(iid: InstrumentId, bar_type: BarType) -> KrakenBTCUSDResearchStrategy:
+    """Create strategy with proper config for the given instrument/bar."""
+    cfg = KrakenBTCUSDResearchConfig(
+        instrument_id=iid,
+        bar_type=bar_type,
+        trade_size=Quantity(0.001, 8),
+        atr_period=20,
+        fast_ema_period=20,
+        slow_ema_period=100,
+        donchian_window=55,
+        initial_stop_atr_multiplier=2.0,
+        trailing_stop_atr_multiplier=1.5,
+        risk_percent=0.0025,
+        max_notional_pct=0.30,
+        cooldown_bars=12,
+        maker_fee=MAKER_FEE,
+        taker_fee=TAKER_FEE,
+    )
+    return KrakenBTCUSDResearchStrategy(config=cfg)
 
 
 def main():
     args = parse_args()
-    
+
     try:
-        # Create data catalog
         catalog = ParquetDataCatalog(path=args.catalog)
-        
-        # Get instrument
-        instruments = catalog.instruments()
-        if not instruments:
-            print("No instruments found in catalog")
-            return 1
-        instrument = instruments[0]
-        print(f"Using instrument: {instrument}")
-        
-        # Get bars for the instrument
-        bar_type = BarType(InstrumentId.from_str(INSTRUMENT_ID), 5)  # 5-minute bars
-        bars = catalog.bars(bar_types=[str(bar_type)])
-        print(f"Loaded {len(bars)} bars from catalog")
-        
+
+        # Get bars first to determine bar_type from catalog data
+        bars = catalog.bars(instrument_ids=[INSTRUMENT_ID])
         if not bars:
             print("No bars found in catalog")
             return 1
-        
-        # Create backtest engine
-        engine_config = BacktestEngineConfig(
-            trader_id="KRAKEN-BTC-USD-BACKTEST",
-            logging=LoggingConfig(log_level="INFO"),
-        )
-        engine = BacktestEngine(config=engine_config)
-        
-        # Configure trading venue (CASH account for spot)
-        engine.add_venue(
-            venue=instrument.id.venue,
-            oms_type="NETTING",
-            account_type="CASH",
-            starting_balances=[args.starting_balance],
-            base_currency=Currency(code="USD", precision=2, iso4217=840, name="USD", currency_type=currency_type_from_str("fiat")),
-            default_leverage=1,  # No leverage
-        )
-        
-        # Add instrument and data
-        engine.add_instrument(instrument)
-        engine.add_data(bars)
-        
-        # Create and add strategy
-        strategy = create_strategy()
-        engine.add_strategy(strategy)
-        
-        # Execute backtest
-        print("Starting backtest...")
-        engine.run(
-            start=args.start,
-            end=args.end,
+        print(f"Loaded {len(bars)} bars from catalog")
+
+        # Derive bar_type from first bar
+        bar_type = bars[0].bar_type
+        iid = bar_type.instrument_id
+
+        # Create engine
+        engine = BacktestEngine(
+            config=BacktestEngineConfig(
+                trader_id="KRAKEN-BACKTEST",
+                logging=LoggingConfig(log_level="INFO", bypass_logging=False),
+            )
         )
 
-        # Save the backtest result to a pickle file for report generation
-        import pickle
-        result_file = backtest_result_path / "result.pkl"
-        with open(result_file, "wb") as f:
-            pickle.dump(engine.run_result, f)
-        print(f"Backtest result saved to {result_file}")
-        
-        # Get results path
-        backtest_result_path = Path(engine.run_result.workdir) / "backtest_result"
-        print(f"Backtest completed. Results in: {backtest_result_path}")
-        
-        # Generate reports
-        reports_dir = Path("reports")
-        generate_reports(backtest_result_path, reports_dir)
-        
-        # Clean up
+        # Add venue
+        iid_obj = InstrumentId.from_str(INSTRUMENT_ID) if str(bar_type.instrument_id) != INSTRUMENT_ID else bar_type.instrument_id
+        engine.add_venue(
+            venue=iid_obj.venue,
+            oms_type=OmsType.NETTING,
+            account_type=AccountType.CASH,
+            starting_balances=[Money(args.starting_balance, USD)],
+            base_currency=None,
+        )
+
+        # Add instrument
+        instrument = _create_instrument()
+        engine.add_instrument(instrument)
+
+        # Add data
+        engine.add_data(bars)
+
+        # Add strategy
+        strategy = _create_strategy(bar_type.instrument_id, bar_type)
+        engine.add_strategy(strategy)
+
+        # Run
+        print(f"Starting backtest {args.start} -> {args.end}...")
+        engine.run(start=args.start, end=args.end)
+
+        result = engine.get_result()
+
+        # Print quick stats
+        stats_pnls = result.stats_pnls.get("stats", {}) if result.stats_pnls else {}
+        stats_returns = result.stats_returns if result.stats_returns else {}
+        print(f"\n=== Backtest Results ===")
+        print(f"Period:          {result.backtest_start} -> {result.backtest_end}")
+        print(f"Total positions: {result.total_positions}")
+        print(f"Total orders:    {result.total_orders}")
+        print(f"Total events:    {result.total_events}")
+        print(f"Total PnL:       {stats_pnls.get('total_pnl', 'N/A')}")
+        print(f"Total fees:      {stats_pnls.get('total_fees', 'N/A')}")
+        print(f"Sharpe ratio:    {stats_returns.get('sharpe_ratio', 'N/A')}")
+        final_eq = stats_returns.get('final_equity', 'N/A')
+        print(f"Final equity:    {final_eq}")
+        max_dd = stats_returns.get('max_drawdown', 'N/A')
+        print(f"Max drawdown:    {max_dd}")
+
+        # Order/fills report
+        fills_df = engine.trader.generate_order_fills_report()
+        if len(fills_df) > 0:
+            print(f"\n=== Fill Report ({len(fills_df)} fills) ===")
+            print(fills_df.to_string())
+
+        pos_df = engine.trader.generate_positions_report()
+        if len(pos_df) > 0:
+            print(f"\n=== Positions Report ({len(pos_df)} positions) ===")
+            print(pos_df.to_string())
+
+        # Generate reports if requested
+        if args.reports_dir:
+            reports_dir = Path(args.reports_dir)
+            summary = generate_reports(result, reports_dir, engine=engine)
+            print(f"\n=== Summary JSON ===")
+            print(json.dumps(summary, indent=2, default=str))
+
         engine.dispose()
-        
-        print("Backtest finished successfully")
+        print("\nBacktest finished.")
         return 0
-        
+
     except Exception as e:
-        print(f"Backtest failed: {str(e)}")
+        print(f"Backtest failed: {e}")
         import traceback
         traceback.print_exc()
         return 1

@@ -387,7 +387,7 @@ def _calculate_position_size(
     # Round to 8 decimal places
     qty_int = int(position_size_btc * 100_000_000)
     position_size_btc = Decimal(qty_int) / Decimal("100000000")
-    return Quantity.from_str(str(position_size_btc))
+    return Quantity(position_size_btc, 8)
 
 
 def create_strategy() -> KrakenBTCUSDResearchStrategy:
