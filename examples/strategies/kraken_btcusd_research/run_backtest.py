@@ -1,27 +1,16 @@
 #!/usr/bin/env python3
-"""
-Run backtest for Kraken BTC/USD strategy.
-
-Usage:
-    python run_backtest.py \
-      --catalog data/catalog/kraken_btcusd \
-      --start 2024-01-01 \
-      --end 2024-06-01 \
-      --starting-balance 10000 \
-      --reports-dir reports/kraken_2024h1
-"""
+"""Run backtest for Kraken BTC/USD strategy (V1 or V2)."""
 
 import argparse
 import json
 import sys
 from decimal import Decimal
 from pathlib import Path
-# Import config using direct path manipulation
+
+# Ensure repo root is on path
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
-
-from decimal import Decimal
 
 from nautilus_trader.backtest.engine import BacktestEngine, BacktestEngineConfig
 from nautilus_trader.config import LoggingConfig
@@ -53,52 +42,63 @@ def parse_args():
     parser.add_argument("--catalog", type=str, required=True, help="Path to ParquetDataCatalog")
     parser.add_argument("--start", type=str, required=True, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end", type=str, required=True, help="End date (YYYY-MM-DD)")
-    parser.add_argument("--starting-balance", type=float, default=STARTING_BALANCE_USD, help="Starting balance in USD")
-    parser.add_argument("--reports-dir", type=str, default=None, help="Directory for report output (default: None)")
+    parser.add_argument("--starting-balance", type=float, default=STARTING_BALANCE_USD)
+    parser.add_argument("--reports-dir", type=str, default=None)
+    parser.add_argument("--v2", action="store_true", help="Use V2 maker-aware strategy")
     return parser.parse_args()
 
 
 def _create_instrument() -> CurrencyPair:
-    """Create Kraken BTC/USD spot instrument."""
     iid = InstrumentId.from_str(INSTRUMENT_ID)
     return CurrencyPair(
-        instrument_id=iid,
-        raw_symbol=Symbol("BTCUSD"),
-        base_currency=BTC,
-        quote_currency=USD,
-        price_precision=2,
-        size_precision=8,
-        price_increment=Price(0.01, 2),
-        size_increment=Quantity(0.00000001, 8),
+        instrument_id=iid, raw_symbol=Symbol("BTCUSD"),
+        base_currency=BTC, quote_currency=USD,
+        price_precision=2, size_precision=8,
+        price_increment=Price(0.01, 2), size_increment=Quantity(0.00000001, 8),
         multiplier=Quantity(1, 0),
-        maker_fee=Decimal("0.0025"),
-        taker_fee=Decimal("0.004"),
-        margin_init=Decimal(0),
-        margin_maint=Decimal(0),
-        ts_event=0,
-        ts_init=0,
+        maker_fee=Decimal("0.0025"), taker_fee=Decimal("0.004"),
+        margin_init=Decimal(0), margin_maint=Decimal(0),
+        ts_event=0, ts_init=0,
     )
 
 
-def _create_strategy(iid: InstrumentId, bar_type: BarType) -> KrakenBTCUSDResearchStrategy:
-    """Create strategy with proper config for the given instrument/bar."""
+def _get_strategy_v1(iid: InstrumentId, bar_type: BarType):
     cfg = KrakenBTCUSDResearchConfig(
-        instrument_id=iid,
-        bar_type=bar_type,
-        trade_size=Quantity(0.001, 8),
-        atr_period=20,
-        fast_ema_period=20,
-        slow_ema_period=100,
-        donchian_window=55,
-        initial_stop_atr_multiplier=2.0,
-        trailing_stop_atr_multiplier=1.5,
-        risk_percent=0.0025,
-        max_notional_pct=0.30,
-        cooldown_bars=12,
-        maker_fee=MAKER_FEE,
-        taker_fee=TAKER_FEE,
+        instrument_id=iid, bar_type=bar_type, trade_size=Quantity(Decimal("0.001"), 8),
+        atr_period=20, fast_ema_period=20, slow_ema_period=100, donchian_window=55,
+        initial_stop_atr_multiplier=2.0, trailing_stop_atr_multiplier=1.5,
+        risk_percent=0.0025, max_notional_pct=0.30, cooldown_bars=12,
+        maker_fee=MAKER_FEE, taker_fee=TAKER_FEE,
     )
     return KrakenBTCUSDResearchStrategy(config=cfg)
+
+
+def _get_strategy_v2(iid: InstrumentId, bar_type: BarType):
+    from examples.strategies.kraken_btcusd_research.strategy_v2 import (
+        KrakenBTCUSDV2Strategy, KrakenBTCUSDV2Config,
+    )
+    from examples.strategies.kraken_btcusd_research.config_v2 import (
+        FAST_EMA_PERIODS, SLOW_EMA_PERIODS, DONCHIAN_WINDOW, ATR_PERIOD,
+        VOLUME_MEDIAN_PERIOD, MAKER_ENTRY_EXPIRY_BARS, SLIPPAGE_BUFFER_PCT,
+        EXPECTED_MOVE_MULTIPLIER, INITIAL_STOP_ATR_MULTIPLIER,
+        TRAILING_STOP_ATR_MULTIPLIER, MAX_NOTIONAL_EXPOSURE_PCT,
+        COOLDOWN_BARS, MIN_POSITION_SIZE_BTC,
+    )
+    cfg = KrakenBTCUSDV2Config(
+        instrument_id=iid, bar_type=bar_type,
+        trade_size=Quantity(Decimal(str(MIN_POSITION_SIZE_BTC)), 8),
+        atr_period=ATR_PERIOD, fast_ema_period=FAST_EMA_PERIODS,
+        slow_ema_period=SLOW_EMA_PERIODS, donchian_window=DONCHIAN_WINDOW,
+        volume_median_period=VOLUME_MEDIAN_PERIOD,
+        initial_stop_atr_multiplier=INITIAL_STOP_ATR_MULTIPLIER,
+        trailing_stop_atr_multiplier=TRAILING_STOP_ATR_MULTIPLIER,
+        risk_percent=0.0025, max_notional_pct=MAX_NOTIONAL_EXPOSURE_PCT,
+        cooldown_bars=COOLDOWN_BARS, maker_entry_expiry_bars=MAKER_ENTRY_EXPIRY_BARS,
+        maker_fee=MAKER_FEE, taker_fee=TAKER_FEE,
+        slippage_buffer_pct=SLIPPAGE_BUFFER_PCT,
+        expected_move_multiplier=EXPECTED_MOVE_MULTIPLIER,
+    )
+    return KrakenBTCUSDV2Strategy(config=cfg)
 
 
 def main():
@@ -106,57 +106,45 @@ def main():
 
     try:
         catalog = ParquetDataCatalog(path=args.catalog)
-
-        # Get bars first to determine bar_type from catalog data
         bars = catalog.bars(instrument_ids=[INSTRUMENT_ID])
         if not bars:
             print("No bars found in catalog")
             return 1
         print(f"Loaded {len(bars)} bars from catalog")
 
-        # Derive bar_type from first bar
         bar_type = bars[0].bar_type
         iid = bar_type.instrument_id
 
-        # Create engine
+        strat = _get_strategy_v2(iid, bar_type) if args.v2 else _get_strategy_v1(iid, bar_type)
+        strategy_name = "V2-maker" if args.v2 else "V1-taker"
+        print(f"Strategy: {strategy_name} | BarType: {bar_type} | Instrument: {iid}")
+
         engine = BacktestEngine(
             config=BacktestEngineConfig(
                 trader_id="KRAKEN-BACKTEST",
                 logging=LoggingConfig(log_level="INFO", bypass_logging=False),
             )
         )
-
-        # Add venue
-        iid_obj = InstrumentId.from_str(INSTRUMENT_ID) if str(bar_type.instrument_id) != INSTRUMENT_ID else bar_type.instrument_id
         engine.add_venue(
-            venue=iid_obj.venue,
-            oms_type=OmsType.NETTING,
+            venue=iid.venue, oms_type=OmsType.NETTING,
             account_type=AccountType.CASH,
             starting_balances=[Money(args.starting_balance, USD)],
             base_currency=None,
         )
-
-        # Add instrument
-        instrument = _create_instrument()
-        engine.add_instrument(instrument)
-
-        # Add data
+        engine.add_instrument(_create_instrument())
         engine.add_data(bars)
+        engine.add_strategy(strat)
 
-        # Add strategy
-        strategy = _create_strategy(bar_type.instrument_id, bar_type)
-        engine.add_strategy(strategy)
-
-        # Run
         print(f"Starting backtest {args.start} -> {args.end}...")
         engine.run(start=args.start, end=args.end)
 
         result = engine.get_result()
-
-        # Print quick stats
         stats_pnls = result.stats_pnls.get("stats", {}) if result.stats_pnls else {}
         stats_returns = result.stats_returns if result.stats_returns else {}
-        print(f"\n=== Backtest Results ===")
+
+        print(f"\n{'='*60}")
+        print(f"Backtest Results ({strategy_name})")
+        print(f"{'='*60}")
         print(f"Period:          {result.backtest_start} -> {result.backtest_end}")
         print(f"Total positions: {result.total_positions}")
         print(f"Total orders:    {result.total_orders}")
@@ -169,18 +157,16 @@ def main():
         max_dd = stats_returns.get('max_drawdown', 'N/A')
         print(f"Max drawdown:    {max_dd}")
 
-        # Order/fills report
         fills_df = engine.trader.generate_order_fills_report()
         if len(fills_df) > 0:
             print(f"\n=== Fill Report ({len(fills_df)} fills) ===")
-            print(fills_df.to_string())
+            print(fills_df.head(5).to_string())
 
         pos_df = engine.trader.generate_positions_report()
         if len(pos_df) > 0:
             print(f"\n=== Positions Report ({len(pos_df)} positions) ===")
-            print(pos_df.to_string())
+            print(pos_df.head(5).to_string())
 
-        # Generate reports if requested
         if args.reports_dir:
             reports_dir = Path(args.reports_dir)
             summary = generate_reports(result, reports_dir, engine=engine)

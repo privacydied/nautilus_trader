@@ -1,2 +1,1 @@
-# -*- coding: utf-8 -*-
-# Strategies package
+# coding: utf-8
