@@ -147,10 +147,13 @@ def make_v3_synthetic_bars_no_fill() -> tuple[BarType, InstrumentId, list[Bar]]:
 
     def _add(i: int, o: float, h: float, l: float, c: float) -> None:
         ts = base_ts + i * interval
+        # Clamp to valid bar: low <= min(open, close), high >= max(open, close)
+        lo = min(l, o, c)
+        hi = max(h, o, c)
         bars.append(Bar(
             bar_type=bt,
-            open=Price(o, 2), high=Price(h, 2),
-            low=Price(l, 2), close=Price(c, 2),
+            open=Price(o, 2), high=Price(hi, 2),
+            low=Price(lo, 2), close=Price(c, 2),
             volume=Quantity(100.0, 8),
             ts_event=ts, ts_init=ts,
         ))
@@ -172,7 +175,8 @@ def make_v3_synthetic_bars_no_fill() -> tuple[BarType, InstrumentId, list[Bar]]:
     for k in range(34):
         i = 117 + k
         price = 48700.0 + k * 50.0
-        _add(i, price, price + 20.0, price + 5.0, price + 15.0)
+        _add(i, price, price + 20.0, price - 5.0, price + 15.0)
+
 
     return bt, iid, bars
 
@@ -182,10 +186,11 @@ def make_engine(
     starting_balance: float = 10000.0,
 ) -> BacktestEngine:
     """Build a BacktestEngine with Kraken spot venue and BTC/USD instrument."""
+    from nautilus_trader.model.identifiers import Symbol
     iid = InstrumentId.from_str(INSTRUMENT_ID)
     instrument = CurrencyPair(
         instrument_id=iid,
-        raw_symbol="BTCUSD",
+        raw_symbol=Symbol("BTCUSD"),
         base_currency=BTC,
         quote_currency=USD,
         price_precision=2,
