@@ -1,0 +1,24 @@
+{
+  "window": "2026",
+  "starting_balance": 100000.0,
+  "total_trades": 0,
+  "wins": 0,
+  "losses": 0,
+  "win_rate": 0.0,
+  "gross_pnl": 0.0,
+  "fees": 0.0,
+  "net_pnl": 0.0,
+  "pnl_by_asset": {},
+  "universe": [
+    "BTC/USD.KRAKEN",
+    "ETH/USD.KRAKEN",
+    "SOL/USD.KRAKEN",
+    "XRP/USD.KRAKEN",
+    "ADA/USD.KRAKEN",
+    "LINK/USD.KRAKEN",
+    "DOGE/USD.KRAKEN",
+    "AVAX/USD.KRAKEN",
+    "LTC/USD.KRAKEN",
+    "BCH/USD.KRAKEN"
+  ]
+}

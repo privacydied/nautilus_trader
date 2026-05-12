@@ -1,0 +1,30 @@
+{
+  "window": "2025",
+  "starting_balance": 100000.0,
+  "total_trades": 21,
+  "wins": 3,
+  "losses": 18,
+  "win_rate": 14.3,
+  "gross_pnl": -4837.21,
+  "fees": 746.54,
+  "net_pnl": -5583.75,
+  "pnl_by_asset": {
+    "LTC/USD.KRAKEN": -394.75,
+    "BCH/USD.KRAKEN": -1585.8899999999999,
+    "BTC/USD.KRAKEN": -1239.01,
+    "ETH/USD.KRAKEN": -1376.69,
+    "SOL/USD.KRAKEN": -240.87
+  },
+  "universe": [
+    "BTC/USD.KRAKEN",
+    "ETH/USD.KRAKEN",
+    "SOL/USD.KRAKEN",
+    "XRP/USD.KRAKEN",
+    "ADA/USD.KRAKEN",
+    "LINK/USD.KRAKEN",
+    "DOGE/USD.KRAKEN",
+    "AVAX/USD.KRAKEN",
+    "LTC/USD.KRAKEN",
+    "BCH/USD.KRAKEN"
+  ]
+}

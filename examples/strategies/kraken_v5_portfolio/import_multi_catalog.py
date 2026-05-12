@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Import multiple Kraken OHLCV CSV files into a ParquetDataCatalog.
+Import multiple Kraken OHLCV CSV files into a Nautilus ParquetDataCatalog.
 
 Usage:
-    python import_multi_catalog.py --csv-dir data/kraken_4h/ \
-        --catalog data/catalog/kraken_4h_universe/ --interval 240
+    python import_multi_catalog.py --csv-dir data/kraken_daily/ \
+        --catalog data/catalog/kraken_daily_universe/
 """
 
 import argparse
@@ -25,27 +25,35 @@ from nautilus_trader.model.instruments import CurrencyPair
 from nautilus_trader.model.objects import Price, Quantity
 from nautilus_trader.persistence.catalog.parquet import ParquetDataCatalog
 
-# Instrument ID → (price_precision, size_precision)
-INSTRUMENT_PRECISION = {
-    "BTC/USD.KRAKEN": (2, 8),
-    "ETH/USD.KRAKEN": (2, 8),
-    "SOL/USD.KRAKEN": (2, 4),
-    "XRP/USD.KRAKEN": (4, 2),
-    "ADA/USD.KRAKEN": (5, 0),
-    "LINK/USD.KRAKEN": (2, 4),
-    "DOGE/USD.KRAKEN": (5, 0),
-    "AVAX/USD.KRAKEN": (2, 4),
-    "LTC/USD.KRAKEN": (2, 8),
-    "BCH/USD.KRAKEN": (2, 8),
+from examples.strategies.kraken_v5_portfolio.instrument_details import PRICE_SIZE_PRECISION
+
+# Aliased as INSTRUMENT_PRECISION for backward compat with existing code
+INSTRUMENT_PRECISION = {}
+for k, (pp, sp) in PRICE_SIZE_PRECISION.items():
+    INSTRUMENT_PRECISION[k] = (pp, sp)
+
+PREFIX_TO_ID = {
+    "BTC_USD": "BTC/USD.KRAKEN",
+    "ETH_USD": "ETH/USD.KRAKEN",
+    "SOL_USD": "SOL/USD.KRAKEN",
+    "XRP_USD": "XRP/USD.KRAKEN",
+    "ADA_USD": "ADA/USD.KRAKEN",
+    "LINK_USD": "LINK/USD.KRAKEN",
+    "DOGE_USD": "DOGE/USD.KRAKEN",
+    "AVAX_USD": "AVAX/USD.KRAKEN",
+    "LTC_USD": "LTC/USD.KRAKEN",
+    "BCH_USD": "BCH/USD.KRAKEN",
+    "XBT_USD": "BTC/USD.KRAKEN",
 }
 
 
 def make_instrument(id_str: str) -> CurrencyPair:
     iid = InstrumentId.from_str(id_str)
     pp, sp = INSTRUMENT_PRECISION.get(id_str, (2, 8))
+    sym = id_str.split("/USD")[0].replace("BTC", "XBT")
     return CurrencyPair(
         instrument_id=iid,
-        raw_symbol=Symbol(id_str.replace("/USD.KRAKEN", "").replace("BTC", "XBT")),
+        raw_symbol=Symbol(sym),
         base_currency=BTC,
         quote_currency=USD,
         price_precision=pp,
@@ -63,7 +71,6 @@ def make_instrument(id_str: str) -> CurrencyPair:
 
 
 def csv_to_bars(csv_path: Path, instrument_id: str, spec: BarSpecification) -> list[Bar]:
-    """Convert a Kraken OHLCV CSV to Nautilus Bar objects."""
     iid = InstrumentId.from_str(instrument_id)
     bt = BarType(iid, spec)
     pp, sp = INSTRUMENT_PRECISION.get(instrument_id, (2, 8))
@@ -86,14 +93,15 @@ def csv_to_bars(csv_path: Path, instrument_id: str, spec: BarSpecification) -> l
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv-dir", required=True, help="Dir containing CSV files")
-    parser.add_argument("--catalog", required=True, help="Output catalog path")
-    parser.add_argument("--interval", type=int, default=240, help="Bar interval in minutes")
+    parser.add_argument("--csv-dir", required=True)
+    parser.add_argument("--catalog", required=True)
     args = parser.parse_args()
 
     csv_dir = Path(args.csv_dir)
     catalog_path = Path(args.catalog)
-    spec = BarSpecification(args.interval, BarAggregation.MINUTE, PriceType.LAST)
+
+    # Daily bars
+    spec = BarSpecification(1, BarAggregation.DAY, PriceType.LAST)
 
     if not csv_dir.is_dir():
         print(f"Error: {csv_dir} not found")
@@ -109,25 +117,12 @@ def main():
 
     total = 0
     for csv_path in csv_files:
-        # Infer instrument ID from filename: XBTUSD_240.csv → BTC/USD.KRAKEN
-        stem = csv_path.stem  # e.g. XBTUSD_240
-        pair_part = stem.split("_")[0]
-        # Map Kraken API pair back to our ID
-        api_to_id = {
-            "XBTUSD": "BTC/USD.KRAKEN",
-            "ETHUSD": "ETH/USD.KRAKEN",
-            "SOLUSD": "SOL/USD.KRAKEN",
-            "XRPUSD": "XRP/USD.KRAKEN",
-            "ADAUSD": "ADA/USD.KRAKEN",
-            "LINKUSD": "LINK/USD.KRAKEN",
-            "DOGEUSD": "DOGE/USD.KRAKEN",
-            "AVAXUSD": "AVAX/USD.KRAKEN",
-            "LTCUSD": "LTC/USD.KRAKEN",
-            "BCHUSD": "BCH/USD.KRAKEN",
-        }
-        id_str = api_to_id.get(pair_part)
+        stem = csv_path.stem
+        parts = stem.rsplit("_", 1)
+        prefix = parts[0]
+        id_str = PREFIX_TO_ID.get(prefix)
         if not id_str:
-            print(f"  SKIP {csv_path.name}: unknown pair {pair_part}")
+            print(f"  SKIP {csv_path.name}: unknown prefix {prefix}")
             continue
 
         bars = csv_to_bars(csv_path, id_str, spec)
@@ -138,10 +133,24 @@ def main():
         instrument = make_instrument(id_str)
         catalog.write_data([instrument])
         catalog.write_data(bars)
-        print(f"  {id_str}: {len(bars):,} bars")
+        print(f"  {id_str}: {len(bars):,} bars ({bars[0].ts_event} -> {bars[-1].ts_event})")
         total += len(bars)
 
     print(f"\nTotal: {total:,} bars in {catalog_path}")
+
+    seen = set()
+    for prefix, id_str in PREFIX_TO_ID.items():
+        if id_str in seen:
+            continue
+        seen.add(id_str)
+        try:
+            count = catalog.bars(instrument_ids=[id_str])
+            if count:
+                print(f"  VERIFY {id_str}: {len(count):,} bars")
+            else:
+                print(f"  VERIFY {id_str}: MISSING")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

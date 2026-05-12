@@ -86,3 +86,83 @@ Structurally different research directions:
 - [ ] Start a new hypothesis only if it changes venue, instrument, data type, or strategy class
 
 The scaffold prevented live deployment of four losing ideas. That is the point of the research system.
+
+---
+
+## V5 Daily Multi-Asset Momentum — Final Reject (2026-05-12)
+
+### Hypothesis
+> A low-turnover multi-asset crypto spot momentum system may outperform single BTC/USD because it can rotate into the strongest liquid assets and avoid dead/choppy regimes.
+
+### What Changed from V4
+- 10 liquid Kraken spot USD pairs instead of BTC/USD alone
+- Daily bars (1-day) instead of 1h (2024h2–2026 windows)
+- Portfolio holds top 2–3 assets by momentum
+- EMA(200) trend filter per asset
+- Trailing ATR stop, weekly rebalance
+
+### Data Coverage
+Daily data from Kraken public API covers 2024-05-22 to 2026-05-01 (710 bars per asset).
+- 2024h2: 184 bars per asset (Jul–Dec 2024). EMA(200) warmup blocks all trading.
+- 2025: 365 bars per asset. Only window with enough data for trading.
+- 2026: 120 bars per asset. EMA(200) warmup blocks all trading.
+
+### V5 Multi-Window Results
+
+| Window | Trades | Win% | Gross PnL | Fees | Net PnL |
+|--------|--------|------|-----------|------|---------|
+| 2024h2 | 0 | 0.0% | $0.00 | $0.00 | $0.00 |
+| 2025 | 21 | 14.3% | -$4,837.21 | $746.54 | -$5,583.75 |
+| 2026 | 0 | 0.0% | $0.00 | $0.00 | $0.00 |
+
+### Net PnL by Asset
+- SOL/USD:   -$240.87
+- LTC/USD:   -$394.75
+- BTC/USD:  -$1,239.01
+- ETH/USD:  -$1,376.69
+- BCH/USD:  -$1,585.89
+
+Only 5 of 10 assets held any positions in the 2025 window.
+
+### Verdict: REJECTED
+
+V5 gross PnL is deeply negative in the only tradable window (-$4,837). Win rate 14.3% with 21 trades.
+Gross positive in 0/3 windows. Net positive in 0/3 windows.
+
+Multi-asset rotation did not rescue the strategy. If anything, the broader universe diluted already weak signals — the portfolio rotated into losing assets and bled across five instruments.
+
+### Acceptance Criteria vs Reality
+- Gross PnL positive overall: FAILED (-$4,837 in 2025)
+- Gross PnL positive in 3/4 windows: FAILED (0/3 had data)
+- Not dominated by one asset: PASSED (losses spread across 5)
+- Positive win rate: FAILED (14.3%)
+- Fees do not dominate: N/A (gross already deeply negative)
+
+---
+
+## All OHLCV Indicator Research — Final Stop
+
+Five families tested across Kraken spot USD pairs under 0.40% taker fees:
+
+| Family | Timeframe | Assets | Gross PnL (best window) | Status |
+|--------|-----------|--------|------------------------|--------|
+| V1: Donchian breakout | 5m/15m | 1 (BTC) | -$X in all windows | REJECTED |
+| V2: Selective breakout | 5m/15m | 1 (BTC) | -$X in all windows | REJECTED |
+| V3: Z-score mean rev | 5m/15m | 1 (BTC) | -$X in all windows | REJECTED |
+| V4: 1h trend-following | 1h | 1 (BTC) | +$120 in 2/4 windows | REJECTED |
+| V5: Daily momentum portfolio | 1d | 10 | -$4,837 in 1 tradable window | REJECTED |
+
+Shared result:
+No tested OHLCV indicator family produced robust positive gross edge across windows.
+
+Conclusion:
+Stop all Kraken spot OHLCV indicator research under this fee model.
+The next viable path requires a fundamentally different approach:
+1. Order-book / microstructure signals
+2. Cross-exchange spread or latency-aware arbitrage
+3. Funding/basis strategies (derivatives)
+4. Different venue with lower fees
+5. Different data type
+
+No more BTC/USD single-asset EMA/Donchian/z-score/timeframe variants.
+No live trading.

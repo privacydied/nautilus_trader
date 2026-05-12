@@ -33,7 +33,20 @@ KRAKEN_VENUE: str = "KRAKEN"
 BAR_SPEC_STEP: int = 4
 BAR_SPEC_AGG: str = "HOUR"
 
-# === INDICATORS ===
+# Per-asset price precision (price decimals) and size precision (qty decimals)
+# Used by import_multi_catalog.py, run_v5_research.py, and strategy_v5.py
+INSTRUMENT_DETAIL: dict[str, tuple[int, int]] = {
+    "BTC/USD.KRAKEN":  (2, 8),
+    "ETH/USD.KRAKEN":  (2, 8),
+    "SOL/USD.KRAKEN":  (2, 4),
+    "XRP/USD.KRAKEN":  (4, 2),
+    "ADA/USD.KRAKEN":  (5, 2),
+    "LINK/USD.KRAKEN": (2, 4),
+    "DOGE/USD.KRAKEN": (5, 2),
+    "AVAX/USD.KRAKEN": (2, 4),
+    "LTC/USD.KRAKEN":  (2, 8),
+    "BCH/USD.KRAKEN":  (2, 8),
+}
 
 EMA_TREND_PERIOD: int = 200          # price above EMA(200) for trend filter
 MOMENTUM_LOOKBACK_30D: int = 180     # 30d momentum ~ 180 bars at 4h
@@ -64,8 +77,8 @@ MIN_POSITION_SIZE_USD: float = 25.0  # skip dust positions
 
 # === TEST WINDOWS ===
 
+# Windows adapted to data availability (daily data starts ~2024-05-22):
 WINDOWS = [
-    ("2024h1", "2024-01-01", "2024-06-01"),
     ("2024h2", "2024-07-01", "2025-01-01"),
     ("2025",   "2025-01-01", "2026-01-01"),
     ("2026",   "2026-01-01", "2026-05-01"),

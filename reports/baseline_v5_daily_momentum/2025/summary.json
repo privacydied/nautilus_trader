@@ -1,0 +1,16 @@
+{
+  "trades": 21,
+  "win_rate": 14.285714285714285,
+  "gross_pnl": -4837.21,
+  "fees": 746.54,
+  "net_pnl": -5583.75,
+  "wins": 3,
+  "losses": 18,
+  "pnl_by_asset": {
+    "LTC/USD.KRAKEN": -394.75,
+    "BCH/USD.KRAKEN": -1585.89,
+    "BTC/USD.KRAKEN": -1239.01,
+    "ETH/USD.KRAKEN": -1376.69,
+    "SOL/USD.KRAKEN": -240.87
+  }
+}

@@ -41,19 +41,8 @@ DEFAULT_UNIVERSE: tuple[str, ...] = (
 )
 
 # Per-instrument size precision (quantity decimals)
-SIZE_PRECISION = {
-    "BTC/USD.KRAKEN": 8,
-    "ETH/USD.KRAKEN": 8,
-    "SOL/USD.KRAKEN": 4,
-    "XRP/USD.KRAKEN": 2,
-    "ADA/USD.KRAKEN": 2,
-    "LINK/USD.KRAKEN": 4,
-    "DOGE/USD.KRAKEN": 1,
-    "AVAX/USD.KRAKEN": 4,
-    "LTC/USD.KRAKEN": 8,
-    "BCH/USD.KRAKEN": 8,
-}
-
+# Use centralized definition; kept here for backward compat
+from examples.strategies.kraken_v5_portfolio.instrument_details import SIZE_PRECISION as SIZE_PRECISION
 
 class _AssetState:
     """Per-asset indicator and position tracking."""
