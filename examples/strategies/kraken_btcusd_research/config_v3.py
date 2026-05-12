@@ -28,6 +28,10 @@ from nautilus_trader.trading.config import StrategyConfig
 # nautilus_trader modules (which need the Rust .so). Keep this file
 # pure-constant so it can be imported even if nautilus_trader is broken.
 # Import KrakenBTCUSDMeanReversionConfig from strategy_v3.py instead.
+#
+# For convenience, a lazy __getattr__ re-export is provided below so that:
+#   from config_v3 import KrakenBTCUSDMeanReversionConfig
+# also works.
 
 # --- Shared constants (same as V1/V2) ---
 
@@ -80,3 +84,16 @@ COOLDOWN_BARS: int = 12
 INITIAL_STOP_ATR_MULTIPLIER: float = 2.0
 TIME_STOP_BARS: int = 32
 TRAILING_STOP_ATR_MULTIPLIER: float = 1.5
+
+
+# --- Deferred re-export of config class ---
+# Primary location: strategy_v3.KrakenBTCUSDMeanReversionConfig
+# This module avoids importing nautilus_trader (Rust .so dependency)
+# so that config_v3 can be inspected even when the .so is broken.
+def __getattr__(name: str):
+    if name == "KrakenBTCUSDMeanReversionConfig":
+        from examples.strategies.kraken_btcusd_research.strategy_v3 import (
+            KrakenBTCUSDMeanReversionConfig,
+        )
+        return KrakenBTCUSDMeanReversionConfig
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
