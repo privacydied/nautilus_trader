@@ -147,58 +147,50 @@ def run_window(
     engine.run(start=start, end=end)
     result = engine.get_result()
 
-    # --- Extract real PnL from engine fill/position reports ---
-    fills_df = None
-    positions_df = None
-    try:
-        fills_df = engine.trader.generate_order_fills_report()
-    except Exception:
-        pass
+    # --- Extract real PnL from engine trader reports ---
+    # stats_pnls["stats"] is empty for BACKTEST engine runs;
+    # use the trader's position/fill reports instead.
     try:
         positions_df = engine.trader.generate_positions_report()
     except Exception:
-        pass
+        positions_df = None
 
     total_pnl = 0.0
     total_fees = 0.0
-    win_count = 0
-    loss_count = 0
-    if positions_df is not None and len(positions_df) > 0:
+    if positions_df is not None and not positions_df.empty:
         for _, row in positions_df.iterrows():
-            pnl_raw = row.get("realized_pnl", 0)
-            if pnl_raw:
-                s = str(pnl_raw).replace("USD", "").replace(",", "").strip()
+            raw_pnl = str(row.get("realized_pnl", "")).strip()
+            if raw_pnl and raw_pnl not in ("0", "0.0"):
+                s = raw_pnl.replace("USD", "").replace(",", "").strip().lstrip("[('").rstrip(")]'")
                 try:
-                    pnl_val = float(s)
-                    total_pnl += pnl_val
-                    if pnl_val > 0:
-                        win_count += 1
-                    elif pnl_val < 0:
-                        loss_count += 1
+                    total_pnl += float(s)
                 except ValueError:
                     pass
-            comm_raw = row.get("commissions", 0)
-            if comm_raw:
-                s = str(comm_raw).replace("USD", "").replace(",", "").strip()
+            raw_comm = str(row.get("commissions", "")).strip()
+            if raw_comm and raw_comm not in ("0", "0.0"):
+                s = raw_comm.replace("USD", "").replace(",", "").strip().lstrip("[('").rstrip(")]'")
                 try:
                     total_fees += float(s)
                 except ValueError:
                     pass
 
-    sharpe = result.stats_returns.get("sharpe_ratio", 0.0) if result.stats_returns else 0.0
-    final_eq = starting_balance + total_pnl - total_fees
+    sharpe = result.stats_returns.get("sharpe_ratio", 0.0) if result.stats_returns else 0.00
+    final_equity = STARTING_BALANCE_USD + total_pnl - total_fees
 
     # Generate reports from BacktestResult
     summary = generate_reports(
         result, reports_dir, trades=[], equity_curve=[]
     )
+    # Override the empty stats with real PnL
+    summary["total_pnl"] = round(total_pnl, 2)
+    summary["total_fees"] = round(total_fees, 2)
 
     print(f"  Positions:  {result.total_positions}")
     print(f"  Orders:     {result.total_orders}")
     print(f"  Total PnL:  {total_pnl:.2f}")
     print(f"  Total Fees: {total_fees:.2f}")
     print(f"  Sharpe:     {sharpe}")
-    print(f"  Final Eq:   {final_eq:.2f}")
+    print(f"  Final Eq:   {final_equity:.2f}")
 
     engine.dispose()
     return summary
