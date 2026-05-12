@@ -112,6 +112,30 @@ class BacktestReportGenerator:
         print(f"Equity curve saved to {output_path}")
 
 
+def parse_pnl(val) -> float:
+    """Parse PnL value from Nautilus position/fill report.
+
+    Handles formats: Money("12.34 'USD'"), "12.34 USD", numeric.
+    """
+    if val is None or val == "":
+        return 0.0
+    s = str(val).strip()
+    # Strip Money repr: "12.34 'USD'" -> "12.34"
+    if s.startswith("Money("):
+        s = s.split(",", 1)[-1].strip().strip("'USD'\"").split("USD")[0].strip().strip("'\"")
+    else:
+        s = s.replace("USD", "").replace("USD", "").replace("\"", "").replace("'", "").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def parse_commission(val) -> float:
+    """Parse commission/fee value from Nautilus report."""
+    return parse_pnl(val)
+
+
 def generate_reports(
     backtest_result: "BacktestResult",
     output_dir: Path,
