@@ -147,13 +147,46 @@ def run_window(
     engine.run(start=start, end=end)
     result = engine.get_result()
 
-    stats_pnls = result.stats_pnls.get("stats", {}) if result.stats_pnls else {}
-    stats_returns = result.stats_returns if result.stats_returns else {}
+    # --- Extract real PnL from engine fill/position reports ---
+    fills_df = None
+    positions_df = None
+    try:
+        fills_df = engine.trader.generate_order_fills_report()
+    except Exception:
+        pass
+    try:
+        positions_df = engine.trader.generate_positions_report()
+    except Exception:
+        pass
 
-    total_pnl = stats_pnls.get("total_pnl", 0.0)
-    total_fees = stats_pnls.get("total_fees", 0.0)
-    final_equity = stats_returns.get("final_equity", starting_balance)
-    sharpe = stats_returns.get("sharpe_ratio", 0.0)
+    total_pnl = 0.0
+    total_fees = 0.0
+    win_count = 0
+    loss_count = 0
+    if positions_df is not None and len(positions_df) > 0:
+        for _, row in positions_df.iterrows():
+            pnl_raw = row.get("realized_pnl", 0)
+            if pnl_raw:
+                s = str(pnl_raw).replace("USD", "").replace(",", "").strip()
+                try:
+                    pnl_val = float(s)
+                    total_pnl += pnl_val
+                    if pnl_val > 0:
+                        win_count += 1
+                    elif pnl_val < 0:
+                        loss_count += 1
+                except ValueError:
+                    pass
+            comm_raw = row.get("commissions", 0)
+            if comm_raw:
+                s = str(comm_raw).replace("USD", "").replace(",", "").strip()
+                try:
+                    total_fees += float(s)
+                except ValueError:
+                    pass
+
+    sharpe = result.stats_returns.get("sharpe_ratio", 0.0) if result.stats_returns else 0.0
+    final_eq = starting_balance + total_pnl - total_fees
 
     # Generate reports from BacktestResult
     summary = generate_reports(
@@ -162,10 +195,10 @@ def run_window(
 
     print(f"  Positions:  {result.total_positions}")
     print(f"  Orders:     {result.total_orders}")
-    print(f"  Total PnL:  {total_pnl}")
-    print(f"  Total Fees: {total_fees}")
+    print(f"  Total PnL:  {total_pnl:.2f}")
+    print(f"  Total Fees: {total_fees:.2f}")
     print(f"  Sharpe:     {sharpe}")
-    print(f"  Final Eq:   {final_equity}")
+    print(f"  Final Eq:   {final_eq:.2f}")
 
     engine.dispose()
     return summary

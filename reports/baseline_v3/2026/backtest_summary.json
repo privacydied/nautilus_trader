@@ -1,0 +1,16 @@
+{
+  "starting_balance": 10000.0,
+  "total_trades": 61,
+  "winning_trades": 0,
+  "losing_trades": 0,
+  "win_rate_percent": 0.0,
+  "average_win": 0.0,
+  "average_loss": 0.0,
+  "total_pnl": 0.0,
+  "total_fees": 0.0,
+  "sharpe_ratio": 0.0,
+  "final_equity": 10000.0,
+  "backtest_start": 1767225600000000000,
+  "backtest_end": 1777593600000000000,
+  "instrument_id": "BACKTEST"
+}
