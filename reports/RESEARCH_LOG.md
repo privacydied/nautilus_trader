@@ -2,7 +2,7 @@
 
 ## V1–V5: OHLCV Indicator Strategies — REJECTED
 
-All OHLCV-derived technical indicator strategies (moving averages, RSI, Bollinger Bands, MACD, volatility breakouts) failed to produce statistically significant edges on BTC/USD and ETH/USD Kraken spot data under conservative backtesting.
+All tested OHLCV-derived strategies — Donchian/EMA breakout, selective breakout, z-score mean reversion, 1h trend-following, and daily multi-asset momentum — failed to produce robust positive edge.
 
 ## V6-A: Cross-Venue Spot Spread Scanner — REJECTED
 
@@ -78,10 +78,11 @@ The funding/basis cash-and-carry thesis is rejected for these venues, assets, an
 | Pessimistic | 15,283 | 28,364 | 0 | 0.2020 | 0.0000 | 0.0000 | 0.0000 |
 | Neutral | 14,564 | 26,622 | 3 | 0.1770 | 0.7286 | 15.0000 | -14.2714 |
 
-### Conclusion
+### V7 Conclusion
 
 Average Kraken BTC/USD spread: ~0.20 bps. Average half-spread captured: ~0.10 bps.
-Maker fee + fill penalty cost: ~5.0 bps per fill. The spread is 25-50x smaller than the cost.
+Maker fee + fill penalty cost: ~5.0 bps per filled quote event in this paper model.
+The spread is 25-50x smaller than the cost.
 No queue priority assumption, no model tweak, no longer runtime can bridge this gap.
 This is a **structural fee/spread impossibility** at this venue and fee tier.
 
