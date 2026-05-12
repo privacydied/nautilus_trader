@@ -2,7 +2,8 @@
 
 ## Final Conclusion
 
-Stop BTC/USD Kraken spot bar-level technical-indicator research under this fee model.
+Do not continue BTC/USD Kraken spot OHLCV indicator variants under this fee model.
+This is a hard stop, not a soft suggestion.
 
 Rejected families:
 - V1: 5m Donchian/EMA breakout
@@ -12,6 +13,8 @@ Rejected families:
 
 Shared result:
 No tested family produced robust positive gross edge across windows.
+
+Requires new hypothesis: venue, instrument universe, execution model, or data type must change.
 
 ---
 
