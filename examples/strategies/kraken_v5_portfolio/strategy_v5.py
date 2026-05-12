@@ -40,9 +40,6 @@ DEFAULT_UNIVERSE: tuple[str, ...] = (
     "BCH/USD.KRAKEN",
 )
 
-# Per-instrument size precision (quantity decimals)
-# Use centralized definition; kept here for backward compat
-from examples.strategies.kraken_v5_portfolio.instrument_details import SIZE_PRECISION as SIZE_PRECISION
 
 class _AssetState:
     """Per-asset indicator and position tracking."""
@@ -60,9 +57,6 @@ class _AssetState:
         self.highest_since_entry: float = 0.0
         self.bars_since_entry: int = 0
 
-        # Per-instrument bar counter for rebalance logic
-        self.bar_count: int = 0
-
     @property
     def current_price(self) -> float:
         return self.price_history[-1] if self.price_history else 0.0
@@ -70,7 +64,7 @@ class _AssetState:
     @property
     def momentum(self) -> float:
         """Return absolute momentum: price change over lookback period."""
-        lookback = 200  # roughly 200 bars of 4h = ~33 days
+        lookback = 200
         if len(self.price_history) > lookback:
             return self.current_price - self.price_history[-(lookback + 1)]
         return 0.0
@@ -100,7 +94,7 @@ class KrakenV5PortfolioConfig(StrategyConfig):
     taker_fee: float = 0.0040
     min_position_size_usd: float = 25.0
     trailing_stop_atr_mult: float = 3.0
-    rebalance_bars: int = 6  # ~24h for 4h bars
+    rebalance_bars: int = 6
 
 
 class KrakenV5PortfolioStrategy(Strategy):
@@ -110,32 +104,41 @@ class KrakenV5PortfolioStrategy(Strategy):
         super().__init__(config)
         self.universe: list[str] = list(config.universe)
         self.assets: dict[str, _AssetState] = {}
+        # O(1) lookup dicts keyed by InstrumentId
+        self._state_by_iid: dict[InstrumentId, _AssetState] = {}
+        self._id_str_by_iid: dict[InstrumentId, str] = {}
         self.bar_spec = config.bar_type.spec if config.bar_type else BarSpecification(
             4, BarAggregation.HOUR, PriceType.LAST
         )
         self.total_bars = 0
-        self.bars_per_instrument: list[int] = []  # to count bars per asset
+        self.bars_per_instrument: list[int] = []
         self.instruments: list[InstrumentId] = []
 
     # -- Nautilus lifecycle --
 
     def on_start(self) -> None:
+        # Use config params, not hardcoded values
+        ema_period = self.config.ema_trend_period
+        atr_period = self.config.atr_period
         for id_str in self.universe:
             iid = InstrumentId.from_str(id_str)
             bt = BarType(iid, self.bar_spec)
             self.subscribe_bars(bt)
-            self.assets[id_str] = _AssetState(iid, 200, 28)
+            state = _AssetState(iid, ema_period, atr_period)
+            self.assets[id_str] = state
+            self._state_by_iid[iid] = state
+            self._id_str_by_iid[iid] = id_str
             self.instruments.append(iid)
             self.bars_per_instrument.append(0)
         self.log.info(f"V5 Portfolio started: {len(self.universe)} assets, {self.bar_spec}")
 
     def on_bar(self, bar: Bar) -> None:
         iid = bar.bar_type.instrument_id
-        state = self._get_state(iid)
+        # O(1) lookup
+        state = self._state_by_iid.get(iid)
         if state is None:
             return
 
-        # Count bars per instrument
         for i, inst_id in enumerate(self.instruments):
             if inst_id == iid:
                 self.bars_per_instrument[i] += 1
@@ -143,7 +146,6 @@ class KrakenV5PortfolioStrategy(Strategy):
 
         self.total_bars += 1
 
-        # Update state
         close = float(bar.close)
         high = float(bar.high)
         low = float(bar.low)
@@ -160,17 +162,17 @@ class KrakenV5PortfolioStrategy(Strategy):
         if state.is_held:
             reason = self._check_exit(state)
             if reason:
-                id_str = self._state_to_id(state)
-                self.log.info(f"EXIT {id_str}: {reason}")
-                self._sell_position(id_str, state)
-                return  # don't rebalance same bar as exit
+                id_str = self._id_str_by_iid.get(iid)
+                if id_str:
+                    self.log.info(f"EXIT {id_str}: {reason}")
+                    self._sell_position(id_str, state)
+                return
 
-        # Rebalance check — uses avg bars across all instruments
         if self._should_rebalance():
             self._rebalance()
 
     def on_order_filled(self, fill) -> None:
-        state = self._get_state(fill.instrument_id)
+        state = self._state_by_iid.get(fill.instrument_id)
         if state is None:
             return
 
@@ -196,25 +198,13 @@ class KrakenV5PortfolioStrategy(Strategy):
 
     # -- Core logic --
 
-    def _state_to_id(self, state: _AssetState) -> Optional[str]:
-        for k, v in self.assets.items():
-            if v is state:
-                return k
-        return None
-
-    def _get_state(self, iid: InstrumentId) -> Optional[_AssetState]:
-        for state in self.assets.values():
-            if state.instrument_id == iid:
-                return state
-        return None
-
     def _check_exit(self, state: _AssetState) -> Optional[str]:
         close = state.current_price
         atr = state.atr_value()
         if atr > 0 and state.highest_since_entry > 0:
             stop = state.highest_since_entry - atr * self.config.trailing_stop_atr_mult
             if close <= stop:
-                return f"trail"
+                return "trail"
         if state.ema_trend.initialized and close < state.ema_trend.value:
             return "trend"
         return None
@@ -223,6 +213,8 @@ class KrakenV5PortfolioStrategy(Strategy):
         if state.position_qty <= 1e-12:
             state.is_held = False
             return
+        # Import precision centrally
+        from examples.strategies.kraken_v5_portfolio.instrument_details import SIZE_PRECISION
         sp = SIZE_PRECISION.get(id_str, 8)
         order = self.order_factory.market(
             instrument_id=InstrumentId.from_str(id_str),
@@ -233,15 +225,12 @@ class KrakenV5PortfolioStrategy(Strategy):
         self.submit_order(order)
 
     def _should_rebalance(self) -> bool:
-        """Rebalance when avg bars per instrument crosses the interval."""
         if not self.bars_per_instrument:
             return False
         avg = sum(self.bars_per_instrument) / len(self.bars_per_instrument)
         return avg > 0 and int(avg) % self.config.rebalance_bars == 0
 
     def _rebalance(self) -> None:
-        """Select top assets by momentum, enter/exit accordingly."""
-        # 1. Rank assets in uptrend by momentum
         scored = []
         for id_str, state in self.assets.items():
             if state.in_uptrend and state.ema_trend.initialized:
@@ -250,19 +239,21 @@ class KrakenV5PortfolioStrategy(Strategy):
         scored.sort(key=lambda x: x[1], reverse=True)
         selected = {s[0] for s in scored[: self.config.max_positions]}
 
-        # 2. Exit dropped assets
+        # Exit dropped assets
         for id_str, state in self.assets.items():
             if state.is_held and id_str not in selected:
                 self.log.info(f"Rebalance exit: {id_str} (rank dropped)")
                 self._sell_position(id_str, state)
 
-        # 3. Enter new assets
+        # Enter new assets
         account = self._account_value()
         if account is None or account <= 0:
             return
 
         current_usd = self._notional_usd()
         max_usd = account * Decimal(str(self.config.max_notional_pct))
+
+        from examples.strategies.kraken_v5_portfolio.instrument_details import SIZE_PRECISION
 
         for id_str, mom, state in scored:
             if id_str not in selected or state.is_held:
@@ -290,11 +281,15 @@ class KrakenV5PortfolioStrategy(Strategy):
     def _account_value(self) -> Optional[Decimal]:
         try:
             from nautilus_trader.model.currencies import USD
-            account = self.portfolio.account(self.instruments[0].venue if self.instruments else "KRAKEN")
+            account = self.portfolio.account(
+                self.instruments[0].venue if self.instruments else "KRAKEN"
+            )
             if account:
                 return account.balance_total(USD).as_decimal()
-        except Exception:
-            pass
+        except ValueError:
+            self.log.warning("_account_value: no account available")
+        except Exception as e:
+            self.log.warning(f"_account_value: unexpected error: {e}")
         return None
 
     def _notional_usd(self) -> Optional[Decimal]:
@@ -305,6 +300,3 @@ class KrakenV5PortfolioStrategy(Strategy):
                 if price > 0:
                     total += Decimal(str(price)) * Decimal(str(state.position_qty))
         return total
-
-
-USD_STR = "USD"

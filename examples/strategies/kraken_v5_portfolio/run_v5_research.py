@@ -21,7 +21,7 @@ from nautilus_trader.model.instruments import CurrencyPair
 from nautilus_trader.model.objects import Money, Price, Quantity
 from nautilus_trader.persistence.catalog.parquet import ParquetDataCatalog
 
-from examples.strategies.kraken_btcusd_research.reports import parse_pnl, parse_commission
+from examples.strategies.kraken_v5_portfolio.parsers import parse_pnl, parse_commission
 from examples.strategies.kraken_v5_portfolio.config_v5 import (
     LIQUID_PAIRS, KRAKEN_VENUE,
     EMA_TREND_PERIOD, ATR_PERIOD,

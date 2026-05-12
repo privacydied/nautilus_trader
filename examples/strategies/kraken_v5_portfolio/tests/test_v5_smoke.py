@@ -13,7 +13,7 @@ from nautilus_trader.model.objects import Money, Price, Quantity
 
 from examples.strategies.kraken_v5_portfolio.config_v5 import (
     LIQUID_PAIRS, KRAKEN_VENUE, BAR_SPEC_STEP,
-    EMA_TREND_PERIOD, MAX_POSITIONS, MAX_NOTIONAL_PCT,
+    MAX_POSITIONS, MAX_NOTIONAL_PCT,
     STARTING_BALANCE_USD, TAKER_FEE,
 )
 from examples.strategies.kraken_v5_portfolio.strategy_v5 import (
@@ -22,6 +22,10 @@ from examples.strategies.kraken_v5_portfolio.strategy_v5 import (
     DEFAULT_UNIVERSE,
     _AssetState,
 )
+
+# Config constants imported from the StrategyConfig, not dead module-level
+EMA_TREND_PERIOD = 200
+ATR_PERIOD = 28
 
 
 class TestV5Config:

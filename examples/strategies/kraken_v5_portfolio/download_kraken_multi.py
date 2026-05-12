@@ -130,7 +130,6 @@ def main():
     parser.add_argument("--since", type=str, default="2024-01-01", help="Start date (YYYY-MM-DD)")
     parser.add_argument("--until", type=str, default="2026-05-01", help="End date")
     parser.add_argument("--output-dir", type=str, default="data/kraken_4h", help="Output directory")
-    parser.add_argument("--api-key", type=str, help="Optional Kraken API key for higher rate limits")
     args = parser.parse_args()
 
     pairs = DEFAULT_PAIRS if args.pair is None else [args.pair]
