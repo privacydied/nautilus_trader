@@ -112,6 +112,66 @@ class BacktestReportGenerator:
         print(f"Equity curve saved to {output_path}")
 
 
+def parse_pnl(val) -> float:
+    """Parse PnL from Nautilus position report. Handles [0.00 USD], '0.00 USD', etc."""
+    if val is None or val == "":
+        return 0.0
+    s = str(val).strip()
+    for prefix in ["['[", "[", "['"]:
+        while s.startswith(prefix):
+            s = s[len(prefix):]
+    for suffix in ["']]", "]]', '0.00 USD]", "]", "']"]:
+        while s.endswith(suffix):
+            s = s[:-len(suffix)]
+    s = s.replace("USD", "").replace(",", "").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def parse_commission(val) -> float:
+    """Parse commission from Nautilus fill/position report."""
+    if val is None or val == "":
+        return 0.0
+    s = str(val).strip()
+    for prefix in ["['", "["]:
+        while s.startswith(prefix):
+            s = s[len(prefix):]
+    for suffix in ["']", "]"]:
+        while s.endswith(suffix):
+            s = s[:-len(suffix)]
+    s = s.replace("USD", "").replace(",", "").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def parse_pnl(val) -> float:
+    """Parse PnL value from Nautilus position report. Handles '[0.00 USD]', etc."""
+    if val is None or val == "":
+        return 0.0
+    s = str(val).strip()
+    # Strip list repr wrappers
+    while s.startswith("['[") or s.startswith("[[") or s.startswith("['"):
+        s = s[2:] if s.startswith("['") else s[1:]
+    while s.endswith("']')") or s.endswith("']]") or s.endswith("']"):
+        s = s[:-2] if s.endswith("']") else s[:-1]
+    # Strip remaining brackets
+    s = s.replace("[", "").replace("]", "").replace("'", "")
+    s = s.replace("USD", "").replace(",", "").strip()
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def parse_commission(val) -> float:
+    """Parse commission/fee value from Nautilus fill/position report."""
+    return parse_pnl(val)
+
+
 def generate_reports(
     backtest_result: "BacktestResult",
     output_dir: Path,

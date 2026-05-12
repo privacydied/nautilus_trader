@@ -55,7 +55,6 @@ from examples.strategies.kraken_btcusd_research.strategy_v3 import (
 from examples.strategies.kraken_btcusd_research.reports import (
     generate_reports, parse_pnl, parse_commission,
 )
-
 # Research windows: (label, start, end)
 WINDOWS = [
     ("2024h1", "2024-01-01", "2024-06-01"),
