@@ -173,22 +173,21 @@ def run_window(
 
 def main():
     """Run all four windows and produce a comparison table."""
-    # Determine catalog path (uses 15m data if available)
     repo_root = REPO_ROOT
-    catalog_15m = repo_root / "data" / "catalog" / "kraken_btcusd_15m"
-    catalog_5m = repo_root / "data" / "catalog" / "kraken_btcusd"
+    catalog_base = repo_root / "data" / "catalog"
 
-    # Prefer 15m catalog, fall back to 5m
-    if catalog_15m.exists():
-        catalog_path = str(catalog_15m)
-        print("Using 15m catalog (V3 default)")
-    elif catalog_5m.exists():
-        catalog_path = str(catalog_5m)
-        print("WARNING: 15m catalog not found. Using 5m catalog.")
-        print("  Results will use 5m bars. Re-import with TIMEFRAME_BARS=15.")
-    else:
-        print("ERROR: No catalog found. Run import_kraken_ohlcv_to_catalog.py first.")
-        return 1
+    # Resolve per-window catalogs (15m preferred, fall back to 5m)
+    catalog_paths = {}
+    for label, start, end in WINDOWS:
+        p15 = catalog_base / f"kraken_btcusd_15m_{label}"
+        p5 = catalog_base / f"kraken_btcusd_{label}"
+        if p15.exists():
+            catalog_paths[label] = str(p15)
+        elif p5.exists():
+            catalog_paths[label] = str(p5)
+        else:
+            print(f"ERROR: No catalog for {label}")
+            return 1
 
     reports_base = repo_root / "reports" / "baseline_v3"
     reports_base.mkdir(parents=True, exist_ok=True)
@@ -197,7 +196,7 @@ def main():
     for label, start, end in WINDOWS:
         window_reports = reports_base / label
         summary = run_window(
-            catalog_path=catalog_path,
+            catalog_path=catalog_paths[label],
             label=label,
             start=start,
             end=end,
@@ -213,23 +212,21 @@ def main():
     header = f"{'Window':<10} {'Trades':>6} {'PnL':>10} {'Fees':>8} {'Net':>10} {'Sharpe':>8}"
     print(header)
     print("-" * 70)
-    for label in WINDOWS:
-        lbl = label[0]
-        s = results.get(lbl)
+    for label, _, _ in WINDOWS:
+        s = results.get(label)
         if s:
             trades = s.get("total_trades", 0)
             pnl = s.get("total_pnl", 0.0)
             fees = s.get("total_fees", 0.0)
             net = pnl - fees
             sharpe = s.get("sharpe_ratio", 0.0)
-            print(f"{lbl:<10} {trades:>6} {pnl:>10.2f} {fees:>8.2f} {net:>10.2f} {sharpe:>8.2f}")
+            print(f"{label:<10} {trades:>6} {pnl:>10.2f} {fees:>8.2f} {net:>10.2f} {sharpe:>8.2f}")
         else:
-            print(f"{lbl:<10} {'N/A':>6} {'N/A':>10} {'N/A':>8} {'N/A':>10} {'N/A':>8}")
+            print(f"{label:<10} {'N/A':>6} {'N/A':>10} {'N/A':>8} {'N/A':>10} {'N/A':>8}")
     print("=" * 70)
     print("\nVerdict:")
-    # Quick viability assessment
-    pnl_windows = [results.get(l[0], {}).get("total_pnl", 0) for l in WINDOWS if l[0] in results]
-    fees_windows = [results.get(l[0], {}).get("total_fees", 0) for l in WINDOWS if l[0] in results]
+    pnl_windows = [results.get(l, {}).get("total_pnl", 0) for l, _, _ in WINDOWS if l in results]
+    fees_windows = [results.get(l, {}).get("total_fees", 0) for l, _, _ in WINDOWS if l in results]
     net_windows = [p - f for p, f in zip(pnl_windows, fees_windows)]
     pos_gross = sum(1 for p in pnl_windows if p > 0)
     pos_net = sum(1 for n in net_windows if n > 0)
