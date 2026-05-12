@@ -28,6 +28,9 @@ class FundingConfig:
     stale_quote_max_age_ms: int = 30_000
     output_dir: str = "reports/v6_market_structure"
 
+    # V6-C: persistence tracking
+    min_persistence_polls: int = 3
+
     # Per-venue fee overrides
     venue_fees: dict = field(default_factory=lambda: {
         "binance": 5.0,
@@ -55,6 +58,78 @@ SYMBOL_MAP = {
         "kraken_perp": "PI_SOLUSD",
         "binance_perp": "SOLUSDT",
         "bybit_perp": "SOLUSDT",
+    },
+    "XRP": {
+        "kraken_spot": "XRPUSD",
+        "kraken_perp": "PI_XRPUSD",
+        "binance_perp": "XRPUSDT",
+        "bybit_perp": "XRPUSDT",
+    },
+    "DOGE": {
+        "kraken_spot": "DOGEUSD",
+        "kraken_perp": None,
+        "binance_perp": "DOGEUSDT",
+        "bybit_perp": "DOGEUSDT",
+    },
+    "LINK": {
+        "kraken_spot": "LINKUSD",
+        "kraken_perp": "PI_LINKUSD",
+        "binance_perp": "LINKUSDT",
+        "bybit_perp": "LINKUSDT",
+    },
+    "AVAX": {
+        "kraken_spot": "AVAXUSD",
+        "kraken_perp": "PI_AVAXUSD",
+        "binance_perp": "AVAXUSDT",
+        "bybit_perp": "AVAXUSDT",
+    },
+    "ADA": {
+        "kraken_spot": "ADAUSD",
+        "kraken_perp": "PI_ADAUSD",
+        "binance_perp": "ADAUSDT",
+        "bybit_perp": "ADAUSDT",
+    },
+    "SUI": {
+        "kraken_spot": "SUIUSD",
+        "kraken_perp": None,
+        "binance_perp": "SUIUSDT",
+        "bybit_perp": "SUIUSDT",
+    },
+    "ARB": {
+        "kraken_spot": "ARBUSD",
+        "kraken_perp": None,
+        "binance_perp": "ARBUSDT",
+        "bybit_perp": "ARBUSDT",
+    },
+    "OP": {
+        "kraken_spot": "OPUSD",
+        "kraken_perp": None,
+        "binance_perp": "OPUSDT",
+        "bybit_perp": "OPUSDT",
+    },
+    "APT": {
+        "kraken_spot": "APTUSD",
+        "kraken_perp": None,
+        "binance_perp": "APTUSDT",
+        "bybit_perp": "APTUSDT",
+    },
+    "PEPE": {
+        "kraken_spot": None,
+        "kraken_perp": None,
+        "binance_perp": "PEPEUSDT",
+        "bybit_perp": "1000PEPEUSDT",
+    },
+    "WIF": {
+        "kraken_spot": "WIFUSD",
+        "kraken_perp": None,
+        "binance_perp": "WIFUSDT",
+        "bybit_perp": "WIFUSDT",
+    },
+    "TON": {
+        "kraken_spot": "TONUSD",
+        "kraken_perp": None,
+        "binance_perp": "TONUSDT",
+        "bybit_perp": "TONUSDT",
     },
 }
 
