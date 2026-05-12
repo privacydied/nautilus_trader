@@ -1,0 +1,25 @@
+{
+  "scan_start": 1778577862.7019122,
+  "scan_duration_seconds": 23.3,
+  "venues_scanned": [
+    "kraken",
+    "binance"
+  ],
+  "symbols_scanned": [
+    "BTC/USD",
+    "ETH/USD"
+  ],
+  "total_polls": 4,
+  "total_opportunities": 8,
+  "total_data_errors": 0,
+  "errors_by_venue": {},
+  "opportunities_by_symbol": {
+    "BTC/USD": 4,
+    "ETH/USD": 4
+  },
+  "opportunities_by_pair": {
+    "binance-kraken": 8
+  },
+  "max_net_edge_bps": -55.9717,
+  "max_is_profitable": false
+}
