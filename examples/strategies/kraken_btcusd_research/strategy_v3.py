@@ -26,7 +26,6 @@ Key differences from V1/V2:
 - Conservative taker exits
 """
 
-from dataclasses import dataclass
 from decimal import Decimal
 from typing import Deque, Optional, Deque as deque_type
 
@@ -43,7 +42,6 @@ from nautilus_trader.indicators import AverageTrueRange as ATR
 from nautilus_trader.indicators import RelativeStrengthIndex as RSI
 
 
-@dataclass(frozen=True)
 class KrakenBTCUSDMeanReversionConfig(StrategyConfig):
     """Configuration for V3 mean reversion strategy."""
     instrument_id: InstrumentId

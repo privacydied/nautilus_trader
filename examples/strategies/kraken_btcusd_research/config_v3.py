@@ -21,6 +21,14 @@ near range lows, not chasing breakouts, with maker-style entries and
 conservative taker exits.
 """
 
+from nautilus_trader.model.objects import Quantity
+from nautilus_trader.trading.config import StrategyConfig
+
+# NOTE: The config class itself cannot go here without importing
+# nautilus_trader modules (which need the Rust .so). Keep this file
+# pure-constant so it can be imported even if nautilus_trader is broken.
+# Import KrakenBTCUSDMeanReversionConfig from strategy_v3.py instead.
+
 # --- Shared constants (same as V1/V2) ---
 
 KRAKEN_VENUE: str = "KRAKEN"
