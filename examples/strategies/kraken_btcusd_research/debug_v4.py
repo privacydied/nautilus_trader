@@ -6,8 +6,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR.parent.parent.parent))
 
 from nautilus_trader.persistence.catalog.parquet import ParquetDataCatalog
-from nautilus_trader.model.data import Bar, BarType, BarSpecification, BarAggregation, PriceType
+from nautilus_trader.model.data import Bar, BarType, BarSpecification, BarAggregation
+from nautilus_trader.model.enums import PriceType
 from nautilus_trader.model.identifiers import InstrumentId
+from nautilus_trader.model.objects import Price, Quantity
 from nautilus_trader.indicators import ExponentialMovingAverage as EMA, DonchianChannel as Donchian, AverageTrueRange as ATR
 
 iid = InstrumentId.from_str("BTC/USD.KRAKEN")
@@ -30,7 +32,6 @@ for b in bars_15m:
         group = []
 print(f"1h bars: {len(bars_1h)}")
 
-from nautilus_trader.model.objects import Price, Quantity
 ema50 = EMA(50)
 ema200 = EMA(200)
 donch = Donchian(100)
@@ -41,6 +42,10 @@ ema_cross_bars = donch_break_bars = atr_exp_bars = all_pass = 0
 
 for i, bar in enumerate(bars_1h):
     c = float(bar.close); h = float(bar.high); l = float(bar.low)
+
+    # Check Donchian breakout BEFORE updating (avoid self-fulfilling comparison)
+    prior_upper = donch.upper if donch.initialized else None
+    
     ema50.update_raw(c)
     ema200.update_raw(c)
     donch.update_raw(h, l)
@@ -52,7 +57,7 @@ for i, bar in enumerate(bars_1h):
         continue
 
     cond1 = ema50.initialized and ema200.initialized and ema50.value > ema200.value
-    cond2 = donch.initialized and c > donch.upper
+    cond2 = prior_upper is not None and c > prior_upper
     cond3 = atr.initialized and atr.value > 0
     med = 0
     if len(atr_med) >= 10:
@@ -66,7 +71,7 @@ for i, bar in enumerate(bars_1h):
     if cond1 and cond2 and cond3 and cond4:
         all_pass += 1
         if all_pass <= 3:
-            print(f"  BAR {i}: close={c:.2f} EMA50={ema50.value:.2f} EMA200={ema200.value:.2f} DonchHI={donch.upper:.2f} ATR={atr.value:.2f} MedATR={med:.2f}")
+            print(f"  BAR {i}: close={c:.2f} EMA50={ema50.value:.2f} EMA200={ema200.value:.2f} DonchHI={prior_upper:.2f} ATR={atr.value:.2f} MedATR={med:.2f}")
 
 print(f"\nSummary (after warmup):")
 print(f"  EMA(50)>EMA(200): {ema_cross_bars} bars")

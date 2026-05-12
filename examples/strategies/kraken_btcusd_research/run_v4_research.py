@@ -121,27 +121,37 @@ def run_window(catalog_path, label, start, end, reports_dir, starting_balance=ST
 
     result = engine.get_result()
 
-    # Extract PnL from engine reports
+    # Extract stats from engine — Nautilus keys stats_pnls by currency (e.g. 'USD')
+    raw_stats = result.stats_pnls.get("USD", result.stats_pnls.get("stats", {}))
+    wins = 0
+    losses = 0
+    total_trades = 0
+    total_pnl = float(raw_stats.get("PnL (total)", 0.0))
+    win_rate_raw = raw_stats.get("Win Rate", 0.0)
+
     try:
         positions_df = engine.trader.generate_positions_report()
     except Exception:
         positions_df = None
 
-    total_pnl = 0.0
-    total_fees = 0.0
-    wins = 0
-    losses = 0
-
-    if positions_df is not None and len(positions_df) > 0 and "realized_pnl" in positions_df.columns:
+    if positions_df is not None and len(positions_df) > 0:
+        # Use position report for trade-level win/loss counting
         for _, row in positions_df.iterrows():
             pnl = parse_pnl(row.get("realized_pnl", 0))
-            comm = parse_commission(row.get("commissions", 0))
-            total_pnl += pnl
-            total_fees += comm
             if pnl > 0:
                 wins += 1
+                total_trades += 1
             elif pnl < 0:
                 losses += 1
+                total_trades += 1
+        win_rate = wins / total_trades * 100 if total_trades > 0 else 0.0
+        # Fees from position-level summation (commissions column is a list of strings)
+        total_fees = 0.0
+        for _, row in positions_df.iterrows():
+            total_fees += parse_commission(row.get("commissions", 0))
+    else:
+        win_rate = win_rate_raw * 100 if isinstance(win_rate_raw, float) else 0.0
+        total_fees = 0.0  # Could not extract
 
     total_trades = wins + losses
     win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0

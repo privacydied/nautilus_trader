@@ -119,6 +119,14 @@ def parse_pnl(val) -> float:
     """
     if val is None or val == "":
         return 0.0
+
+    # Handle list format from positions report: ['3.58 USD']
+    if isinstance(val, list):
+        total = 0.0
+        for item in val:
+            total += parse_commission(item)
+        return total
+
     s = str(val).strip()
     # Strip Money repr: "12.34 'USD'" -> "12.34"
     if s.startswith("Money("):
@@ -159,11 +167,18 @@ def generate_reports(
     stats_pnls = backtest_result.stats_pnls.get("stats", {})
     stats_returns = backtest_result.stats_returns
 
-    total_pnl = stats_pnls.get("total_pnl", 0.0)
-    total_fees = stats_pnls.get("total_fees", 0.0)
+    # Extract PnL stats — Nautilus now keys stats_pnls by currency (e.g. 'USD')
+    # instead of using 'stats'. Try both patterns.
+    raw_stats = {}
+    for key, val in backtest_result.stats_pnls.items():
+        if isinstance(val, dict):
+            raw_stats.update(val)
+    
+    total_pnl = raw_stats.get("total_pnl", 0.0)
+    total_fees = raw_stats.get("total_fees", raw_stats.get("total_commissions", 0.0))
     total_trades = backtest_result.total_positions
-    winning_trades = stats_pnls.get("winning_trades", 0)
-    losing_trades = stats_pnls.get("losing_trades", 0)
+    winning_trades = raw_stats.get("winning_trades", 0)
+    losing_trades = raw_stats.get("losing_trades", 0)
     win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0.0
     avg_win = stats_pnls.get("average_win", 0.0)
     avg_loss = stats_pnls.get("average_loss", 0.0)

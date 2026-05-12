@@ -145,14 +145,19 @@ class KrakenBTCUSDV4TrendStrategy(Strategy):
             f"Donchian({self.donchian_window}) | "
             f"ATR trailing={self.trailing_stop_atr_multiplier}x"
         )
-
     def on_bar(self, bar: Bar) -> None:
         self.bars_processed += 1
         close = float(bar.close)
         high = float(bar.high)
         low = float(bar.low)
 
-        # Update indicators
+        # Capture prior Donchian high BEFORE updating — breakout is checked against
+        # the donchian upper from previous bars only.
+        prior_donch_high: Optional[float] = None
+        if self.donchian and self.donchian.initialized:
+            prior_donch_high = self.donchian.upper
+
+        # Update all indicators every bar (including warmup).
         if self.ema_fast:
             self.ema_fast.update_raw(close)
         if self.ema_slow:
@@ -162,9 +167,9 @@ class KrakenBTCUSDV4TrendStrategy(Strategy):
         if self.donchian:
             self.donchian.update_raw(high, low)
         if self.atr:
-            atr_val = self.atr.update_raw(high, low, close)
-            if atr_val is not None:
-                a = float(atr_val) if not isinstance(atr_val, float) else atr_val
+            self.atr.update_raw(high, low, close)
+            if self.atr.initialized:
+                a = float(self.atr.value) if not isinstance(self.atr.value, float) else self.atr.value
                 self._atr_history.append(a)
                 while len(self._atr_history) > self.atr_expansion_window + 1:
                     self._atr_history.popleft()
@@ -178,9 +183,8 @@ class KrakenBTCUSDV4TrendStrategy(Strategy):
             if high > self.highest_high_since_entry:
                 self.highest_high_since_entry = high
 
-        # Check warm-up
+        # Warmup guard — indicators still being built, skip trading.
         if not self._indicators_warmed_up():
-            self.log.debug(f"Bar {self.bars_processed}: warming up...")
             return
 
         # --- Exit checks ---
@@ -190,9 +194,9 @@ class KrakenBTCUSDV4TrendStrategy(Strategy):
                 self.submit_order(exit_order)
                 return
 
-        # --- Entry checks ---
+        # --- Entry checks (use prior Donchian high) ---
         if not self._has_open_position and self.cooldown_timer <= 0:
-            entry_order = self._check_entry(bar)
+            entry_order = self._check_entry(bar, prior_donch_high)
             if entry_order is not None:
                 self.submit_order(entry_order)
 
@@ -258,7 +262,7 @@ class KrakenBTCUSDV4TrendStrategy(Strategy):
             return (h[n // 2 - 1] + h[n // 2]) / 2.0
         return float(h[n // 2])
 
-    def _check_entry(self, bar: Bar) -> Optional[Order]:
+    def _check_entry(self, bar: Bar, prior_donchian_high: Optional[float]) -> Optional[Order]:
         """
         Entry conditions:
         1. EMA(50) > EMA(200) -- trend filter
@@ -273,9 +277,9 @@ class KrakenBTCUSDV4TrendStrategy(Strategy):
         if self.ema_fast.value <= self.ema_slow.value:
             return None
 
-        if self.donchian is None:
+        if self.donchian is None or prior_donchian_high is None:
             return None
-        if close <= self.donchian.upper:
+        if close <= prior_donchian_high:
             return None
 
         atr = self._atr_value()
