@@ -26,19 +26,19 @@ Key differences from V1/V2:
 - Conservative taker exits
 """
 
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Deque, Optional, Deque as deque_type
-
-from nautilus_trader.model.currencies import BTC, USD
+from nautilus_trader.model.currencies import USD
 from nautilus_trader.model.data import Bar
-from nautilus_trader.model.enums import OrderSide, OrderType, PriceType, TimeInForce
+from nautilus_trader.model.enums import OrderSide, TimeInForce
 from nautilus_trader.model.identifiers import InstrumentId
-from nautilus_trader.model.objects import Money, Price, Quantity
+from nautilus_trader.model.objects import Price, Quantity
 from nautilus_trader.trading.strategy import Strategy
 from nautilus_trader.trading.config import StrategyConfig
 from nautilus_trader.model.orders import Order
-
 from nautilus_trader.indicators import AverageTrueRange as ATR
+from nautilus_trader.indicators import RelativeStrengthIndex as RSI
 from nautilus_trader.indicators import RelativeStrengthIndex as RSI
 
 
@@ -151,6 +151,10 @@ class KrakenBTCUSDMeanReversionStrategy(Strategy):
         self._pending_limit_bar: int = -1
         self._is_pending: bool = False
 
+        # Position state (tracked via on_order_filled, NOT on_position_changed)
+        self._has_open_position: bool = False
+        self._position_qty: float = 0.0  # positive = long, negative = short
+
         # Cooldown
         self.cooldown_timer: int = -1
 
@@ -193,6 +197,11 @@ class KrakenBTCUSDMeanReversionStrategy(Strategy):
         if self.rsi:
             self.rsi.update_raw(close)
 
+        # Update trailing stop high if we have a position
+        if self._has_open_position and self.highest_high_since_entry is not None:
+            if high > self.highest_high_since_entry:
+                self.highest_high_since_entry = high
+
         # Cooldown tick
         if self.cooldown_timer > 0:
             self.cooldown_timer -= 1
@@ -217,45 +226,54 @@ class KrakenBTCUSDMeanReversionStrategy(Strategy):
                 return
 
         # --- Exit checks (position open) ---
-        if self.position.is_net_long or self.position.is_flat:
-            if self.position.is_net_long:
-                exit_order = self._check_exit(bar)
-                if exit_order is not None:
-                    self.submit_order(exit_order)
-                    return
+        if self._has_open_position:
+            exit_order = self._check_exit(bar)
+            if exit_order is not None:
+                self.submit_order(exit_order)
+                return
 
         # --- Entry checks (no position, no pending) ---
-        if not self.position.is_net_long and not self._is_pending and self.cooldown_timer <= 0:
+        if not self._has_open_position and not self._is_pending and self.cooldown_timer <= 0:
             entry_order = self._check_entry(bar)
             if entry_order is not None:
                 # Create pending limit order (do NOT submit yet)
                 self._create_pending_limit(entry_order, bar)
 
-    def on_order_filled(self, fill: Order) -> None:
-        # Note: for maker limit orders, the engine fills them
-        # We track position state via the position callback
-        pass
+    def on_order_filled(self, fill: "OrderFilled") -> None:
+        """Track position state from fill events (V1 pattern)."""
+        from nautilus_trader.model.enums import OrderSide
+
+        qty = float(fill.last_qty.as_decimal())
+        if fill.order_side == OrderSide.BUY and qty > 0:
+            self._has_open_position = True
+            self._position_qty += qty
+            self.entry_price = float(fill.last_px)
+            self.entry_bar = self.bars_processed
+            self.initial_stop_price = None
+            self.highest_high_since_entry = float(fill.last_px)
+            # Clear pending in case it wasn't cleared
+            self._clear_pending()
+            self.log.info(
+                f"Bar {self.bars_processed}: position opened at {self.entry_price:.2f} "
+                f"qty={self._position_qty}"
+            )
+        elif fill.order_side == OrderSide.SELL and qty > 0:
+            self._position_qty -= qty
+            if self._position_qty <= 1e-10:
+                self._has_open_position = False
+                self.entry_price = None
+                self.entry_bar = 0
+                self.initial_stop_price = None
+                self.highest_high_since_entry = None
+                if self.cooldown_timer <= 0:
+                    self.cooldown_timer = self.cooldown_bars
+                self.log.info(
+                    f"Bar {self.bars_processed}: position closed, qty={self._position_qty}"
+                )
 
     def on_position_changed(self, position) -> None:
-        """Track position lifecycle."""
-        if position.is_closed:
-            # Reset entry tracking
-            self.entry_price = None
-            self.entry_bar = 0
-            self.initial_stop_price = None
-            self.highest_high_since_entry = None
-            # Set cooldown
-            if self.cooldown_timer <= 0:
-                self.cooldown_timer = self.cooldown_bars
-                self.log.debug(f"Bar {self.bars_processed}: cooldown set after exit")
-
-        elif position.is_open or position.is_net_long:
-            if self.entry_price is None:
-                self.entry_price = float(position.avg_px_open)
-                self.entry_bar = self.bars_processed
-                self.log.info(
-                    f"Bar {self.bars_processed}: position opened at {self.entry_price}"
-                )
+        # Not used — position state is tracked via on_order_filled
+        pass
 
     def on_stop(self) -> None:
         self.log.info("V3 Mean Reversion stopped.")
@@ -522,14 +540,13 @@ class KrakenBTCUSDMeanReversionStrategy(Strategy):
 
     def _create_exit_order(self, bar: Bar) -> Optional[Order]:
         """Create a market sell order to exit position."""
-        pos_qty = self.position.quantity
-        if pos_qty is None or float(pos_qty.as_decimal()) <= 0:
+        if self._position_qty <= 1e-10:
             return None
 
         return self.order_factory.market(
             instrument_id=self.instrument_id,
             order_side=OrderSide.SELL,
-            quantity=pos_qty,
+            quantity=Quantity(self._position_qty, 8),
             time_in_force=TimeInForce.GTC,
         )
 
