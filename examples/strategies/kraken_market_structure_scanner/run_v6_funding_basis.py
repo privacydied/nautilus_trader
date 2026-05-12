@@ -8,7 +8,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from examples.strategies.kraken_market_structure_scanner.funding_config import FundingConfig
+from examples.strategies.kraken_market_structure_scanner.funding_config import FundingConfig, SYMBOL_MAP
 from examples.strategies.kraken_market_structure_scanner.funding_scanner import run_funding_scan
 from examples.strategies.kraken_market_structure_scanner.symbols import STANDARD_SYMBOLS
 
@@ -28,8 +28,8 @@ def main():
     args = parser.parse_args()
 
     for a in args.assets:
-        if a not in STANDARD_SYMBOLS:
-            print(f"Error: unknown asset '{a}'. Known: {list(STANDARD_SYMBOLS.keys())}")
+        if a not in SYMBOL_MAP:
+            print(f"Error: unknown asset '{a}'. Known: {list(SYMBOL_MAP.keys())}")
             sys.exit(1)
 
     cfg = FundingConfig(

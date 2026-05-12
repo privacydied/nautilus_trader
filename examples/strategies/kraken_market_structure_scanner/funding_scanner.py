@@ -153,16 +153,14 @@ def make_observation(asset, spot_pl, perp_pl, frate, cfg, perp_venue):
     reason = None
     if frate is not None and frate <= 0:
         reason = "funding_rate_not_positive"
-    elif estimated_net_edge < cfg.min_net_edge_bps:
-        reason = f"net_edge_too_low"
+    elif quote_mismatch:
+        reason = "USD_USDT_mismatch"
     elif funding_apr is not None and funding_apr < cfg.min_funding_apr:
         reason = "funding_apr_too_low"
+    elif estimated_net_edge < cfg.min_net_edge_bps:
+        reason = f"net_edge_too_low"
     else:
         is_candidate = True
-
-    if quote_mismatch:
-        reason = (reason + "; ") if reason else ""
-        reason += "USD_USDT_mismatch"
 
     return FundingObservation(
         timestamp_ms=_recv_ms(),
