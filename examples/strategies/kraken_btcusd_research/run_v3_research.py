@@ -159,20 +159,19 @@ def run_window(
     total_fees = 0.0
     if positions_df is not None and not positions_df.empty:
         for _, row in positions_df.iterrows():
-            raw_pnl = str(row.get("realized_pnl", "")).strip()
-            if raw_pnl and raw_pnl not in ("0", "0.0"):
-                s = raw_pnl.replace("USD", "").replace(",", "").strip().lstrip("[('").rstrip(")]'")
-                try:
-                    total_pnl += float(s)
-                except ValueError:
-                    pass
-            raw_comm = str(row.get("commissions", "")).strip()
-            if raw_comm and raw_comm not in ("0", "0.0"):
-                s = raw_comm.replace("USD", "").replace(",", "").strip().lstrip("[('").rstrip(")]'")
-                try:
-                    total_fees += float(s)
-                except ValueError:
-                    pass
+            raw_pnl = str(row.get("realized_pnl", "0")).strip()
+            # Parse "0.00 USD" or "-15.37  USD" format
+            s = raw_pnl.replace("USD", "").replace(",", "").strip().lstrip("[('").rstrip("')]")
+            try:
+                total_pnl += float(s)
+            except ValueError:
+                pass
+            raw_comm = str(row.get("commissions", "0")).strip()
+            s2 = raw_comm.replace("USD", "").replace(",", "").strip().lstrip("[('").rstrip("')]")
+            try:
+                total_fees += float(s2)
+            except ValueError:
+                pass
 
     sharpe = result.stats_returns.get("sharpe_ratio", 0.0) if result.stats_returns else 0.00
     final_equity = STARTING_BALANCE_USD + total_pnl - total_fees
