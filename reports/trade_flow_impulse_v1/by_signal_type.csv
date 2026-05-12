@@ -1,0 +1,5 @@
+signal_type,total_signals,valid_events,avg_mean_net_return_bps
+count_burst,0,0,
+large_trade,748,4380,-14.0412
+notional_burst,442,2572,-13.9632
+signed_imbalance,708,4151,-14.0158
