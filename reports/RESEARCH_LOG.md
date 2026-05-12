@@ -62,6 +62,57 @@ The funding/basis cash-and-carry thesis is rejected for these venues, assets, an
 - Different venue classes (DEX, options, calendar spreads)
 - Non-Kraken/Binance/Bybit venues
 
+## V7: L2 Maker Microstructure Paper Simulator — REJECTED
+
+- **Scope**: Kraken public WebSocket v2, BTC/USD and ETH/USD order book + trades
+- **Method**: Subscribe to live L2 book, place paper post-only maker quotes at the touch, model fills pessimistically (book must cross price for pessimistic, touch for neutral), track adverse selection, compute PnL after maker fees + fill penalty
+- **Data source**: Kraken WS v2 public endpoint, no private keys, no orders
+- **Fill assumptions**: Same-tick fills disallowed. Conservative fee model: maker fee 3.0 bps + fill penalty 2.0 bps = 5.0 bps per round-trip fill
+- **Quote lifetime**: 5 seconds, cancel on mid-move, spread collapse, imbalance flip
+- **Duration**: 120 seconds per model (pessimistic + neutral)
+
+### Results
+
+| Model | Book Updates | Quotes Placed | Fills | Avg Spread (bps) | Gross PnL (bps) | Fees (bps) | Net PnL (bps) |
+|-------|-------------|---------------|-------|---------------------|-----------------|------------|---------------|
+| Pessimistic | 15,283 | 28,364 | 0 | 0.2020 | 0.0000 | 0.0000 | 0.0000 |
+| Neutral | 14,564 | 26,622 | 3 | 0.1770 | 0.7286 | 15.0000 | -14.2714 |
+
+### Conclusion
+
+Average Kraken BTC/USD spread: ~0.20 bps. Average half-spread captured: ~0.10 bps.
+Maker fee + fill penalty cost: ~5.0 bps per fill. The spread is 25-50x smaller than the cost.
+No queue priority assumption, no model tweak, no longer runtime can bridge this gap.
+This is a **structural fee/spread impossibility** at this venue and fee tier.
+
 ---
 
-*Log maintained as of May 12, 2026. Branch: kraken-v6-market-structure-scanner, tag: v6-market-structure-rejected.*
+## Final Verdict
+
+**Kraken trading research is stopped under the current fee/account setup.**
+
+| Phase | Thesis | Result | Verdict |
+|-------|--------|--------|---------|
+| V1-V5 | OHLCV indicator strategies | No statistically significant edge | REJECTED |
+| V6-A | Cross-venue spot spread | 0/8 profitable, net -56 bps | REJECTED |
+| V6-B | BTC/ETH funding/basis | 0/36 candidates | REJECTED |
+| V6-C | Altcoin funding anomalies | 0/468 candidates, max APR 10.95% | REJECTED |
+| V7 | L2 maker microstructure | Spread 0.20 bps << cost 5.0 bps | REJECTED |
+
+**Reason:**
+No tested strategy class produced a realistic positive edge after accounting for fees, spreads, buffers, and execution assumptions. V7 confirms that Kraken BTC/USD and ETH/USD top-of-book spreads are far smaller than the maker fee + penalty cost, making microstructure market making structurally uneconomic at this fee tier.
+
+**Action:**
+No V8. No live trading. Reuse the scaffold only if the venue, fee tier, instrument class, or capital assumptions change materially.
+
+**Remaining paths (not V8):**
+1. Lower-fee venue / rebate venue — needed for market making
+2. Different instrument class — options, calendar spreads, prediction markets
+3. VIP fee tier — only if expected edge is close (it is not on Kraken BTC/ETH)
+4. Non-trading monetizable project — most likely to produce money
+
+---
+
+---
+
+*Log updated May 12, 2026. Tag: kraken-trading-research-rejected-2026-05-12.*
