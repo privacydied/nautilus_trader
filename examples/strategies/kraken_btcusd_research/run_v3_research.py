@@ -170,33 +170,30 @@ def run_window(
     engine.dispose()
     return summary
 
-
 def main():
     """Run all four windows and produce a comparison table."""
     repo_root = REPO_ROOT
     catalog_base = repo_root / "data" / "catalog"
-
-    # Resolve per-window catalogs (15m preferred, fall back to 5m)
-    catalog_paths = {}
-    for label, start, end in WINDOWS:
-        p15 = catalog_base / f"kraken_btcusd_15m_{label}"
-        p5 = catalog_base / f"kraken_btcusd_{label}"
-        if p15.exists():
-            catalog_paths[label] = str(p15)
-        elif p5.exists():
-            catalog_paths[label] = str(p5)
-        else:
-            print(f"ERROR: No catalog for {label}")
-            return 1
-
     reports_base = repo_root / "reports" / "baseline_v3"
     reports_base.mkdir(parents=True, exist_ok=True)
 
     results = {}
     for label, start, end in WINDOWS:
+        # Try 15m per-window catalog first, fall back to 5m
+        p15 = catalog_base / f"kraken_btcusd_15m_{label}"
+        p5 = catalog_base / f"kraken_btcusd_{label}"
+        if p15.exists():
+            catalog_path = str(p15)
+            print(f"Using 15m catalog for {label}")
+        elif p5.exists():
+            catalog_path = str(p5)
+            print(f"WARNING: 15m catalog not found for {label}, using 5m")
+        else:
+            print(f"ERROR: No catalog for {label}")
+            continue
         window_reports = reports_base / label
         summary = run_window(
-            catalog_path=catalog_paths[label],
+            catalog_path=catalog_path,
             label=label,
             start=start,
             end=end,
