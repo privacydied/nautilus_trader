@@ -1,0 +1,77 @@
+"""Configuration for the venue-agnostic signal observer."""
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+
+@dataclass
+class Horizon:
+    """A forward-return horizon."""
+    name: str          # e.g. "10s", "5m"
+    seconds: float     # e.g. 10.0, 300.0
+
+
+DEFAULT_HORIZONS: List[Horizon] = [
+    Horizon("10s", 10.0),
+    Horizon("30s", 30.0),
+    Horizon("60s", 60.0),
+    Horizon("5m", 300.0),
+    Horizon("15m", 900.0),
+    Horizon("1h", 3600.0),
+]
+
+
+@dataclass
+class FeeModel:
+    """Simple flat fee + slippage + optional quote-mismatch buffer."""
+    fee_bps: float = 5.0
+    slippage_bps: float = 1.0
+    quote_mismatch_buffer_bps: float = 0.0
+
+    def total_cost_bps(self, quote_mismatch: bool) -> float:
+        cost = self.fee_bps + self.slippage_bps
+        if quote_mismatch:
+            cost += self.quote_mismatch_buffer_bps
+        return cost
+
+
+@dataclass
+class SignalSourceConfig:
+    """Configuration for a signal source."""
+    # CSV signal source
+    signals_csv_path: Optional[str] = None
+    columns_mapping: Optional[dict] = None  # map CSV column names to SignalEvent fields
+
+    # Cross-market signal source
+    cross_market_source_venue: Optional[str] = None
+    cross_market_source_instrument: Optional[str] = None
+    cross_market_target_venue: Optional[str] = None
+    cross_market_target_instrument: Optional[str] = None
+    cross_market_move_threshold_bps: float = 20.0
+    cross_market_lookback_seconds: float = 60.0
+    cross_market_cooldown_seconds: float = 60.0
+
+
+@dataclass
+class ObserverConfig:
+    """Top-level configuration for the signal observer."""
+    horizons: List[Horizon] = field(default_factory=lambda: list(DEFAULT_HORIZONS))
+    fee_model: FeeModel = field(default_factory=FeeModel)
+    signal_source: SignalSourceConfig = field(default_factory=SignalSourceConfig)
+
+    # Data input — CSV bars for the target instrument
+    bars_csv_path: Optional[str] = None
+    bars_csv_columns: dict = field(default_factory=lambda: {
+        "timestamp": "timestamp",
+        "close": "close",
+    })
+
+    # Filtering
+    quote_source_currency: str = "USDT"
+    quote_target_currency: str = "USD"
+    apply_quote_mismatch_buffer: bool = True
+
+    # Output
+    output_dir: str = "reports/signal_observer"
+
+    # Synthetic mode (deterministic smoke runs)
+    synthetic: bool = False
