@@ -733,9 +733,12 @@ class TestNoOrderGuard:
         violations = []
         test_file = Path(__file__).resolve()
         # Also exclude other test files that intentionally scan for these strings
-        other_test = pkg / "tests" / "test_all.py"
+        other_tests = [
+            pkg / "tests" / "test_all.py",
+            pkg / "tests" / "test_trade_flow_impulse.py",
+        ]
         for fpath in pkg.rglob("*.py"):
-            if fpath == test_file or fpath == other_test:
+            if fpath == test_file or fpath in other_tests:
                 continue
             content = fpath.read_text()
             for forbidden in self._FORBIDDEN:

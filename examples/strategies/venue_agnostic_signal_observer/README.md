@@ -47,9 +47,11 @@ examples/strategies/venue_agnostic_signal_observer/
   tick_models.py         — TradeTickLite, QuoteTickLite, TickSignalEvent, TickForwardReturn
   tick_store.py          — JSONL loader/saver, sort, dedup, stale rejection, file discovery
   event_study.py         — Tick-level lead-lag generator, forward returns, candidate gate
+  trade_flow_impulse.py  — Trade-flow impulse signals (count burst, notional burst, large trade, signed imbalance)
   ws_collectors.py       — (placeholder) Public WebSocket collectors
   run_tick_capture.py    — CLI for real-time public tick capture
   run_tick_lead_lag.py   — CLI sweep runner for tick-level lead-lag study
+  run_trade_flow_impulse.py — CLI sweep runner for trade-flow impulse study
   run_signal_observer.py — Legacy CLI for the original bar-based observer
 
   data/                  — Downloaded CSV tick data lives here
@@ -78,6 +80,7 @@ All tests must pass.  The suite includes:
 - Candidate gate logic
 - Report output verification
 - No-order and no-key code scans
+- Trade-flow impulse config validation, tick-rule proxy, burst detection direction, metadata structure, large-trade guard
 
 ---
 
@@ -157,6 +160,65 @@ contains:
 - Baseline comparison
 - Candidate groups (if any)
 - Final verdict
+
+---
+
+## Running the trade-flow impulse study (trade count, notional, large trades, signed imbalance)
+
+### Step 1: Capture ticks (same as above, or reuse existing data)
+
+Tick data is shared with the lead-lag study. See the section above.
+
+### Step 2: Run the sweep
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_trade_flow_impulse \
+    --ticks data/signal_observer_ticks_v3 \
+    --source-venues coinbase,kraken \
+    --target-venues kraken,coinbase \
+    --symbols BTC/USD,ETH/USD \
+    --signal-types count_burst,notional_burst,large_trade,signed_imbalance \
+    --lookbacks-ms 1000,5000,10000,30000 \
+    --baseline-window-ms 60000 \
+    --horizons-ms 1000,2000,5000,10000,30000,60000 \
+    --cooldown-ms 10000 \
+    --fee-bps 12 \
+    --slippage-bps 2 \
+    --quote-mismatch-buffer-bps 5 \
+    --min-events 50 \
+    --out reports/trade_flow_impulse_v1
+```
+
+Key differences from tick lead-lag:
+- **Signal source**: trade flow (count, notional, large trades, imbalance) instead of raw price moves
+- **Direction**: derived from concurrent price move or exchange-reported side, not from a price lead
+- **Baseline window**: rolling 60s median used for burst/multiplier comparison
+- **Per-type sweep**: each signal type is evaluated independently across lookbacks
+
+### Signal types
+
+| Type | What it detects | Direction label |
+|---|---|---|
+| `count_burst` | Trade count in lookback > rolling median × multiplier | From source price move over same lookback |
+| `notional_burst` | Notional volume in lookback > rolling median × multiplier | From source price move over same lookback |
+| `large_trade` | Single trade notional >= minimum or > rolling median × multiplier | From exchange side if known, else price move |
+| `signed_imbalance` | (buy_notional − sell_notional) / total exceeds threshold | Buy imbalance → long; sell imbalance → short |
+
+### Step 3: Read the report
+
+The report at `reports/trade_flow_impulse_v1/trade_flow_impulse_report.md` contains
+the same verdict structure as the tick lead-lag study, plus additional aggregation
+by signal type.
+
+---
+
+## Research archive
+
+| Study | Verdict | Tag | Date |
+|---|---|---|---|
+| OHLCV lead-lag (1m bars, Binance→Kraken) | REJECTED | — | 2026-05-12 |
+| Tick lead-lag v3 (Coinbase/Kraken BTC/ETH, 600s ticks) | REJECTED | `lead-lag-v3-coinbase-kraken-rejected` | 2026-05-12 |
+| Trade-flow impulse v1 | Pending | — | — |
 
 ---
 
