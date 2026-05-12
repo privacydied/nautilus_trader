@@ -1,0 +1,57 @@
+{
+  "run_start_utc": "2026-05-12T22:32:07.106171+00:00",
+  "run_end_utc": "2026-05-12T22:42:07.241142+00:00",
+  "duration_seconds": 600.135,
+  "venues": [
+    "kraken",
+    "coinbase"
+  ],
+  "requested_symbols": [
+    "BTC/USD",
+    "ETH/USD"
+  ],
+  "files_written": [
+    "data/signal_observer_ticks_v3/trades_kraken_BTC-USD_1778625127.jsonl",
+    "data/signal_observer_ticks_v3/trades_kraken_ETH-USD_1778625127.jsonl",
+    "data/signal_observer_ticks_v3/trades_coinbase_BTC-USD_1778625127.jsonl",
+    "data/signal_observer_ticks_v3/trades_coinbase_ETH-USD_1778625127.jsonl"
+  ],
+  "tick_counts": {
+    "kraken|BTC/USD": 180,
+    "kraken|ETH/USD": 85,
+    "coinbase|BTC/USD": 1720,
+    "coinbase|ETH/USD": 743
+  },
+  "first_tick_ts": {
+    "coinbase|ETH/USD": 1778625127980422912,
+    "coinbase|BTC/USD": 1778625128456281856,
+    "kraken|BTC/USD": 1778625131318845952,
+    "kraken|ETH/USD": 1778625131649178880
+  },
+  "last_tick_ts": {
+    "coinbase|ETH/USD": 1778625726855099904,
+    "coinbase|BTC/USD": 1778625726938216960,
+    "kraken|BTC/USD": 1778625726290877184,
+    "kraken|ETH/USD": 1778625726293533952
+  },
+  "price_min": {
+    "coinbase|ETH/USD": 2283.69,
+    "coinbase|BTC/USD": 80600.0,
+    "kraken|BTC/USD": 80621.1,
+    "kraken|ETH/USD": 2283.34
+  },
+  "price_max": {
+    "coinbase|ETH/USD": 2286.89,
+    "coinbase|BTC/USD": 80704.27,
+    "kraken|BTC/USD": 80679.9,
+    "kraken|ETH/USD": 2285.99
+  },
+  "price_move_bps": {
+    "coinbase|ETH/USD": 14.012409740375524,
+    "coinbase|BTC/USD": 12.93672456575733,
+    "kraken|BTC/USD": 7.293376051677335,
+    "kraken|ETH/USD": 11.605805530493209
+  },
+  "errors": [],
+  "warnings": []
+}

@@ -75,3 +75,25 @@ class ObserverConfig:
 
     # Synthetic mode (deterministic smoke runs)
     synthetic: bool = False
+
+
+@dataclass
+class LeadLagConfig:
+    """Configuration for a cross-venue lead-lag sweep experiment."""
+    # Source venue pair
+    source_venue: str = "BINANCE"
+    source_instrument: str = "BTC/USDT"
+    target_venue: str = "KRAKEN"
+    target_instrument: str = "BTC/USD"
+
+    # Lookback windows (seconds) — how far back to measure source move
+    lookback_windows: list[float] = field(default_factory=lambda: [10.0, 30.0, 60.0])
+
+    # Move thresholds (basis points) — minimum move to fire a signal
+    move_thresholds_bps: list[float] = field(default_factory=lambda: [5.0, 10.0, 20.0])
+
+    # Cooldown between signals (seconds)
+    cooldown_seconds: float = 60.0
+
+    # Data alignment grid (seconds) — resample period for cross-venue alignment
+    grid_seconds: float = 10.0

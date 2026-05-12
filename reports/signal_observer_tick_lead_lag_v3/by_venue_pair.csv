@@ -1,0 +1,3 @@
+venue_pair,symbols,total_signals,valid_events,avg_mean_net_return_bps
+coinbase→kraken,"BTC-USD,ETH-USD",101,489,-13.1198
+kraken→coinbase,"BTC-USD,ETH-USD",30,150,-12.9978
