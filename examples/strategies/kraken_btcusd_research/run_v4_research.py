@@ -49,7 +49,7 @@ WINDOWS = [
 
 def aggregate_bars_to_1h(bars_15m, iid):
     """Aggregate 15m bars to 1h bars. 4x 15m bars = 1h bar."""
-    spec_1h = BarSpecification(60, BarAggregation.MINUTE, PriceType.LAST)
+    spec_1h = BarSpecification(1, BarAggregation.HOUR, PriceType.LAST)
     bt_1h = BarType(iid, spec_1h)
     bars_1h = []
     group = []
