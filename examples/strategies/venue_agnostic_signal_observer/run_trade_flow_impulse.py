@@ -269,30 +269,35 @@ def run_sweep(args: argparse.Namespace) -> TradeFlowImpulseSummary:
                 continue
 
             for symbol in symbols:
-                source_key = (source_venue, symbol)
-                target_key = (target_venue, symbol)
+                # Normalize lookup key to canonical hyphen form (what loader stores).
+                try:
+                    canon_sym = resolve_symbol(symbol)
+                    lookup_sym = f"{canon_sym.asset}-{canon_sym.quote}"
+                    display_sym = f"{canon_sym.asset}/{canon_sym.quote}"
+                    asset = canon_sym.asset
+                except ValueError:
+                    lookup_sym = symbol
+                    display_sym = symbol
+                    asset = symbol.split("/")[0] if "/" in symbol else symbol
+
+                source_key = (source_venue, lookup_sym)
+                target_key = (target_venue, lookup_sym)
 
                 if source_key not in grouped or target_key not in grouped:
-                    print(f"[SKIP] source={source_venue} target={target_venue} symbol={symbol}: missing data")
+                    print(f"[SKIP] source={source_venue} target={target_venue} symbol={display_sym}: missing data")
                     continue
 
                 source_ticks = grouped[source_key]
                 target_ticks = grouped[target_key]
 
                 if not source_ticks:
-                    print(f"[SKIP] source={source_venue} symbol={symbol}: no source ticks")
+                    print(f"[SKIP] source={source_venue} symbol={display_sym}: no source ticks")
                     continue
                 if not target_ticks:
-                    print(f"[SKIP] target={target_venue} symbol={symbol}: no target ticks")
+                    print(f"[SKIP] target={target_venue} symbol={display_sym}: no target ticks")
                     continue
 
-                try:
-                    canon = resolve_symbol(symbol)
-                    asset = canon.asset
-                except ValueError:
-                    asset = symbol.split("/")[0] if "/" in symbol else symbol
-
-                pair_label = f"{source_venue} → {target_venue} @ {symbol}"
+                pair_label = f"{source_venue} -> {target_venue} @ {display_sym}"
                 print(f"\n[3] Analyzing pair: {pair_label}")
                 print(f"    source: {len(source_ticks):>8} ticks  [{_format_ts(source_ticks[0].ts_event)} … {_format_ts(source_ticks[-1].ts_event)}]")
                 print(f"    target: {len(target_ticks):>8} ticks  [{_format_ts(target_ticks[0].ts_event)} … {_format_ts(target_ticks[-1].ts_event)}]")

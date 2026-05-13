@@ -17,6 +17,7 @@
 from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.enums import BookType, OmsType, AccountType
 from nautilus_trader.model.objects import Currency, Money
+from typing import Final
 
 # Stop loss multipliers (ATR-based)
 INITIAL_STOP_ATR_MULTIPLIER: Final[float] = 2.0
