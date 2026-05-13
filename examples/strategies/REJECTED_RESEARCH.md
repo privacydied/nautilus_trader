@@ -55,6 +55,27 @@ This rejected only that specific spot→spot pairing under the configured cost m
 The "derivatives lead-lag" research branch requires a derivatives source (perp or futures)
 to be tested. Until then the actual thesis remains OPEN_UNTESTED.
 
+## First DEX→CEX Empirical Run Summary
+
+The first real empirical run (2026-05-13 03:17-03:27 UTC) produced:
+
+* **CEX ticks:** 1,344 ticks across Kraken + Coinbase for SOL, LINK, AVAX, DOGE, ADA (10-min capture)
+* **DEX snapshots:** 18 snapshots from 2 LINK pools on ethereum/uniswap (2-min capture)
+* **Events:** 0 dislocation events fired
+* **Verdict:** `NEEDS_MORE_DATA`
+
+**Key findings:**
+* LINK/ETH and LINK/WETH prices frozen at $10.44 across all 18 snapshots (0.00 bps movement)
+* DEX Screener search API returns stale/cached prices during quiet market hours
+* SOL, AVAX, DOGE, ADA pools below $500k liquidity + $100k 1h volume threshold
+* Only 2 of 5 target assets had pools passing filters
+* The DEX search endpoint's 5m volume data is cumulative, not per-interval, making burst detection at 10s polling ineffective
+
+**What would be needed for a real test:**
+* Live DEX pool data from direct DEX Screener `/latest/dex/pairs/{chain}/{address}` endpoint
+* 30-60 minute capture during active market hours
+* Lower minimum thresholds (e.g. $100k liquidity / $50k vol1h) to include mid-tier pools
+
 ## Known Issues
 
 - config.py Final import: fixed 2026-05-13

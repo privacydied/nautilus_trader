@@ -252,6 +252,11 @@ cost model, event counts, forward-return distribution, and verdict.
 | Derivatives lead-lag v1 thesis (perp source->spot target) | OPEN_UNTESTED | -- | -- |
 | DEX-CEX spot dislocation v1 (on-chain -> CEX spot) | NEEDS_MORE_DATA | `dex-cex-v1-needs-more-data` | 2026-05-13 |
 
+Note: First empirical run found DEX Screener search API returns stale prices during
+quiet hours (LINK/ETH frozen at $10.44, 0 bps movement). Only 2/5 target assets
+(LINK pools) met the minimum $500k liquidity + $100k 1h volume thresholds. A real
+test requires direct DEX pair endpoint polling and longer captures during active hours.
+
 ---
 
 ## How to interpret report verdicts
