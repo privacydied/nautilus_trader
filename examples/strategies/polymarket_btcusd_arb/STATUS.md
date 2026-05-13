@@ -6,10 +6,10 @@ Phase 1 observer-only backtest and hypothesis validation. No live trading.
 ## Git Branch
 Current Nautilus branch: polymarket-btcusd-arb-phase1
 Base branch/commit: origin/develop / ace1612eb0917a3b691bb0c22dd82788db953ee2
-Remote tracking branch: origin/develop
+Remote tracking branch: fork/polymarket-btcusd-arb-phase1
 Was implementation done on polymarket-btcusd-arb-phase1: True
 Nautilus working tree status before implementation: clean before branch creation
-Nautilus working tree status after implementation: see git status
+Nautilus working tree status after implementation: implementation committed; untracked cache/ and reports/ contain generated warm-cache/report artifacts
 arb-bot working tree status before fixture generation: dirty pre-existing config/strategy_btc_15m.toml observed by read-only inspection
 arb-bot working tree status after fixture generation: approved script only if present
 
