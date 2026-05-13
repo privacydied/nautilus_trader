@@ -26,7 +26,7 @@ The full mined status table is at [reports/research_status_table.csv](../reports
 | Tick lead-lag v3 | Coinbase/Kraken BTC/ETH, 600s | Coinbase↔Kraken | REJECTED | Best -12.28 bps, win rate 0% | `lead-lag-v3-coinbase-kraken-rejected` |
 | Trade-flow impulse v1 (600s) | 4 signal types, 600s | Coinbase↔Kraken | REJECTED | Best -13.66 bps, win rate 0% | `trade-flow-impulse-v1-rejected` |
 | Trade-flow impulse v1 (300s) | 4 signal types, 300s | Coinbase↔Kraken | REJECTED | Best -11.97 bps, win rate 0% | `trade-flow-impulse-v1-300s-rejected` |
-| Derivatives lead-lag v1 | notional burst, price shock, signed imbalance | Coinbase→Kraken BTC | REJECTED | Best -18.74 bps, win rate 0% | — |
+| Derivatives lead-lag v1 (smoke) | notional burst, price shock, signed imbalance | Coinbase spot -> Kraken spot BTC | REJECTED_SPOT_SPOT_SMOKE | Best -18.74 bps, win rate 0% | `derivatives-lead-lag-v1-spot-smoke-rejected` |
 
 ## Locked Gates — Do Not Revisit Without Structural Change
 
@@ -34,14 +34,25 @@ The full mined status table is at [reports/research_status_table.csv](../reports
 2. **Same-asset same-quote cross-venue tick lead-lag** (CB↔KRK BTC/ETH). HFT-dominated, sub-second decay. Rejected.
 3. **Naive top-of-book L2 market making** on BTC/ETH at current fee tier. Spread too small, fills too toxic. Rejected.
 4. **Direct cash-and-carry** under Kraken USD spot + Binance/Bybit USDT perp cost model. Net edge below all-in cost. Rejected.
+5. **Same-asset spot/spot lead-lag** tested as a smoke run for the derivatives lead-lag v1 observer. REJECTED_SPOT_SPOT_SMOKE. The observer implementation is correct but the run only re-proved an already locked gate.
 
 ## Still Open
 
-- Derivatives flow impulse → spot lead-lag (perp venue as source, not spot)
+- **Derivatives flow impulse → spot lead-lag** (perp/futures venue as source, not spot). IMPLEMENTED_OBSERVER_ONLY. The `derivatives_lead_lag_v1` observer is built but has never been tested against an actual derivatives source (Binance/Bybit/Kraken futures perps). The initial v1 smoke run used Coinbase spot as source — a same-asset spot/spot pair already in locked gate #2. Actual derivatives-source thesis: OPEN_UNTESTED.
 - OI + price regime classification (filter, not standalone trade)
 - Funding as crowding/sentiment feature (not carry)
 - L2 adverse selection conditioning on book state
 - Options IV/RV regime overlay (filter, not trade)
+
+## Instrument Type Note
+
+The `derivatives_lead_lag_v1` run tagged as `REJECTED_SPOT_SPOT_SMOKE` used:
+- source: Coinbase BTC/USD (spot)
+- target: Kraken BTC/USD (spot)
+
+This rejected only that specific spot→spot pairing under the configured cost model.
+The "derivatives lead-lag" research branch requires a derivatives source (perp or futures)
+to be tested. Until then the actual thesis remains OPEN_UNTESTED.
 
 ## Known Issues
 

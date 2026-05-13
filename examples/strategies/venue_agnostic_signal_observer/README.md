@@ -216,9 +216,11 @@ by signal type.
 
 | Study | Verdict | Tag | Date |
 |---|---|---|---|
-| OHLCV lead-lag (1m bars, Binance→Kraken) | REJECTED | — | 2026-05-12 |
+| OHLCV lead-lag (1m bars, Binance->Kraken) | REJECTED | -- | 2026-05-12 |
 | Tick lead-lag v3 (Coinbase/Kraken BTC/ETH, 600s ticks) | REJECTED | `lead-lag-v3-coinbase-kraken-rejected` | 2026-05-12 |
-| Trade-flow impulse v1 | Pending | — | — |
+| Trade-flow impulse v1 | Pending | -- | -- |
+| Derivatives lead-lag v1 observer (smoke: Coinbase spot->Kraken spot BTC) | REJECTED_SPOT_SPOT_SMOKE | `derivatives-lead-lag-v1-spot-smoke-rejected` | 2026-05-13 |
+| Derivatives lead-lag v1 thesis (perp source->spot target) | OPEN_UNTESTED | -- | -- |
 
 ---
 

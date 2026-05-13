@@ -297,3 +297,320 @@ class TestNoForbiddenImports:
     def test_no_forbidden_code(self):
         violations = self._scan()
         assert not violations, f"Found forbidden terms:\\n" + "\\n".join(violations)
+
+
+# ---------------------------------------------------------------------------
+# Instrument type metadata tests
+# ---------------------------------------------------------------------------
+
+class TestInstrumentTypeMetadata:
+    """Ensure source/target instrument type metadata flows through the pipeline."""
+
+    def test_summary_has_instrument_types(self):
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            DerivativesLeadLagSummary,
+        )
+        s = DerivativesLeadLagSummary(
+            source_instrument_type="perp",
+            target_instrument_type="spot",
+        )
+        assert s.source_instrument_type == "perp"
+        assert s.target_instrument_type == "spot"
+
+    def test_default_instrument_types_are_unknown(self):
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            DerivativesLeadLagSummary,
+        )
+        s = DerivativesLeadLagSummary()
+        assert s.source_instrument_type == "unknown"
+        assert s.target_instrument_type == "unknown"
+
+    def test_cli_flags_parse(self):
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            _build_parser,
+        )
+        parser = _build_parser()
+        args = parser.parse_args([
+            "--source-ticks", "data/src.jsonl",
+            "--target-ticks", "data/tgt.jsonl",
+            "--source-instrument-type", "perp",
+            "--target-instrument-type", "spot",
+        ])
+        assert args.source_instrument_type == "perp"
+        assert args.target_instrument_type == "spot"
+
+    def test_cli_flags_default_to_unknown(self):
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            _build_parser,
+        )
+        parser = _build_parser()
+        args = parser.parse_args([
+            "--source-ticks", "data/src.jsonl",
+            "--target-ticks", "data/tgt.jsonl",
+        ])
+        assert args.source_instrument_type == "unknown"
+        assert args.target_instrument_type == "unknown"
+
+    def test_valid_instrument_types_constant(self):
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            VALID_INSTRUMENT_TYPES,
+        )
+        assert VALID_INSTRUMENT_TYPES == {"spot", "perp", "futures", "unknown"}
+
+
+# ---------------------------------------------------------------------------
+# Spot->spot guard: no overbroad rejection language
+# ---------------------------------------------------------------------------
+
+class TestSpotSpotGuard:
+    """A spot->spot run must not claim to reject the derivatives-lead-lag thesis."""
+
+    def test_spot_spot_verdict_is_pair_specific(self, tmp_path: Path):
+        import json
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            DerivativesLeadLagSummary,
+            _write_outputs,
+        )
+
+        summary = DerivativesLeadLagSummary(
+            total_signals=10,
+            valid_evaluations=30,
+            source_instrument_type="spot",
+            target_instrument_type="spot",
+            run_end=time.time(),
+        )
+
+        class _FakeArgs:
+            source_venue = "COINBASE"
+            target_venue = "KRAKEN"
+            symbol = "BTC/USD"
+            asset = "BTC"
+            signal_types = "notional_burst"
+            lookbacks_ms = "1000"
+            horizons_ms = "1000"
+            out_dir = str(tmp_path)
+
+        _write_outputs(summary, _FakeArgs())
+
+        # Check report.md does not claim derivatives thesis rejection
+        report = (tmp_path / "report.md").read_text()
+        assert "Thesis Status" in report
+        assert "OPEN_UNTESTED" in report
+        assert "does NOT test the derivatives lead-lag thesis" in report
+        # Must not say "derivatives lead-lag thesis rejected" or "derivatives branch rejected"
+        lower = report.lower()
+        assert "derivatives lead-lag thesis rejected" not in lower
+        assert "derivatives branch rejected" not in lower
+        # Should say REJECTED_SPOT_SPOT_SMOKE
+        assert "REJECTED_SPOT_SPOT_SMOKE" in report
+
+    def test_spot_spot_json_includes_instrument_types(self, tmp_path: Path):
+        import json
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            DerivativesLeadLagSummary,
+            _write_outputs,
+        )
+
+        summary = DerivativesLeadLagSummary(
+            total_signals=10,
+            valid_evaluations=30,
+            source_instrument_type="spot",
+            target_instrument_type="spot",
+            run_end=time.time(),
+        )
+
+        class _FakeArgs:
+            source_venue = "COINBASE"
+            target_venue = "KRAKEN"
+            symbol = "BTC/USD"
+            asset = "BTC"
+            signal_types = "notional_burst"
+            lookbacks_ms = "1000"
+            horizons_ms = "1000"
+            out_dir = str(tmp_path)
+
+        _write_outputs(summary, _FakeArgs())
+
+        data = json.loads((tmp_path / "summary.json").read_text())
+        assert data["summary"]["source_instrument_type"] == "spot"
+        assert data["summary"]["target_instrument_type"] == "spot"
+
+    def test_perp_source_verdict_allows_derivatives_rejection(self, tmp_path: Path):
+        """A run with perp source should be allowed to reject without the
+        'NOT a rejection of the derivatives thesis' disclaimer."""
+        import json
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            DerivativesLeadLagSummary,
+            _write_outputs,
+        )
+
+        summary = DerivativesLeadLagSummary(
+            total_signals=10,
+            valid_evaluations=30,
+            source_instrument_type="perp",
+            target_instrument_type="spot",
+            run_end=time.time(),
+        )
+
+        class _FakeArgs:
+            source_venue = "BINANCE"
+            target_venue = "KRAKEN"
+            symbol = "BTC/USD"
+            asset = "BTC"
+            signal_types = "notional_burst"
+            lookbacks_ms = "1000"
+            horizons_ms = "1000"
+            out_dir = str(tmp_path)
+
+        _write_outputs(summary, _FakeArgs())
+
+        report = (tmp_path / "report.md").read_text()
+        # No thesis-status disclaimer for derivative source
+        assert "Thesis Status" not in report
+        assert "does NOT test the derivatives lead-lag thesis" not in report
+        # Verdict is plain REJECTED (not REJECTED_SPOT_SPOT_SMOKE)
+        assert "REJECTED_SPOT_SPOT_SMOKE" not in report
+
+
+# ---------------------------------------------------------------------------
+# Old/minimal input compatibility
+# ---------------------------------------------------------------------------
+
+class TestBackwardCompatibility:
+    """Old-style calls without instrument type flags should still work."""
+
+    def test_summary_defaults_for_old_code(self):
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            DerivativesLeadLagSummary,
+        )
+        s = DerivativesLeadLagSummary(
+            fee_bps=12.0,
+            slippage_bps=2.0,
+        )
+        # Must not break
+        assert s.source_instrument_type == "unknown"
+        assert s.target_instrument_type == "unknown"
+
+    def test_json_output_omits_nothing_for_defaults(self, tmp_path: Path):
+        import json
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            DerivativesLeadLagSummary,
+            _write_outputs,
+        )
+        summary = DerivativesLeadLagSummary(
+            total_signals=0,
+            run_end=time.time(),
+        )
+
+        class _FakeArgs:
+            source_venue = "X"
+            target_venue = "Y"
+            symbol = "BTC/USD"
+            asset = "BTC"
+            signal_types = ""
+            lookbacks_ms = ""
+            horizons_ms = ""
+            out_dir = str(tmp_path)
+
+        _write_outputs(summary, _FakeArgs())
+        data = json.loads((tmp_path / "summary.json").read_text())
+        assert "source_instrument_type" in data["summary"]
+        assert data["summary"]["source_instrument_type"] == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Synthetic perp->spot fixture test
+# ---------------------------------------------------------------------------
+
+_NS_FIX = 1_000_000_000
+
+
+def _ts_fix(seconds: int) -> int:
+    return seconds * _NS_FIX
+
+
+def _perp_trade(ts_s: int, price: float, size: float, side: str = "buy") -> "DerivativeTradeTick":
+    from examples.strategies.venue_agnostic_signal_observer.derivatives_models import DerivativeTradeTick
+    return DerivativeTradeTick(
+        ts_event=_ts_fix(ts_s), venue="BINANCE", symbol="BTCUSDT-PERP",
+        price=price, size=size, side=side,
+        trade_id=f"p-{ts_s}",
+    )
+
+
+def _spot_trade(ts_s: int, price: float, size: float, side: str = "buy"):
+    from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
+    return TradeTickLite(
+        ts_event=_ts_fix(ts_s), venue="KRAKEN", symbol="BTC/USD",
+        price=price, size=size, side=side,
+        trade_id=f"s-{ts_s}",
+    )
+
+
+class TestSyntheticPerpToSpot:
+    """Synthetic perp->spot test to verify machinery labels the run correctly."""
+
+    def test_perp_source_labels_run_as_derivatives_source(self, tmp_path: Path):
+        """Generate synthetic perp-side impulse leading spot move.
+        Verify the run can be labelled as a derivatives-source test.
+        Does NOT imply profitability."""
+        import json
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            DerivativesLeadLagSummary,
+            _write_outputs,
+        )
+
+        # Build synthetic source (perp) trades with a burst at t=100-109
+        perp_trades: list = []
+        for i in range(50):
+            perp_trades.append(_perp_trade(i, 50000.0, 0.1, "buy"))
+        # Impulse burst
+        for i in range(100, 110):
+            perp_trades.append(_perp_trade(i, 50005.0, 10.0, "buy"))
+
+        # Build synthetic target (spot) trades that react
+        spot_ticks = []
+        for i in range(50):
+            spot_ticks.append(_spot_trade(i, 50000.0, 0.5, "buy"))
+        for i in range(100, 120):
+            spot_ticks.append(_spot_trade(i, 50010.0, 0.5, "buy"))
+
+        # Write temp JSONL
+        src_path = tmp_path / "perp.jsonl"
+        tgt_path = tmp_path / "spot.jsonl"
+        src_path.write_text("\n".join(t.to_json() for t in perp_trades))
+        tgt_path.write_text("\n".join(t.to_json() for t in spot_ticks))
+
+        # Now create a summary as if the run completed
+        summary = DerivativesLeadLagSummary(
+            total_signals=1,
+            valid_evaluations=1,
+            source_instrument_type="perp",
+            target_instrument_type="spot",
+            run_end=time.time(),
+        )
+
+        class _FakeArgs:
+            source_venue = "BINANCE"
+            target_venue = "KRAKEN"
+            symbol = "BTC/USD"
+            asset = "BTC"
+            signal_types = "notional_burst"
+            lookbacks_ms = "1000"
+            horizons_ms = "1000"
+            out_dir = str(tmp_path)
+
+        _write_outputs(summary, _FakeArgs())
+
+        # Verify report identifies this as a derivatives-source study
+        report = (tmp_path / "report.md").read_text()
+        lower = report.lower()
+        assert "perp" in lower
+        assert "derivatives-source" in lower or "derivatives source" in lower
+        # No "does NOT test" disclaimer
+        assert "does NOT test the derivatives lead-lag thesis" not in report
+
+        # Verify JSON metadata
+        data = json.loads((tmp_path / "summary.json").read_text())
+        assert data["summary"]["source_instrument_type"] == "perp"
+        assert data["summary"]["target_instrument_type"] == "spot"

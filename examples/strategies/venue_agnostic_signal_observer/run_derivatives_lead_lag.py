@@ -42,6 +42,10 @@ from .event_study import (
 )
 
 
+VALID_INSTRUMENT_TYPES = {"spot", "perp", "futures", "unknown"}
+_DERIVATIVE_SOURCE_TYPES = {"perp", "futures"}
+
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
@@ -55,6 +59,8 @@ class DerivativesLeadLagSummary:
     slippage_bps: float = 2.0
     latency_buffer_bps: float = 5.0
     quote_mismatch_bps: float = 5.0
+    source_instrument_type: str = "unknown"
+    target_instrument_type: str = "unknown"
     results_by_group: list[dict] = field(default_factory=list)
     candidate_groups: list[dict] = field(default_factory=list)
     run_start: float = 0.0
@@ -136,6 +142,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "--imbalance-threshold", type=float, default=0.6,
         help="Min absolute imbalance to fire",
     )
+    p.add_argument(
+        "--source-instrument-type",
+        default="unknown",
+        choices=sorted(VALID_INSTRUMENT_TYPES),
+        help="Source instrument type: spot, perp, futures, unknown",
+    )
+    p.add_argument(
+        "--target-instrument-type",
+        default="unknown",
+        choices=sorted(VALID_INSTRUMENT_TYPES),
+        help="Target instrument type: spot, perp, futures, unknown",
+    )
     p.add_argument("--out-dir", default="reports/derivatives_lead_lag_v1")
     return p
 
@@ -150,6 +168,8 @@ def run_sweep(args: argparse.Namespace) -> DerivativesLeadLagSummary:
         slippage_bps=args.slippage_bps,
         latency_buffer_bps=args.latency_buffer_bps,
         quote_mismatch_bps=args.quote_mismatch_bps,
+        source_instrument_type=args.source_instrument_type,
+        target_instrument_type=args.target_instrument_type,
         run_start=time.time(),
     )
 
@@ -365,6 +385,9 @@ def run_sweep(args: argparse.Namespace) -> DerivativesLeadLagSummary:
 def _write_outputs(summary: DerivativesLeadLagSummary, args: argparse.Namespace) -> None:
     out = Path(args.out_dir)
 
+    src_type = summary.source_instrument_type
+    tgt_type = summary.target_instrument_type
+
     # --- JSON ---
     data = {
         "summary": {
@@ -375,6 +398,8 @@ def _write_outputs(summary: DerivativesLeadLagSummary, args: argparse.Namespace)
             "slippage_bps": summary.slippage_bps,
             "latency_buffer_bps": summary.latency_buffer_bps,
             "quote_mismatch_bps": summary.quote_mismatch_bps,
+            "source_instrument_type": src_type,
+            "target_instrument_type": tgt_type,
             "results_by_group": summary.results_by_group,
             "candidate_groups": summary.candidate_groups,
             "run_duration_s": round(summary.run_end - summary.run_start, 2),
@@ -388,6 +413,7 @@ def _write_outputs(summary: DerivativesLeadLagSummary, args: argparse.Namespace)
     csv_path = out / "summary.csv"
     fields = [
         "source_venue", "target_venue", "symbol", "asset",
+        "source_instrument_type", "target_instrument_type",
         "signal_type", "lookback_ms", "total_signals", "total_events",
         "valid_events", "rejected_events", "mean_net_return_bps",
         "median_net_return_bps", "win_rate", "baseline_mean_net_bps",
@@ -410,6 +436,41 @@ def _write_outputs(summary: DerivativesLeadLagSummary, args: argparse.Namespace)
     # --- events.jsonl ---
     (out / "events.jsonl").write_text("")  # placeholder
 
+    # --- Compute verdict ---
+    verdict_count = len(summary.candidate_groups)
+    if summary.total_signals == 0:
+        overall = "NEEDS_MORE_DATA"
+    elif verdict_count > 0:
+        overall = "CANDIDATE_FOR_LONGER_OBSERVATION"
+    else:
+        overall = "REJECTED"
+
+    is_derivative_source = src_type in _DERIVATIVE_SOURCE_TYPES
+
+    # --- Per-pair rejection wording ---
+    if overall == "REJECTED":
+        if is_derivative_source:
+            pair_verdict = "REJECTED"
+            pair_detail = (
+                "No signal group passed the candidate gate after net-cost evaluation.\n"
+                "This run rejected the configured derivatives-source -> target pair "
+                f"(source type: {src_type}) under the configured cost model."
+            )
+        else:
+            # Must NOT use derivatives-branch rejection language for non-derivative sources
+            pair_verdict = "REJECTED_SPOT_SPOT_SMOKE" if src_type == "spot" and tgt_type == "spot" else "REJECTED"
+            pair_detail = (
+                "This run rejected the configured source->target pair under the "
+                f"configured cost model. Source instrument type: {src_type}; "
+                f"target instrument type: {tgt_type}.\n\n"
+                "This is NOT a rejection of the derivatives lead-lag thesis. "
+                "A true derivatives-source test requires source_instrument_type "
+                "to be 'perp' or 'futures' (e.g. Binance/Bybit/Kraken perps as source)."
+            )
+    else:
+        pair_verdict = overall
+        pair_detail = ""
+
     # --- MD report ---
     lines: list[str] = [
         "# Derivatives Lead-Lag Signal Report",
@@ -422,6 +483,8 @@ def _write_outputs(summary: DerivativesLeadLagSummary, args: argparse.Namespace)
         "",
         f"- **Source venue:** {args.source_venue}",
         f"- **Target venue:** {args.target_venue}",
+        f"- **Source instrument type:** {src_type}",
+        f"- **Target instrument type:** {tgt_type}",
         f"- **Symbol:** {args.symbol}",
         f"- **Signal types:** {args.signal_types}",
         f"- **Lookbacks (ms):** {args.lookbacks_ms}",
@@ -430,33 +493,41 @@ def _write_outputs(summary: DerivativesLeadLagSummary, args: argparse.Namespace)
         "",
         "## Results by Group",
         "",
-        "| Source | Target | Symbol | Signal | LB(ms) | Signals | Valid | Net(bps) | Win% | Baseline | Candidate |",
-        "|--------|--------|--------|--------|--------|---------|-------|----------|------|----------|-----------|",
+        "| Source | Target | Src Type | Tgt Type | Symbol | Signal | LB(ms) | Signals | Valid | Net(bps) | Win% | Baseline | Candidate |",
+        "|--------|--------|----------|----------|--------|--------|--------|---------|-------|----------|------|----------|-----------|",
     ]
     for g in summary.results_by_group:
         cand = g.get("gate", {}).get("candidate", False) if isinstance(g.get("gate"), dict) else False
         bl = g.get("baseline_mean_net_bps")
         bl_str = f"{bl}" if bl is not None else "-"
         lines.append(
-            f"| {g.get('source_venue','')} | {g.get('target_venue','')} | {g.get('symbol','')} "
-            f"| {g.get('signal_type','')} | {g.get('lookback_ms','')} | {g.get('total_signals','-')} "
-            f"| {g.get('valid_events','-')} | {g.get('mean_net_return_bps', '-')} "
-            f"| {g.get('win_rate','-')} | {bl_str} | {'YES' if cand else 'NO'} |"
+            f"| {g.get('source_venue','')} | {g.get('target_venue','')} | {src_type} | {tgt_type} "
+            f"| {g.get('symbol','')} | {g.get('signal_type','')} | {g.get('lookback_ms','')} "
+            f"| {g.get('total_signals','-')} | {g.get('valid_events','-')} "
+            f"| {g.get('mean_net_return_bps', '-')} | {g.get('win_rate','-')} "
+            f"| {bl_str} | {'YES' if cand else 'NO'} |"
         )
 
     lines.append("")
-    verdict_count = len(summary.candidate_groups)
-    overall = "NEEDS_MORE_DATA" if summary.total_signals == 0 else (
-        "CANDIDATE_FOR_LONGER_OBSERVATION" if verdict_count > 0 else "REJECTED"
-    )
     lines.append("## Final Verdict")
     lines.append("")
-    lines.append(f"**{overall}**")
-    if overall == "REJECTED":
-        lines.append("No signal group passed the candidate gate after net-cost evaluation.")
-    elif overall == "NEEDS_MORE_DATA":
-        lines.append("Insufficient events to evaluate. Collect more data and re-run.")
+    lines.append(f"**{pair_verdict}**")
+    lines.append(pair_detail)
     lines.append("")
+
+    # --- Thesis-level status note ---
+    if not is_derivative_source:
+        lines.append("## Thesis Status")
+        lines.append("")
+        lines.append(
+            f"This run used source_instrument_type='{src_type}' and "
+            f"target_instrument_type='{tgt_type}', so it does NOT test the "
+            "derivatives lead-lag thesis. The actual thesis (perp/futures source "
+            "-> spot target) remains OPEN_UNTESTED until tested with real "
+            "derivatives data."
+        )
+        lines.append("")
+
     (out / "report.md").write_text("\n".join(lines))
     print(f"Written: {out}/report.md")
 
