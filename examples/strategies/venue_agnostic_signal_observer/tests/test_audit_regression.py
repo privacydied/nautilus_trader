@@ -135,7 +135,7 @@ class TestBaselineUsesRealTicks:
         return [
             TradeTickLite(
                 ts_event=base_ns + i * 1_000_000_000,  # 1 second apart
-                venue="KRAKEN",
+                venue="kraken",
                 symbol="BTC/USD",
                 price=50000.0 + i * 0.01,
                 size=0.01,
