@@ -10,7 +10,7 @@ def normalize_binance_df(df,symbol='BTCUSDT',source='trade_proxy'):
     if 'ts_event_ns' not in df:
         for c in ('timestamp','T','time','transact_time'):
             if c in df:
-                vals=pd.to_numeric(df[c]); df['ts_event_ns']=(vals*(1_000_000 if vals.max()<10_000_000_000_000 else 1)).astype('int64'); break
+                vals=pd.to_numeric(df[c]); max_v=vals.max(); scale=1_000_000 if max_v<10_000_000_000_000 else (1_000 if max_v<10_000_000_000_000_000 else 1); df['ts_event_ns']=(vals*scale).astype('int64'); break
     if 'price' not in df:
         for c in ('p','last_trade','close'):
             if c in df: df['price']=pd.to_numeric(df[c]); break
@@ -25,7 +25,9 @@ def load_binance_data(config,start_ns,end_ns,local_path=None):
     if local_path:
         p=Path(local_path); df=pd.read_parquet(p) if p.suffix=='.parquet' else pd.read_csv(p); return normalize_binance_df(df,config.binance_symbol,'local_trade_proxy'),None,'local'
     day=_dt(start_ns).strftime('%Y-%m-%d'); data=config.binance_cache_dir/config.binance_symbol/f'{day}.parquet'; meta=config.binance_cache_dir/config.binance_symbol/f'{day}.metadata.json'
-    if config.use_warm_cache and not config.refresh_cache and data.exists() and meta.exists(): df,cm=read_cache(data,meta); return df,cm,'cache'
+    if config.use_warm_cache and not config.refresh_cache and data.exists() and meta.exists():
+        df,cm=read_cache(data,meta)
+        if len(df) and cm.start_ns<=start_ns and cm.end_ns>=min(start_ns,end_ns): return df,cm,'cache'
     df=_download(config.binance_symbol,_dt(start_ns)); df=df[(df.ts_event_ns>=start_ns)&(df.ts_event_ns<=end_ns)].reset_index(drop=True); cm=write_cache(df,data,meta,source='binance_vision_aggTrades',symbol_or_slug=config.binance_symbol,sanitize_info=False,loader_version_or_module='binance_data.py'); return df,cm,'network'
 def align_state(states,ts_event_ns,max_staleness_ns):
     import bisect

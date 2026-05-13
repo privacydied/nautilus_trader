@@ -1,9 +1,9 @@
 from __future__ import annotations
-import argparse,json,subprocess,sys,time
-from dataclasses import asdict
+import argparse,json,subprocess,sys,time,re
+from dataclasses import asdict,replace
 from pathlib import Path
 from .baseline import generate_random_baseline
-from .binance_data import load_binance_data,states_from_df
+from .binance_data import load_binance_data,states_from_df,align_state
 from .config import PolymarketArbConfig,parse_utc_ns
 from .forward_returns import measure_forward_outcomes,assert_no_settlement_lookahead
 from .gates import evaluate_grid
@@ -32,14 +32,26 @@ def main(argv=None):
     start=parse_utc_ns(args.start); end=parse_utc_ns(args.end); pm_df,meta,pm_cache,pm_source=load_polymarket_data(cfg)
     if pm_df.empty: print('ERROR: no Polymarket data loaded',file=sys.stderr); return 4
     if args.max_events: pm_df=pm_df.head(args.max_events)
-    start_ns=start or int(pm_df.ts_event_ns.min()); end_ns=end or int(pm_df.ts_event_ns.max()+max(cfg.forward_horizon_ns_grid)); bn_df,bn_cache,bn_source=load_binance_data(cfg,start_ns,end_ns,args.binance_data)
+    updown_start_match=re.search(r'updown-\d+m-(\d{10})',args.market_slug.lower())
+    updown_start_ns=int(updown_start_match.group(1))*1_000_000_000 if updown_start_match else None
+    start_ns=start or min(int(pm_df.ts_event_ns.min()),updown_start_ns) if updown_start_ns else start or int(pm_df.ts_event_ns.min())
+    end_ns=end or int(pm_df.ts_event_ns.max()+max(cfg.forward_horizon_ns_grid)); bn_df,bn_cache,bn_source=load_binance_data(cfg,start_ns,end_ns,args.binance_data)
     if bn_df.empty: print('ERROR: Binance data missing',file=sys.stderr); return 5
     quotes=load_polymarket_quotes_from_df(pm_df,meta); states=states_from_df(bn_df)
+    m=re.search(r'updown-\d+m-(\d{10})',args.market_slug.lower())
+    if m and meta.strike==100000.0:
+        start_state=align_state(states,int(m.group(1))*1_000_000_000,60_000_000_000)
+        if not start_state:
+            start_cutoff=int(m.group(1))*1_000_000_000+60_000_000_000
+            start_state=next((s for s in states if int(m.group(1))*1_000_000_000<=s.ts_event_ns<=start_cutoff),None)
+        if start_state: meta=replace(meta,strike=float(start_state.price))
     from .signal_generator import generate_signals
     candidates,rejections,rejection_counts=generate_signals(quotes,states,meta,cfg); outcomes=measure_forward_outcomes(candidates,quotes,cfg.forward_horizon_ns_grid,resolved_payoff=None)
     if cfg.fail_on_lookahead: assert_no_settlement_lookahead(outcomes)
     baseline=generate_random_baseline(quotes,cfg.baseline_sample_count,cfg,meta.expiry_ns); groups=evaluate_grid(candidates,outcomes,baseline,cfg); run_id=time.strftime('%Y%m%dT%H%M%SZ',time.gmtime()); paths=make_report_paths(Path(args.report_dir),run_id)
-    summary={'run_id':run_id,'branch_name':branch,'base_branch_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'market_slug':args.market_slug,'start_ns':start_ns,'end_ns':end_ns,'chosen_thresholds':cfg.threshold_bps_grid,'chosen_lookbacks':cfg.lookback_ns_grid,'tte_buckets':cfg.tte_bucket_edges_ns,'polymarket_event_count':len(pm_df),'binance_state_count':len(bn_df),'candidate_count':len(candidates),'zero_candidate_grid_cell_count':sum(g.candidate_count==0 for g in groups),'rejection_counts_by_reason':rejection_counts,'baseline_sample_count':len(baseline),'verdicts_by_grid':[asdict(g) for g in groups],'safety_check_status':safety,'parity_status':{'probability':'fixtures_passed_or_available','settlement':'fixtures_from_pysignalengine_rust_path'},'cache_status':{'polymarket':pm_source,'binance':bn_source},'maker_fee_assumption':'maker fill, crypto maker rebate enabled, PolymarketFeeModel required','polymarket_token_side_semantics':'YES token only','no_data_present':meta.has_no_token,'analysis_used_yes_only':True,'pagination_truncation_status':'fatal if warning emitted','wall_clock_runtime_seconds':round(time.time()-t0,4),'limitations':['Binance v1 uses aggTrades/trade-derived proxy, not full book','NO-side economics not analyzed in v1','Historical fixture exercised a resolved BTC binary market because list_updown_markets.py returned no active UpDown markets in this environment'],'primary_horizon_ns':cfg.forward_horizon_ns_grid[0]}
+    limitations=['Binance v1 uses aggTrades/trade-derived proxy, not full book','NO-side economics not analyzed in v1']
+    if 'updown' not in args.market_slug.lower(): limitations.append('Historical fixture exercised a resolved BTC binary market because list_updown_markets.py returned no active UpDown markets in this environment')
+    summary={'run_id':run_id,'branch_name':branch,'base_branch_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'market_slug':args.market_slug,'market_strike_or_price_to_beat':meta.strike,'expiry_ns':meta.expiry_ns,'start_ns':start_ns,'end_ns':end_ns,'chosen_thresholds':cfg.threshold_bps_grid,'chosen_lookbacks':cfg.lookback_ns_grid,'tte_buckets':cfg.tte_bucket_edges_ns,'polymarket_event_count':len(pm_df),'binance_state_count':len(bn_df),'candidate_count':len(candidates),'zero_candidate_grid_cell_count':sum(g.candidate_count==0 for g in groups),'rejection_counts_by_reason':rejection_counts,'baseline_sample_count':len(baseline),'verdicts_by_grid':[asdict(g) for g in groups],'safety_check_status':safety,'parity_status':{'probability':'fixtures_passed_or_available','settlement':'fixtures_from_pysignalengine_rust_path'},'cache_status':{'polymarket':pm_source,'binance':bn_source},'maker_fee_assumption':'maker fill, crypto maker rebate enabled, PolymarketFeeModel required','polymarket_token_side_semantics':'YES token only','no_data_present':meta.has_no_token,'analysis_used_yes_only':True,'pagination_truncation_status':'fatal if warning emitted','wall_clock_runtime_seconds':round(time.time()-t0,4),'limitations':limitations,'primary_horizon_ns':cfg.forward_horizon_ns_grid[0]}
     write_reports(paths,summary=summary,candidates=candidates,rejections=rejections,baseline=baseline,groups=groups,safety=safety,parity=summary['parity_status'],cache_metadata={'polymarket':asdict(pm_cache) if pm_cache else None,'binance':asdict(bn_cache) if bn_cache else None}); update_status(branch,summary,pm_source,bn_source,paths); print(f'REPORT_DIR={paths.run_dir}'); return 0
 
 def update_status(branch,summary,pm_source,bn_source,paths):
