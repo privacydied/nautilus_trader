@@ -1,0 +1,9 @@
+[
+  {
+    "blocked": true,
+    "case_id": "settlement_predictor_binding_blocked",
+    "expected": {},
+    "inputs": {},
+    "notes": "Direct PySettlementPredictor export is unavailable; do not fake parity."
+  }
+]
