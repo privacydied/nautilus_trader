@@ -1,0 +1,13 @@
+source_venue,target_venue,symbol,asset,signal_type,lookback_ms,total_signals,total_events,valid_events,rejected_events,mean_net_return_bps,median_net_return_bps,win_rate,baseline_mean_net_bps,candidate,rejection_reasons
+coinbase,kraken,BTC/USD,BTC,notional_burst,1000,23,138,130,8,-18.9748,-19.0,0.0,-18.7641,,mean_net_return_not_positive: -18.97 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,notional_burst,5000,27,162,149,13,-18.8884,-19.0,0.0,-18.781,,mean_net_return_not_positive: -18.89 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,notional_burst,10000,28,168,153,15,-18.8492,-19.0,0.0,-18.7749,,mean_net_return_not_positive: -18.85 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,notional_burst,30000,26,156,145,11,-18.8793,-19.0,0.0,-18.7808,,mean_net_return_not_positive: -18.88 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,price_shock,1000,11,66,59,7,-18.9168,-19.0,0.0,-18.6526,,mean_net_return_not_positive: -18.92 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,price_shock,5000,12,72,65,7,-18.7401,-19.0,0.0,-18.6859,,mean_net_return_not_positive: -18.74 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,price_shock,10000,12,72,65,7,-18.9204,-19.0,0.0,-18.6859,,mean_net_return_not_positive: -18.92 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,price_shock,30000,17,102,90,12,-18.8856,-19.0,0.0,-18.7342,,mean_net_return_not_positive: -18.89 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,signed_imbalance,1000,24,144,134,10,-19.0198,-19.0,0.0,-18.7777,,mean_net_return_not_positive: -19.02 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,signed_imbalance,5000,26,156,146,10,-18.9138,-19.0,0.0,-18.7808,,mean_net_return_not_positive: -18.91 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,signed_imbalance,10000,25,150,135,15,-19.0043,-19.0,0.0,-18.7808,,mean_net_return_not_positive: -19.00 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000
+coinbase,kraken,BTC/USD,BTC,signed_imbalance,30000,16,96,90,6,-19.0281,-19.0,0.0,-18.7514,,mean_net_return_not_positive: -19.03 bps; median_net_too_negative: -19.00 bps; win_rate_fails: 0.0000 vs baseline 0.0000

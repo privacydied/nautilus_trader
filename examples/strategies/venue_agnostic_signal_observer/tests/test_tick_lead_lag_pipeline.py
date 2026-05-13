@@ -736,6 +736,7 @@ class TestNoOrderGuard:
         other_tests = [
             pkg / "tests" / "test_all.py",
             pkg / "tests" / "test_trade_flow_impulse.py",
+            pkg / "tests" / "test_derivatives_lead_lag.py",
         ]
         for fpath in pkg.rglob("*.py"):
             if fpath == test_file or fpath in other_tests:
