@@ -335,9 +335,9 @@ class TestForwardReturns:
         results = evaluate_signal(sig, ts, prices, [Horizon("10s", 10.0)], FeeModel(fee_bps=0, slippage_bps=0))
         valid = [r for r in results if r.valid]
         assert len(valid) == 1
-        # Price went up -> short loses (negative adjusted return)
-        assert valid[0].raw_return_bps < 0
-        assert valid[0].direction_adjusted_return_bps < 0
+        # Price went up -> short loses (negative adjusted return, positive raw return)
+        assert valid[0].raw_return_bps > 0  # raw: price went up 50000->50100 = +20 bps
+        assert valid[0].direction_adjusted_return_bps < 0  # short: inverted = -20 bps
 
 
 # ===================================================================

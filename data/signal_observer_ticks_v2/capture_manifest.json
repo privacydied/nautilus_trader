@@ -1,0 +1,42 @@
+{
+  "run_start_utc": "2026-05-12T21:23:16.490537+00:00",
+  "run_end_utc": "2026-05-12T21:28:16.528886+00:00",
+  "duration_seconds": 300.038,
+  "venues": [
+    "kraken",
+    "coinbase"
+  ],
+  "requested_symbols": [
+    "BTC/USD"
+  ],
+  "files_written": [
+    "data/signal_observer_ticks_v2/trades_kraken_BTC-USD_1778620996.jsonl",
+    "data/signal_observer_ticks_v2/trades_coinbase_BTC-USD_1778620996.jsonl"
+  ],
+  "tick_counts": {
+    "kraken|BTC/USD": 158,
+    "coinbase|BTC/USD": 1009
+  },
+  "first_tick_ts": {
+    "coinbase|BTC/USD": 1778620997575364096,
+    "kraken|BTC/USD": 1778620999117419008
+  },
+  "last_tick_ts": {
+    "coinbase|BTC/USD": 1778621296229270016,
+    "kraken|BTC/USD": 1778621295665585920
+  },
+  "price_min": {
+    "coinbase|BTC/USD": 80607.7,
+    "kraken|BTC/USD": 80623.6
+  },
+  "price_max": {
+    "coinbase|BTC/USD": 80647.9,
+    "kraken|BTC/USD": 80660.5
+  },
+  "price_move_bps": {
+    "coinbase|BTC/USD": 4.987116615409829,
+    "kraken|BTC/USD": 4.576823659572901
+  },
+  "errors": [],
+  "warnings": []
+}

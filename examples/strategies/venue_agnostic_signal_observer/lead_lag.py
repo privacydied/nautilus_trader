@@ -65,7 +65,8 @@ def generate_lead_lag_signals(
         j = i - 1
         while j >= 0 and source_timestamps[j] >= window_start:
             j -= 1
-        j = max(0, j)
+        # j now points OUTSIDE the window (or -1); use j+1 for the first tick inside
+        j = j + 1 if j + 1 < len(source_prices) else 0
 
         ref_price = source_prices[j]
         if ref_price <= 0:

@@ -367,10 +367,13 @@ def tick_file_discovery(
             continue
 
         parts = match.groupdict()
+        # Normalize slashes/hyphens for cross-venue symbol matching
+        file_sym = parts["symbol"].lower().replace("-", "/")
+        arg_sym = symbol_lower.replace("-", "/")
         if (
             parts["tick_type"].lower() == tick_type_lower
             and parts["venue"].lower() == venue_lower
-            and parts["symbol"].lower() == symbol_lower
+            and file_sym == arg_sym
         ):
             results.append(str(entry.resolve()))
 

@@ -1,0 +1,20 @@
+{
+  "runtime_seconds": 30.2,
+  "symbols": [
+    "BTC/USD",
+    "ETH/USD"
+  ],
+  "book_updates": 2498,
+  "quotes_placed": 3752,
+  "quotes_cancelled": 3747,
+  "paper_fills": 1,
+  "fill_rate": 0.0,
+  "average_spread_bps": 0.2852,
+  "average_quote_lifetime_seconds": 12.8534,
+  "gross_paper_pnl_bps": 0.0221,
+  "fees_bps": 5.0,
+  "net_paper_pnl_bps": -4.9779,
+  "stale_book_count": 0,
+  "crossed_book_count": 0,
+  "adverse_checks_performed": 0
+}

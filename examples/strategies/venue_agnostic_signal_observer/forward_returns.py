@@ -166,14 +166,16 @@ def evaluate_signal(
             continue
 
         forward_ts, forward_price = forward_info
-        raw_bps = compute_forward_return(entry_price, forward_price, signal.direction)
+        dir_adj_bps = compute_forward_return(entry_price, forward_price, signal.direction)
+        # raw_bps is the unsigned price move (not direction-adjusted)
+        raw_bps = (forward_price - entry_price) / entry_price * 10000.0
 
         fav_bps, adv_bps = compute_excursions(
             target_timestamps, target_prices, entry_ts, entry_price,
             forward_ts, signal.direction,
         )
 
-        net_bps = raw_bps - total_cost
+        net_bps = dir_adj_bps - total_cost
 
         results.append(ForwardReturnResult(
             signal_id=signal.signal_id,
@@ -189,7 +191,7 @@ def evaluate_signal(
             entry_reference_price=entry_price,
             forward_price=forward_price,
             raw_return_bps=round(raw_bps, 4),
-            direction_adjusted_return_bps=round(raw_bps, 4),
+            direction_adjusted_return_bps=round(dir_adj_bps, 4),
             fee_bps=fee_model.fee_bps,
             slippage_bps=fee_model.slippage_bps,
             quote_mismatch_buffer_bps=fee_model.quote_mismatch_buffer_bps if quote_mismatch else 0.0,

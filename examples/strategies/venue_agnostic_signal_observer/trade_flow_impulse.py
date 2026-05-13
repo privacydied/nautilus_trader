@@ -385,7 +385,8 @@ class TradeFlowImpulseSignalGenerator:
                     continue
 
             if trade.side in ("buy", "sell"):
-                direction = trade.side
+                # Map exchange side terms to our internal direction convention
+                direction = "long" if trade.side == "buy" else "short"
             else:
                 direction = self._resolve_direction(
                     trades, idx, 1000, "large_trade"

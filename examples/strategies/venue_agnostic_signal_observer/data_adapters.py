@@ -149,6 +149,7 @@ def download_public_klines(
     """Download OHLCV klines from public exchange APIs (no auth required).
 
     Handles pagination and rate limiting automatically.
+    Uses httpx.AsyncClient to avoid blocking the event loop if called from async context.
 
     Args:
         venue: Exchange name — "binance", "kraken", or "coinbase".

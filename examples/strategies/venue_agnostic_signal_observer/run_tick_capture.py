@@ -940,6 +940,15 @@ async def _main(args: argparse.Namespace) -> None:
     run_end_utc = datetime.now(tz=timezone.utc).isoformat()
     elapsed = time.monotonic() - start_time
 
+    # Explicit warnings for zero-tick streams and subscription failures
+    for key, count in stats.tick_counts.items():
+        if count == 0:
+            venue_part = key.split("|")[0]
+            sym_part = key.split("|")[1]
+            warn_msg = f"ZERO TICKS: {venue_part} {sym_part} — stream produced no ticks during capture window (possible subscription failure or dead product)"
+            if warn_msg not in stats.warnings:
+                stats.warnings.append(warn_msg)
+
     # Collect relative paths of written files
     files_written: list[str] = []
     for venue in venues:

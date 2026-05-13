@@ -269,7 +269,9 @@ class DerivativesImpulseGenerator:
         ref_idx = idx
         while ref_idx > 0 and ts - trades[ref_idx].ts_event <= lookback_ns:
             ref_idx -= 1
-        ref_price = trades[ref_idx].price if ref_idx >= 0 else trades[0].price
+        # ref_idx now points OUTSIDE the lookback window; use ref_idx+1
+        ref_idx = ref_idx + 1 if ref_idx + 1 <= idx else idx
+        ref_price = trades[ref_idx].price
         curr_price = trades[idx].price
         return "long" if curr_price >= ref_price else "short"
 

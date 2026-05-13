@@ -1,0 +1,2 @@
+source_venue,target_venue,symbol,total_signals,valid_events,mean_net_return_bps,median_net_return_bps,win_rate
+coinbase,coinbase,BTC-USD,0,0,,,

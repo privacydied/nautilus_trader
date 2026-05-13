@@ -1,0 +1,757 @@
+[
+  {
+    "pair_key": "binance:BTC/USDT->kraken:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.53 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.53 <= -44.98 + 1.00",
+      "single_event_driven: mean_without_best=-45.53 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USDT->kraken:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.08 bps",
+      "median_net_too_negative: -45.05 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.08 <= -44.84 + 1.00",
+      "single_event_driven: mean_without_best=-45.08 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USDT->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "target_subscription_failed",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USDT->coinbase:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.26 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.26 <= -45.09 + 1.00",
+      "single_event_driven: mean_without_best=-45.27 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USDT->coinbase:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.30 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.30 <= -45.01 + 1.00",
+      "single_event_driven: mean_without_best=-45.31 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USDT->coinbase:DOGE/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.12 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.12 <= -45.01 + 1.00",
+      "single_event_driven: mean_without_best=-45.12 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USDT->kraken:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.27 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.27 <= -44.96 + 1.00",
+      "single_event_driven: mean_without_best=-45.27 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USDT->kraken:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.31 bps",
+      "median_net_too_negative: -45.14 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.31 <= -44.87 + 1.00",
+      "single_event_driven: mean_without_best=-45.31 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USDT->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "target_subscription_failed",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USDT->coinbase:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.14 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.14 <= -45.06 + 1.00",
+      "single_event_driven: mean_without_best=-45.15 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USDT->coinbase:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.25 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.25 <= -44.96 + 1.00",
+      "single_event_driven: mean_without_best=-45.26 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USDT->coinbase:DOGE/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.98 bps",
+      "median_net_too_negative: -45.89 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.98 <= -45.02 + 1.00",
+      "single_event_driven: mean_without_best=-45.99 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USD->kraken:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.07 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.07 <= -44.37 + 1.00",
+      "single_event_driven: mean_without_best=-45.22 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USD->kraken:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "insufficient_events: 49 < 50",
+      "mean_net_return_not_positive: -44.51 bps",
+      "median_net_too_negative: -44.07 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "single_event_driven: mean_without_best=-44.58 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USD->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "target_subscription_failed",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USD->coinbase:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -46.35 bps",
+      "median_net_too_negative: -46.05 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -46.35 <= -45.12 + 1.00",
+      "single_event_driven: mean_without_best=-46.49 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USD->coinbase:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.52 bps",
+      "median_net_too_negative: -45.95 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.52 <= -44.94 + 1.00",
+      "single_event_driven: mean_without_best=-45.66 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:BTC/USD->coinbase:DOGE/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -46.16 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -46.16 <= -46.71 + 1.00",
+      "single_event_driven: mean_without_best=-46.30 bps"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USD->kraken:SOL/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "source_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USD->kraken:LINK/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "source_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USD->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "target_subscription_failed",
+      "source_zero_ticks",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USD->coinbase:SOL/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "source_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USD->coinbase:LINK/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "source_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "binance:ETH/USD->coinbase:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "source_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USDT->kraken:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -44.40 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -44.40 <= -44.75 + 1.00",
+      "single_event_driven: mean_without_best=-44.42 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USDT->kraken:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -43.98 bps",
+      "median_net_too_negative: -43.93 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "single_event_driven: mean_without_best=-44.00 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USDT->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "target_subscription_failed",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USDT->coinbase:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.00 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.00 <= -45.10 + 1.00",
+      "single_event_driven: mean_without_best=-45.02 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USDT->coinbase:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -44.43 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -44.43 <= -44.85 + 1.00",
+      "single_event_driven: mean_without_best=-44.46 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USDT->coinbase:DOGE/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -44.51 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -44.51 <= -44.95 + 1.00",
+      "single_event_driven: mean_without_best=-44.54 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USDT->kraken:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "insufficient_events: 38 < 50",
+      "mean_net_return_not_positive: -45.41 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.41 <= -43.07 + 1.00",
+      "single_event_driven: mean_without_best=-45.65 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USDT->kraken:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "insufficient_events: 35 < 50",
+      "mean_net_return_not_positive: -45.38 bps",
+      "median_net_too_negative: -46.91 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "single_event_driven: mean_without_best=-45.51 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USDT->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "target_subscription_failed",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USDT->coinbase:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "insufficient_events: 39 < 50",
+      "mean_net_return_not_positive: -44.54 bps",
+      "median_net_too_negative: -43.95 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -44.54 <= -43.70 + 1.00",
+      "single_event_driven: mean_without_best=-44.75 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USDT->coinbase:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "insufficient_events: 39 < 50",
+      "mean_net_return_not_positive: -43.98 bps",
+      "median_net_too_negative: -44.05 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -43.98 <= -43.55 + 1.00",
+      "single_event_driven: mean_without_best=-44.15 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USDT->coinbase:DOGE/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "insufficient_events: 39 < 50",
+      "mean_net_return_not_positive: -46.62 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -46.62 <= -43.98 + 1.00",
+      "single_event_driven: mean_without_best=-46.83 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USD->kraken:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.17 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.17 <= -45.00 + 1.00",
+      "single_event_driven: mean_without_best=-45.18 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USD->kraken:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.16 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.16 <= -44.85 + 1.00",
+      "single_event_driven: mean_without_best=-45.16 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USD->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "target_subscription_failed",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USD->coinbase:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.18 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.18 <= -45.07 + 1.00",
+      "single_event_driven: mean_without_best=-45.19 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USD->coinbase:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.17 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.17 <= -45.03 + 1.00",
+      "single_event_driven: mean_without_best=-45.18 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:BTC/USD->coinbase:DOGE/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.28 bps",
+      "median_net_too_negative: -45.89 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.28 <= -45.01 + 1.00",
+      "single_event_driven: mean_without_best=-45.29 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USD->kraken:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -44.77 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -44.77 <= -45.01 + 1.00",
+      "single_event_driven: mean_without_best=-44.77 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USD->kraken:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.07 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.07 <= -44.84 + 1.00",
+      "single_event_driven: mean_without_best=-45.08 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USD->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "target_subscription_failed",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USD->coinbase:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -44.87 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -44.87 <= -45.10 + 1.00",
+      "single_event_driven: mean_without_best=-44.87 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USD->coinbase:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -44.96 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -44.96 <= -45.06 + 1.00",
+      "single_event_driven: mean_without_best=-44.96 bps"
+    ]
+  },
+  {
+    "pair_key": "coinbase:ETH/USD->coinbase:DOGE/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.16 bps",
+      "median_net_too_negative: -45.89 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.16 <= -45.01 + 1.00",
+      "single_event_driven: mean_without_best=-45.17 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USDT->kraken:SOL/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "source_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USDT->kraken:LINK/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "source_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USDT->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "target_subscription_failed",
+      "source_zero_ticks",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USDT->coinbase:SOL/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "source_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USDT->coinbase:LINK/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "source_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USDT->coinbase:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "source_subscription_failed",
+      "source_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USDT->kraken:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -46.43 bps",
+      "median_net_too_negative: -46.05 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -46.43 <= -44.99 + 1.00",
+      "single_event_driven: mean_without_best=-46.50 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USDT->kraken:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.91 bps",
+      "median_net_too_negative: -46.91 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.91 <= -44.70 + 1.00",
+      "single_event_driven: mean_without_best=-45.93 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USDT->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "target_subscription_failed",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USDT->coinbase:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.25 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.25 <= -44.89 + 1.00",
+      "single_event_driven: mean_without_best=-45.31 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USDT->coinbase:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.30 bps",
+      "median_net_too_negative: -45.95 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.30 <= -44.61 + 1.00",
+      "single_event_driven: mean_without_best=-45.39 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USDT->coinbase:DOGE/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -46.70 bps",
+      "median_net_too_negative: -45.89 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -46.70 <= -44.97 + 1.00",
+      "single_event_driven: mean_without_best=-46.75 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USD->kraken:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.59 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.59 <= -45.08 + 1.00",
+      "single_event_driven: mean_without_best=-45.60 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USD->kraken:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.04 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.04 <= -45.19 + 1.00",
+      "single_event_driven: mean_without_best=-45.05 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USD->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "target_subscription_failed",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USD->coinbase:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.27 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.27 <= -45.16 + 1.00",
+      "single_event_driven: mean_without_best=-45.27 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USD->coinbase:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.47 bps",
+      "median_net_too_negative: -45.95 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.47 <= -45.32 + 1.00",
+      "single_event_driven: mean_without_best=-45.48 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:BTC/USD->coinbase:DOGE/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -46.15 bps",
+      "median_net_too_negative: -45.89 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -46.15 <= -45.02 + 1.00",
+      "single_event_driven: mean_without_best=-46.16 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USD->kraken:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.96 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.96 <= -45.44 + 1.00",
+      "single_event_driven: mean_without_best=-45.98 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USD->kraken:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.77 bps",
+      "median_net_too_negative: -45.43 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.77 <= -45.05 + 1.00",
+      "single_event_driven: mean_without_best=-45.78 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USD->kraken:DOGE/USD",
+    "reason": "data_issue",
+    "data_issues": [
+      "target_subscription_failed",
+      "target_zero_ticks",
+      "no_true_overlap"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USD->coinbase:SOL/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.33 bps",
+      "median_net_too_negative: -45.00 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.33 <= -45.37 + 1.00",
+      "single_event_driven: mean_without_best=-45.34 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USD->coinbase:LINK/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -46.25 bps",
+      "median_net_too_negative: -45.95 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -46.25 <= -45.32 + 1.00",
+      "single_event_driven: mean_without_best=-46.27 bps"
+    ]
+  },
+  {
+    "pair_key": "kraken:ETH/USD->coinbase:DOGE/USD",
+    "reason": "candidate_gate",
+    "rejection_reasons": [
+      "mean_net_return_not_positive: -45.78 bps",
+      "median_net_too_negative: -45.89 bps",
+      "win_rate_fails: 0.0000 vs baseline 0.0000",
+      "does_not_beat_baseline_by_margin: -45.78 <= -45.34 + 1.00",
+      "single_event_driven: mean_without_best=-45.80 bps"
+    ]
+  }
+]

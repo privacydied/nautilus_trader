@@ -53,13 +53,49 @@ _ALIAS_REGISTRY: dict[str, CanonicalSymbol] = {
     "sol/usd": CanonicalSymbol("SOL", "USD"),
     "solusd": CanonicalSymbol("SOL", "USD"),
 
-    # Binance
+    # Binance (spot and perp -- perp uses USDT quote, not USD)
     "btcusdt": CanonicalSymbol("BTC", "USDT"),
-    "btcusd": CanonicalSymbol("BTC", "USD"),
+    "btc/usdt": CanonicalSymbol("BTC", "USDT"),
     "ethusdt": CanonicalSymbol("ETH", "USDT"),
-    "ethusd": CanonicalSymbol("ETH", "USD"),
+    "eth/usdt": CanonicalSymbol("ETH", "USDT"),
     "solusdt": CanonicalSymbol("SOL", "USDT"),
+    "sol/usdt": CanonicalSymbol("SOL", "USDT"),
+    "btcusd": CanonicalSymbol("BTC", "USD"),
+    "btc/usd": CanonicalSymbol("BTC", "USD"),
+    "ethusd": CanonicalSymbol("ETH", "USD"),
+    "eth/usd": CanonicalSymbol("ETH", "USD"),
     "solusd": CanonicalSymbol("SOL", "USD"),
+    "sol/usd": CanonicalSymbol("SOL", "USD"),
+
+    # Binance altcoins (USDT quote)
+    "linkusdt": CanonicalSymbol("LINK", "USDT"),
+    "link/usdt": CanonicalSymbol("LINK", "USDT"),
+    "avaxusdt": CanonicalSymbol("AVAX", "USDT"),
+    "avax/usdt": CanonicalSymbol("AVAX", "USDT"),
+    "adausdt": CanonicalSymbol("ADA", "USDT"),
+    "ada/usdt": CanonicalSymbol("ADA", "USDT"),
+    "dogeusdt": CanonicalSymbol("DOGE", "USDT"),
+    "doge/usdt": CanonicalSymbol("DOGE", "USDT"),
+
+    # Kraken altcoins
+    "link/usd": CanonicalSymbol("LINK", "USD"),
+    "linkusd": CanonicalSymbol("LINK", "USD"),
+    "avax/usd": CanonicalSymbol("AVAX", "USD"),
+    "avaxusd": CanonicalSymbol("AVAX", "USD"),
+    "ada/usd": CanonicalSymbol("ADA", "USD"),
+    "adausd": CanonicalSymbol("ADA", "USD"),
+    "doge/usd": CanonicalSymbol("DOGE", "USD"),
+    "dogeusd": CanonicalSymbol("DOGE", "USD"),
+
+    # Coinbase altcoins
+    "link-usd": CanonicalSymbol("LINK", "USD"),
+    "link/usd": CanonicalSymbol("LINK", "USD"),
+    "avax-usd": CanonicalSymbol("AVAX", "USD"),
+    "avax/usd": CanonicalSymbol("AVAX", "USD"),
+    "ada-usd": CanonicalSymbol("ADA", "USD"),
+    "ada/usd": CanonicalSymbol("ADA", "USD"),
+    "doge-usd": CanonicalSymbol("DOGE", "USD"),
+    "doge/usd": CanonicalSymbol("DOGE", "USD"),
 }
 
 

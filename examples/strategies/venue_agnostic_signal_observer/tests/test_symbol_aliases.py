@@ -74,8 +74,8 @@ class TestUnknownSymbols:
     """Unknown symbols fail clearly rather than being silently inferred."""
 
     def test_unknown_symbol_raises(self):
-        with pytest.raises(ValueError, match="DOGE-USD"):
-            resolve_symbol("DOGE-USD")
+        with pytest.raises(ValueError):
+            resolve_symbol("FOO-USD")
 
     def test_unknown_symbol_with_spaces(self):
         with pytest.raises(ValueError):
@@ -83,7 +83,7 @@ class TestUnknownSymbols:
 
     def test_unknown_slash_raises(self):
         with pytest.raises(ValueError):
-            resolve_symbol("DOGE/USD")
+            resolve_symbol("FOO/USD")
 
 
 class TestSymbolComparison:

@@ -1,0 +1,13 @@
+source_venue,target_venue,symbol,asset,lookback_ms,threshold_bps,total_signals,total_events,valid_events,rejected_events,mean_net_return_bps,median_net_return_bps,win_rate,std_net_return_bps,max_net_return_bps,min_net_return_bps,candidate
+coinbase,coinbase,BTC-USD,BTC-USD,1000,5.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,1000,10.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,1000,20.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,5000,5.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,5000,10.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,5000,20.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,10000,5.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,10000,10.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,10000,20.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,30000,5.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,30000,10.0,0,0,0,0,,,,,,,False
+coinbase,coinbase,BTC-USD,BTC-USD,30000,20.0,0,0,0,0,,,,,,,False

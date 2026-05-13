@@ -8,8 +8,9 @@
 ## Mined Status
 
 The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 45 study groups:
-- **35 REJECTED**
+|- **35 REJECTED**
 - **9 NEEDS_MORE_DATA** (insufficient events / zero signals)
+- **1 MARKET_MODERATE_DIAGNOSTIC** (quiet/moderate capture, below volatility gate)
 - **1 UNKNOWN**
 
 ## Status Table
@@ -27,7 +28,9 @@ The full mined status table is at [reports/research_status_table.csv](../reports
 | Trade-flow impulse v1 (600s) | 4 signal types, 600s | Coinbase↔Kraken | REJECTED | Best -13.66 bps, win rate 0% | `trade-flow-impulse-v1-rejected` |
 | Trade-flow impulse v1 (300s) | 4 signal types, 300s | Coinbase↔Kraken | REJECTED | Best -11.97 bps, win rate 0% | `trade-flow-impulse-v1-300s-rejected` |
 | Derivatives lead-lag v1 (smoke) | notional burst, price shock, signed imbalance | Coinbase spot -> Kraken spot BTC | REJECTED_SPOT_SPOT_SMOKE | Best -18.74 bps, win rate 0% | `derivatives-lead-lag-v1-spot-smoke-rejected` |
-| DEX-CEX spot dislocation v1 | DEX pool price/volume/liquidity -> CEX forward returns | DEX Screener -> Kraken/Coinbase spot | NEEDS_MORE_DATA | 0 events from 70 snapshots, 2-min window too short, DEX search 5m volumes too stable | `dex-cex-v1-needs-more-data` |
+| Derivatives-source spot lead-lag v2 | notional_burst, large_trade, signed_imbalance | Binance USD-M perp → Kraken/Coinbase spot | OPEN_IMPLEMENTATION | Implementation complete. Needs empirical capture during volatile market window. | — |
+|| DEX-CEX spot dislocation v1 | DEX pool price/volume/liquidity -> CEX forward returns | DEX Screener -> Kraken/Coinbase spot | NEEDS_MORE_DATA | 0 events from 70 snapshots, 2-min window too short, DEX search 5m volumes too stable | `dex-cex-v1-needs-more-data` |
+|| Cross-asset spot impulse v1 | BTC/ETH spot impulse -> alt spot forward returns | Coinbase/Kraken/Binance spot | MARKET_MODERATE_DIAGNOSTIC | Best pair -43.98 bps (coinbase:ETH/USDT->coinbase:LINK/USD) in a quiet/moderate capture. BTC/ETH source movement during actual capture was only ~9-17 bps, below the 30 bps source-range gate required to test stress beta-lag. Not a full volatile-window rejection. | 2026-05-13 07:37-07:53 UTC, 906s capture, quiet/moderate market (BTC 12.6 bps, ETH 16.2 bps). 72 pairs, 11,890 signals, 50 pairs with overlap, 0 pairs with sufficient source/target movement. Diagnostic evidence only — open for volatile-window retest. |
 
 ## Locked Gates — Do Not Revisit Without Structural Change
 
@@ -39,7 +42,8 @@ The full mined status table is at [reports/research_status_table.csv](../reports
 
 ## Still Open
 
-- **Derivatives flow impulse → spot lead-lag** (perp/futures venue as source, not spot). IMPLEMENTED_OBSERVER_ONLY. The `derivatives_lead_lag_v1` observer is built but has never been tested against an actual derivatives source (Binance/Bybit/Kraken futures perps). The initial v1 smoke run used Coinbase spot as source — a same-asset spot/spot pair already in locked gate #2. Actual derivatives-source thesis: OPEN_UNTESTED.
+- **Cross-asset spot impulse v1** — Quiet/moderate-regime diagnostic only. BTC/ETH source movement during the actual capture was ~9-17 bps, below the 30 bps source-range gate required to test stress beta-lag. The 50 pairs with overlap all failed after the 50bps cost wall (best -43.98 bps), but this is diagnostic evidence from a quiet market, not a structural rejection. Open for a genuine volatile/stress-window retest only.
+- **Derivatives flow impulse → spot lead-lag** (perp/futures venue as source, not spot). OPEN_IMPLEMENTATION. The v2 implementation (`run_derivatives_spot_capture.py` + `run_derivatives_spot_lead_lag.py`) uses Binance USD-M perp as source and Kraken/Coinbase spot as target with a single combined async capture runner, overlap-window enforcement, OI bucket labeling, and volatility sanity gates. Needs empirical capture during a volatile market window.
 - OI + price regime classification (filter, not standalone trade)
 - Funding as crowding/sentiment feature (not carry)
 - L2 adverse selection conditioning on book state
@@ -51,9 +55,8 @@ The `derivatives_lead_lag_v1` run tagged as `REJECTED_SPOT_SPOT_SMOKE` used:
 - source: Coinbase BTC/USD (spot)
 - target: Kraken BTC/USD (spot)
 
-This rejected only that specific spot→spot pairing under the configured cost model.
-The "derivatives lead-lag" research branch requires a derivatives source (perp or futures)
-to be tested. Until then the actual thesis remains OPEN_UNTESTED.
+This rejected only that specific spot->spot pairing under the configured cost model.
+The "derivatives-source spot lead-lag v2" implementation uses Binance USD-M perp (fapi.binance.com aggTrade WebSocket) as source with Kraken/Coinbase spot as target. It has a combined async capture runner, overlap enforcement, and OI bucket classification. Awaiting empirical capture during a volatile market window.
 
 ## First DEX→CEX Empirical Run Summary
 
@@ -78,7 +81,7 @@ The first real empirical run (2026-05-13 03:17-03:27 UTC) produced:
 
 ## Known Issues
 
-- config.py Final import: fixed 2026-05-13
+- config.py Final import: fixed 2026-05-13 (no longer applies)
 - uv version mismatch (0.11.8 pinned vs 0.11.13 runtime)
 - No retry logic in REST fetchers
 - Pickle coupling in btcusd_research/reports.py
