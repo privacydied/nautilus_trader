@@ -65,7 +65,7 @@ None for current warm-cache path. True historical BTC 15m UpDown slug selection 
 `.venv/bin/python -m pytest examples/strategies/polymarket_btcusd_arb/tests examples/strategies/polymarket_btcusd_arb/parity_tests -q` -> 24 passed. Plain `python -m pytest ...` failed in the non-venv interpreter because `msgspec` is unavailable; repo-local `.venv/bin/python` was used because `uv run` is blocked by uv version pin mismatch (`required ==0.11.12`, installed `0.11.14`).
 
 ## Backtest Runs
-Last run report: /mnt/nasirjones/py/nautilus_trader/reports/polymarket_btcusd_arb/20260513T205902Z
+Last run report: /mnt/nasirjones/py/nautilus_trader/reports/polymarket_btcusd_arb/20260513T210151Z
 
 ## Current Verdict
 See summary.json verdicts_by_grid. NEEDS_MORE_DATA is not a win.
