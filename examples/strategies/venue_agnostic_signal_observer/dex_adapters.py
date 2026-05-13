@@ -34,18 +34,28 @@ def parse_dexscreener_pair(raw_pair: dict, ts_recv_ns: int) -> DexPoolSnapshot |
     Returns None if the payload cannot be parsed into a valid snapshot.
     """
     try:
-        # Nested structure varies; handle the documented shape
+        # Nested structure varies between pair-lookup and search endpoints
         base = raw_pair.get("baseToken", {})
         quote = raw_pair.get("quoteToken", {})
         info = raw_pair.get("info", {})
-        liquidity = info.get("liquidity", {})
-        txn_5m = info.get("txn", {}).get("m5", {})
+        # Liquidity: top-level in search results, info.liquidity in pair lookup
+        liquidity = raw_pair.get("liquidity", {})
+        if not liquidity:
+            liquidity = info.get("liquidity", {})
+        # Transactions: top-level in search (txns.m5), nested in info (info.txn.m5)
+        txn_5m = raw_pair.get("txns", {}).get("m5", {})
+        if not txn_5m:
+            txn_5m = info.get("txn", {}).get("m5", {})
         volume_5m = raw_pair.get("volume", {}).get("m5", 0)
         volume_24h = raw_pair.get("volume", {}).get("h24", 0)
         vol_1h = raw_pair.get("volume", {}).get("h1", 0)
         price_usd = raw_pair.get("priceUsd")
-        price_change_5m_pct = info.get("priceChange", {}).get("m5")
-        price_change_1h_pct = info.get("priceChange", {}).get("h1")
+        # Price change: top-level priceChange in search, nested in info for pair lookup
+        price_change = raw_pair.get("priceChange", {})
+        if not price_change:
+            price_change = info.get("priceChange", {})
+        price_change_5m_pct = price_change.get("m5")
+        price_change_1h_pct = price_change.get("h1")
         dex_id = raw_pair.get("dexId", "")
         chain_id = raw_pair.get("chainId", "")
         pair_address = raw_pair.get("pairAddress", "")

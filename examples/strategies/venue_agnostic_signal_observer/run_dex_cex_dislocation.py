@@ -102,19 +102,35 @@ def load_target_ticks(
     target_venues: list[str],
     assets: list[str],
 ) -> dict[str, list[TradeTickLite]]:
-    """Discover tick files from directories per convention in tick_store."""
-    from .tick_store import discover_tick_files
+    """Discover tick files from directories.
+
+    Tries tick_file_discovery per venue+symbol, then falls back to
+    scanning for trades_*.jsonl files in the directory.
+    """
+    from .tick_store import tick_file_discovery
 
     result: dict[str, list[TradeTickLite]] = {}
     for d in tick_dirs:
         dp = Path(d)
         for venue in target_venues:
-            files = discover_tick_files(str(dp), venue=venue)
-            for fpath in files:
-                ticks = _read_jsonl_trades(fpath)
+            # Try per-venue symbol discovery
+            for asset in assets:
+                for sym_variant in [f"{asset}/USD", f"{asset}-USD", f"{asset}/USDT", f"{asset}-USDT"]:
+                    files = tick_file_discovery(str(dp), venue=venue, symbol=sym_variant)
+                    for fpath in files:
+                        ticks = _read_jsonl_trades(fpath)
+                        if ticks:
+                            key = f"{venue}:{ticks[0].symbol}"
+                            if key not in result:
+                                result[key] = ticks
+
+            # Also do a broad directory scan for any remaining trades files
+            for fpath in sorted(dp.glob("trades_*.jsonl")):
+                ticks = _read_jsonl_trades(str(fpath))
                 if ticks:
-                    key = f"{venue}:{ticks[0].symbol}"
-                    result[key] = ticks
+                    key = f"{ticks[0].venue}:{ticks[0].symbol}"
+                    if key not in result:
+                        result[key] = ticks
     return result
 
 
