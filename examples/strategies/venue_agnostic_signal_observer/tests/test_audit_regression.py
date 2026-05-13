@@ -329,3 +329,83 @@ class TestLargeTradeDirectionMapping:
         assert "long" in buy_dir, (
             "Expected direction='long' for large buy trade."
         )
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Regression tests for H-5, H-6, H-7 structural fixes."""
+
+class TestReconnectLoop:
+    """Verify the bounded reconnect wrapper exists and is used."""
+
+    def test_with_reconnect_function_exists(self):
+        """_with_reconnect_loop must exist in the capture module."""
+        from ..run_derivatives_spot_capture import _with_reconnect_loop
+        assert callable(_with_reconnect_loop)
+
+    def test_reconnect_constants_defined(self):
+        """Bounded reconnect constants must be present."""
+        from .. import run_derivatives_spot_capture as cap
+        assert hasattr(cap, "_RECONNECT_MAX_ATTEMPTS")
+        assert hasattr(cap, "_RECONNECT_BUDGET_S")
+        assert cap._RECONNECT_MAX_ATTEMPTS <= 5
+        assert cap._RECONNECT_BUDGET_S <= 30
+
+    def test_capture_functions_return_str_or_none(self):
+        """Capture functions must return str|None (reconnect reason)."""
+        import inspect
+        from ..run_derivatives_spot_capture import (
+            capture_binance_perp,
+            capture_kraken_spot,
+            capture_coinbase_spot,
+        )
+        for fn in (capture_binance_perp, capture_kraken_spot, capture_coinbase_spot):
+            ret = inspect.signature(fn).return_annotation
+            # Should be str | None, not None (the old void return type)
+            assert ret is not type(None), (
+                f"{fn.__name__} still returns None — no reconnect reason propagation"
+            )
+
+
+# ============================================
+# H-6: aiohttp session cleanup on close
+# ============================================
+class TestSessionCleanup:
+    """Verify _ws_close stashes and closes aiohttp session."""
+
+    def test_ws_close_cleans_session(self):
+        """_ws_close must look for _aiohttp_session attribute."""
+        import inspect
+        from ..run_derivatives_spot_capture import _ws_close
+        src = inspect.getsource(_ws_close)
+        assert "_aiohttp_session" in src, (
+            "_ws_close does not clean up aiohttp session — session leak risk"
+        )
+
+
+# ============================================
+# H-7: Task exceptions surfaced in manifest
+# ============================================
+class TestTaskExceptionSurfacing:
+    """Verify the gather result handling associates errors with task names."""
+
+    def test_task_exceptions_in_manifest_structure(self):
+        """The manifest must include 'task_exceptions' key."""
+        from .. import run_derivatives_spot_capture as cap
+        path = cap.__file__
+        with open(path) as f:
+            src = f.read()
+        assert '"task_exceptions"' in src or "'task_exceptions'" in src, (
+            "Manifest does not record task-level exceptions"
+        )
+        assert "task_exceptions.append" in src, (
+            "No task_exception collection logic — exceptions are swallowed"
+        )
+
+    def test_exception_branch_uses_task_name(self):
+        """Exception handling must use Task.get_name() for identification."""
+        from .. import run_derivatives_spot_capture as cap
+        import inspect
+        src = inspect.getsource(cap)
+        assert "task_name = t.get_name()" in src, (
+            "Exception handling does not use Task.get_name() — errors anonymous"
+        )
