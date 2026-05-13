@@ -250,7 +250,7 @@ cost model, event counts, forward-return distribution, and verdict.
 | Trade-flow impulse v1 | Pending | -- | -- |
 | Derivatives lead-lag v1 observer (smoke: Coinbase spot->Kraken spot BTC) | REJECTED_SPOT_SPOT_SMOKE | `derivatives-lead-lag-v1-spot-smoke-rejected` | 2026-05-13 |
 | Derivatives lead-lag v1 thesis (perp source->spot target) | OPEN_UNTESTED | -- | -- |
-| DEX-CEX spot dislocation v1 (on-chain -> CEX spot) | OPEN_OBSERVER_ONLY | `dex-cex-spot-dislocation-v1` | 2026-05-13 |
+| DEX-CEX spot dislocation v1 (on-chain -> CEX spot) | NEEDS_MORE_DATA | `dex-cex-v1-needs-more-data` | 2026-05-13 |
 
 ---
 
