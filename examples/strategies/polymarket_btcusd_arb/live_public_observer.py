@@ -84,6 +84,7 @@ def main():
     # Fetch market detail for tokens and strike
     detail=fetch_market_detail(selected.slug)
     yes_token=selected.yes_token_id
+    price_to_beat_source="slug_epoch"
     if detail:
         import json
         from .polymarket_data import _extract_strike,_extract_updown_tokens
@@ -114,11 +115,13 @@ def main():
             snap=binance_check.poll_bookticker()
             if snap and snap.get("best_bid"):
                 strike=float(snap["best_bid"])
+                price_to_beat_source="approximation_binance_bookticker"
                 print(f"Strike approximated from Binance bookTicker: {strike}")
-                selected=UpDownMarketInfo(slug=selected.slug,question=selected.question,active=selected.active,closed=selected.closed,condition_id=selected.condition_id,yes_token_id=selected.yes_token_id,no_token_id=selected.no_token_id,start_ns=selected.start_ns,end_ns=selected.end_ns,series_slug=selected.series_slug,resolution_source=selected.resolution_source,price_to_beat=strike,price_to_beat_source="approximation_binance_bookticker")
+                selected=UpDownMarketInfo(slug=selected.slug,question=selected.question,active=selected.active,closed=selected.closed,condition_id=selected.condition_id,yes_token_id=selected.yes_token_id,no_token_id=selected.no_token_id,start_ns=selected.start_ns,end_ns=selected.end_ns,series_slug=selected.series_slug,resolution_source=selected.resolution_source,price_to_beat=strike,price_to_beat_source=price_to_beat_source)
         except Exception as e:
             print(f"Binance bookTicker check failed: {e}")
             strike=100000.0
+            price_to_beat_source="fallback_default"
 
     # Run capture
     binance=BinancePublicStream()
@@ -136,7 +139,7 @@ def main():
     report_dir=Path(args.report_dir)/run_id
     poly_stale_rate=capture["poly_stale"]/max(capture["poly_polls"],1)
     binance_stale_rate=capture["binance_stale"]/max(capture["binance_polls"],1)
-    summary={"run_id":run_id,"branch":"polymarket-btcusd-arb-phase2-observer","market_slug":selected.slug,"market_strike_or_price_to_beat":selected.price_to_beat,"price_to_beat_source":selected.price_to_beat_source,"expiry_ns":selected.end_ns,"duration_seconds":capture["duration_seconds"],"candidate_count":len(capture["signals"]),"rejection_total":sum(capture["rejection_counts"].values()) if capture["rejection_counts"] else 0,"rejection_counts":capture["rejection_counts"],"binance_polls":capture["binance_polls"],"poly_polls":capture["poly_polls"],"binance_stale_rate":binance_stale_rate,"poly_stale_rate":poly_stale_rate,"missing_binance":capture["missing_binance"],"missing_poly":capture["missing_poly"],"safety_check_status":safety,"phase":"2_observer_only"}
+    summary={"run_id":run_id,"branch":"polymarket-btcusd-arb-phase2-observer","market_slug":selected.slug,"market_strike_or_price_to_beat":selected.price_to_beat,"price_to_beat_source":price_to_beat_source,"expiry_ns":selected.end_ns,"duration_seconds":capture["duration_seconds"],"evaluated_event_count":capture.get("evaluated_event_count",0),"candidate_count":len(capture["signals"]),"rejection_total":sum(capture["rejection_counts"].values()) if capture["rejection_counts"] else 0,"rejection_counts":capture["rejection_counts"],"binance_polls":capture["binance_polls"],"poly_polls":capture["poly_polls"],"binance_stale_rate":binance_stale_rate,"poly_stale_rate":poly_stale_rate,"missing_binance":capture["missing_binance"],"missing_poly":capture["missing_poly"],"safety_check_status":safety,"phase":"2_observer_only"}
 
     # Attempt replay
     try:
@@ -149,7 +152,12 @@ def main():
     groups=[asdict(g) if hasattr(g,"__dataclass_fields__") else g for g in capture.get("groups",[])]
     write_live_report(report_dir,summary=summary,signals=capture["signals"],rejections=capture["rejections"],groups=groups,safety=safety,replay=replay_result)
     print(f"REPORT_DIR={report_dir}")
+    print(f"Evaluated events: {capture.get('evaluated_event_count',0)}")
     print(f"Candidate count: {len(capture['signals'])}")
+    print(f"Rejection count: {sum(capture['rejection_counts'].values()) if capture['rejection_counts'] else 0}")
+    if capture["rejection_counts"]:
+        for reason,count in sorted(capture["rejection_counts"].items()):
+            print(f"  {reason}: {count}")
     print(f"Binance stale rate: {binance_stale_rate:.4f}")
     print(f"Polymarket stale rate: {poly_stale_rate:.4f}")
     print(f"Replay deterministic: {replay_result.get('deterministic','?')}")

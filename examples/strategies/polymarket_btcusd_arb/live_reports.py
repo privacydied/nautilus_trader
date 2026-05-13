@@ -25,8 +25,19 @@ def write_live_report(report_dir:Path,*,summary:dict,signals:list,rejections:lis
     top_lines.append(f"Branch: {summary.get('branch','?')}")
     top_lines.append(f"Market slug: {summary.get('market_slug','?')}")
     top_lines.append(f"Phase: 2 observer-only, no orders, no keys, public data only\n")
+    top_lines.append(f"Evaluated events: {summary.get('evaluated_event_count',0)}")
     top_lines.append(f"Candidate count: {summary.get('candidate_count',0)}")
     top_lines.append(f"Rejection count: {summary.get('rejection_total',0)}")
+    # Rejection reason table
+    rej_counts=summary.get("rejection_counts",{})
+    if rej_counts:
+        top_lines.append("\n## Rejection Reasons\n")
+        top_lines.append("| Reason | Count |")
+        top_lines.append("|---|---|")
+        for reason,count in sorted(rej_counts.items(),key=lambda x:-x[1]):
+            top_lines.append(f"| {reason} | {count} |")
+    else:
+        top_lines.append("\nNo rejection records (possibly no evaluable events).")
     for g in groups:
         tte=g.get("tte_bucket","?")
         th=g.get("threshold_bps","?")
@@ -35,7 +46,7 @@ def write_live_report(report_dir:Path,*,summary:dict,signals:list,rejections:lis
         verdict=g.get("verdict","?")
         reason=g.get("reason","?")
         mean_edge=g.get("mean_edge_bps")
-        top_lines.append(f"Lookback {lb}ns, threshold {th}bps, TTE {tte}: {count} candidates, verdict={verdict}, reason={reason}, mean_edge={mean_edge}")
+        top_lines.append(f"\nLookback {lb}ns, threshold {th}bps, TTE {tte}: {count} candidates, verdict={verdict}, reason={reason}, mean_edge={mean_edge}")
     top_lines.append(f"\nBinance stale rate: {summary.get('binance_stale_rate','N/A')}")
     top_lines.append(f"Polymarket stale rate: {summary.get('poly_stale_rate','N/A')}")
     top_lines.append(f"Safety check: {safety.get('ok',False)}")
