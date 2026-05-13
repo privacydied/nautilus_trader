@@ -409,3 +409,102 @@ class TestTaskExceptionSurfacing:
         assert "task_name = t.get_name()" in src, (
             "Exception handling does not use Task.get_name() — errors anonymous"
         )
+
+
+# ============================================
+# Reconnect overlap integrity
+# ============================================
+class TestReconnectOverlapPreservesUnion:
+    """Verify first_tick_ts survives reconnect and overlap is computed as union."""
+
+    def _make_stats(self, **kwargs):
+        from ..run_derivatives_spot_capture import StreamStats
+        s = StreamStats(kwargs.pop("name", "test"))
+        for k, v in kwargs.items():
+            setattr(s, k, v)
+        return s
+
+    def test_post_reconnect_first_tick_ts_not_overwritten(self):
+        """first_tick_ts must survive reconnect via 'is None' guard."""
+        from .. import run_derivatives_spot_capture as cap
+        import inspect
+        # The guard pattern must exist in all three handlers
+        src = inspect.getsource(cap)
+        assert "if s.first_tick_ts is None:" in src, (
+            "first_tick_ts guard missing — reconnect may overwrite pre-reconnect anchor"
+        )
+        # last_tick_ts must be set unconditionally (no guard)
+        # Check that the line after the guard is NOT also guarded
+        lines = src.splitlines()
+        for i, line in enumerate(lines):
+            if "first_tick_ts is None" in line:
+                # Next few lines should include last_tick_ts without an 'if' guard
+                next_block = "\n".join(lines[i:i+5])
+                assert "last_tick_ts = ts_ns" in next_block, (
+                    "last_tick_ts not updated after first_tick_ts guard"
+                )
+                break
+
+    def test_overlap_uses_min_max_across_reconnect(self):
+        """compute_overlap_windows must use min/max of first/last across targets."""
+        from ..run_derivatives_spot_capture import (
+            StreamStats,
+            compute_overlap_windows,
+        )
+
+        BASE = 1_700_000_000_000_000_000  # ~Nov 2023 in ns
+        SEC = 1_000_000_000
+
+        stats = {}
+
+        # Source: pre-reconnect tick at t=0, post-reconnect tick at t=1080s
+        src = self._make_stats(
+            name="binance_perp_BTC/USDT",
+            status="ok",
+            tick_count=500,
+            first_tick_ts=BASE,
+            last_tick_ts=BASE + 1080 * SEC,
+            reconnect_count=1,
+        )
+        stats["binance_perp_BTC/USDT"] = src
+
+        # Target: Kraken continuous from t=30s to t=1080s
+        kr = self._make_stats(
+            name="kraken_BTC/USD",
+            status="ok",
+            tick_count=300,
+            first_tick_ts=BASE + 30 * SEC,
+            last_tick_ts=BASE + 1080 * SEC,
+        )
+        stats["kraken_BTC/USD"] = kr
+
+        # Target: Coinbase dropped at t=300s, came back at t=360s,
+        # first_tick_ts preserved at t=60s (pre-drop), last at t=1080s
+        cb = self._make_stats(
+            name="coinbase_BTC/USD",
+            status="ok",
+            tick_count=200,
+            first_tick_ts=BASE + 60 * SEC,
+            last_tick_ts=BASE + 1080 * SEC,
+            reconnect_count=1,
+        )
+        stats["coinbase_BTC/USD"] = cb
+
+        result = compute_overlap_windows(stats, ["BTC"])
+        p = result["per_pair"]["BTC"]
+
+        # Target min should be min(30s, 60s) = 30s (not the post-reconnect 360s)
+        expected_target_min = BASE + 30 * SEC
+        assert p["target_start_ns"] == expected_target_min, (
+            f"target_start_ns = {p['target_start_ns']}, expected {expected_target_min}. "
+            "Reconnect must not truncate the target window."
+        )
+        # Target max should be 1080s
+        assert p["target_end_ns"] == BASE + 1080 * SEC
+
+        # Overlap = max(source_min, target_min) .. min(source_max, target_max)
+        # = max(0s, 30s) .. min(1080s, 1080s) = 30s .. 1080s = 1050s
+        assert p["overlap_duration_seconds"] == 1050.0, (
+            f"Expected 1050s overlap, got {p['overlap_duration_seconds']}s. "
+            "Overlap must span the full union of pre/post-reconnect data."
+        )

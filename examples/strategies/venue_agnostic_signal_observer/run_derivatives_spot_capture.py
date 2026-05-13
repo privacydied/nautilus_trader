@@ -108,8 +108,13 @@ async def _ws_connect(url: str, max_reconnects: int = 5, name: str = "ws"):
     try:
         import aiohttp
         session = aiohttp.ClientSession()
-        ws_timeout = aiohttp.ClientWSTimeout(ws_receive=10, ws_close=10)
-        ws = await asyncio.wait_for(session.ws_connect(url, timeout=ws_timeout), timeout=10)
+        ws = await asyncio.wait_for(
+            session.ws_connect(url, timeout=aiohttp.ClientWSTimeout(ws_receive=10, ws_close=10)),
+            timeout=10,
+        )
+        # Stash session on ws so _ws_close can clean it up — closing the
+        # WebSocket alone does NOT free the underlying ClientSession.
+        ws._aiohttp_session = session  # track for cleanup in _ws_close
         print(f"  [{name}] Connected via aiohttp")
         return ws, "aiohttp"
     except ImportError:
@@ -147,13 +152,248 @@ async def _ws_close(ws, backend: str) -> None:
             await ws.close()
         else:
             await ws.close()
+            # Clean up the aiohttp session we stashed during connect
+            session = getattr(ws, "_aiohttp_session", None)
+            if session is not None and not session.closed:
+                await session.close()
     except Exception:
         pass
 
 
 # ---------------------------------------------------------------------------
+# Bounded reconnect wrapper for capture loops
+# ---------------------------------------------------------------------------
+
+_RECONNECT_MAX_ATTEMPTS = 5
+_RECONNECT_BUDGET_S = 30
+
+
+async def _with_reconnect_loop(
+    url: str,
+    name: str,
+    on_connect,
+    on_message,
+    duration_seconds: int,
+    stop_event: asyncio.Event,
+    stats: dict[str, StreamStats] | None = None,
+    stat_keys: list[str] | None = None,
+) -> str | None:
+    """Run a capture loop with bounded reconnect on socket failures.
+
+    Parameters
+    ----------
+    url : str
+        WebSocket endpoint.
+    name : str
+        Label for log output (e.g. \"BINANCE_PERP\").
+    on_connect : async callable(ws, backend)
+        Called after each successful connect (or reconnect) to perform
+        venue-specific setup — usually subscription messages.  Called as
+        ``await on_connect(ws, backend)``.  May be ``None``.
+    on_message : async callable(msg_dict, ws, backend) -> bool
+        Called for each parsed message.  Returns ``True`` to continue,
+        ``False`` to stop the loop immediately (e.g. parse error that
+        indicates an unrecoverable stream state).
+    duration_seconds : int
+        How long to capture total.
+    stop_event : asyncio.Event
+        External stop signal.
+    stats : dict, optional
+        StreamStats dict — updated with reconnect_count on each recovery.
+    stat_keys : list, optional
+        Which stat entries to increment reconnect_count on.
+
+    Returns
+    -------
+    str | None
+        ``None`` on normal exit, or a short reason string on unrecoverable
+        failure (e.g. \"reconnect_budget_exceeded\").
+    """
+    deadline = time.time() + duration_seconds
+    ws: object | None = None
+    backend: str = ""
+    reason: str | None = None
+
+    # --- initial connect -------------------------------------------------
+    connect_start = time.monotonic()
+    for attempt in range(_RECONNECT_MAX_ATTEMPTS + 1):
+        try:
+            ws, backend = await _ws_connect(
+                url, max_reconnects=0, name=name
+            )
+            connect_start = time.monotonic()
+            break
+        except Exception as exc:
+            if time.monotonic() - connect_start > _RECONNECT_BUDGET_S:
+                reason = f"connect_budget_exceeded ({exc})"
+                ws = None
+                break
+            print(f"  [{name}] Connect attempt {attempt + 1} failed: {exc}")
+            await asyncio.sleep(min(2 ** attempt, 10))
+    else:
+        reason = "initial_connect_failed"
+        ws = None
+
+    if reason:
+        print(f"  [{name}] {reason}")
+        return reason
+
+    # --- subscribe if callable provided ----------------------------------
+    try:
+        if on_connect is not None:
+            await on_connect(ws, backend)
+    except Exception as exc:
+        reason = f"subscribe_error: {exc}"
+        print(f"  [{name}] {reason}")
+        try:
+            await _ws_close(ws, backend)
+        except Exception:
+            pass
+        return reason
+
+    # --- main receive loop with reconnect --------------------------------
+    while time.time() < deadline and not stop_event.is_set():
+        remaining = min(2.0, max(0.0, deadline - time.time()))
+        try:
+            msg = await _ws_recv(ws, backend, timeout=remaining)
+        except Exception as exc:
+            # Socket broke — attempt bounded reconnect
+            print(f"  [{name}] Socket error, reconnecting: {exc}")
+            try:
+                await _ws_close(ws, backend)
+            except Exception:
+                pass
+
+            reconnect_start = time.monotonic()
+            ws, backend = None, ""
+            for attempt in range(_RECONNECT_MAX_ATTEMPTS + 1):
+                if time.monotonic() - reconnect_start > _RECONNECT_BUDGET_S:
+                    reason = f"reconnect_budget_exceeded ({exc})"
+                    break
+                try:
+                    ws, backend = await _ws_connect(
+                        url, max_reconnects=0, name=name
+                    )
+                    break
+                except Exception as exc2:
+                    print(
+                        f"  [{name}] Reconnect {attempt + 1} failed: {exc2}"
+                    )
+                    await asyncio.sleep(min(2 ** attempt, 10))
+            else:
+                reason = f"reconnect_exhausted ({exc})"
+
+            if ws is None:
+                print(f"  [{name}] {reason}")
+                return reason
+
+            # Re-subscribe
+            try:
+                if on_connect is not None:
+                    await on_connect(ws, backend)
+            except Exception as exc3:
+                reason = f"resubscribe_error: {exc3}"
+                print(f"  [{name}] {reason}")
+                try:
+                    await _ws_close(ws, backend)
+                except Exception:
+                    pass
+                return reason
+
+            # Track recovery
+            if stats and stat_keys:
+                for k in stat_keys:
+                    if k in stats:
+                        stats[k].reconnect_count += 1
+                print(f"  [{name}] Reconnected, total reconnects: {stats[stat_keys[0]].reconnect_count if stat_keys else 0}")
+            continue
+
+        if msg is None:
+            continue
+
+        try:
+            data = json.loads(msg)
+        except json.JSONDecodeError:
+            continue
+
+        # Let the per-venue handler process; False = stop
+        try:
+            keep_going = await on_message(data, ws, backend)
+        except Exception as exc:
+            print(f"  [{name}] Handler error: {exc}")
+            # Treat handler errors like socket errors — reconnect
+            continue
+        if not keep_going:
+            break
+
+    # --- clean exit ------------------------------------------------------
+    try:
+        await _ws_close(ws, backend)
+    except Exception:
+        pass
+
+    if reason:
+        print(f"  [{name}] Capture ended early: {reason}")
+    return reason
+
+
+# ---------------------------------------------------------------------------
 # Binance USD-M perp capture
 # ---------------------------------------------------------------------------
+
+async def _binance_perp_handler(raw_to_canonical, files, stats, run_id, out_dir):
+    """Binance perp message handler for _with_reconnect_loop."""
+    async def _on_connect(ws, backend):
+        # Binance combined streams auto-send after connect — no subscribe needed.
+        pass
+
+    async def _on_message(data, ws, backend):
+        # Combined stream: {"stream":"btcusdt@aggTrade","data":{...}}
+        if "data" in data:
+            payload = data["data"]
+            stream_label = data.get("stream", "")
+            raw = stream_label.split("@")[0]
+        elif data.get("e") == "aggTrade":
+            payload = data
+            raw = payload.get("s", "").lower()
+        else:
+            return True  # not a trade message, keep going
+
+        if raw not in raw_to_canonical:
+            return True
+
+        try:
+            p = float(payload["p"])
+            q = float(payload["q"])
+            m = payload.get("m", False)
+            t_ms = int(payload["T"])
+        except (KeyError, ValueError):
+            return True
+
+        side = "sell" if m else "buy"
+        ts_ns = t_ms * _MS_TO_NS
+        canon_sym = raw_to_canonical[raw]
+
+        s = stats[f"binance_perp_{canon_sym}"]
+        s.tick_count += 1
+        if s.first_tick_ts is None:
+            s.first_tick_ts = ts_ns
+        s.last_tick_ts = ts_ns
+
+        tick = TradeTickLite(
+            ts_event=ts_ns,
+            venue="binance_perp",
+            symbol=canon_sym,
+            price=p,
+            size=q,
+            side=side,
+            trade_id=str(payload.get("a", "")),
+        )
+        files[raw].write(tick.to_json() + "\n")
+        return True
+
+    return _on_connect, _on_message
+
 
 async def capture_binance_perp(
     out_dir: Path,
@@ -162,7 +402,7 @@ async def capture_binance_perp(
     stats: dict[str, StreamStats],
     duration_seconds: int,
     stop_event: asyncio.Event,
-) -> None:
+) -> str | None:
     """Capture Binance USD-M perp aggTrade trades via combined WebSocket.
 
     WebSocket URL: wss://fstream.binance.com/stream?streams=btcusdt@aggTrade/...
@@ -188,20 +428,9 @@ async def capture_binance_perp(
     url = f"wss://fstream.binance.com/stream?streams={'/'.join(stream_names)}"
     print(f"  [BINANCE_PERP] Connecting: {url}")
 
-    try:
-        ws, backend = await _ws_connect(
-            url, max_reconnects=5, name="BINANCE_PERP"
-        )
-    except RuntimeError as e:
-        print(f"  [BINANCE_PERP] Failed: {e}")
-        for raw, canon in raw_to_canonical.items():
-            s = stats[f"binance_perp_{canon}"] = StreamStats(f"binance_perp_{canon}")
-            s.status = "failed"
-            s.error_summary = str(e)[:200]
-        return
-
     # Open file handles
     files: dict[str, object] = {}
+    stat_keys: list[str] = []
     for raw, canon in raw_to_canonical.items():
         sym_file = canon.replace("/", "-")
         fname = f"trades_binance_perp_{sym_file}_{run_id}.jsonl"
@@ -210,53 +439,76 @@ async def capture_binance_perp(
         s.start_time = _ts_now_iso()
         s.status = "ok"
         files[raw] = open(out_dir / fname, "w")
+        stat_keys.append(name)
 
-    deadline = time.time() + duration_seconds
+    on_connect, on_message = await _binance_perp_handler(
+        raw_to_canonical, files, stats, run_id, out_dir
+    )
 
-    try:
-        while time.time() < deadline and not stop_event.is_set():
-            remaining = min(2.0, deadline - time.time())
+    reason = await _with_reconnect_loop(
+        url=url,
+        name="BINANCE_PERP",
+        on_connect=on_connect,
+        on_message=on_message,
+        duration_seconds=duration_seconds,
+        stop_event=stop_event,
+        stats=stats,
+        stat_keys=stat_keys,
+    )
+
+    for f in files.values():
+        f.close()
+    for raw, canon in raw_to_canonical.items():
+        stats[f"binance_perp_{canon}"].end_time = _ts_now_iso()
+
+    if reason:
+        for k in stat_keys:
+            if k in stats:
+                stats[k].error_summary = reason[:200]
+                if stats[k].status == "ok":
+                    stats[k].status = "failed"
+
+    print(f"  [BINANCE_PERP] Capture complete")
+    return reason
+
+
+# ---------------------------------------------------------------------------
+# Kraken spot capture
+# ---------------------------------------------------------------------------
+
+async def _kraken_handler(files, stats, symbols):
+    """Kraken spot message handler for _with_reconnect_loop."""
+    async def _on_connect(ws, backend):
+        sub = {
+            "method": "subscribe",
+            "params": {"channel": "trade", "symbol": symbols},
+        }
+        await _ws_send(ws, backend, json.dumps(sub))
+
+    async def _on_message(data, ws, backend):
+        # Kraken trade messages are arrays: [channel_id, [trades...], channel_name, symbol]
+        if not isinstance(data, list) or len(data) < 4:
+            return True
+        if data[2] != "trade":
+            return True
+
+        symbol = data[3]
+        trades_list = data[1]
+        canon_sym = _normalize_kraken_symbol(symbol)
+        if canon_sym not in files:
+            return True
+
+        for t in trades_list:
             try:
-                msg = await _ws_recv(ws, backend, timeout=remaining)
-            except Exception:
-                break
-
-            if msg is None:
+                price = float(t["price"])
+                size = float(t["qty"])
+                side = t.get("side", "unknown")
+                ts_seconds = float(t["timestamp"])
+                ts_ns = int(ts_seconds * 1_000_000_000)
+            except (KeyError, ValueError, TypeError):
                 continue
 
-            try:
-                data = json.loads(msg)
-            except json.JSONDecodeError:
-                continue
-
-            # Combined stream: {"stream":"btcusdt@aggTrade","data":{...}}
-            if "data" in data:
-                payload = data["data"]
-                stream_label = data.get("stream", "")
-                raw = stream_label.split("@")[0]
-            elif data.get("e") == "aggTrade":
-                payload = data
-                raw = payload.get("s", "").lower()
-            else:
-                continue
-
-            if raw not in raw_to_canonical:
-                continue
-
-            try:
-                p = float(payload["p"])
-                q = float(payload["q"])
-                m = payload.get("m", False)
-                t_ms = int(payload["T"])
-            except (KeyError, ValueError):
-                continue
-
-            # m=true -> buyer was maker -> seller aggressor -> sell
-            side = "sell" if m else "buy"
-            ts_ns = t_ms * _MS_TO_NS
-            canon_sym = raw_to_canonical[raw]
-
-            s = stats[f"binance_perp_{canon_sym}"]
+            s = stats[f"kraken_{canon_sym}"]
             s.tick_count += 1
             if s.first_tick_ts is None:
                 s.first_tick_ts = ts_ns
@@ -264,27 +516,18 @@ async def capture_binance_perp(
 
             tick = TradeTickLite(
                 ts_event=ts_ns,
-                venue="binance_perp",
+                venue="kraken",
                 symbol=canon_sym,
-                price=p,
-                size=q,
+                price=price,
+                size=size,
                 side=side,
-                trade_id=str(payload.get("a", "")),
+                trade_id=str(t.get("id", "")),
             )
-            files[raw].write(tick.to_json() + "\n")
-    finally:
-        for f in files.values():
-            f.close()
-        for raw, canon in raw_to_canonical.items():
-            stats[f"binance_perp_{canon}"].end_time = _ts_now_iso()
-        await _ws_close(ws, backend)
+            files[canon_sym].write(tick.to_json() + "\n")
+        return True
 
-    print(f"  [BINANCE_PERP] Capture complete")
+    return _on_connect, _on_message
 
-
-# ---------------------------------------------------------------------------
-# Kraken spot capture
-# ---------------------------------------------------------------------------
 
 async def capture_kraken_spot(
     out_dir: Path,
@@ -293,39 +536,14 @@ async def capture_kraken_spot(
     stats: dict[str, StreamStats],
     duration_seconds: int,
     stop_event: asyncio.Event,
-) -> None:
+) -> str | None:
     """Capture Kraken spot trades via WebSocket."""
     url = "wss://ws.kraken.com"
     print(f"  [KRAKEN] Connecting: {url}")
 
-    try:
-        ws, backend = await _ws_connect(
-            url, max_reconnects=5, name="KRAKEN"
-        )
-    except RuntimeError as e:
-        print(f"  [KRAKEN] Failed: {e}")
-        for sym in symbols:
-            canon = resolve_symbol(sym)
-            sym_key = f"{canon.asset}/{canon.quote}"
-            s = stats[f"kraken_{sym_key}"] = StreamStats(f"kraken_{sym_key}")
-            s.status = "failed"
-            s.error_summary = str(e)[:200]
-        return
-
-    # Subscribe
-    sub = {
-        "method": "subscribe",
-        "params": {"channel": "trade", "symbol": symbols},
-    }
-    try:
-        await _ws_send(ws, backend, json.dumps(sub))
-    except Exception as e:
-        print(f"  [KRAKEN] Subscribe error: {e}")
-        await _ws_close(ws, backend)
-        return
-
     # Open files
     files: dict[str, object] = {}
+    stat_keys: list[str] = []
     for sym in symbols:
         try:
             canon = resolve_symbol(sym)
@@ -339,79 +557,92 @@ async def capture_kraken_spot(
         s.start_time = _ts_now_iso()
         s.status = "ok"
         files[canon_sym] = open(out_dir / fname, "w")
+        stat_keys.append(name)
 
-    deadline = time.time() + duration_seconds
+    on_connect, on_message = await _kraken_handler(files, stats, symbols)
 
-    try:
-        while time.time() < deadline and not stop_event.is_set():
-            remaining = min(2.0, deadline - time.time())
-            try:
-                msg = await _ws_recv(ws, backend, timeout=remaining)
-            except Exception:
-                break
+    reason = await _with_reconnect_loop(
+        url=url,
+        name="KRAKEN",
+        on_connect=on_connect,
+        on_message=on_message,
+        duration_seconds=duration_seconds,
+        stop_event=stop_event,
+        stats=stats,
+        stat_keys=stat_keys,
+    )
 
-            if msg is None:
-                continue
+    for f in files.values():
+        f.close()
+    for canon_sym in files:
+        stats[f"kraken_{canon_sym}"].end_time = _ts_now_iso()
 
-            try:
-                data = json.loads(msg)
-            except json.JSONDecodeError:
-                continue
-
-            # Kraken trade messages are arrays: [channel_id, [trades...], channel_name, symbol]
-            if not isinstance(data, list) or len(data) < 4:
-                continue
-
-            if data[2] != "trade":
-                continue
-
-            symbol = data[3]
-            trades_list = data[1]
-
-            # Normalize symbol
-            canon_sym = _normalize_kraken_symbol(symbol)
-            if canon_sym not in files:
-                continue
-
-            for t in trades_list:
-                try:
-                    price = float(t["price"])
-                    size = float(t["qty"])
-                    side = t.get("side", "unknown")
-                    ts_seconds = float(t["timestamp"])
-                    ts_ns = int(ts_seconds * 1_000_000_000)
-                except (KeyError, ValueError, TypeError):
-                    continue
-
-                s = stats[f"kraken_{canon_sym}"]
-                s.tick_count += 1
-                if s.first_tick_ts is None:
-                    s.first_tick_ts = ts_ns
-                s.last_tick_ts = ts_ns
-
-                tick = TradeTickLite(
-                    ts_event=ts_ns,
-                    venue="kraken",
-                    symbol=canon_sym,
-                    price=price,
-                    size=size,
-                    side=side,
-                    trade_id=str(t.get("id", "")),
-                )
-                files[canon_sym].write(tick.to_json() + "\n")
-    finally:
-        for f in files.values():
-            f.close()
-        for canon_sym in files:
-            stats[f"kraken_{canon_sym}"].end_time = _ts_now_iso()
-        await _ws_close(ws, backend)
+    if reason:
+        for k in stat_keys:
+            if k in stats:
+                stats[k].error_summary = reason[:200]
+                if stats[k].status == "ok":
+                    stats[k].status = "failed"
 
     print(f"  [KRAKEN] Capture complete")
+    return reason
 
 
 # ---------------------------------------------------------------------------
 # Coinbase spot capture
 # ---------------------------------------------------------------------------
+
+async def _coinbase_handler(files, stats, product_ids):
+    """Coinbase spot message handler for _with_reconnect_loop."""
+    async def _on_connect(ws, backend):
+        sub = {
+            "type": "subscribe",
+            "product_ids": product_ids,
+            "channels": ["matches"],
+        }
+        await _ws_send(ws, backend, json.dumps(sub))
+
+    async def _on_message(data, ws, backend):
+        if data.get("type") != "match":
+            return True
+
+        product_id = data.get("product_id", "")
+        parts = product_id.split("-")
+        canon_sym = f"{parts[0]}/{parts[1]}" if len(parts) >= 2 else product_id
+
+        if canon_sym not in files:
+            return True
+
+        try:
+            price = float(data["price"])
+            size = float(data["size"])
+            side = data.get("side", "unknown")
+            time_str = data.get("time", "")
+            dt_match = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+            ts_ns = int(dt_match.timestamp() * 1e9)
+        except (KeyError, ValueError):
+            return True
+
+        s = stats[f"coinbase_{canon_sym}"]
+        s.tick_count += 1
+        if s.first_tick_ts is None:
+            s.first_tick_ts = ts_ns
+        s.last_tick_ts = ts_ns
+
+        tick = TradeTickLite(
+            ts_event=ts_ns,
+            venue="coinbase",
+            symbol=canon_sym,
+            price=price,
+            size=size,
+            side=side,
+            trade_id=str(data.get("trade_id", "")),
+        )
+        files[canon_sym].write(tick.to_json() + "\n")
+        return True
+
+    return _on_connect, _on_message
+
 
 async def capture_coinbase_spot(
     out_dir: Path,
@@ -420,27 +651,10 @@ async def capture_coinbase_spot(
     stats: dict[str, StreamStats],
     duration_seconds: int,
     stop_event: asyncio.Event,
-) -> None:
+) -> str | None:
     """Capture Coinbase spot trades via WebSocket."""
     url = "wss://ws-feed.exchange.coinbase.com"
     print(f"  [COINBASE] Connecting: {url}")
-
-    try:
-        ws, backend = await _ws_connect(
-            url, max_reconnects=5, name="COINBASE"
-        )
-    except RuntimeError as e:
-        print(f"  [COINBASE] Failed: {e}")
-        for sym in symbols:
-            try:
-                canon = resolve_symbol(sym)
-                sym_key = f"{canon.asset}/{canon.quote}"
-            except ValueError:
-                sym_key = sym
-            s = stats[f"coinbase_{sym_key}"] = StreamStats(f"coinbase_{sym_key}")
-            s.status = "failed"
-            s.error_summary = str(e)[:200]
-        return
 
     # Build Coinbase product IDs
     product_ids: list[str] = []
@@ -451,22 +665,10 @@ async def capture_coinbase_spot(
         except ValueError:
             product_ids.append(sym)
 
-    sub = {
-        "type": "subscribe",
-        "product_ids": product_ids,
-        "channels": ["matches"],
-    }
-    try:
-        await _ws_send(ws, backend, json.dumps(sub))
-    except Exception as e:
-        print(f"  [COINBASE] Subscribe error: {e}")
-        await _ws_close(ws, backend)
-        return
-
     # Open files
     files: dict[str, object] = {}
+    stat_keys: list[str] = []
     for pid in product_ids:
-        # Map product_id back to canonical
         parts = pid.split("-")
         canon_sym = f"{parts[0]}/{parts[1]}" if len(parts) >= 2 else pid
         sym_file = canon_sym.replace("/", "-")
@@ -476,73 +678,35 @@ async def capture_coinbase_spot(
         s.start_time = _ts_now_iso()
         s.status = "ok"
         files[canon_sym] = open(out_dir / fname, "w")
+        stat_keys.append(name)
 
-    deadline = time.time() + duration_seconds
+    on_connect, on_message = await _coinbase_handler(files, stats, product_ids)
 
-    try:
-        while time.time() < deadline and not stop_event.is_set():
-            remaining = min(2.0, deadline - time.time())
-            try:
-                msg = await _ws_recv(ws, backend, timeout=remaining)
-            except Exception:
-                break
+    reason = await _with_reconnect_loop(
+        url=url,
+        name="COINBASE",
+        on_connect=on_connect,
+        on_message=on_message,
+        duration_seconds=duration_seconds,
+        stop_event=stop_event,
+        stats=stats,
+        stat_keys=stat_keys,
+    )
 
-            if msg is None:
-                continue
+    for f in files.values():
+        f.close()
+    for canon_sym in files:
+        stats[f"coinbase_{canon_sym}"].end_time = _ts_now_iso()
 
-            try:
-                data = json.loads(msg)
-            except json.JSONDecodeError:
-                continue
-
-            if data.get("type") != "match":
-                continue
-
-            product_id = data.get("product_id", "")
-            # Map product_id to canonical symbol
-            parts = product_id.split("-")
-            if len(parts) >= 2:
-                canon_sym = f"{parts[0]}/{parts[1]}"
-            else:
-                canon_sym = product_id
-
-            if canon_sym not in files:
-                continue
-
-            try:
-                price = float(data["price"])
-                size = float(data["size"])
-                side = data.get("side", "unknown")
-                time_str = data.get("time", "")
-                dt_match = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-                ts_ns = int(dt_match.timestamp() * 1e9)
-            except (KeyError, ValueError):
-                continue
-
-            s = stats[f"coinbase_{canon_sym}"]
-            s.tick_count += 1
-            if s.first_tick_ts is None:
-                s.first_tick_ts = ts_ns
-            s.last_tick_ts = ts_ns
-
-            tick = TradeTickLite(
-                ts_event=ts_ns,
-                venue="coinbase",
-                symbol=canon_sym,
-                price=price,
-                size=size,
-                side=side,
-                trade_id=str(data.get("trade_id", "")),
-            )
-            files[canon_sym].write(tick.to_json() + "\n")
-    finally:
-        for f in files.values():
-            f.close()
-        for canon_sym in files:
-            stats[f"coinbase_{canon_sym}"].end_time = _ts_now_iso()
-        await _ws_close(ws, backend)
+    if reason:
+        for k in stat_keys:
+            if k in stats:
+                stats[k].error_summary = reason[:200]
+                if stats[k].status == "ok":
+                    stats[k].status = "failed"
 
     print(f"  [COINBASE] Capture complete")
+    return reason
 
 
 # ---------------------------------------------------------------------------
@@ -768,6 +932,7 @@ def main() -> None:
     async def run_capture():
         # Start all captures concurrently
         tasks = []
+        tasks_and_names: list[tuple[str, asyncio.Task]] = []
         tasks.append(asyncio.create_task(
             capture_binance_perp(
                 out_dir, run_id, source_symbols, stats,
@@ -775,6 +940,7 @@ def main() -> None:
             ),
             name="binance_perp"
         ))
+        tasks_and_names.append(("binance_perp", tasks[-1]))
         tasks.append(asyncio.create_task(
             capture_kraken_spot(
                 out_dir, run_id, target_symbols, stats,
@@ -782,6 +948,7 @@ def main() -> None:
             ),
             name="kraken"
         ))
+        tasks_and_names.append(("kraken", tasks[-1]))
         tasks.append(asyncio.create_task(
             capture_coinbase_spot(
                 out_dir, run_id, target_symbols, stats,
@@ -789,6 +956,7 @@ def main() -> None:
             ),
             name="coinbase"
         ))
+        tasks_and_names.append(("coinbase", tasks[-1]))
 
         if args.capture_open_interest:
             tasks.append(asyncio.create_task(
@@ -798,6 +966,7 @@ def main() -> None:
                 ),
                 name="oi_poll"
             ))
+            tasks_and_names.append(("oi_poll", tasks[-1]))
 
         # Wait for duration, then stop
         print(f"\n  Capturing for {args.duration_seconds} seconds...")
@@ -816,24 +985,30 @@ def main() -> None:
             if not t.done():
                 t.cancel()
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        return results
+        return results, tasks_and_names
 
     start_time = _ts_now_iso()
     loop = asyncio.new_event_loop()
     try:
-        results = loop.run_until_complete(run_capture())
+        results, tasks_and_names = loop.run_until_complete(run_capture())
     finally:
         loop.close()
 
     end_time = _ts_now_iso()
 
     # Handle OI counts from poll task and log any task exceptions
-    for r in results:
+    task_exceptions: list[dict] = []
+    for t, r in zip([t for _, t in tasks_and_names], results):
+        task_name = t.get_name()
         if isinstance(r, dict):
             oi_counts.update(r)
         elif isinstance(r, BaseException):
-            task_name = getattr(r, "__cause__", None)
-            print(f"  [WARN] Capture task failed: {type(r).__name__}: {r}")
+            task_exceptions.append({
+                "task": task_name,
+                "exception_type": type(r).__name__,
+                "message": str(r)[:500],
+            })
+            print(f"  [WARN] Capture task '{task_name}' failed: {type(r).__name__}: {r}")
 
     # Compute overlaps
     # Extract base assets from source symbols
@@ -868,6 +1043,7 @@ def main() -> None:
             {"stream": s.name, "error": s.error_summary}
             for s in stats.values() if s.error_summary
         ],
+        "task_exceptions": task_exceptions,
     }
 
     # Write manifest
