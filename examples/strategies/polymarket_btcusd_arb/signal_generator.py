@@ -19,7 +19,9 @@ def generate_signals(quotes,binance_states,meta,config):
             if tte<config.min_tte_ns: rej('too_close_to_expiry'); continue
             b=align_state(binance_states,q.ts_event_ns,config.max_binance_staleness_ns)
             if b is None: rej('stale_or_missing_binance'); continue
-            fp=fair_probability(b,tte,meta.strike,config).fair_probability; raw=(fp-q.quoted_probability)*10_000.0; mf=maker_fee_bps(q.quoted_probability,config.maker_rebates_enabled); spread=q.spread_bps or 0.0; net=raw-mf-spread-config.latency_buffer_bps-config.settlement_buffer_bps
+            fp=fair_probability(b,tte,meta.strike,config).fair_probability; raw=(fp-q.quoted_probability)*10_000.0; mf=maker_fee_bps(q.quoted_probability,config.maker_rebates_enabled); spread=q.spread_bps or 0.0
+            if spread>config.max_spread_bps: rej('spread_too_wide',fp=fp,raw=raw,mf=mf,net=raw-mf-spread-config.latency_buffer_bps-config.settlement_buffer_bps); continue
+            net=raw-mf-spread-config.latency_buffer_bps-config.settlement_buffer_bps
             s=DivergenceSignal(fair_probability=fp,raw_divergence_bps=raw,maker_fee_bps=mf,spread_bps=spread,latency_buffer_bps=config.latency_buffer_bps,settlement_buffer_bps=config.settlement_buffer_bps,stale_buffer_bps=0.0,net_divergence_bps=net,rejection_reason=None if net>=th else 'edge_below_threshold',**base)
             (candidates if net>=th else rejections).append(s)
             if net<th: counts['edge_below_threshold']+=1

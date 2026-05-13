@@ -1,6 +1,14 @@
-"""Live public data capture for Phase 2 observer."""
+"""Live public data capture for Phase 2 observer.
+
+Accounting contract: both live capture and replay use the same grid-level
+evaluation path via signal_generator.generate_signals(). Each evaluated
+(event × lookback × threshold) grid cell produces exactly one record:
+either a candidate or a rejection. Event-level rejections (where the event
+cannot be evaluated at all) are tracked separately as pre-grid rejections
+and are not comparable to grid-level rejections.
+"""
 from __future__ import annotations
-import asyncio,json,time,logging,os
+import json,time,logging
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -28,7 +36,6 @@ class BinancePublicStream:
     def poll_aggtrades(self,start_ns:int,end_ns:int)->list[BinanceReferenceState]:
         """Fetch aggTrades for a time window from Binance public API."""
         import urllib.request
-        from datetime import datetime,timezone
         start_ms=max(0,start_ns//1_000_000); end_ms=end_ns//1_000_000
         url=f"https://api.binance.com/api/v3/aggTrades?symbol={self.symbol}&startTime={start_ms}&endTime={end_ms}&limit=1000"
         req=urllib.request.Request(url,headers={"User-Agent":"NautilusTrader/Phase2Observer"})
@@ -105,33 +112,46 @@ class PolymarketPublicStream:
         except Exception as e:
             log.warning("Polymarket trade poll failed: %s",e); return []
 
+
 def run_live_capture(market_info:UpDownMarketInfo,binance:BinancePublicStream,poly:PolymarketPublicStream,duration_seconds:int,threshold_grid:tuple[float,...],config)->dict:
     """Run a live observer capture for a fixed duration.
 
-    Emits rejection records for every evaluated event that does not become a candidate,
-    tracking rejection reasons explicitly.
+    Accounting contract: grid-level evaluation using signal_generator.
+    Each (quote × lookback × threshold) grid cell produces one record:
+    either a candidate or a grid-level rejection.
+
+    Pre-grid event-level rejections (missing_poly, market_expired, too_close_to_expiry,
+    stale_or_missing_binance, spread_too_wide) are tracked separately because
+    those events were never evaluated at grid level.
     """
-    from .fair_probability import fair_probability
-    from .signal_generator import maker_fee_bps
-    from .binance_data import align_state
+    from .signal_generator import generate_signals
 
     t0=time.time(); end_time=t0+duration_seconds
     poll_interval=5
-    signals=[]; rejections=[]; rejection_counts:dict[str,int]={}
-    binance_polls=0; poly_polls=0; binance_stale=0; poly_stale=0
-    missing_bn=0; missing_poly=0; evaluated_events=0
+
+    # Pre-grid tracking: events that could not be evaluated at all
+    pre_grid_rejections:list[DivergenceSignal]=[]
+    pre_grid_rejection_counts:dict[str,int]={}
+    pre_grid_events=0  # events that passed to grid evaluation
+    missing_poly=0
+    market_expired=0
+
+    # Quote collection for grid evaluation
+    collected_quotes:list[PolymarketQuoteState]=[]
+    binance_polls=0; poly_polls=0
 
     while time.time()<end_time:
         now_ns=int(time.time()*1_000_000_000)
+
         # Compute time-to-expiry
         if not market_info.end_ns or now_ns<market_info.end_ns:
             tte=market_info.end_ns-now_ns if market_info.end_ns else 10_000_000_000_000
         else:
-            tte=0  # Market has expired
+            tte=0
 
         # Poll Binance
-        bn_states=binance.poll_aggtrades(now_ns-5_000_000_000,now_ns)
-        bn=binance.poll_bookticker()
+        binance.poll_aggtrades(now_ns-5_000_000_000,now_ns)
+        binance.poll_bookticker()
         # Poll Polymarket
         poly_q=poly.poll_orderbook()
         binance_polls+=1; poly_polls+=1
@@ -142,69 +162,98 @@ def run_live_capture(market_info:UpDownMarketInfo,binance:BinancePublicStream,po
             time.sleep(poll_interval)
             continue
 
-        # If too close to expiry, record rejection
+        # If market expired, record pre-grid rejection
         if tte<=0:
             r=DivergenceSignal(market_slug=market_info.slug,side="YES",threshold_bps=0,lookback_ns=0,tte_bucket="expired",fair_probability=0.0,quoted_probability=poly_q.quoted_probability,raw_divergence_bps=0.0,maker_fee_bps=0.0,spread_bps=poly_q.spread_bps or 0.0,latency_buffer_bps=0.0,settlement_buffer_bps=0.0,stale_buffer_bps=0.0,net_divergence_bps=0.0,ts_event_ns=poly_q.ts_event_ns,expiry_ns=market_info.end_ns or 0,rejection_reason="market_expired")
-            rejections.append(r); rejection_counts["market_expired"]=rejection_counts.get("market_expired",0)+1
+            pre_grid_rejections.append(r); pre_grid_rejection_counts["market_expired"]=pre_grid_rejection_counts.get("market_expired",0)+1
             time.sleep(poll_interval)
             continue
 
-        # If TTE too small, record rejection
+        # If TTE too small for evaluation, record pre-grid rejection
         if tte<config.min_tte_ns:
             bucket=tte_bucket_name(max(0,tte),config.tte_bucket_edges_ns)
             r=DivergenceSignal(market_slug=market_info.slug,side="YES",threshold_bps=0,lookback_ns=0,tte_bucket=bucket,fair_probability=0.0,quoted_probability=poly_q.quoted_probability,raw_divergence_bps=0.0,maker_fee_bps=0.0,spread_bps=poly_q.spread_bps or 0.0,latency_buffer_bps=0.0,settlement_buffer_bps=0.0,stale_buffer_bps=0.0,net_divergence_bps=0.0,ts_event_ns=poly_q.ts_event_ns,expiry_ns=market_info.end_ns or 0,rejection_reason="too_close_to_expiry")
-            rejections.append(r); rejection_counts["too_close_to_expiry"]=rejection_counts.get("too_close_to_expiry",0)+1
+            pre_grid_rejections.append(r); pre_grid_rejection_counts["too_close_to_expiry"]=pre_grid_rejection_counts.get("too_close_to_expiry",0)+1
             time.sleep(poll_interval)
             continue
 
-        # Try to align Binance state
-        binance_states=binance._states[-2000:] if binance._states else []
-        aligned=align_state(binance_states,poly_q.ts_event_ns,config.max_binance_staleness_ns)
-
-        if aligned is None:
-            missing_bn+=1
-            r=DivergenceSignal(market_slug=market_info.slug,side="YES",threshold_bps=0,lookback_ns=0,tte_bucket=tte_bucket_name(max(0,tte),config.tte_bucket_edges_ns),fair_probability=0.0,quoted_probability=poly_q.quoted_probability,raw_divergence_bps=0.0,maker_fee_bps=0.0,spread_bps=poly_q.spread_bps or 0.0,latency_buffer_bps=0.0,settlement_buffer_bps=0.0,stale_buffer_bps=0.0,net_divergence_bps=0.0,ts_event_ns=poly_q.ts_event_ns,expiry_ns=market_info.end_ns or 0,rejection_reason="stale_or_missing_binance")
-            rejections.append(r); rejection_counts["stale_or_missing_binance"]=rejection_counts.get("stale_or_missing_binance",0)+1
-            time.sleep(poll_interval)
-            continue
-
-        # We have a valid Polymarket quote and aligned Binance state - evaluate
-        evaluated_events+=1
-        tte_now=market_info.end_ns-poly_q.ts_event_ns if market_info.end_ns else 10_000_000_000_000
-        bucket=tte_bucket_name(max(0,tte_now),config.tte_bucket_edges_ns)
-        fp_result=fair_probability(aligned,tte_now,market_info.price_to_beat or 100000.0,config)
-        fp=fp_result.fair_probability
-        raw=(fp-poly_q.quoted_probability)*10_000.0
-        mf=maker_fee_bps(poly_q.quoted_probability,config.maker_rebates_enabled)
-        spread=poly_q.spread_bps or 0.0
-        net=raw-mf-spread-config.latency_buffer_bps-config.settlement_buffer_bps-config.stale_buffer_bps
-
-        # Check for spread too wide
-        max_spread=getattr(config,"max_spread_bps",200.0)
-        if spread>max_spread:
-            r=DivergenceSignal(market_slug=market_info.slug,side="YES",threshold_bps=0,lookback_ns=0,tte_bucket=bucket,fair_probability=fp,quoted_probability=poly_q.quoted_probability,raw_divergence_bps=raw,maker_fee_bps=mf,spread_bps=spread,latency_buffer_bps=config.latency_buffer_bps,settlement_buffer_bps=config.settlement_buffer_bps,stale_buffer_bps=config.stale_buffer_bps,net_divergence_bps=net,ts_event_ns=poly_q.ts_event_ns,expiry_ns=market_info.end_ns or 0,rejection_reason="spread_too_wide")
-            rejections.append(r); rejection_counts["spread_too_wide"]=rejection_counts.get("spread_too_wide",0)+1
-            time.sleep(poll_interval)
-            continue
-
-        # Evaluate against each threshold
-        for th in threshold_grid:
-            if net>=th:
-                s=DivergenceSignal(market_slug=market_info.slug,side="YES",threshold_bps=th,lookback_ns=0,tte_bucket=bucket,fair_probability=fp,quoted_probability=poly_q.quoted_probability,raw_divergence_bps=raw,maker_fee_bps=mf,spread_bps=spread,latency_buffer_bps=config.latency_buffer_bps,settlement_buffer_bps=config.settlement_buffer_bps,stale_buffer_bps=config.stale_buffer_bps,net_divergence_bps=net,ts_event_ns=poly_q.ts_event_ns,expiry_ns=market_info.end_ns or 0)
-                signals.append(s)
-            else:
-                r=DivergenceSignal(market_slug=market_info.slug,side="YES",threshold_bps=th,lookback_ns=0,tte_bucket=bucket,fair_probability=fp,quoted_probability=poly_q.quoted_probability,raw_divergence_bps=raw,maker_fee_bps=mf,spread_bps=spread,latency_buffer_bps=config.latency_buffer_bps,settlement_buffer_bps=config.settlement_buffer_bps,stale_buffer_bps=config.stale_buffer_bps,net_divergence_bps=net,ts_event_ns=poly_q.ts_event_ns,expiry_ns=market_info.end_ns or 0,rejection_reason="edge_below_threshold")
-                rejections.append(r); rejection_counts["edge_below_threshold"]=rejection_counts.get("edge_below_threshold",0)+1
+        # Collect valid quote for grid evaluation
+        collected_quotes.append(poly_q)
+        pre_grid_events+=1
 
         time.sleep(poll_interval)
 
+    # Build contract metadata
+    meta=PolymarketContractMetadata(
+        market_slug=market_info.slug,
+        strike=market_info.price_to_beat or 100000.0,
+        expiry_ns=market_info.end_ns or 0,
+        yes_token_id=market_info.yes_token_id,
+        no_token_id=market_info.no_token_id,
+        has_no_token=bool(market_info.no_token_id),
+        sanitized_info=True
+    )
+
+    # Grid-level evaluation using the same signal_generator as replay
+    binance_states=tuple(binance._states[-5000:]) if binance._states else ()
+    grid_candidates,grid_rejections,grid_rejection_counts=generate_signals(
+        tuple(collected_quotes),binance_states,meta,config
+    )
+
+    # Combine: pre-grid rejections + grid-level results
+    all_signals=list(grid_candidates)
+    all_rejections=pre_grid_rejections+list(grid_rejections)
+    all_rejection_counts:dict[str,int]={}
+    for k,v in pre_grid_rejection_counts.items():
+        all_rejection_counts[k]=all_rejection_counts.get(k,0)+v
+    for k,v in grid_rejection_counts.items():
+        all_rejection_counts[k]=all_rejection_counts.get(k,0)+v
+
+    # Compute derived stats
+    binance_stale=0  # tracked by align_state internally
+    poly_stale=0
+
     elapsed=time.time()-t0
-    return {"signals":signals,"rejections":rejections,"rejection_counts":rejection_counts,"evaluated_event_count":evaluated_events,"binance_polls":binance_polls,"poly_polls":poly_polls,"binance_stale":binance_stale,"poly_stale":poly_stale,"missing_binance":missing_bn,"missing_poly":missing_poly,"duration_seconds":elapsed}
+
+    # Compute accounting metrics
+    event_count=poly_polls  # total poll attempts that could produce events
+    evaluated_event_count=pre_grid_events  # events that passed to grid evaluation
+    grid_evaluation_count=len(collected_quotes)*len(config.lookback_ns_grid)*len(config.threshold_bps_grid)
+    grid_rejection_total=len(grid_rejections)
+    grid_candidate_total=len(grid_candidates)
+
+    return {
+        "signals":all_signals,
+        "rejections":all_rejections,
+        "rejection_counts":all_rejection_counts,
+        "evaluated_event_count":evaluated_event_count,
+        "event_count":event_count,
+        "grid_evaluation_count":grid_evaluation_count,
+        "grid_candidate_count":grid_candidate_total,
+        "grid_rejection_count":grid_rejection_total,
+        # Pre-grid rejections separately
+        "pre_grid_rejection_counts":pre_grid_rejection_counts,
+        "pre_grid_rejection_count":len(pre_grid_rejections),
+        # Grid-level rejections separately
+        "grid_rejection_counts":grid_rejection_counts,
+        # Accounting contract
+        "accounting_contract":"grid_level: event × lookback × threshold",
+        "accounting_note":"Live capture and replay both use signal_generator.generate_signals() for grid-level evaluation. Pre-grid rejections (missing_poly, market_expired, too_close_to_expiry) are event-level only and not comparable to grid-level counts.",
+        # Poll counts
+        "binance_polls":binance_polls,
+        "poly_polls":poly_polls,
+        "binance_stale":binance_stale,
+        "poly_stale":poly_stale,
+        "missing_binance":grid_rejection_counts.get("stale_or_missing_binance",0),
+        "missing_poly":missing_poly,
+        "duration_seconds":elapsed,
+    }
+
 
 def write_capture(run_id:str,capture:dict,market_info:UpDownMarketInfo,config)->Path:
     """Write capture data to JSONL files."""
     d=LIVE_DATA_ROOT/run_id; d.mkdir(parents=True,exist_ok=True)
-    (d/"metadata.json").write_text(json.dumps({"run_id":run_id,"market_slug":market_info.slug,"start_ns":market_info.start_ns,"end_ns":market_info.end_ns,"yes_token_id":market_info.yes_token_id,"no_token_id":market_info.no_token_id,"series_slug":market_info.series_slug,"threshold_grid":list(config.threshold_bps_grid if hasattr(config,'threshold_bps_grid') else threshold_grid),"lookback_grid":list(config.lookback_ns_grid),"duration_seconds":capture["duration_seconds"],"evaluated_event_count":capture.get("evaluated_event_count",0),"phase":"2_observer_only"},indent=2))
+    (d/"metadata.json").write_text(json.dumps({"run_id":run_id,"market_slug":market_info.slug,"start_ns":market_info.start_ns,"end_ns":market_info.end_ns,"yes_token_id":market_info.yes_token_id,"no_token_id":market_info.no_token_id,"series_slug":market_info.series_slug,"accounting_contract":capture.get("accounting_contract","grid_level: event × lookback × threshold"),"threshold_grid":list(config.threshold_bps_grid),"lookback_grid":list(config.lookback_ns_grid),"duration_seconds":capture["duration_seconds"],"evaluated_event_count":capture.get("evaluated_event_count",0),"event_count":capture.get("event_count",0),"grid_evaluation_count":capture.get("grid_evaluation_count",0),"phase":"2_observer_only"},indent=2))
     with open(d/"polymarket_events.jsonl","w") as f:
         for e in capture.get("_poly_events",()):
             f.write(json.dumps(e)+"\n")
@@ -218,5 +267,25 @@ def write_capture(run_id:str,capture:dict,market_info:UpDownMarketInfo,config)->
         for s in capture["rejections"]:
             f.write(json.dumps(asdict(s) if hasattr(s,"__dataclass_fields__") else s)+"\n")
     (d/"heartbeat.jsonl").write_text(json.dumps({"ts_ns":int(time.time()*1e9),"status":"completed"})+"\n")
-    (d/"observer_summary.json").write_text(json.dumps({"candidate_count":len(capture["signals"]),"rejection_count":len(capture["rejections"]),"rejection_counts":capture["rejection_counts"],"evaluated_event_count":capture.get("evaluated_event_count",0),"binance_polls":capture["binance_polls"],"poly_polls":capture["poly_polls"],"binance_stale":capture["binance_stale"],"poly_stale":capture["poly_stale"],"missing_binance":capture["missing_binance"],"missing_poly":capture["missing_poly"],"duration_seconds":capture["duration_seconds"]},indent=2))
+    (d/"observer_summary.json").write_text(json.dumps({
+        "candidate_count":len(capture["signals"]),
+        "rejection_count":len(capture["rejections"]),
+        "rejection_counts":capture["rejection_counts"],
+        "evaluated_event_count":capture.get("evaluated_event_count",0),
+        "event_count":capture.get("event_count",0),
+        "grid_evaluation_count":capture.get("grid_evaluation_count",0),
+        "grid_candidate_count":capture.get("grid_candidate_count",0),
+        "grid_rejection_count":capture.get("grid_rejection_count",0),
+        "pre_grid_rejection_counts":capture.get("pre_grid_rejection_counts",{}),
+        "pre_grid_rejection_count":capture.get("pre_grid_rejection_count",0),
+        "grid_rejection_counts":capture.get("grid_rejection_counts",{}),
+        "accounting_contract":capture.get("accounting_contract","grid_level: event × lookback × threshold"),
+        "binance_polls":capture["binance_polls"],
+        "poly_polls":capture["poly_polls"],
+        "binance_stale":capture["binance_stale"],
+        "poly_stale":capture["poly_stale"],
+        "missing_binance":capture["missing_binance"],
+        "missing_poly":capture["missing_poly"],
+        "duration_seconds":capture["duration_seconds"],
+    },indent=2))
     return d
