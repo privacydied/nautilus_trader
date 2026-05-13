@@ -150,7 +150,9 @@ def main():
         replay_result={"deterministic":False,"error":str(e)}
 
     groups=[asdict(g) if hasattr(g,"__dataclass_fields__") else g for g in capture.get("groups",[])]
-    write_live_report(report_dir,summary=summary,signals=capture["signals"],rejections=capture["rejections"],groups=groups,safety=safety,replay=replay_result)
+    # Live captures don't use a file cache, record this explicitly
+    cache_meta={"source":"live_observer","symbol_or_slug":selected.slug,"phase":"2_observer_only","cache_type":"none_live_capture"}
+    write_live_report(report_dir,summary=summary,signals=capture["signals"],rejections=capture["rejections"],groups=groups,safety=safety,replay=replay_result,cache_meta=cache_meta)
     print(f"REPORT_DIR={report_dir}")
     print(f"Evaluated events: {capture.get('evaluated_event_count',0)}")
     print(f"Candidate count: {len(capture['signals'])}")
