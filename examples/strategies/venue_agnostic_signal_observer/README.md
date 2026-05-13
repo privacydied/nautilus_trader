@@ -212,6 +212,35 @@ by signal type.
 
 ---
 
+### Running the DEX-CEX spot dislocation study (on-chain -> CEX spot)
+
+### Step 1: Gather DEX pool snapshots
+
+Load historical snapshots into a JSONL file or collect them live:
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation \
+    --dex-snapshots data/dex_snapshots.jsonl \
+    --target-ticks data/signal_observer_ticks_v3 \
+    --target-venues kraken,coinbase \
+    --assets SOL,LINK,AVAX,DOGE,ADA \
+    --horizons-ms 30000,60000,300000,900000,3600000 \
+    --fee-bps 40 \
+    --slippage-bps 5 \
+    --stale-data-buffer-bps 10 --quote-mismatch-buffer-bps 5 \
+    --min-liquidity-usd 500000 \
+    --min-volume-1h-usd 100000 \
+    --out-dir reports/dex_cex_spot_dislocation_v1
+```
+
+### Step 2: Read the report
+
+The report at `reports/dex_cex_spot_dislocation_v1/report.md` contains
+observer-only guard warnings, asset universe, DEX source, target CEX venues,
+cost model, event counts, forward-return distribution, and verdict.
+
+---
+
 ## Research archive
 
 | Study | Verdict | Tag | Date |
@@ -221,6 +250,7 @@ by signal type.
 | Trade-flow impulse v1 | Pending | -- | -- |
 | Derivatives lead-lag v1 observer (smoke: Coinbase spot->Kraken spot BTC) | REJECTED_SPOT_SPOT_SMOKE | `derivatives-lead-lag-v1-spot-smoke-rejected` | 2026-05-13 |
 | Derivatives lead-lag v1 thesis (perp source->spot target) | OPEN_UNTESTED | -- | -- |
+| DEX-CEX spot dislocation v1 (on-chain -> CEX spot) | OPEN_OBSERVER_ONLY | `dex-cex-spot-dislocation-v1` | 2026-05-13 |
 
 ---
 
