@@ -56,6 +56,48 @@
     "notes": "Near-expiry behavior."
   },
   {
+    "case_id": "far_from_expiry",
+    "expected": {
+      "probability": 0.45184472606026116
+    },
+    "inputs": {
+      "risk_free_rate": 0.0,
+      "sigma": 0.5,
+      "spot": 100100.0,
+      "strike": 100000.0,
+      "time_to_expiry_years": 0.25
+    },
+    "notes": "Long time to expiry."
+  },
+  {
+    "case_id": "high_volatility",
+    "expected": {
+      "probability": 0.46215642125709283
+    },
+    "inputs": {
+      "risk_free_rate": 0.0,
+      "sigma": 2.0,
+      "spot": 100100.0,
+      "strike": 100000.0,
+      "time_to_expiry_years": 0.01
+    },
+    "notes": "High volatility."
+  },
+  {
+    "case_id": "low_volatility",
+    "expected": {
+      "probability": 0.5782427612534491
+    },
+    "inputs": {
+      "risk_free_rate": 0.0,
+      "sigma": 0.05,
+      "spot": 100100.0,
+      "strike": 100000.0,
+      "time_to_expiry_years": 0.01
+    },
+    "notes": "Low volatility."
+  },
+  {
     "case_id": "zero_volatility_terminal",
     "expected": {
       "probability": 1.0

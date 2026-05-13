@@ -1,9 +1,198 @@
 [
   {
-    "blocked": true,
-    "case_id": "settlement_predictor_binding_blocked",
-    "expected": {},
-    "inputs": {},
-    "notes": "Direct PySettlementPredictor export is unavailable; do not fake parity."
+    "case_id": "strong_up_momentum_cvd",
+    "expected": {
+      "confidence": 0.4581179228062908,
+      "contributing_signals": [
+        "momentum_30s=2.13bps",
+        "momentum_3m=0.36bps",
+        "cvd:tfi30=0.100,tfi3m=0.100,vol30=9.98btc",
+        "funding=5.00bps:NEUTRAL",
+        "basis=3.00bps"
+      ],
+      "cvd_agrees": true,
+      "cvd_strength": "moderate",
+      "direction": "UP",
+      "direction_stable": true,
+      "flush_cooling_detected": false,
+      "funding_bias": "NEUTRAL",
+      "in_no_trade_band": false,
+      "liq_contradicts": false,
+      "probability_yes": 0.7290589614031454,
+      "score": 0.4124389088012922
+    },
+    "inputs": {
+      "observations": [
+        {
+          "cvd_30s": 100000.0,
+          "cvd_3m": 300000.0,
+          "cvd_total_notional_30s": 1000000.0,
+          "cvd_total_notional_3m": 3000000.0,
+          "funding_rate_bps": 5.0,
+          "liquidation_buy_notional_30s": 0.0,
+          "liquidation_buy_notional_3m": 0.0,
+          "liquidation_sell_notional_30s": 0.0,
+          "liquidation_sell_notional_3m": 0.0,
+          "now_ms": 1700000000000,
+          "perp_spot_basis_bps": 3.0,
+          "spot_mid": 100000.0
+        },
+        {
+          "cvd_30s": 100000.0,
+          "cvd_3m": 300000.0,
+          "cvd_total_notional_30s": 1000000.0,
+          "cvd_total_notional_3m": 3000000.0,
+          "funding_rate_bps": 5.0,
+          "liquidation_buy_notional_30s": 0.0,
+          "liquidation_buy_notional_3m": 0.0,
+          "liquidation_sell_notional_30s": 0.0,
+          "liquidation_sell_notional_3m": 0.0,
+          "now_ms": 1700000001000,
+          "perp_spot_basis_bps": 3.0,
+          "spot_mid": 100040.0
+        },
+        {
+          "cvd_30s": 100000.0,
+          "cvd_3m": 300000.0,
+          "cvd_total_notional_30s": 1000000.0,
+          "cvd_total_notional_3m": 3000000.0,
+          "funding_rate_bps": 5.0,
+          "liquidation_buy_notional_30s": 0.0,
+          "liquidation_buy_notional_3m": 0.0,
+          "liquidation_sell_notional_30s": 0.0,
+          "liquidation_sell_notional_3m": 0.0,
+          "now_ms": 1700000002000,
+          "perp_spot_basis_bps": 3.0,
+          "spot_mid": 100080.0
+        },
+        {
+          "cvd_30s": 100000.0,
+          "cvd_3m": 300000.0,
+          "cvd_total_notional_30s": 1000000.0,
+          "cvd_total_notional_3m": 3000000.0,
+          "funding_rate_bps": 5.0,
+          "liquidation_buy_notional_30s": 0.0,
+          "liquidation_buy_notional_3m": 0.0,
+          "liquidation_sell_notional_30s": 0.0,
+          "liquidation_sell_notional_3m": 0.0,
+          "now_ms": 1700000003000,
+          "perp_spot_basis_bps": 3.0,
+          "spot_mid": 100120.0
+        },
+        {
+          "cvd_30s": 100000.0,
+          "cvd_3m": 300000.0,
+          "cvd_total_notional_30s": 1000000.0,
+          "cvd_total_notional_3m": 3000000.0,
+          "funding_rate_bps": 5.0,
+          "liquidation_buy_notional_30s": 0.0,
+          "liquidation_buy_notional_3m": 0.0,
+          "liquidation_sell_notional_30s": 0.0,
+          "liquidation_sell_notional_3m": 0.0,
+          "now_ms": 1700000004000,
+          "perp_spot_basis_bps": 3.0,
+          "spot_mid": 100160.0
+        }
+      ]
+    },
+    "notes": "Five-sample warmup then positive momentum/CVD; expected from Rust PySignalEngine SettlementPredictor."
+  },
+  {
+    "case_id": "strong_down_momentum_cvd",
+    "expected": {
+      "confidence": 0.4581179228062907,
+      "contributing_signals": [
+        "momentum_30s=-2.13bps",
+        "momentum_3m=-0.36bps",
+        "cvd:tfi30=-0.100,tfi3m=-0.100,vol30=10.02btc",
+        "funding=-5.00bps:NEUTRAL",
+        "basis=-3.00bps"
+      ],
+      "cvd_agrees": true,
+      "cvd_strength": "moderate",
+      "direction": "DOWN",
+      "direction_stable": true,
+      "flush_cooling_detected": false,
+      "funding_bias": "NEUTRAL",
+      "in_no_trade_band": false,
+      "liq_contradicts": false,
+      "probability_yes": 0.27094103859685464,
+      "score": -0.4124389088012922
+    },
+    "inputs": {
+      "observations": [
+        {
+          "cvd_30s": -100000.0,
+          "cvd_3m": -300000.0,
+          "cvd_total_notional_30s": 1000000.0,
+          "cvd_total_notional_3m": 3000000.0,
+          "funding_rate_bps": -5.0,
+          "liquidation_buy_notional_30s": 0.0,
+          "liquidation_buy_notional_3m": 0.0,
+          "liquidation_sell_notional_30s": 0.0,
+          "liquidation_sell_notional_3m": 0.0,
+          "now_ms": 1700010000000,
+          "perp_spot_basis_bps": -3.0,
+          "spot_mid": 100000.0
+        },
+        {
+          "cvd_30s": -100000.0,
+          "cvd_3m": -300000.0,
+          "cvd_total_notional_30s": 1000000.0,
+          "cvd_total_notional_3m": 3000000.0,
+          "funding_rate_bps": -5.0,
+          "liquidation_buy_notional_30s": 0.0,
+          "liquidation_buy_notional_3m": 0.0,
+          "liquidation_sell_notional_30s": 0.0,
+          "liquidation_sell_notional_3m": 0.0,
+          "now_ms": 1700010001000,
+          "perp_spot_basis_bps": -3.0,
+          "spot_mid": 99960.0
+        },
+        {
+          "cvd_30s": -100000.0,
+          "cvd_3m": -300000.0,
+          "cvd_total_notional_30s": 1000000.0,
+          "cvd_total_notional_3m": 3000000.0,
+          "funding_rate_bps": -5.0,
+          "liquidation_buy_notional_30s": 0.0,
+          "liquidation_buy_notional_3m": 0.0,
+          "liquidation_sell_notional_30s": 0.0,
+          "liquidation_sell_notional_3m": 0.0,
+          "now_ms": 1700010002000,
+          "perp_spot_basis_bps": -3.0,
+          "spot_mid": 99920.0
+        },
+        {
+          "cvd_30s": -100000.0,
+          "cvd_3m": -300000.0,
+          "cvd_total_notional_30s": 1000000.0,
+          "cvd_total_notional_3m": 3000000.0,
+          "funding_rate_bps": -5.0,
+          "liquidation_buy_notional_30s": 0.0,
+          "liquidation_buy_notional_3m": 0.0,
+          "liquidation_sell_notional_30s": 0.0,
+          "liquidation_sell_notional_3m": 0.0,
+          "now_ms": 1700010003000,
+          "perp_spot_basis_bps": -3.0,
+          "spot_mid": 99880.0
+        },
+        {
+          "cvd_30s": -100000.0,
+          "cvd_3m": -300000.0,
+          "cvd_total_notional_30s": 1000000.0,
+          "cvd_total_notional_3m": 3000000.0,
+          "funding_rate_bps": -5.0,
+          "liquidation_buy_notional_30s": 0.0,
+          "liquidation_buy_notional_3m": 0.0,
+          "liquidation_sell_notional_30s": 0.0,
+          "liquidation_sell_notional_3m": 0.0,
+          "now_ms": 1700010004000,
+          "perp_spot_basis_bps": -3.0,
+          "spot_mid": 99840.0
+        }
+      ]
+    },
+    "notes": "Five-sample warmup then negative momentum/CVD."
   }
 ]

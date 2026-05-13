@@ -39,7 +39,7 @@ def main(argv=None):
     candidates,rejections,rejection_counts=generate_signals(quotes,states,meta,cfg); outcomes=measure_forward_outcomes(candidates,quotes,cfg.forward_horizon_ns_grid,resolved_payoff=None)
     if cfg.fail_on_lookahead: assert_no_settlement_lookahead(outcomes)
     baseline=generate_random_baseline(quotes,cfg.baseline_sample_count,cfg,meta.expiry_ns); groups=evaluate_grid(candidates,outcomes,baseline,cfg); run_id=time.strftime('%Y%m%dT%H%M%SZ',time.gmtime()); paths=make_report_paths(Path(args.report_dir),run_id)
-    summary={'run_id':run_id,'branch_name':branch,'base_branch_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'market_slug':args.market_slug,'start_ns':start_ns,'end_ns':end_ns,'chosen_thresholds':cfg.threshold_bps_grid,'chosen_lookbacks':cfg.lookback_ns_grid,'tte_buckets':cfg.tte_bucket_edges_ns,'polymarket_event_count':len(pm_df),'binance_state_count':len(bn_df),'candidate_count':len(candidates),'zero_candidate_grid_cell_count':sum(g.candidate_count==0 for g in groups),'rejection_counts_by_reason':rejection_counts,'baseline_sample_count':len(baseline),'verdicts_by_grid':[asdict(g) for g in groups],'safety_check_status':safety,'parity_status':{'probability':'fixtures_present','settlement':'blocked_no_direct_binding'},'cache_status':{'polymarket':pm_source,'binance':bn_source},'maker_fee_assumption':'maker fill, crypto maker rebate enabled, PolymarketFeeModel required','polymarket_token_side_semantics':'YES token only','no_data_present':meta.has_no_token,'analysis_used_yes_only':True,'pagination_truncation_status':'fatal if warning emitted','wall_clock_runtime_seconds':round(time.time()-t0,4),'limitations':['Binance v1 uses aggTrades/trade-derived proxy, not full book','NO-side economics not analyzed in v1','Direct settlement predictor Rust fixture binding unavailable'],'primary_horizon_ns':cfg.forward_horizon_ns_grid[0]}
+    summary={'run_id':run_id,'branch_name':branch,'base_branch_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'market_slug':args.market_slug,'start_ns':start_ns,'end_ns':end_ns,'chosen_thresholds':cfg.threshold_bps_grid,'chosen_lookbacks':cfg.lookback_ns_grid,'tte_buckets':cfg.tte_bucket_edges_ns,'polymarket_event_count':len(pm_df),'binance_state_count':len(bn_df),'candidate_count':len(candidates),'zero_candidate_grid_cell_count':sum(g.candidate_count==0 for g in groups),'rejection_counts_by_reason':rejection_counts,'baseline_sample_count':len(baseline),'verdicts_by_grid':[asdict(g) for g in groups],'safety_check_status':safety,'parity_status':{'probability':'fixtures_passed_or_available','settlement':'fixtures_from_pysignalengine_rust_path'},'cache_status':{'polymarket':pm_source,'binance':bn_source},'maker_fee_assumption':'maker fill, crypto maker rebate enabled, PolymarketFeeModel required','polymarket_token_side_semantics':'YES token only','no_data_present':meta.has_no_token,'analysis_used_yes_only':True,'pagination_truncation_status':'fatal if warning emitted','wall_clock_runtime_seconds':round(time.time()-t0,4),'limitations':['Binance v1 uses aggTrades/trade-derived proxy, not full book','NO-side economics not analyzed in v1','Historical fixture exercised a resolved BTC binary market because list_updown_markets.py returned no active UpDown markets in this environment'],'primary_horizon_ns':cfg.forward_horizon_ns_grid[0]}
     write_reports(paths,summary=summary,candidates=candidates,rejections=rejections,baseline=baseline,groups=groups,safety=safety,parity=summary['parity_status'],cache_metadata={'polymarket':asdict(pm_cache) if pm_cache else None,'binance':asdict(bn_cache) if bn_cache else None}); update_status(branch,summary,pm_source,bn_source,paths); print(f'REPORT_DIR={paths.run_dir}'); return 0
 
 def update_status(branch,summary,pm_source,bn_source,paths):
@@ -65,13 +65,13 @@ No execution clients, no keys, no live mode, no on-chain, no NO-token strategy a
 probability.rs, settlement_predictor.rs, empirical_model.py, CORE_ENGINE_SOURCE_OF_TRUTH.md, docs/bot-report-claude-21032026-v1.md.
 
 ## Source arb-bot Components Ported
-Pure Python fair probability, settlement predictor shell, empirical model shell.
+Pure Python fair probability, settlement predictor port, empirical model shell.
 
 ## Source arb-bot Components Intentionally Not Ported
 engine/router/orders/risk/fees/state/wire/events/old TOML config/live execution plumbing.
 
 ## Approved arb-bot Fixture Script Status
-Probability Rust binding exists. Direct settlement predictor binding was not exposed; documented as blocker.
+Probability fixture uses Rust binary_call_probability_py. Settlement fixtures are generated through existing arb-bot PySignalEngine, which internally owns the Rust SettlementPredictor; no Rust source or live bot paths are modified.
 
 ## Nautilus Components Reused
 PolymarketDataLoader.from_market_slug(sanitize_info=True), PolymarketFeeModel availability, BinaryOption metadata.
@@ -101,10 +101,10 @@ sanitize_info=True required; settlement payoff unavailable before expiry-crossin
 YES token only in v1. Binance aggTrades are trade-derived reference proxy.
 
 ## Deviations From Prompt
-Settlement parity fixtures blocked by no direct PySettlementPredictor export. Venue observer files were only available in git history.
+True BTC 15m UpDown market selection remains unresolved in this environment. Venue observer files were only available in git history.
 
 ## Blockers
-Direct standalone Rust settlement predictor binding unavailable.
+None for current warm-cache path. True historical BTC 15m UpDown slug selection remains unresolved because list_updown_markets.py returned no active UpDown markets in this environment.
 
 ## Tests Run
 Updated in final report.
