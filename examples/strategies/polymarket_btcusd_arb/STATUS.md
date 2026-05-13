@@ -215,7 +215,10 @@ Campaign ID: 20260513T230446Z
 Result: 0/2 windows completed. Both observer subprocesses failed due to branch check rejecting `polymarket-btcusd-arb-phase2b-observer-campaign` (hardcoded to Phase 2 branch name only).
 Fix: branch check broadened to accept any `polymarket-btcusd-arb-phase2*` branch.
 Subsequent dry-discover attempt: 0 active BTC 15m UpDown markets found. Market btc-updown-15m-1778798700 has expired.
-Campaign will need to be re-run when a new active market is available.
+
+Dry-discover re-check (2026-05-14): 0 active BTC 15m UpDown markets.
+No new live observation data from Phase 2B campaign.
+Phase 2B did NOT produce new live evidence — only infrastructure readiness was validated.
 
 ## Phase 2B Replay Checks
 Not yet performed — no completed windows from campaign. Previous Phase 2 post-fix capture (20260513T225119Z) demonstrated full replay determinism (candidate count match, grid rejection count match, rejection by reason match).
@@ -224,7 +227,7 @@ Not yet performed — no completed windows from campaign. Previous Phase 2 post-
 56 tests passing (45 Phase 1/2 + 11 Phase 2B campaign). AST safety scan clean. No orders, no keys, no execution client imports. Campaign runner uses subprocess of existing observer — inherits all Phase 2 safety invariants.
 
 ## Phase 2B Verdict
-NEEDS_MORE_DATA — campaign attempted but no active BTC 15m UpDown market was available after the branch check fix. The two 900s windows from the previous Phase 2 run (plus the validated post-fix capture 20260513T225119Z) both produced 0 candidates with spread_too_wide as the dominant blocker. This remains an episodic finding, not a global rejection.
+NEEDS_MORE_DATA — no active BTC 15m UpDown market available for campaign. Phase 2B infrastructure (campaign runner, tests, reports) is ready but did not produce new live evidence. Previous Phase 2 900s windows (2 total, both zero candidates, dominant blocker: spread_too_wide) remain the only live observation data. This is insufficient for a global reject/continue decision.
 
 ## Phase 2B Limitations
 - Observer-only. No execution.
