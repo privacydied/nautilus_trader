@@ -211,16 +211,20 @@ Capabilities: multi-window observer campaign, discover markets, aggregate reject
 Safety: no orders, no keys, no execution imports, no on-chain calls. AST-checked.
 
 ## Phase 2B Campaign Runs
-(To be filled after live campaign)
+Campaign ID: 20260513T230446Z
+Result: 0/2 windows completed. Both observer subprocesses failed due to branch check rejecting `polymarket-btcusd-arb-phase2b-observer-campaign` (hardcoded to Phase 2 branch name only).
+Fix: branch check broadened to accept any `polymarket-btcusd-arb-phase2*` branch.
+Subsequent dry-discover attempt: 0 active BTC 15m UpDown markets found. Market btc-updown-15m-1778798700 has expired.
+Campaign will need to be re-run when a new active market is available.
 
 ## Phase 2B Replay Checks
-(To be filled after live campaign)
+Not yet performed — no completed windows from campaign. Previous Phase 2 post-fix capture (20260513T225119Z) demonstrated full replay determinism (candidate count match, grid rejection count match, rejection by reason match).
 
 ## Phase 2B Safety Checks
-56 tests passing (45 Phase 1/2 + 11 Phase 2B campaign). AST safety scan clean. No orders, no keys, no execution client imports.
+56 tests passing (45 Phase 1/2 + 11 Phase 2B campaign). AST safety scan clean. No orders, no keys, no execution client imports. Campaign runner uses subprocess of existing observer — inherits all Phase 2 safety invariants.
 
 ## Phase 2B Verdict
-(To be filled after live campaign)
+NEEDS_MORE_DATA — campaign attempted but no active BTC 15m UpDown market was available after the branch check fix. The two 900s windows from the previous Phase 2 run (plus the validated post-fix capture 20260513T225119Z) both produced 0 candidates with spread_too_wide as the dominant blocker. This remains an episodic finding, not a global rejection.
 
 ## Phase 2B Limitations
 - Observer-only. No execution.

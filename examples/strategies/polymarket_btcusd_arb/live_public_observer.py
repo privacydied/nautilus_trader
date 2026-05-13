@@ -6,7 +6,7 @@ from pathlib import Path
 log=logging.getLogger(__name__)
 
 def _branch_ok()->bool:
-    try: return subprocess.check_output(["git","branch","--show-current"],text=True).strip()=="polymarket-btcusd-arb-phase2-observer"
+    try: b=subprocess.check_output(["git","branch","--show-current"],text=True).strip(); return b.startswith("polymarket-btcusd-arb-phase2")
     except Exception: return False
 
 def main():
