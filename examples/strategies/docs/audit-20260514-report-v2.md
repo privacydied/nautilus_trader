@@ -4667,6 +4667,109 @@ Purpose:
 Recommendation:
 - Add venue-specific side semantics tests for real raw payloads.
 
+### Modules added after original audit date
+
+69. cost_sensitivity.py
+Purpose:
+- Diagnostic-only cost-sensitivity / breakeven analysis for evaluated signal groups.
+Key functions:
+- load_report_groups — reads summary.json from an evaluated report
+- compute_cost_sensitivity — per-group breakeven cost computation at multiple cost levels
+- write_cost_sensitivity_reports — writes JSON + markdown
+Verdicts:
+- COST_SENSITIVITY_READY, NO_EVALUATED_GROUPS
+Forbidden verdicts:
+- REJECTED, CANDIDATE, CANDIDATE_FOR_LONGER_OBSERVATION (module raises ValueError)
+Persistence:
+- No network; reads report summary.json, writes cost_sensitivity_summary.json and .md.
+Tests:
+- test_cost_sensitivity.py.
+Security/ops:
+- Observer-only diagnostic; no execution gating.
+Recommendations:
+- Add capture metadata to cost-level tables.
+
+70. run_cost_sensitivity.py
+Purpose:
+- CLI runner for cost-sensitivity diagnostic.
+Entry points:
+- build_parser, main.
+Configs:
+- --report-dir (required), --out (required), --cost-levels-bps (default 50,10,5,1,0.5), --min-events (default 0).
+Data flow:
+- Loads evaluated report → computes cost sensitivity per group → writes reports.
+Persistence:
+- Writes cost_sensitivity_summary.json, cost_sensitivity_report.md.
+Security/ops:
+- Local file I/O only; no network; no orders.
+
+71. candidate_falsification.py
+Purpose:
+- Diagnostic-only falsification summary combining multiple optional report artifacts (evaluated, cost sensitivity, null test, heatmap, corpus consistency) into a survival/failure matrix.
+Key classes:
+- FalsificationSummary — verdict, rows with per-group scores
+- GroupKey — source/target venue, symbol, signal_type, lookback/horizon, OI bucket, capture_mode
+Key functions:
+- compute_candidate_falsification_summary — loads optional reports and produces scored matrix
+- write_candidate_falsification_reports — writes JSON + markdown
+Scoring:
+- +1 per available evidence type; -1 for missing evidence or single-capture status.
+Verdicts:
+- FALSIFICATION_SUMMARY_READY, NO_EVALUATED_GROUPS, NO_SURVIVING_GROUPS, INSUFFICIENT_EVIDENCE, COST_WALL_BLOCKED, MISSING_REQUIRED_REPORTS
+Forbidden verdicts:
+- REJECTED, CANDIDATE, CANDIDATE_FOR_LIVE, EXECUTION_READY, TRADE_READY, READY_FOR_LIVE, LIVE_READY, DEPLOY_READY
+Persistence:
+- Reads optional report dirs; writes candidate_falsification_summary.json + .md.
+Tests:
+- test_candidate_falsification.py.
+Security/ops:
+- Observer-only; all inputs are optional (missing inputs produce a MISSING_REQUIRED_REPORTS verdict rather than aborting).
+Recommendations:
+- Add CLI flags for score-weight overrides.
+
+72. run_candidate_falsification.py
+Purpose:
+- CLI runner for candidate falsification summary.
+Entry points:
+- build_parser, main.
+Configs:
+- --evaluated-report-dir (optional), --cost-sensitivity-dir (optional), --permutation-null-dir (optional), --heatmap-dir (optional), --consistency-dir (optional), --out (required), --viability-cost-bps (default 50.0), --min-events (default 50).
+Data flow:
+- Reads optional report directories → loads per-group evidence → computes falsification scores → writes summary.
+Persistence:
+- Writes candidate_falsification_summary.json, candidate_falsification_report.md.
+Security/ops:
+- Local file I/O only; all report dirs optional.
+
+73. test_cost_sensitivity.py
+Purpose:
+- Unit tests for cost_sensitivity module.
+Coverage:
+- Load/filter groups from JSON
+- Breakeven cost computation
+- Viability at multiple cost levels
+- Empty/no-groups handling
+- NaN/inf filtering
+- Report writing schema
+- Forbidden verdict enforcement
+Security/ops:
+- Pure unit tests; mock I/O.
+
+74. test_candidate_falsification.py
+Purpose:
+- Unit tests for candidate_falsification module.
+Coverage:
+- FalsificationSummary construction and verdict validation
+- Forbidden verdict enforcement
+- Group key construction
+- Evidence loading from optional reports
+- Score computation with various evidence combinations
+- Missing report paths produce MISSING_REQUIRED_REPORTS
+- Cost-wall blocked detection
+- Empty/no-groups handling
+Security/ops:
+- Pure unit tests; mock I/O.
+
 Cross-cutting security/operational notes:
 - No credentials, private endpoints, or order-submission paths found in the audited source summaries.
 - Most network calls use public endpoints but should have explicit timeouts/retries/backoff everywhere.
