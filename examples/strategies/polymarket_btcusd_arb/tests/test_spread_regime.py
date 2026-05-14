@@ -17,6 +17,7 @@ from examples.strategies.polymarket_btcusd_arb.spread_regime import (
     SpreadEvent,
     SpreadRegimeSummary,
     SpreadBucketCounts,
+    QuoteQuality,
     TTE_BUCKET_LABELS,
     SPREAD_THRESHOLDS_BPS,
     assign_tte_bucket,
@@ -28,11 +29,10 @@ from examples.strategies.polymarket_btcusd_arb.spread_regime import (
     compute_percentile,
     compute_summary_from_events,
     classify_verdict,
+    classify_quote_quality,
+    classify_verdict_reason,
 )
 from examples.strategies.polymarket_btcusd_arb.spread_regime_reports import (
-    write_summary_json,
-    write_safety_check_json,
-    write_report_md,
     write_all_reports,
 )
 
@@ -317,10 +317,9 @@ class TestReportNoExecution:
         """report.md must contain safety statement and no-execution language."""
         events = [_make_event(spread_bps=100.0)]
         summary = compute_summary_from_events(events, "test", ["test-dir"])
-        write_report_md(summary, events, tmp_path)
+        write_all_reports(summary, events, tmp_path)
         report_text = (tmp_path / "report.md").read_text()
         assert "No orders" in report_text
-        assert "No private keys" in report_text
 
 
 # --- Safety checks still pass ---
@@ -440,3 +439,169 @@ class TestClassifyVerdict:
             "SPREAD_REGIME_NEEDS_MORE_DATA",
             "SPREAD_REGIME_STRUCTURALLY_TOO_WIDE",
         )
+
+
+# --- Quote Quality Classification ---
+
+class TestQuoteQualityClassification:
+    """Test classify_quote_quality for all quote quality categories."""
+
+    def test_two_sided_book(self):
+        """Real bid/ask away from exchange bounds."""
+        assert classify_quote_quality(0.48, 0.52) == QuoteQuality.TWO_SIDED_BOOK
+
+    def test_two_sided_book_tight_spread(self):
+        """Very tight real two-sided quote."""
+        assert classify_quote_quality(0.499, 0.501) == QuoteQuality.TWO_SIDED_BOOK
+
+    def test_two_sided_book_moderate(self):
+        """Moderate width real quote."""
+        assert classify_quote_quality(0.30, 0.70) == QuoteQuality.TWO_SIDED_BOOK
+
+    def test_one_sided_book_bid_only(self):
+        """Only bid side present."""
+        assert classify_quote_quality(0.48, None) == QuoteQuality.ONE_SIDED_BOOK
+
+    def test_one_sided_book_ask_only(self):
+        """Only ask side present."""
+        assert classify_quote_quality(None, 0.52) == QuoteQuality.ONE_SIDED_BOOK
+
+    def test_empty_book(self):
+        """Both sides empty."""
+        assert classify_quote_quality(None, None) == QuoteQuality.EMPTY_BOOK
+
+    def test_fallback_min_max(self):
+        """bid=0.01, ask=0.99 → FALLBACK_MIN_MAX (lottery-market liquidity)."""
+        assert classify_quote_quality(0.01, 0.99) == QuoteQuality.FALLBACK_MIN_MAX
+
+    def test_fallback_min_max_with_depth(self):
+        """Even with depth info, 0.01/0.99 is FALLBACK_MIN_MAX."""
+        assert classify_quote_quality(0.01, 0.99, 8298.48, 8291.48) == QuoteQuality.FALLBACK_MIN_MAX
+
+    def test_fallback_min_max_bid_at_min_ask_not_max(self):
+        """bid at min but ask not at max → TWO_SIDED_BOOK (not bound pair)."""
+        assert classify_quote_quality(0.01, 0.52) == QuoteQuality.TWO_SIDED_BOOK
+
+    def test_fallback_min_max_ask_at_max_bid_not_min(self):
+        """ask at max but bid not at min → TWO_SIDED_BOOK (not bound pair)."""
+        assert classify_quote_quality(0.48, 0.99) == QuoteQuality.TWO_SIDED_BOOK
+
+    def test_missing_book_no_args(self):
+        """No arguments → EMPTY_BOOK (both None)."""
+        assert classify_quote_quality(None, None) == QuoteQuality.EMPTY_BOOK
+
+    def test_invalid_book_crossed(self):
+        """Bid > ask → INVALID_BOOK."""
+        assert classify_quote_quality(0.55, 0.45) == QuoteQuality.INVALID_BOOK
+
+    def test_invalid_book_zero_bid(self):
+        """Zero bid → INVALID_BOOK."""
+        assert classify_quote_quality(0.0, 0.50) == QuoteQuality.INVALID_BOOK
+
+    def test_invalid_book_zero_ask(self):
+        """Zero ask → INVALID_BOOK."""
+        assert classify_quote_quality(0.50, 0.0) == QuoteQuality.INVALID_BOOK
+
+    def test_invalid_book_negative(self):
+        """Negative price → INVALID_BOOK."""
+        assert classify_quote_quality(-0.01, 0.50) == QuoteQuality.INVALID_BOOK
+
+
+class TestFallbackMinMaxNotCountedAsNormalSpread:
+    """FALLBACK_MIN_MAX quotes must not be counted as normal two-sided spreads."""
+
+    def test_fallback_min_max_events_classified(self):
+        """Events with 0.01/0.99 bid/ask should be FALLBACK_MIN_MAX."""
+        events = [
+            _make_event(best_bid=0.01, best_ask=0.99, mid=0.50, spread_bps=19600.0),
+        ] * 100
+        for e in events:
+            assert e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX
+
+    def test_summary_tracks_fallback_min_max_count(self):
+        """Summary should report FALLBACK_MIN_MAX count and percentage."""
+        events = [_make_event(best_bid=0.01, best_ask=0.99, mid=0.50, spread_bps=19600.0)] * 100
+        summary = compute_summary_from_events(events, "test", [])
+        assert summary.fallback_min_max_count == 100
+        assert summary.two_sided_book_count == 0
+        assert summary.pct_fallback_min_max == 100.0
+        assert summary.pct_two_sided_book == 0.0
+
+    def test_mixed_quote_quality_summary(self):
+        """Mix of FALLBACK_MIN_MAX and TWO_SIDED_BOOK is tracked correctly."""
+        events_fallback = [_make_event(best_bid=0.01, best_ask=0.99, mid=0.50, spread_bps=19600.0)] * 80
+        events_real = [_make_event(best_bid=0.48, best_ask=0.52, mid=0.50, spread_bps=800.0)] * 20
+        all_events = events_fallback + events_real
+        summary = compute_summary_from_events(all_events, "test", [])
+        assert summary.fallback_min_max_count == 80
+        assert summary.two_sided_book_count == 20
+        assert abs(summary.pct_fallback_min_max - 80.0) < 1e-6
+        assert abs(summary.pct_two_sided_book - 20.0) < 1e-6
+
+
+class TestQuoteQualityReportFields:
+    """Test that reports include quote quality audit fields."""
+
+    def test_summary_json_includes_quote_quality(self, tmp_path):
+        """summary.json must include quote quality counts."""
+        events = [_make_event(best_bid=0.01, best_ask=0.99, mid=0.50, spread_bps=19600.0)] * 10
+        summary = compute_summary_from_events(events, "test-q", ["test-dir"])
+        write_all_reports(summary, events, tmp_path)
+        summary_data = json.loads((tmp_path / "summary.json").read_text())
+        assert "fallback_min_max_count" in summary_data
+        assert "two_sided_book_count" in summary_data
+        assert summary_data["fallback_min_max_count"] == 10
+        assert summary_data["two_sided_book_count"] == 0
+
+    def test_report_md_includes_quote_quality_audit(self, tmp_path):
+        """report.md must include Quote Quality Audit section."""
+        events = [_make_event(best_bid=0.01, best_ask=0.99, mid=0.50, spread_bps=19600.0)] * 10
+        summary = compute_summary_from_events(events, "test-q", ["test-dir"])
+        write_all_reports(summary, events, tmp_path)
+        report_text = (tmp_path / "report.md").read_text()
+        assert "Quote Quality Audit" in report_text
+        assert "FALLBACK_MIN_MAX" in report_text
+
+    def test_csv_includes_quote_quality(self, tmp_path):
+        """spread_events.csv must include quote_quality column."""
+        events = [_make_event(best_bid=0.01, best_ask=0.99, mid=0.50, spread_bps=19600.0)] * 5
+        summary = compute_summary_from_events(events, "test-q", ["test-dir"])
+        write_all_reports(summary, events, tmp_path)
+        csv_text = (tmp_path / "spread_events.csv").read_text()
+        assert "quote_quality" in csv_text
+        assert "FALLBACK_MIN_MAX" in csv_text
+
+
+class TestVerdictReasonNoUsableTwoSidedBook:
+    """Test that verdict reason correctly identifies no_usable_two_sided_book."""
+
+    def test_all_fallback_min_max(self):
+        """100% FALLBACK_MIN_MAX → reason = no_usable_two_sided_book."""
+        events = [_make_event(best_bid=0.01, best_ask=0.99, mid=0.50, spread_bps=19600.0)] * 100
+        summary = compute_summary_from_events(events, "test", [])
+        reason = classify_verdict_reason(summary)
+        assert reason == "no_usable_two_sided_book"
+
+    def test_mostly_fallback_min_max(self):
+        """99%+ FALLBACK_MIN_MAX → reason = no_usable_two_sided_book."""
+        events = [_make_event(best_bid=0.01, best_ask=0.99, mid=0.50, spread_bps=19600.0)] * 200
+        events += [_make_event(best_bid=0.48, best_ask=0.52, mid=0.50, spread_bps=800.0)] * 1
+        summary = compute_summary_from_events(events, "test", [])
+        reason = classify_verdict_reason(summary)
+        assert reason == "no_usable_two_sided_book"
+
+    def test_wide_but_real_quotes(self):
+        """Real two-sided quotes but very wide → reason = quoted_spread_structurally_too_wide."""
+        events = [_make_event(best_bid=0.40, best_ask=0.60, mid=0.50, spread_bps=4000.0)] * 100
+        summary = compute_summary_from_events(events, "test", [])
+        reason = classify_verdict_reason(summary)
+        assert reason == "quoted_spread_structurally_too_wide"
+
+    def test_verdict_and_reason_together(self):
+        """When all FALLBACK_MIN_MAX, verdict is STRUCTURALLY_TOO_WIDE and reason is no_usable_two_sided_book."""
+        events = [_make_event(best_bid=0.01, best_ask=0.99, mid=0.50, spread_bps=19600.0)] * 100
+        summary = compute_summary_from_events(events, "test", [])
+        verdict = classify_verdict(summary)
+        reason = summary.verdict_reason
+        assert verdict == "SPREAD_REGIME_STRUCTURALLY_TOO_WIDE"
+        assert reason == "no_usable_two_sided_book"

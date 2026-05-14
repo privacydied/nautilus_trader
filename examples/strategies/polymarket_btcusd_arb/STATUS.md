@@ -389,3 +389,41 @@ examples/strategies/polymarket_btcusd_arb/FINAL_RESEARCH_STATUS.md
 This research track is archived as REJECTED_FOR_CURRENT_LIVE_CONDITIONS.
 Future studies (spread regime, wider thresholds, different durations) are separate hypothesis branches and must not modify this archive verdict.
 Squash-merged into develop. Tag: polymarket-btc-15m-updown-rejected-live-2026-05-14.
+
+## Spread Regime Quote-Semantics Audit
+
+### Finding
+All 1,127 observed Polymarket BTC 15m UpDown quotes had best_bid=0.01 / best_ask=0.99.
+These are NOT empty-book or fallback default values. They are real resting CLOB orders
+with genuine size (verified via live CLOB API: bid size ~8,298, ask size ~8,291 at the
+time of audit). However, they represent lottery-market liquidity at exchange minimum
+($0.01) and maximum ($0.99) price bounds — not actionable two-sided spread.
+
+### Quote Quality Classification
+- TWO_SIDED_BOOK: 0 (0.0%) — genuine two-sided quotes away from bounds
+- FALLBACK_MIN_MAX: 1,127 (100.0%) — at exchange min/max bounds
+- ONE_SIDED_BOOK: 0
+- EMPTY_BOOK: 0
+- MISSING_BOOK: 0
+- INVALID_BOOK: 0
+
+### Verdict
+- Verdict: SPREAD_REGIME_STRUCTURALLY_TOO_WIDE
+- Reason: no_usable_two_sided_book
+- The 0.01/0.99 quotes are real CLOB levels with genuine size, but they provide
+  no usable two-sided liquidity for a fair-probability strategy.
+- This is Case B: "no usable two-sided liquidity" rather than Case A: "structurally
+  quoted at maximum width."
+
+### Report Directory
+reports/polymarket_btcusd_arb/spread_regime/20260514T020315Z/
+
+### Tests Run
+75 spread regime tests (25 new quote quality audit tests) — all passing.
+Full suite: 144 passed.
+
+### Safety
+- No orders
+- No keys
+- No execution client imports
+- No on-chain calls

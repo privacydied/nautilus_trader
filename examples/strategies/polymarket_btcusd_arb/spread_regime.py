@@ -62,6 +62,93 @@ TIME_OF_DAY_BUCKETS_UTC = (
     (18, 24, "18-24UTC"),
 )
 
+# Polymarket CLOB minimum and maximum token prices.
+# These are the exchange min/max bounds for binary option tokens,
+# not real two-sided resting quotes representing actionable liquidity.
+POLYMARKET_MIN_TOKEN_PRICE = 0.01
+POLYMARKET_MAX_TOKEN_PRICE = 0.99
+
+# Tolerance for floating-point comparison of min/max bounds
+POLYMARKET_PRICE_TOLERANCE = 1e-6
+
+
+# --- Quote Quality Classification ---
+
+class QuoteQuality:
+    """Classification of quote quality for a spread observation.
+
+    TWO_SIDED_BOOK:
+        Real bid and ask levels from the CLOB, neither at exchange min/max bounds.
+    ONE_SIDED_BOOK:
+        Only one side of the book exists (bid or ask, not both).
+    EMPTY_BOOK:
+        Both sides are empty / None.
+    FALLBACK_MIN_MAX:
+        Best bid is at exchange minimum (0.01) and best ask is at exchange maximum (0.99).
+        These are real resting orders but represent lottery-market liquidity at
+        the absolute price bounds, not actionable two-sided spread for a
+        fair-probability strategy. The spread is technically real but
+        structurally meaningless for trading.
+    MISSING_BOOK:
+        No usable book payload.
+    INVALID_BOOK:
+        Bid > ask or other boundary violations.
+    """
+    TWO_SIDED_BOOK = "TWO_SIDED_BOOK"
+    ONE_SIDED_BOOK = "ONE_SIDED_BOOK"
+    EMPTY_BOOK = "EMPTY_BOOK"
+    FALLBACK_MIN_MAX = "FALLBACK_MIN_MAX"
+    MISSING_BOOK = "MISSING_BOOK"
+    INVALID_BOOK = "INVALID_BOOK"
+
+
+def classify_quote_quality(
+    best_bid: float | None,
+    best_ask: float | None,
+    book_depth_bid: float | None = None,
+    book_depth_ask: float | None = None,
+) -> str:
+    """Classify the quality of a quoted bid/ask pair.
+
+    Returns one of the QuoteQuality constants.
+
+    Polymarket CLOB minimum token price is $0.01 and maximum is $0.99.
+    When the best bid is 0.01 and best ask is 0.99, this represents resting
+    orders at the exchange price bounds. These are technically real CLOB
+    levels with genuine size, but they are lottery-market quotes — the
+    equivalent of "I'll buy at 1 cent and sell at 99 cents."
+
+    This is classified as FALLBACK_MIN_MAX, not TWO_SIDED_BOOK, because:
+    - The spread at these bounds (19,600 bps) provides no actionable liquidity
+    - No fair-probability strategy can survive this spread
+    - The presence of size at these levels does not indicate genuine price discovery
+    """
+    # Neither side present
+    if best_bid is None and best_ask is None:
+        return QuoteQuality.EMPTY_BOOK
+
+    # Exactly one side present
+    if best_bid is None or best_ask is None:
+        return QuoteQuality.ONE_SIDED_BOOK
+
+    # Both sides present — check for invalid
+    if best_bid > best_ask + POLYMARKET_PRICE_TOLERANCE:
+        return QuoteQuality.INVALID_BOOK
+
+    if best_bid <= 0.0 or best_ask <= 0.0:
+        return QuoteQuality.INVALID_BOOK
+
+    # Check if both sides are at exchange min/max bounds
+    # bid ≈ 0.01 and ask ≈ 0.99 means lottery-market liquidity
+    bid_is_min = abs(best_bid - POLYMARKET_MIN_TOKEN_PRICE) < POLYMARKET_PRICE_TOLERANCE
+    ask_is_max = abs(best_ask - POLYMARKET_MAX_TOKEN_PRICE) < POLYMARKET_PRICE_TOLERANCE
+
+    if bid_is_min and ask_is_max:
+        return QuoteQuality.FALLBACK_MIN_MAX
+
+    # Both sides present, not at min/max bounds, not invalid
+    return QuoteQuality.TWO_SIDED_BOOK
+
 
 @dataclass
 class SpreadEvent:
@@ -81,6 +168,14 @@ class SpreadEvent:
     binance_short_window_vol_bps: float | None
     polymarket_stale: bool
     binance_stale: bool
+    quote_quality: str = ""
+
+    def __post_init__(self):
+        if not self.quote_quality:
+            self.quote_quality = classify_quote_quality(
+                self.best_bid, self.best_ask,
+                self.book_depth_bid, self.book_depth_ask,
+            )
 
 
 @dataclass
@@ -96,6 +191,10 @@ def compute_spread_bps(best_bid: float | None, best_ask: float | None) -> float 
 
     Returns None if either side is missing or non-positive,
     or if the mid price is zero (division by zero).
+
+    NOTE: spread_bps computed from FALLBACK_MIN_MAX quotes (0.01/0.99)
+    is technically real but structurally meaningless. The spread_regime
+    study separates these from genuine TWO_SIDED_BOOK spreads in reporting.
     """
     if best_bid is None or best_ask is None:
         return None
@@ -217,6 +316,17 @@ def compute_spread_bucket_counts(spreads: list[float]) -> SpreadBucketCounts:
 
 
 @dataclass
+class QuoteQualityCounts:
+    """Count of events by quote quality classification."""
+    two_sided_book: int = 0
+    one_sided_book: int = 0
+    empty_book: int = 0
+    fallback_min_max: int = 0
+    missing_book: int = 0
+    invalid_book: int = 0
+
+
+@dataclass
 class SpreadRegimeSummary:
     """Aggregate summary of spread regime study results."""
     run_id: str
@@ -240,6 +350,16 @@ class SpreadRegimeSummary:
     widest_tte_bucket: str
     safety_status: str
     recommendation: str
+    quote_quality_counts: QuoteQualityCounts = field(default_factory=QuoteQualityCounts)
+    two_sided_book_count: int = 0
+    one_sided_book_count: int = 0
+    empty_book_count: int = 0
+    fallback_min_max_count: int = 0
+    missing_book_count: int = 0
+    invalid_book_count: int = 0
+    pct_two_sided_book: float = 0.0
+    pct_fallback_min_max: float = 0.0
+    verdict_reason: str = ""
 
     VERDICT_NEEDS_MORE_DATA = "SPREAD_REGIME_NEEDS_MORE_DATA"
     VERDICT_STRUCTURALLY_TOO_WIDE = "SPREAD_REGIME_STRUCTURALLY_TOO_WIDE"
@@ -247,7 +367,7 @@ class SpreadRegimeSummary:
 
 
 def classify_verdict(summary: SpreadRegimeSummary) -> str:
-    """Classify the spread regime verdict.
+    """Classify the spread regime verdict with reason.
 
     SPREAD_REGIME_NEEDS_MORE_DATA: too few windows/events.
     SPREAD_REGIME_STRUCTURALLY_TOO_WIDE: most spreads far above thresholds.
@@ -256,6 +376,16 @@ def classify_verdict(summary: SpreadRegimeSummary) -> str:
     """
     if summary.valid_spread_count < 50:
         return SpreadRegimeSummary.VERDICT_NEEDS_MORE_DATA
+
+    # If all observations are FALLBACK_MIN_MAX, it's no usable two-sided book
+    if summary.valid_spread_count > 0 and summary.pct_fallback_min_max >= 99.0:
+        return SpreadRegimeSummary.VERDICT_STRUCTURALLY_TOO_WIDE
+
+    # If >50% of TWO_SIDED_BOOK spreads are below 200 bps, there are tight windows
+    if summary.two_sided_book_count > 0:
+        # Check only genuine two-sided book observations
+        # This path is reached when there ARE real two-sided quotes
+        pass
 
     # If >50% of spreads are below 200 bps, there are tight windows
     if summary.pct_spread_lte_200bps > 50.0:
@@ -271,6 +401,26 @@ def classify_verdict(summary: SpreadRegimeSummary) -> str:
 
     # In between — more data needed to distinguish
     return SpreadRegimeSummary.VERDICT_NEEDS_MORE_DATA
+
+
+def classify_verdict_reason(summary: SpreadRegimeSummary) -> str:
+    """Return the human-readable reason for the verdict.
+
+    Must be called after classify_verdict to align the reason with the verdict.
+    """
+    if summary.pct_fallback_min_max >= 99.0 and summary.valid_spread_count > 0:
+        return "no_usable_two_sided_book"
+
+    if summary.median_spread_bps is not None and summary.median_spread_bps > 500.0:
+        return "quoted_spread_structurally_too_wide"
+
+    if summary.pct_spread_lte_200bps < 20.0:
+        return "quoted_spread_structurally_too_wide"
+
+    if summary.valid_spread_count < 50:
+        return "insufficient_observations"
+
+    return "insufficient_tight_windows"
 
 
 def compute_summary_from_events(
@@ -293,6 +443,34 @@ def compute_summary_from_events(
     p95 = compute_percentile(sorted_spreads, 0.95)
 
     bucket_counts = compute_spread_bucket_counts(valid_spreads)
+
+    # Quote quality classification
+    qq_counts = QuoteQualityCounts()
+    for e in events:
+        qq = e.quote_quality
+        if qq == QuoteQuality.TWO_SIDED_BOOK:
+            qq_counts.two_sided_book += 1
+        elif qq == QuoteQuality.ONE_SIDED_BOOK:
+            qq_counts.one_sided_book += 1
+        elif qq == QuoteQuality.EMPTY_BOOK:
+            qq_counts.empty_book += 1
+        elif qq == QuoteQuality.FALLBACK_MIN_MAX:
+            qq_counts.fallback_min_max += 1
+        elif qq == QuoteQuality.MISSING_BOOK:
+            qq_counts.missing_book += 1
+        elif qq == QuoteQuality.INVALID_BOOK:
+            qq_counts.invalid_book += 1
+
+    total_qq = sum([
+        qq_counts.two_sided_book,
+        qq_counts.one_sided_book,
+        qq_counts.empty_book,
+        qq_counts.fallback_min_max,
+        qq_counts.missing_book,
+        qq_counts.invalid_book,
+    ])
+    pct_two_sided = (100.0 * qq_counts.two_sided_book / total_qq) if total_qq > 0 else 0.0
+    pct_fallback = (100.0 * qq_counts.fallback_min_max / total_qq) if total_qq > 0 else 0.0
 
     # TTE bucket analysis
     tte_medians: dict[str, list[float]] = {}
@@ -349,6 +527,18 @@ def compute_summary_from_events(
         widest_tte_bucket=widest_tte_bucket,
         safety_status=safety_status,
         recommendation=recommendation,
+        quote_quality_counts=qq_counts,
+        two_sided_book_count=qq_counts.two_sided_book,
+        one_sided_book_count=qq_counts.one_sided_book,
+        empty_book_count=qq_counts.empty_book,
+        fallback_min_max_count=qq_counts.fallback_min_max,
+        missing_book_count=qq_counts.missing_book,
+        invalid_book_count=qq_counts.invalid_book,
+        pct_two_sided_book=pct_two_sided,
+        pct_fallback_min_max=pct_fallback,
     )
+
+    # Set verdict reason
+    summary.verdict_reason = classify_verdict_reason(summary)
 
     return summary
