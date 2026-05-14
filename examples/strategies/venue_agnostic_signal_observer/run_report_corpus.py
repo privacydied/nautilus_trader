@@ -27,6 +27,21 @@ from typing import Any
 from .artifact_metadata import build_metadata
 
 
+def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively replace NaN/inf float values with None for JSON serialization."""
+    if obj is None:
+        return None
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(item) for item in obj]
+    return obj
+
+
 # ---------------------------------------------------------------------------
 # corpus_config_key
 # ---------------------------------------------------------------------------
@@ -39,12 +54,18 @@ def corpus_config_key(group: dict[str, Any]) -> tuple:
     Groups sharing the same key represent the same signal-target configuration
     across different capture windows.
     """
+    def _safe_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     return (
         str(group.get("source_venue", "")),
         str(group.get("target_venue", "")),
         str(group.get("signal_type", "")),
-        int(group.get("lookback_ms", 0)),
-        int(group.get("horizon_ms", 0)),
+        _safe_int(group.get("lookback_ms"), 0),
+        _safe_int(group.get("horizon_ms"), 0),
     )
 
 
@@ -220,7 +241,7 @@ def aggregate_corpus(report_dirs: list[Path]) -> list[CorpusAggregation]:
 
     # HARD RULE: Sort by num_captures desc, then avg_mean_net_bps desc
     aggregations.sort(
-        key=lambda a: (-a.num_captures, -a.avg_mean_net_bps if math.isfinite(a.avg_mean_net_bps) else 1e9)
+        key=lambda a: (-a.num_captures, -a.avg_mean_net_bps if math.isfinite(a.avg_mean_net_bps) else float('inf'))
     )
 
     return aggregations
@@ -455,7 +476,7 @@ def main() -> None:
 
     json_path = out_dir / "corpus_aggregation.json"
     with open(json_path, "w") as f:
-        json.dump(json_data, f, indent=2, default=str)
+        json.dump(_sanitize_for_json(json_data), f, indent=2, default=str)
 
     # Write Markdown
     md_content = format_corpus_report(aggregations)

@@ -93,11 +93,8 @@ def is_mcpt_worthy_group(
         if mnb > -(cost_floor_bps * 0.2) and mnb > baseline_mean_net_bps + 5.0:
             return True, f"near_breakeven_but_beats_baseline: net={mnb:.2f} vs baseline={baseline_mean_net_bps:.2f}"
 
-    # Everything else is cost-floor dust
-    if mnb <= 0:
-        return False, f"non_positive_net_bps={mnb:.2f}, below cost floor"
-
-    return False, "no_positive_signal"
+    # Everything else is cost-floor dust (covers mnb <= 0 OR baseline check not passed)
+    return False, f"non_positive_net_bps={mnb:.2f}, below cost floor"
 
 
 # ---------------------------------------------------------------------------
@@ -151,13 +148,16 @@ def select_mcpt_candidate_groups(
     # Sort: candidate groups first, then by mean_net_bps desc, win_rate desc, count desc
     def _sort_key(r: dict) -> tuple:
         is_cand = 0 if r.get("candidate") is True else 1
-        mnb = r.get("mean_net_bps") or 0.0
+        mnb_raw = r.get("mean_net_bps")
+        mnb = mnb_raw if mnb_raw is not None else 0.0
         if not math.isfinite(mnb):
             mnb = -1e9
-        wr = r.get("win_rate") or 0.0
+        wr_raw = r.get("win_rate")
+        wr = wr_raw if wr_raw is not None else 0.0
         if not math.isfinite(wr):
             wr = 0.0
-        vc = r.get("valid_count") or 0
+        vc_raw = r.get("valid_count")
+        vc = vc_raw if vc_raw is not None else 0
         return (is_cand, -mnb, -wr, -vc)
 
     worthy.sort(key=_sort_key)

@@ -123,7 +123,8 @@ def select_null_candidate_groups(
     # Sort: candidate groups first, then mean_net_bps desc
     def _sort_key(r: dict) -> tuple:
         is_cand = 0 if r.get("candidate") is True else 1
-        mnb = r.get("mean_net_bps") or 0.0
+        mnb_raw = r.get("mean_net_bps")
+        mnb = mnb_raw if mnb_raw is not None else 0.0
         if not math.isfinite(mnb):
             mnb = -1e9
         return (is_cand, -mnb)
