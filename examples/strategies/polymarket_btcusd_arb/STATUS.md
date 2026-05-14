@@ -66,9 +66,9 @@ Verdict on parity:
 - list_updown_markets.py for market discovery
 
 ## Historical Polymarket Market Selected
-- Phase 1: btc-updown-15m-1778793300 (resolved, YES won — BTC above strike)
-- Phase 2 run 1: btc-updown-15m-1778794200 (legacy event-level accounting capture)
-- Phase 2 run 2 (post-fix): btc-updown-15m-1778796900 (grid-level accounting capture)
+- Scaffold fixture market: `bitcoin-above-70000-on-april-5` (resolved BTC binary, 5 runs, 0 candidates)
+- Accepted Phase 1 direct-slug BTC 15m UpDown validation market: `btc-updown-15m-1767107700` (resolved, 65 candidates, 20 grid cells CANDIDATE_FOR_LONGER_OBSERVATION, 60 NEEDS_MORE_DATA)
+- Phase 2 live observer: `btc-updown-15m-1778796900` (active at observation time, 0 candidates)
 
 ## Polymarket Cache Status
 Warm cache at cache/polymarket_btcusd_arb/polymarket/
@@ -164,12 +164,13 @@ Phase 2B: 11 tests (campaign runner: dry-run, no-markets, completed/failed windo
 Total: 56 tests, all passing.
 
 ## Backtest Runs
-Phase 1: btc-updown-15m-1778793300, warm cache, deterministic.
-Phase 2 run 1: btc-updown-15m-1778794200, 900s live observation, legacy event-level accounting, deterministic candidate match, rejection match not_applicable.
-Phase 2 run 2: btc-updown-15m-1778796900, 900s live observation, grid-level accounting, deterministic candidate AND rejection match.
+Scaffold fixture: bitcoin-above-70000-on-april-5 (5 runs, 0 candidates each).
+Phase 1 direct-slug: btc-updown-15m-1767107700 (resolved, 65 candidates, warm cache, deterministic).
+Phase 2 run 1: btc-updown-15m-1778794200 (legacy event-level accounting capture, 0 candidates).
+Phase 2 run 2 (post-fix): btc-updown-15m-1778796900 (grid-level accounting capture, 0 candidates, deterministic).
 
 ## Current Verdict
-Phase 1: CANDIDATE_FOR_LONGER_OBSERVATION (on resolved historical data).
+Phase 1: CANDIDATE_FOR_LONGER_OBSERVATION (on resolved `btc-updown-15m-1767107700` historical data — the accepted Phase 1 direct-slug BTC 15m UpDown market).
 Phase 2: NEEDS_MORE_DATA (0 candidates in two 900s live observation windows).
 The Phase 1 backtest signal did not produce candidates in live observation because live Polymarket 15m UpDown spreads are consistently wider than the backtest assumed. This is one observation across two 900s windows, not a global rejection of the hypothesis.
 

@@ -46,7 +46,19 @@ All commits on branch `polymarket-btcusd-arb-phase2c-observer-analysis` and its 
 
 ## Phase 1 Backtest Evidence
 
-One resolved BTC 15m UpDown market (`bitcoin-above-70000-on-april-5`) produced candidate grid cells under backtest conditions. The fair-probability model identified divergence between computed and quoted probability. Backtest parity with Rust fixtures was confirmed within 1e-9 tolerance.
+Initial scaffold/backtest path was first exercised on `bitcoin-above-70000-on-april-5`, a resolved BTC binary fixture market (5 runs, 0 candidates each).
+
+The accepted Phase 1 direct-slug BTC 15m UpDown validation market was:
+`btc-updown-15m-1767107700`
+
+Phase 1 direct-slug result:
+- Resolved BTC 15m UpDown market
+- 65 candidates
+- 20 grid cells with CANDIDATE_FOR_LONGER_OBSERVATION
+- 60 grid cells with NEEDS_MORE_DATA
+- Limitations: one resolved market, Binance aggTrade proxy, Binance-derived price-to-beat approximation, not Chainlink historical stream replay
+
+Parity with Rust fixtures was confirmed within 1e-9 tolerance.
 
 ## Phase 2 Live Observer Evidence
 
