@@ -702,7 +702,7 @@ def main() -> int:
                 "4h Chainlink hypothesis is parked.",
             ],
         }
-        write_reports(output_dir, summary, [], [], [])
+        write_reports(output_dir, run_id, summary, [], [], [])
 
         if argv.fail_if_discovery_unvalidated:
             return 1
@@ -817,7 +817,7 @@ def main() -> int:
                 "This produces no liquidity evidence and must be treated as NEEDS_MORE_DATA.",
             ],
         }
-        write_reports(output_dir, summary, [], all_1h_markets, [])
+        write_reports(output_dir, run_id, summary, [], all_1h_markets, [])
         print(f"\nReports written to: {output_dir}")
         print(f"Overall verdict: {V_NEEDS_MORE_DATA_NO_ACTIVE}")
         return 0
@@ -1050,7 +1050,7 @@ def main() -> int:
         ],
     }
 
-    write_reports(output_dir, summary, snapshots, all_1h_markets, book_poll_failures)
+    write_reports(output_dir, run_id, summary, snapshots, all_1h_markets, book_poll_failures)
 
     print(f"\nReports written to: {output_dir}")
     print(f"Overall verdict: {overall_verdict}")
