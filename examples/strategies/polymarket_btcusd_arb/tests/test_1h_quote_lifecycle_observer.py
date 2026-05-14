@@ -37,8 +37,11 @@ from examples.strategies.polymarket_btcusd_arb.run_1h_quote_lifecycle_observer i
     build_quote_quality_counts,
     build_lifecycle_bucket_counts,
     classify_verdict,
+    classify_snapshot_timing_state,
+    classify_market_timing_state,
     V_DISCOVERY_VALIDATION_FAILED,
     V_NEEDS_MORE_DATA_NO_ACTIVE,
+    V_NEEDS_MORE_DATA_MARKET_NOT_STARTED,
     V_BOOK_POLL_FAILED,
     V_NO_ACTIONABLE,
     V_TRANSIENT_ACTIONABLE,
@@ -46,6 +49,11 @@ from examples.strategies.polymarket_btcusd_arb.run_1h_quote_lifecycle_observer i
     FORBIDDEN_VERDICTS,
     DEFAULT_MIN_ACTIONABLE_RATE_FOR_PHASE1,
     DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1,
+    DEFAULT_MAX_WAIT_FOR_START_SECONDS,
+    TIMING_PRE_START,
+    TIMING_IN_LIFECYCLE,
+    TIMING_EXPIRED,
+    TIMING_UNKNOWN,
     BRANCH,
 )
 
@@ -100,6 +108,7 @@ def _make_snapshot(
     book_poll_success: bool = True,
     book_poll_error: str | None = None,
     ts_event_ns: int = 1_777_000_000_000_000_000,
+    timing_state: str = TIMING_IN_LIFECYCLE,
 ) -> LifecycleSnapshot:
     """Create a test lifecycle snapshot."""
     if quote_quality is None:
@@ -131,6 +140,7 @@ def _make_snapshot(
         is_closed=False,
         seconds_to_start=None,
         seconds_to_expiry=seconds_to_expiry,
+        timing_state=timing_state,
         book_poll_success=book_poll_success,
         book_poll_error=book_poll_error,
         best_bid=best_bid,
@@ -547,6 +557,7 @@ class TestLifecycleSnapshotDataclass:
             "duration_label", "duration_seconds", "reference_source_kind",
             "product_exists", "is_active", "is_closed",
             "seconds_to_start", "seconds_to_expiry",
+            "timing_state",
             "book_poll_success", "book_poll_error",
             "best_bid", "best_ask", "best_bid_size", "best_ask_size",
             "spread_bps", "quote_quality", "actionable_two_sided_book",
@@ -614,7 +625,7 @@ class TestVerdictClassificationWithDwellThresholds:
     """Verdict classification with actionable-book dwell thresholds."""
 
     def test_zero_actionable_snapshots_yields_no_actionable(self):
-        """Zero actionable snapshots -> NO_ACTIONABLE."""
+        """Zero actionable snapshots -> NO_ACTIONABLE (with in-lifecycle)."""
         verdict, _ = classify_verdict(
             actionable_count=0,
             total_count=100,
@@ -622,6 +633,8 @@ class TestVerdictClassificationWithDwellThresholds:
             max_contiguous_actionable_seconds=0.0,
             book_poll_success_count=80,
             book_poll_failure_count=20,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_NO_ACTIONABLE
 
@@ -634,6 +647,8 @@ class TestVerdictClassificationWithDwellThresholds:
             max_contiguous_actionable_seconds=0.0,  # single snapshot
             book_poll_success_count=100,
             book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_TRANSIENT_ACTIONABLE
         assert "dwell" in desc.lower() or "threshold" in desc.lower()
@@ -647,6 +662,8 @@ class TestVerdictClassificationWithDwellThresholds:
             max_contiguous_actionable_seconds=400.0,  # passes contiguous
             book_poll_success_count=100,
             book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_TRANSIENT_ACTIONABLE
 
@@ -659,6 +676,8 @@ class TestVerdictClassificationWithDwellThresholds:
             max_contiguous_actionable_seconds=120.0,  # 120s < 300s threshold
             book_poll_success_count=100,
             book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_TRANSIENT_ACTIONABLE
 
@@ -671,6 +690,8 @@ class TestVerdictClassificationWithDwellThresholds:
             max_contiguous_actionable_seconds=400.0,  # 400s > 300s threshold
             book_poll_success_count=100,
             book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_ACTIONABLE_REQUIRES_PHASE1
         assert "phase 1" in desc.lower() or "phase1" in desc.lower()
@@ -684,6 +705,8 @@ class TestVerdictClassificationWithDwellThresholds:
             max_contiguous_actionable_seconds=400.0,  # above contiguous threshold
             book_poll_success_count=100,
             book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_ACTIONABLE_REQUIRES_PHASE1
 
@@ -696,6 +719,8 @@ class TestVerdictClassificationWithDwellThresholds:
             max_contiguous_actionable_seconds=300.0,  # exactly threshold
             book_poll_success_count=100,
             book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_ACTIONABLE_REQUIRES_PHASE1
 
@@ -708,6 +733,8 @@ class TestVerdictClassificationWithDwellThresholds:
             max_contiguous_actionable_seconds=0.0,
             book_poll_success_count=0,
             book_poll_failure_count=50,
+            in_lifecycle_snapshot_count=0,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_BOOK_POLL_FAILED
 
@@ -721,6 +748,8 @@ class TestVerdictClassificationWithDwellThresholds:
             max_contiguous_actionable_seconds=0.0,
             book_poll_success_count=100,
             book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_NO_ACTIONABLE
 
@@ -733,6 +762,8 @@ class TestVerdictClassificationWithDwellThresholds:
             max_contiguous_actionable_seconds=0.0,
             book_poll_success_count=50,
             book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=50,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_NO_ACTIONABLE
 
@@ -757,6 +788,7 @@ class TestVerdictForbiddenValues:
         allowed = {
             V_DISCOVERY_VALIDATION_FAILED,
             V_NEEDS_MORE_DATA_NO_ACTIVE,
+            V_NEEDS_MORE_DATA_MARKET_NOT_STARTED,
             V_BOOK_POLL_FAILED,
             V_NO_ACTIONABLE,
             V_TRANSIENT_ACTIONABLE,
@@ -777,6 +809,8 @@ class TestVerdictTransientWording:
             max_contiguous_actionable_seconds=0.0,
             book_poll_success_count=100,
             book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
         )
         assert V_TRANSIENT_ACTIONABLE == "ONE_HOUR_TRANSIENT_ACTIONABLE_BOOK_OBSERVED_NEEDS_MORE_OBSERVATION"
         lower = desc.lower()
@@ -801,6 +835,8 @@ class TestVerdictTransientWording:
             max_contiguous_actionable_seconds=400.0,
             book_poll_success_count=100,
             book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
         )
         assert verdict == V_ACTIONABLE_REQUIRES_PHASE1
         lower = desc.lower()
@@ -816,3 +852,233 @@ class TestDwellThresholdDefaults:
 
     def test_default_min_contiguous_seconds(self):
         assert DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1 == 300.0
+
+    def test_default_max_wait_for_start_seconds(self):
+        assert DEFAULT_MAX_WAIT_FOR_START_SECONDS == 0
+
+
+class TestSnapshotTimingState:
+    """Snapshot timing state classification tests."""
+
+    def test_pre_start_snapshot_classifies_correctly(self):
+        """Future market start_ns -> PRE_START_OPEN_FOR_TRADING."""
+        ts = 1_000_000_000_000_000_000  # now
+        start_ns = 2_000_000_000_000_000_000  # future
+        end_ns = 2_000_000_003_600_000_000
+        state = classify_snapshot_timing_state(ts, start_ns, end_ns)
+        assert state == TIMING_PRE_START
+
+    def test_in_lifecycle_snapshot_classifies_correctly(self):
+        """Now between start and end -> IN_LIFECYCLE."""
+        start_ns = 1_000_000_000_000_000_000
+        end_ns = 1_000_000_003_600_000_000
+        ts = 1_000_000_002_000_000_000  # 2000s after start, within lifecycle
+        state = classify_snapshot_timing_state(ts, start_ns, end_ns)
+        assert state == TIMING_IN_LIFECYCLE
+
+    def test_expired_snapshot_classifies_correctly(self):
+        """Now after end_ns -> EXPIRED."""
+        start_ns = 1_000_000_000_000_000_000
+        end_ns = 1_000_000_003_600_000_000
+        ts = 1_000_000_004_000_000_000  # past expiry
+        state = classify_snapshot_timing_state(ts, start_ns, end_ns)
+        assert state == TIMING_EXPIRED
+
+    def test_unknown_timing_when_start_ns_is_none(self):
+        """None start_ns -> UNKNOWN_TIMING."""
+        ts = 1_000_000_000_000_000_000
+        state = classify_snapshot_timing_state(ts, None, None)
+        assert state == TIMING_UNKNOWN
+
+
+class TestMarketTimingState:
+    """Market timing state classification tests."""
+
+    def test_future_market_is_pre_start(self):
+        """Future active market is classified as PRE_START_OPEN_FOR_TRADING."""
+        now_ns = 1_000_000_000_000_000_000
+        start_ns = 2_000_000_000_000_000_000
+        end_ns = 2_000_000_003_600_000_000
+        state = classify_market_timing_state(now_ns, start_ns, end_ns)
+        assert state == TIMING_PRE_START
+
+    def test_in_lifecycle_market(self):
+        """Market with start <= now < end is IN_LIFECYCLE."""
+        now_ns = 1_000_000_002_000_000_000
+        start_ns = 1_000_000_000_000_000_000
+        end_ns = 1_000_000_003_600_000_000
+        state = classify_market_timing_state(now_ns, start_ns, end_ns)
+        assert state == TIMING_IN_LIFECYCLE
+
+    def test_expired_market(self):
+        """Market past end is EXPIRED."""
+        now_ns = 1_000_000_004_000_000_000
+        start_ns = 1_000_000_000_000_000_000
+        end_ns = 1_000_000_003_600_000_000
+        state = classify_market_timing_state(now_ns, start_ns, end_ns)
+        assert state == TIMING_EXPIRED
+
+    def test_unknown_timing_when_none(self):
+        """None timestamps -> UNKNOWN_TIMING."""
+        now_ns = 1_000_000_000_000_000_000
+        state = classify_market_timing_state(now_ns, None, None)
+        assert state == TIMING_UNKNOWN
+
+
+class TestVerdictLifecycleValidity:
+    """Quote-quality verdicts require in-lifecycle observations."""
+
+    def test_all_pre_start_snapshots_emit_market_not_started(self):
+        """All pre-start snapshots -> NEEDS_MORE_DATA_MARKET_NOT_STARTED."""
+        verdict, _ = classify_verdict(
+            actionable_count=0,
+            total_count=100,
+            actionable_rate=0.0,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=0,
+            pre_start_snapshot_count=100,
+        )
+        assert verdict == V_NEEDS_MORE_DATA_MARKET_NOT_STARTED
+
+    def test_all_pre_start_does_not_emit_no_actionable(self):
+        """All pre-start must NOT emit NO_ACTIONABLE."""
+        verdict, _ = classify_verdict(
+            actionable_count=0,
+            total_count=100,
+            actionable_rate=0.0,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=0,
+            pre_start_snapshot_count=100,
+        )
+        assert verdict != V_NO_ACTIONABLE
+
+    def test_in_lifecycle_no_actionable_yields_no_actionable(self):
+        """In-lifecycle observations with zero actionable -> NO_ACTIONABLE."""
+        verdict, _ = classify_verdict(
+            actionable_count=0,
+            total_count=100,
+            actionable_rate=0.0,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
+        )
+        assert verdict == V_NO_ACTIONABLE
+
+    def test_in_lifecycle_transient_actionable(self):
+        """In-lifecycle transient actionable -> TRANSIENT_ACTIONABLE."""
+        verdict, _ = classify_verdict(
+            actionable_count=1,
+            total_count=100,
+            actionable_rate=0.01,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
+        )
+        assert verdict == V_TRANSIENT_ACTIONABLE
+
+    def test_in_lifecycle_dwell_qualified_actionable(self):
+        """In-lifecycle dwell-qualified actionable -> ACTIONABLE_REQUIRES_PHASE1."""
+        verdict, _ = classify_verdict(
+            actionable_count=20,
+            total_count=100,
+            actionable_rate=0.20,
+            max_contiguous_actionable_seconds=400.0,
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=0,
+        )
+        assert verdict == V_ACTIONABLE_REQUIRES_PHASE1
+
+    def test_mixed_pre_start_and_lifecycle_no_actionable(self):
+        """Mixed pre-start + in-lifecycle with zero actionable -> NO_ACTIONABLE."""
+        verdict, _ = classify_verdict(
+            actionable_count=0,
+            total_count=200,
+            actionable_rate=0.0,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=200,
+            book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=100,
+            pre_start_snapshot_count=100,
+        )
+        assert verdict == V_NO_ACTIONABLE
+
+    def test_market_not_started_verdict_constant(self):
+        """Verify the constant value."""
+        assert V_NEEDS_MORE_DATA_MARKET_NOT_STARTED == "NEEDS_MORE_DATA_MARKET_NOT_STARTED"
+
+    def test_market_not_started_not_forbidden(self):
+        """NEEDS_MORE_DATA_MARKET_NOT_STARTED is not in forbidden set."""
+        assert V_NEEDS_MORE_DATA_MARKET_NOT_STARTED not in FORBIDDEN_VERDICTS
+
+    def test_pre_start_with_actionable_still_market_not_started(self):
+        """Even if actionable books seen pre-start, verdict is MARKET_NOT_STARTED."""
+        # This should not happen in practice since pre-start books are exchange-bound
+        # but if somehow they were, the lifecycle validity takes precedence
+        verdict, _ = classify_verdict(
+            actionable_count=50,
+            total_count=100,
+            actionable_rate=0.50,
+            max_contiguous_actionable_seconds=400.0,
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=0,
+            pre_start_snapshot_count=100,
+        )
+        assert verdict == V_NEEDS_MORE_DATA_MARKET_NOT_STARTED
+
+
+class TestReportWordingLifecycleTiming:
+    """Report includes lifecycle timing correctness wording."""
+
+    def test_report_module_has_pre_start_wording(self):
+        """The module source must mention pre-start lifecycle caveat."""
+        from examples.strategies.polymarket_btcusd_arb import run_1h_quote_lifecycle_observer
+        source = Path(run_1h_quote_lifecycle_observer.__file__).read_text()
+        assert "pre-start" in source.lower() or "pre_start" in source.lower()
+
+    def test_report_module_has_market_not_started_verdict(self):
+        """The module source must handle V_NEEDS_MORE_DATA_MARKET_NOT_STARTED."""
+        from examples.strategies.polymarket_btcusd_arb import run_1h_quote_lifecycle_observer
+        source = Path(run_1h_quote_lifecycle_observer.__file__).read_text()
+        assert V_NEEDS_MORE_DATA_MARKET_NOT_STARTED in source
+
+    def test_report_module_separates_concepts(self):
+        """Module separates product/active/book/actionable concepts."""
+        from examples.strategies.polymarket_btcusd_arb import run_1h_quote_lifecycle_observer
+        source = Path(run_1h_quote_lifecycle_observer.__file__).read_text()
+        # Must separate product existence from active market availability
+        assert "Product existence" in source or "product existence" in source
+        assert "active market" in source or "Active market" in source
+        # Must also separate active/open for trading from lifecycle start
+        assert "active/open for trading" in source or "event lifecycle" in source.lower()
+
+
+class TestLifecycleSnapshotTimingField:
+    """Snapshot has timing_state field."""
+
+    def test_timing_state_field_exists(self):
+        snap = _make_snapshot()
+        assert hasattr(snap, "timing_state")
+        assert snap.timing_state == TIMING_IN_LIFECYCLE  # default
+
+    def test_timing_state_pre_start(self):
+        snap = _make_snapshot(timing_state=TIMING_PRE_START)
+        assert snap.timing_state == TIMING_PRE_START
+
+    def test_timing_state_expired(self):
+        snap = _make_snapshot(timing_state=TIMING_EXPIRED)
+        assert snap.timing_state == TIMING_EXPIRED
+
+    def test_timing_state_unknown(self):
+        snap = _make_snapshot(timing_state=TIMING_UNKNOWN)
+        assert snap.timing_state == TIMING_UNKNOWN

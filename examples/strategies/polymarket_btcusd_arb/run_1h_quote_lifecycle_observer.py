@@ -45,7 +45,7 @@ from .spread_regime import (
 )
 from .safety_checks import check_path
 
-BRANCH = "polymarket-btc-updown-1h-quote-lifecycle-v1"
+BRANCH = "polymarket-btc-updown-1h-lifecycle-window-fix-v2"
 
 # Default known 1h slug for validation
 DEFAULT_KNOWN_1H_SLUG = "bitcoin-up-or-down-may-13-2026-11pm-et"
@@ -67,6 +67,7 @@ LIFECYCLE_BUCKET_LABELS = [b[0] for b in LIFECYCLE_BUCKETS]
 # Verdict constants
 V_DISCOVERY_VALIDATION_FAILED = "DISCOVERY_VALIDATION_FAILED"
 V_NEEDS_MORE_DATA_NO_ACTIVE = "NEEDS_MORE_DATA_NO_ACTIVE_1H_MARKET"
+V_NEEDS_MORE_DATA_MARKET_NOT_STARTED = "NEEDS_MORE_DATA_MARKET_NOT_STARTED"
 V_BOOK_POLL_FAILED = "ONE_HOUR_BOOK_POLL_FAILED"
 V_NO_ACTIONABLE = "ONE_HOUR_NO_ACTIONABLE_BOOK_OBSERVED"
 V_TRANSIENT_ACTIONABLE = "ONE_HOUR_TRANSIENT_ACTIONABLE_BOOK_OBSERVED_NEEDS_MORE_OBSERVATION"
@@ -81,9 +82,56 @@ FORBIDDEN_VERDICTS = {
     "PAPER_TRADING_READY",
 }
 
+# Timing state constants for snapshots
+TIMING_PRE_START = "PRE_START_OPEN_FOR_TRADING"
+TIMING_IN_LIFECYCLE = "IN_LIFECYCLE"
+TIMING_EXPIRED = "EXPIRED"
+TIMING_UNKNOWN = "UNKNOWN_TIMING"
+
 # Default dwell thresholds for actionable-book verdict
 DEFAULT_MIN_ACTIONABLE_RATE_FOR_PHASE1 = 0.05
 DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1 = 300.0
+DEFAULT_MAX_WAIT_FOR_START_SECONDS = 0
+
+
+def classify_snapshot_timing_state(
+    ts_event_ns: int,
+    market_start_ns: int | None,
+    market_end_ns: int | None,
+) -> str:
+    """Classify whether a snapshot timestamp is pre_start, in_lifecycle, or expired.
+
+    Pre-start: ts_event_ns < market_start_ns (market not yet started)
+    In-lifecycle: market_start_ns <= ts_event_ns < market_end_ns
+    Expired: ts_event_ns >= market_end_ns
+    """
+    if market_start_ns is None or market_end_ns is None:
+        return TIMING_UNKNOWN
+    if ts_event_ns < market_start_ns:
+        return TIMING_PRE_START
+    if ts_event_ns < market_end_ns:
+        return TIMING_IN_LIFECYCLE
+    return TIMING_EXPIRED
+
+
+def classify_market_timing_state(
+    now_ns: int,
+    market_start_ns: int | None,
+    market_end_ns: int | None,
+) -> str:
+    """Classify the current timing state of a market relative to now.
+
+    Returns IN_LIFECYCLE if the market's event window has started,
+    PRE_START_OPEN_FOR_TRADING if not yet started,
+    EXPIRED if past end, or UNKNOWN_TIMING if start/end are unknown.
+    """
+    if market_start_ns is None or market_end_ns is None:
+        return TIMING_UNKNOWN
+    if now_ns >= market_end_ns:
+        return TIMING_EXPIRED
+    if now_ns >= market_start_ns:
+        return TIMING_IN_LIFECYCLE
+    return TIMING_PRE_START
 
 
 def classify_verdict(
@@ -93,12 +141,18 @@ def classify_verdict(
     max_contiguous_actionable_seconds: float,
     book_poll_success_count: int,
     book_poll_failure_count: int,
+    in_lifecycle_snapshot_count: int = 0,
+    pre_start_snapshot_count: int = 0,
     min_actionable_rate: float = DEFAULT_MIN_ACTIONABLE_RATE_FOR_PHASE1,
     min_contiguous_seconds: float = DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1,
 ) -> tuple[str, str]:
     """Classify the observation verdict based on actionable book statistics.
 
     Returns (verdict_constant, verdict_description).
+
+    A quote-quality verdict is only valid if the observation includes at least
+    one in-lifecycle snapshot. If all snapshots are pre_start, emit
+    NEEDS_MORE_DATA_MARKET_NOT_STARTED instead.
 
     A single 5-second actionable snapshot is not enough to justify a Phase 1
     backtest. Actionable liquidity must demonstrate dwell: both a minimum
@@ -112,6 +166,20 @@ def classify_verdict(
             "This is not evidence against product existence."
         )
 
+    # Lifecycle validity check: if no in-lifecycle snapshots exist, we
+    # cannot emit a quote-quality verdict about the actual market lifecycle.
+    all_pre_start = pre_start_snapshot_count > 0 and in_lifecycle_snapshot_count == 0
+
+    if all_pre_start:
+        return V_NEEDS_MORE_DATA_MARKET_NOT_STARTED, (
+            "The selected/available 1h market was open for trading but remained "
+            "entirely pre_start during the observation window. No lifecycle "
+            "quote-quality conclusion can be drawn. This is not a negative "
+            "liquidity verdict — it means the observation did not cover the "
+            "actual event lifecycle."
+        )
+
+    # If we have in-lifecycle observations, classify based on quote quality
     any_actionable = actionable_count > 0
 
     if not any_actionable:
@@ -158,6 +226,7 @@ class LifecycleSnapshot:
     is_closed: bool
     seconds_to_start: float | None
     seconds_to_expiry: float | None
+    timing_state: str
     book_poll_success: bool
     book_poll_error: str | None
     best_bid: float | None
@@ -488,6 +557,13 @@ def _write_report_md(
         lines.append("or lifecycle coverage exists to justify a Phase 1 backtest yet.")
         lines.append("Recommend more observer-only 1h lifecycle captures.")
         lines.append("This does not recommend execution or Phase 3.\n")
+    elif verdict == V_NEEDS_MORE_DATA_MARKET_NOT_STARTED:
+        lines.append("The selected/available 1h market was open for trading but remained")
+        lines.append("entirely pre_start during the observation window. No lifecycle")
+        lines.append("quote-quality conclusion can be drawn.\n")
+        lines.append("This run observed pre-start liquidity only. It does not establish")
+        lines.append("whether the 1h market has actionable two-sided books during the")
+        lines.append("actual event lifecycle.\n")
     elif verdict == V_NEEDS_MORE_DATA_NO_ACTIVE:
         lines.append("No active 1h BTC UpDown market was available during this run.")
         lines.append("This produces no liquidity evidence and must be treated as NEEDS_MORE_DATA.\n")
@@ -499,6 +575,29 @@ def _write_report_md(
         lines.append("or the slug may have expired. Re-run with a fresh slug.\n")
     else:
         lines.append(f"Unexpected verdict: {verdict}\n")
+
+    # Lifecycle timing interpretation
+    all_pre_start = summary.get("all_snapshots_pre_start", False)
+    in_lc = summary.get("in_lifecycle_snapshot_count", 0)
+    pre_start = summary.get("pre_start_snapshot_count", 0)
+    expired = summary.get("expired_snapshot_count", 0)
+    lines.append("## Lifecycle Timing\n")
+    lines.append(f"| Timing State | Count |")
+    lines.append(f"|-------------|-------|")
+    lines.append(f"| PRE_START_OPEN_FOR_TRADING | {pre_start} |")
+    lines.append(f"| IN_LIFECYCLE | {in_lc} |")
+    lines.append(f"| EXPIRED | {expired} |")
+    lines.append("")
+    if all_pre_start:
+        lines.append("WARNING: All snapshots were PRE_START_OPEN_FOR_TRADING.")
+        lines.append("This run observed pre-start liquidity only. It does not establish")
+        lines.append("whether the 1h market has actionable two-sided books during the")
+        lines.append("actual event lifecycle.\n")
+        lines.append("A market being active/open for trading does not necessarily mean")
+        lines.append("the event lifecycle has started.\n")
+    elif in_lc > 0:
+        coverage = summary.get("lifecycle_coverage_rate", 0.0)
+        lines.append(f"In-lifecycle snapshots observed: {in_lc}. Coverage rate: {coverage:.2%}.\n")
 
     # What this does NOT do
     lines.append("## What This Run Does NOT Do\n")
@@ -599,6 +698,12 @@ def main() -> int:
         type=float,
         default=DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1,
         help=f"Minimum contiguous actionable seconds to justify Phase 1 backtest (default: {DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1})",
+    )
+    parser.add_argument(
+        "--max-wait-for-start-seconds",
+        type=int,
+        default=DEFAULT_MAX_WAIT_FOR_START_SECONDS,
+        help="Maximum seconds to wait for a pre-start market to enter its lifecycle (default: 0, no wait)",
     )
     argv = parser.parse_args()
 
@@ -749,6 +854,9 @@ def main() -> int:
     # --- Step 3: Select market to observe ---
     print("\n=== Step 3: Select Market ===")
     selected: DurationMarketInfo | None = None
+    selected_timing_state: str = TIMING_UNKNOWN
+
+    now_ns = int(time.time() * 1_000_000_000)
 
     if argv.market_slug:
         # User-specified market
@@ -765,19 +873,60 @@ def main() -> int:
         else:
             print(f"  Using user-specified slug: {argv.market_slug}")
     else:
-        # Pick first active 1h market with Binance reference
+        # Priority 1: in-lifecycle active Binance 1h markets
         binance_active = [
             dm for dm in active_1h
             if dm.resolution_source_kind == REF_SOURCE_BINANCE
         ]
-        if binance_active:
+
+        in_lifecycle = [
+            dm for dm in binance_active
+            if dm.market.start_ns is not None
+            and dm.market.end_ns is not None
+            and dm.market.start_ns <= now_ns < dm.market.end_ns
+        ]
+        pre_start = [
+            dm for dm in binance_active
+            if dm.market.start_ns is not None
+            and dm.market.start_ns > now_ns
+        ]
+
+        if in_lifecycle:
+            selected = in_lifecycle[0]
+            selected_timing_state = TIMING_IN_LIFECYCLE
+            print(f"  Selected in-lifecycle Binance 1h market: {selected.market.slug}")
+        elif pre_start:
+            # Check if we should wait for this pre-start market
+            soonest = min(pre_start, key=lambda dm: dm.market.start_ns or 0)
+            wait_seconds = ((soonest.market.start_ns or 0) - now_ns) / 1_000_000_000
+            if 0 < wait_seconds <= argv.max_wait_for_start_seconds:
+                print(f"  Waiting {wait_seconds:.0f}s for market {soonest.market.slug} to start...")
+                time.sleep(wait_seconds)
+                now_ns = int(time.time() * 1_000_000_000)
+                # Re-check timing after wait
+                if soonest.market.start_ns is not None and soonest.market.start_ns <= now_ns:
+                    selected = soonest
+                    selected_timing_state = TIMING_IN_LIFECYCLE
+                    print(f"  Market started. Selected: {selected.market.slug}")
+                else:
+                    print(f"  Market did not start within wait window.")
+            else:
+                print(f"  Nearest pre-start market starts in {wait_seconds:.0f}s "
+                      f"(max_wait={argv.max_wait_for_start_seconds}s). Not waiting.")
+
+            if selected is None and pre_start:
+                # Fall back to first pre-start market if not waiting
+                selected = pre_start[0]
+                selected_timing_state = TIMING_PRE_START
+                print(f"  Selected pre-start Binance 1h market: {selected.market.slug}")
+
+        if selected is None and binance_active:
+            # Last resort: pick any active Binance 1h market
             selected = binance_active[0]
             print(f"  Selected active Binance 1h market: {selected.market.slug}")
-        elif active_1h:
+        elif selected is None and active_1h:
             selected = active_1h[0]
             print(f"  Selected active 1h market (non-Binance ref): {selected.market.slug}")
-        else:
-            print("  No active 1h market available.")
 
     # If no active 1h market found, exit with NEEDS_MORE_DATA
     if selected is None:
@@ -837,6 +986,14 @@ def main() -> int:
     print(f"    active={selected.market.active}")
     print(f"    start_ns={selected.market.start_ns}")
     print(f"    end_ns={selected.market.end_ns}")
+    print(f"    timing_state={selected_timing_state}")
+
+    # Classify current market timing if not already set
+    if selected_timing_state == TIMING_UNKNOWN:
+        selected_timing_state = classify_market_timing_state(
+            now_ns, selected.market.start_ns, selected.market.end_ns
+        )
+        print(f"    timing_state={selected_timing_state} (classified)")
 
     if argv.dry_discover:
         print("\nDRY_DISCOVER=1. Skipping observation.")
@@ -873,6 +1030,11 @@ def main() -> int:
             # Classify lifecycle bucket
             lifecycle_bucket = classify_lifecycle_bucket(seconds_to_expiry)
 
+            # Classify snapshot timing state
+            snap_timing_state = classify_snapshot_timing_state(
+                now_ns, selected.market.start_ns, selected.market.end_ns
+            )
+
             # Poll book
             poll_count += 1
             quote = poll_quote_for_market(selected.market)
@@ -898,6 +1060,7 @@ def main() -> int:
                     is_closed=selected.market.closed,
                     seconds_to_start=seconds_to_start,
                     seconds_to_expiry=seconds_to_expiry,
+                    timing_state=snap_timing_state,
                     book_poll_success=False,
                     book_poll_error="book_poll_returned_none",
                     best_bid=None,
@@ -911,7 +1074,7 @@ def main() -> int:
                     raw_source="clob_poll_failure",
                 )
                 snapshots.append(snap)
-                print(f"  [{elapsed:.0f}s] BOOK_POLL_FAILED | bucket={lifecycle_bucket}")
+                print(f"  [{elapsed:.0f}s] BOOK_POLL_FAILED | bucket={lifecycle_bucket} timing={snap_timing_state}")
             else:
                 success_count += 1
                 best_bid = quote.get("best_bid")
@@ -940,6 +1103,7 @@ def main() -> int:
                     is_closed=selected.market.closed,
                     seconds_to_start=seconds_to_start,
                     seconds_to_expiry=seconds_to_expiry,
+                    timing_state=snap_timing_state,
                     book_poll_success=True,
                     book_poll_error=None,
                     best_bid=best_bid,
@@ -954,7 +1118,7 @@ def main() -> int:
                 )
                 snapshots.append(snap)
                 bucket_str = f"bucket={lifecycle_bucket}"
-                print(f"  [{elapsed:.0f}s] bid={best_bid} ask={best_ask} qq={qq} actionable={actionable} {bucket_str}")
+                print(f"  [{elapsed:.0f}s] bid={best_bid} ask={best_ask} qq={qq} actionable={actionable} {bucket_str} timing={snap_timing_state}")
 
             # Sleep until next poll
             time.sleep(argv.poll_seconds)
@@ -972,14 +1136,42 @@ def main() -> int:
     qq_counts = build_quote_quality_counts(snapshots)
     bucket_qq = build_lifecycle_bucket_counts(snapshots)
 
+    # Compute lifecycle timing state counts
+    timing_counts = {"PRE_START_OPEN_FOR_TRADING": 0, "IN_LIFECYCLE": 0, "EXPIRED": 0, "UNKNOWN_TIMING": 0}
+    for s in snapshots:
+        if s.timing_state in timing_counts:
+            timing_counts[s.timing_state] += 1
+        else:
+            timing_counts["UNKNOWN_TIMING"] += 1
+
+    pre_start_count = timing_counts[TIMING_PRE_START]
+    in_lifecycle_count = timing_counts[TIMING_IN_LIFECYCLE]
+    expired_count = timing_counts[TIMING_EXPIRED]
+    all_pre_start = pre_start_count > 0 and in_lifecycle_count == 0 and expired_count == 0
+
+    # Lifecycle coverage
+    total_observation_seconds = argv.duration_seconds
+    lifecycle_coverage_seconds = 0.0
+    lifecycle_coverage_rate = 0.0
+    if in_lifecycle_count > 0 and len(snapshots) > 1:
+        # Estimate coverage from number of in-lifecycle snapshots * poll interval
+        lifecycle_coverage_seconds = in_lifecycle_count * argv.poll_seconds
+        lifecycle_coverage_rate = min(lifecycle_coverage_seconds / total_observation_seconds, 1.0)
+
     print(f"  Actionable TWO_SIDED_BOOK count: {actionable_stats['actionable_two_sided_book_count']}")
     print(f"  Actionable rate: {actionable_stats['actionable_two_sided_book_rate']:.4f}")
     print(f"  Max contiguous actionable: {actionable_stats['max_contiguous_actionable_seconds']:.1f}s")
     print(f"  Min actionable rate threshold: {argv.min_actionable_rate_for_phase1}")
     print(f"  Min contiguous seconds threshold: {argv.min_contiguous_actionable_seconds_for_phase1}")
     print(f"  Quote quality counts: {qq_counts}")
+    print(f"  Timing state counts: {timing_counts}")
+    print(f"  Pre-start snapshots: {pre_start_count}")
+    print(f"  In-lifecycle snapshots: {in_lifecycle_count}")
+    print(f"  Expired snapshots: {expired_count}")
+    print(f"  All pre-start: {all_pre_start}")
+    print(f"  Lifecycle coverage: {lifecycle_coverage_seconds:.0f}s ({lifecycle_coverage_rate:.2%})")
 
-    # Determine verdict using dwell-threshold-aware classifier
+    # Determine verdict using dwell-threshold-aware classifier with lifecycle validity
     overall_verdict, verdict_description = classify_verdict(
         actionable_count=actionable_stats["actionable_two_sided_book_count"],
         total_count=len(snapshots),
@@ -987,6 +1179,8 @@ def main() -> int:
         max_contiguous_actionable_seconds=actionable_stats["max_contiguous_actionable_seconds"],
         book_poll_success_count=success_count,
         book_poll_failure_count=failure_count,
+        in_lifecycle_snapshot_count=in_lifecycle_count,
+        pre_start_snapshot_count=pre_start_count,
         min_actionable_rate=argv.min_actionable_rate_for_phase1,
         min_contiguous_seconds=argv.min_contiguous_actionable_seconds_for_phase1,
     )
@@ -1010,6 +1204,7 @@ def main() -> int:
         "is_active": selected.market.active,
         "start_ns": selected.market.start_ns,
         "end_ns": selected.market.end_ns,
+        "selected_market_timing_state": selected_timing_state,
     } if selected else None
 
     summary = {
@@ -1022,6 +1217,7 @@ def main() -> int:
         "reference_source": "BINANCE_BTCUSDT",
         "observation_duration_seconds": argv.duration_seconds,
         "poll_seconds": argv.poll_seconds,
+        "max_wait_for_start_seconds": argv.max_wait_for_start_seconds,
         "snapshot_count": len(snapshots),
         "book_poll_success_count": success_count,
         "book_poll_failure_count": failure_count,
@@ -1030,6 +1226,13 @@ def main() -> int:
             k: {q: c for q, c in qq.items()}
             for k, qq in bucket_qq.items()
         },
+        "timing_state_counts": timing_counts,
+        "pre_start_snapshot_count": pre_start_count,
+        "in_lifecycle_snapshot_count": in_lifecycle_count,
+        "expired_snapshot_count": expired_count,
+        "lifecycle_coverage_seconds": lifecycle_coverage_seconds,
+        "lifecycle_coverage_rate": lifecycle_coverage_rate,
+        "all_snapshots_pre_start": all_pre_start,
         "actionable_two_sided_book_count": actionable_stats["actionable_two_sided_book_count"],
         "actionable_two_sided_book_rate": actionable_stats["actionable_two_sided_book_rate"],
         "first_actionable_ts_event_ns": actionable_stats["first_actionable_ts_event_ns"],
@@ -1043,7 +1246,9 @@ def main() -> int:
             "Observer-only. No orders. No keys.",
             "Public API data only.",
             "Product existence is separate from active market availability.",
+            "Active market availability is separate from book poll success.",
             "Book poll success is separate from actionable two-sided liquidity.",
+            "A market being active/open for trading does not necessarily mean the event lifecycle has started.",
             "4h Chainlink hypothesis is parked — do not include in this phase.",
             "Single 1h market observed — not a global sample.",
             "Observation window may not cover full market lifecycle.",
