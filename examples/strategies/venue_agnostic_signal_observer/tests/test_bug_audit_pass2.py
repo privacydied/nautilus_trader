@@ -1,5 +1,6 @@
 """Regression tests for bug audit pass 2 numerical robustness fixes."""
 
+import json
 import math
 
 import pytest
@@ -191,3 +192,51 @@ def test_data_fetcher_empty_csv_has_header(tmp_path):
     write_ohlc_csv([], str(path))
 
     assert path.read_text().strip() == "timestamp,open,high,low,close,volume"
+
+
+
+def test_run_derivatives_spot_report_top_groups_filters_non_finite_group_means(tmp_path):
+    from ..run_derivatives_spot_lead_lag import EvalSummary, _write_md
+
+    summary = EvalSummary(
+        capture_dir="capture",
+        capture_mode="FULL_ACTIVE",
+        verdict="NEEDS_MORE_DATA",
+        all_in_cost_bps=50.0,
+        results_by_group=[
+            {"signal_type": "poison", "lookback_ms": 1, "horizon_ms": 1, "mean_net_bps": float("nan"), "valid_count": 99},
+            {"signal_type": "good", "lookback_ms": 1, "horizon_ms": 1, "mean_net_bps": 5.0, "valid_count": 1},
+        ],
+        best_group={"signal_type": "good", "lookback_ms": 1, "horizon_ms": 1, "mean_net_bps": 5.0, "valid_count": 1},
+    )
+
+    _write_md(summary, tmp_path)
+    report = (tmp_path / "report.md").read_text()
+
+    assert "poison" not in report
+    assert "good" in report
+    assert "5.0" in report
+
+
+def test_run_mcpt_export_skip_reason_ignores_nan_group_means(tmp_path, capsys):
+    from ..run_mcpt_export import main
+
+    report_dir = tmp_path / "report"
+    report_dir.mkdir()
+    (report_dir / "summary.json").write_text(json.dumps({
+        "results_by_group": [
+            {"mean_net_bps": float("nan"), "valid_count": 100, "candidate": False},
+            {"mean_net_bps": -50.0, "valid_count": 100, "candidate": False},
+        ]
+    }))
+
+    old_argv = __import__("sys").argv
+    try:
+        __import__("sys").argv = ["run_mcpt_export", "--report-dir", str(report_dir)]
+        main()
+    finally:
+        __import__("sys").argv = old_argv
+
+    out = capsys.readouterr().out
+    assert "nan" not in out.lower()
+    assert "-50.0" in out

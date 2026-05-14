@@ -209,7 +209,7 @@ def evaluate_dex_events(
             )
 
             for fr in forward_returns:
-                valid = fr.valid and fr.net_return_bps is not None
+                valid = fr.valid and fr.net_return_bps is not None and math.isfinite(fr.net_return_bps)
                 result = DexCexForwardResult(
                     event_id=evt.event_id,
                     asset=evt.asset,
@@ -361,7 +361,7 @@ def run_sweep(args: argparse.Namespace) -> DexCexDislocationSummary:
     candidate_groups: list[dict] = []
 
     for (venue, asset, horizon), group_results in sorted(groups.items()):
-        valid = [r for r in group_results if r.valid and r.net_bps is not None]
+        valid = [r for r in group_results if r.valid and r.net_bps is not None and math.isfinite(r.net_bps)]
         rejected = [r for r in group_results if not r.valid]
 
         stats_group = {
@@ -397,8 +397,8 @@ def run_sweep(args: argparse.Namespace) -> DexCexDislocationSummary:
             })
 
         # Candidate gate
-        all_nets = [r.net_bps for r in group_results if r.net_bps is not None]
-        gross_nets = [r.gross_bps for r in group_results if r.gross_bps is not None]
+        all_nets = [r.net_bps for r in group_results if r.net_bps is not None and math.isfinite(r.net_bps)]
+        gross_nets = [r.gross_bps for r in group_results if r.gross_bps is not None and math.isfinite(r.gross_bps)]
         gate = evaluate_candidate_group(
             forward_returns=[_r2tfr(r) for r in valid],
             baseline_forward_returns=[],

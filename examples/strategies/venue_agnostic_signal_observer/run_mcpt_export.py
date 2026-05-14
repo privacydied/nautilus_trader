@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -30,6 +31,13 @@ from .mcpt_export import (
     export_mcpt_summary,
     select_mcpt_candidate_groups,
 )
+
+
+def _format_optional_bps(value: object) -> str:
+    """Format finite numeric bps values; return N/A for missing/non-finite values."""
+    if isinstance(value, int | float) and math.isfinite(value):
+        return f"{value:.2f}"
+    return "N/A"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -119,7 +127,7 @@ def main() -> None:
 
     if not selected:
         # Determine skip reason from the data
-        all_net = [g.get("mean_net_bps") for g in all_groups if g.get("mean_net_bps") is not None]
+        all_net = [g.get("mean_net_bps") for g in all_groups if g.get("mean_net_bps") is not None and math.isfinite(g["mean_net_bps"])]
         if all_net:
             from statistics import mean
             avg_net = mean(all_net)
@@ -158,7 +166,7 @@ def main() -> None:
             f"  EXPORTED: {path.name} "
             f"({group.get('signal_type', '?')}/{group.get('lookback_ms', '?')}ms/"
             f"{group.get('horizon_ms', '?')}ms, "
-            f"net={group.get('mean_net_bps', '?'):.2f} bps, "
+            f"net={_format_optional_bps(group.get('mean_net_bps'))} bps, "
             f"n={group.get('valid_count', '?')})"
         )
 

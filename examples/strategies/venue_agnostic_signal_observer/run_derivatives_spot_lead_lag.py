@@ -549,7 +549,7 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
                     break
 
         for bucket, frs in bucket_map.items():
-            valid = [r for r in frs if r.valid and r.net_return_bps is not None]
+            valid = [r for r in frs if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
             if not valid:
                 continue
             nets = [r.net_return_bps for r in valid if r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
@@ -586,12 +586,12 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
 
     for gkey, gdata in group_map.items():
         frs = gdata["forward_returns"]
-        valid = [r for r in frs if r.valid and r.net_return_bps is not None]
+        valid = [r for r in frs if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
         if not valid:
             continue
 
         nets = [r.net_return_bps for r in valid]
-        raws = [r.raw_return_bps for r in valid if r.raw_return_bps is not None]
+        raws = [r.raw_return_bps for r in valid if r.raw_return_bps is not None and math.isfinite(r.raw_return_bps)]
 
         mean_raw = statistics.mean(raws) if raws else 0.0
         mean_net = statistics.mean(nets)
@@ -632,7 +632,7 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
                             slippage_bps=args.slippage_bps,
                         )
                         for bfr in bl_frs:
-                            if bfr.valid and bfr.net_return_bps is not None:
+                            if bfr.valid and bfr.net_return_bps is not None and math.isfinite(bfr.net_return_bps):
                                 bl_nets_all.append(bfr.net_return_bps)
                 if bl_nets_all:
                     baseline_mean_net = round(statistics.mean(bl_nets_all), 4)

@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import statistics
 import sys
@@ -350,7 +351,7 @@ def _compute_group_stats(
     group_key: dict,
 ) -> dict:
     """Compute statistics for a single (lookback, threshold) group."""
-    valid = [r for r in all_forward_returns if r.valid and r.net_return_bps is not None]
+    valid = [r for r in all_forward_returns if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
     rejected = [r for r in all_forward_returns if not r.valid]
 
     if not valid:
@@ -616,7 +617,7 @@ def run_sweep(args: argparse.Namespace) -> TickLeadLagSummary:
                     baseline_valid = [
                         r
                         for r in baseline_returns
-                        if r.valid and r.net_return_bps is not None
+                        if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)
                     ]
                     if baseline_valid:
                         bnets = [r.net_return_bps for r in baseline_valid]
@@ -860,7 +861,7 @@ def _write_outputs(summary: TickLeadLagSummary, out_dir: str, skip_baseline: boo
                 horizon_agg[key]["groups"] += 1
                 if g.get("valid_events", 0) > 0:
                     horizon_agg[key]["total_valid"] += g["valid_events"]
-                    if g.get("mean_net_return_bps") is not None:
+                    if g.get("mean_net_return_bps") is not None and math.isfinite(g["mean_net_return_bps"]):
                         horizon_agg[key]["mean_nets"].append(g["mean_net_return_bps"])
 
     horizon_rows = []
@@ -899,7 +900,7 @@ def _write_outputs(summary: TickLeadLagSummary, out_dir: str, skip_baseline: boo
             }
         vp_agg[pair_key]["total_signals"] += g.get("total_signals", 0)
         vp_agg[pair_key]["valid_events"] += g.get("valid_events", 0)
-        if g.get("mean_net_return_bps") is not None:
+        if g.get("mean_net_return_bps") is not None and math.isfinite(g["mean_net_return_bps"]):
             vp_agg[pair_key]["mean_nets"].append(g["mean_net_return_bps"])
         if g.get("symbol"):
             vp_agg[pair_key]["symbols"].add(g["symbol"])
@@ -939,7 +940,7 @@ def _write_outputs(summary: TickLeadLagSummary, out_dir: str, skip_baseline: boo
             }
         asset_agg[asset]["total_signals"] += g.get("total_signals", 0)
         asset_agg[asset]["valid_events"] += g.get("valid_events", 0)
-        if g.get("mean_net_return_bps") is not None:
+        if g.get("mean_net_return_bps") is not None and math.isfinite(g["mean_net_return_bps"]):
             asset_agg[asset]["mean_nets"].append(g["mean_net_return_bps"])
 
     asset_rows = []
@@ -1203,7 +1204,7 @@ def generate_markdown_report(
     # 8. Best groups by mean net return (top 5)
     h("Best Groups by Mean Net Return (Top 5)")
     sorted_by_mean = sorted(
-        [g for g in groups if g.get("mean_net_return_bps") is not None],
+        [g for g in groups if g.get("mean_net_return_bps") is not None and math.isfinite(g["mean_net_return_bps"])],
         key=lambda x: x["mean_net_return_bps"],
         reverse=True,
     )[:5]
@@ -1231,7 +1232,7 @@ def generate_markdown_report(
     # 9. Best groups by median net return (top 5)
     h("Best Groups by Median Net Return (Top 5)")
     sorted_by_median = sorted(
-        [g for g in groups if g.get("median_net_return_bps") is not None],
+        [g for g in groups if g.get("median_net_return_bps") is not None and math.isfinite(g["median_net_return_bps"])],
         key=lambda x: x["median_net_return_bps"],
         reverse=True,
     )[:5]

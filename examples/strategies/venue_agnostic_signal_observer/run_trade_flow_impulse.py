@@ -384,7 +384,7 @@ def run_sweep(args: argparse.Namespace) -> TradeFlowImpulseSummary:
                             forward_returns.extend(rets)
 
                         # Compute group stats
-                        valid = [r for r in forward_returns if r.valid and r.net_return_bps is not None]
+                        valid = [r for r in forward_returns if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
                         rejected = [r for r in forward_returns if not r.valid]
 
                         if valid:
@@ -468,7 +468,7 @@ def run_sweep(args: argparse.Namespace) -> TradeFlowImpulseSummary:
                         )
                         baseline_returns.extend(rets)
 
-                    bl_valid = [r for r in baseline_returns if r.valid and r.net_return_bps is not None]
+                    bl_valid = [r for r in baseline_returns if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
                     if bl_valid:
                         bnets = [r.net_return_bps for r in bl_valid]
                         baseline_stats = {
@@ -679,7 +679,7 @@ def _write_outputs(summary: TradeFlowImpulseSummary, out_dir: str, skip_baseline
             st_agg[st] = {"signal_type": st, "total_signals": 0, "valid_events": 0, "mean_nets": []}
         st_agg[st]["total_signals"] += g.get("total_signals", 0)
         st_agg[st]["valid_events"] += g.get("valid_events", 0)
-        if g.get("mean_net_return_bps") is not None:
+        if g.get("mean_net_return_bps") is not None and math.isfinite(g["mean_net_return_bps"]):
             st_agg[st]["mean_nets"].append(g["mean_net_return_bps"])
 
     st_rows = []
@@ -859,7 +859,7 @@ def generate_markdown_report(
         p("No group results.")
 
     h("Best Groups by Mean Net Return (Top 5)")
-    valid_groups = [g for g in groups if g.get("mean_net_return_bps") is not None]
+    valid_groups = [g for g in groups if g.get("mean_net_return_bps") is not None and math.isfinite(g["mean_net_return_bps"])]
     top5 = sorted(valid_groups, key=lambda x: x["mean_net_return_bps"], reverse=True)[:5]
     if top5:
         header = "| Source | Target | Symbol | Type | LB(ms) | Mean Net(bps) | Valid | Win Rate |"

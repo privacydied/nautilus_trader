@@ -276,7 +276,7 @@ def run_sweep(args: argparse.Namespace) -> DerivativesLeadLagSummary:
             )
             forward_returns.extend(rets)
 
-        valid = [r for r in forward_returns if r.valid and r.net_return_bps is not None]
+        valid = [r for r in forward_returns if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
         rejected = [r for r in forward_returns if not r.valid]
 
         if valid:
@@ -331,7 +331,7 @@ def run_sweep(args: argparse.Namespace) -> DerivativesLeadLagSummary:
                     quote_mismatch_buffer_bps=args.quote_mismatch_bps,
                     quote_mismatch=True,
                 ))
-            bl_valid = [r for r in bl_fwd if r.valid and r.net_return_bps is not None]
+            bl_valid = [r for r in bl_fwd if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
             if bl_valid:
                 bl_nets = [r.net_return_bps for r in bl_valid]
                 stats["baseline_mean_net_bps"] = round(statistics.mean(bl_nets), 4)

@@ -58,6 +58,7 @@ python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spo
 - Missing OI produces `flat_or_unknown` bucket, never a crash
 - No overlap or insufficient overlap produces `NEEDS_MORE_DATA`, not `REJECTED`
 - Quiet captures (price movement far below the cost wall) produce `NEEDS_MORE_DATA`
+- Summary/report aggregation filters non-finite (`NaN`/`inf`) return and bps values before means, medians, rankings, MCPT skip reasons, and candidate gates; malformed market data must not poison a whole group.
 
 ### Allowed verdicts
 

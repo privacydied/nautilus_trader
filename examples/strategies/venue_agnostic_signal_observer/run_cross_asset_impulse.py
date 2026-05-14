@@ -518,7 +518,7 @@ def _run(args: argparse.Namespace) -> None:
         )
 
         # Run candidate gate evaluation
-        valid_only = [r for r in valid_returns if r.valid and r.net_return_bps is not None]
+        valid_only = [r for r in valid_returns if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
         if valid_only:
             # Generate random baseline from source ticks
             src_ticks = tick_data.get(skey, [])
@@ -555,7 +555,7 @@ def _run(args: argparse.Namespace) -> None:
                 pair_res.candidate_gate = gate_result
 
                 # Separate gate for long-executable subset
-                valid_long_only = [r for r in valid_long_returns if r.valid and r.net_return_bps is not None]
+                valid_long_only = [r for r in valid_long_returns if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
                 if valid_long_only:
                     # Subset baseline
                     baseline_long_events = generate_random_baseline(
@@ -589,7 +589,7 @@ def _run(args: argparse.Namespace) -> None:
                     )
 
                 # Separate gate for diagnostic subset
-                valid_diag_only = [r for r in valid_diag_returns if r.valid and r.net_return_bps is not None]
+                valid_diag_only = [r for r in valid_diag_returns if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
                 if valid_diag_only:
                     baseline_diag_events = generate_random_baseline(
                         source_ticks=src_ticks,
