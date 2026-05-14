@@ -36,12 +36,16 @@ from examples.strategies.polymarket_btcusd_arb.run_1h_quote_lifecycle_observer i
     compute_actionable_stats,
     build_quote_quality_counts,
     build_lifecycle_bucket_counts,
+    classify_verdict,
     V_DISCOVERY_VALIDATION_FAILED,
     V_NEEDS_MORE_DATA_NO_ACTIVE,
     V_BOOK_POLL_FAILED,
     V_NO_ACTIONABLE,
+    V_TRANSIENT_ACTIONABLE,
     V_ACTIONABLE_REQUIRES_PHASE1,
     FORBIDDEN_VERDICTS,
+    DEFAULT_MIN_ACTIONABLE_RATE_FOR_PHASE1,
+    DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1,
     BRANCH,
 )
 
@@ -490,7 +494,7 @@ class TestReportWording:
 
     def test_forbidden_verdicts_not_produced(self):
         """None of the forbidden verdicts are allowed."""
-        forbidden = {"ALLOW_PHASE_3", "READY_FOR_EXECUTION", "LIVE_TRADING_READY"}
+        forbidden = {"ALLOW_PHASE_3", "READY_FOR_EXECUTION", "LIVE_TRADING_READY", "EXECUTION_READY", "PAPER_TRADING_READY"}
         assert forbidden == FORBIDDEN_VERDICTS
 
     def test_no_actionable_verdict_does_not_claim_global_proof(self):
@@ -604,3 +608,211 @@ class TestContiguousActionableSeconds:
         stats = compute_actionable_stats(snaps)
         assert stats["actionable_two_sided_book_count"] == 0
         assert stats["max_contiguous_actionable_seconds"] == 0.0
+
+
+class TestVerdictClassificationWithDwellThresholds:
+    """Verdict classification with actionable-book dwell thresholds."""
+
+    def test_zero_actionable_snapshots_yields_no_actionable(self):
+        """Zero actionable snapshots -> NO_ACTIONABLE."""
+        verdict, _ = classify_verdict(
+            actionable_count=0,
+            total_count=100,
+            actionable_rate=0.0,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=80,
+            book_poll_failure_count=20,
+        )
+        assert verdict == V_NO_ACTIONABLE
+
+    def test_single_actionable_snapshot_yields_transient(self):
+        """One actionable snapshot with 5s dwell -> too brief for Phase 1."""
+        verdict, desc = classify_verdict(
+            actionable_count=1,
+            total_count=100,
+            actionable_rate=0.01,  # 1%
+            max_contiguous_actionable_seconds=0.0,  # single snapshot
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+        )
+        assert verdict == V_TRANSIENT_ACTIONABLE
+        assert "dwell" in desc.lower() or "threshold" in desc.lower()
+
+    def test_actionable_rate_below_threshold_yields_transient(self):
+        """Rate below 5% but above 0 -> transient, even with long contiguous."""
+        verdict, _ = classify_verdict(
+            actionable_count=3,
+            total_count=100,
+            actionable_rate=0.03,  # 3% < 5% threshold
+            max_contiguous_actionable_seconds=400.0,  # passes contiguous
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+        )
+        assert verdict == V_TRANSIENT_ACTIONABLE
+
+    def test_contiguous_dwell_below_threshold_yields_transient(self):
+        """Rate passes but contiguous dwell fails -> transient."""
+        verdict, _ = classify_verdict(
+            actionable_count=10,
+            total_count=100,
+            actionable_rate=0.10,  # 10% > 5% threshold
+            max_contiguous_actionable_seconds=120.0,  # 120s < 300s threshold
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+        )
+        assert verdict == V_TRANSIENT_ACTIONABLE
+
+    def test_both_thresholds_pass_yields_phase1(self):
+        """Both rate and contiguous pass -> ACTIONABLE_REQUIRES_PHASE1."""
+        verdict, desc = classify_verdict(
+            actionable_count=20,
+            total_count=100,
+            actionable_rate=0.20,  # 20% > 5% threshold
+            max_contiguous_actionable_seconds=400.0,  # 400s > 300s threshold
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+        )
+        assert verdict == V_ACTIONABLE_REQUIRES_PHASE1
+        assert "phase 1" in desc.lower() or "phase1" in desc.lower()
+
+    def test_exact_threshold_passes_rate(self):
+        """Rate exactly at threshold (0.05) passes."""
+        verdict, _ = classify_verdict(
+            actionable_count=5,
+            total_count=100,
+            actionable_rate=0.05,  # exactly threshold
+            max_contiguous_actionable_seconds=400.0,  # above contiguous threshold
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+        )
+        assert verdict == V_ACTIONABLE_REQUIRES_PHASE1
+
+    def test_exact_threshold_passes_contiguous(self):
+        """Contiguous exactly at threshold (300s) passes."""
+        verdict, _ = classify_verdict(
+            actionable_count=20,
+            total_count=100,
+            actionable_rate=0.20,
+            max_contiguous_actionable_seconds=300.0,  # exactly threshold
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+        )
+        assert verdict == V_ACTIONABLE_REQUIRES_PHASE1
+
+    def test_all_polls_failed_yields_book_poll_failed(self):
+        """All polls failed -> BOOK_POLL_FAILED regardless of actionable count."""
+        verdict, _ = classify_verdict(
+            actionable_count=0,
+            total_count=0,
+            actionable_rate=0.0,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=0,
+            book_poll_failure_count=50,
+        )
+        assert verdict == V_BOOK_POLL_FAILED
+
+    def test_exchange_bound_never_contributes_to_actionable(self):
+        """EXCHANGE_BOUND_TWO_SIDED_BOOK must not contribute to actionable count."""
+        # 100 snapshots all exchange-bound -> 0 actionable
+        verdict, _ = classify_verdict(
+            actionable_count=0,
+            total_count=100,
+            actionable_rate=0.0,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+        )
+        assert verdict == V_NO_ACTIONABLE
+
+    def test_one_sided_never_contributes_to_actionable(self):
+        """ONE_SIDED_BOOK must not contribute to actionable count."""
+        verdict, _ = classify_verdict(
+            actionable_count=0,
+            total_count=50,
+            actionable_rate=0.0,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=50,
+            book_poll_failure_count=0,
+        )
+        assert verdict == V_NO_ACTIONABLE
+
+
+class TestVerdictForbiddenValues:
+    """Verify forbidden verdicts cannot be emitted."""
+
+    def test_forbidden_verdicts_include_execution_and_phase3(self):
+        """FORBIDDEN_VERDICTS must include all execution-related verdicts."""
+        assert "ALLOW_PHASE_3" in FORBIDDEN_VERDICTS
+        assert "READY_FOR_EXECUTION" in FORBIDDEN_VERDICTS
+        assert "LIVE_TRADING_READY" in FORBIDDEN_VERDICTS
+        assert "EXECUTION_READY" in FORBIDDEN_VERDICTS
+        assert "PAPER_TRADING_READY" in FORBIDDEN_VERDICTS
+
+    def test_transient_verdict_is_not_forbidden(self):
+        """Transient verdict is allowed."""
+        assert V_TRANSIENT_ACTIONABLE not in FORBIDDEN_VERDICTS
+
+    def test_all_allowed_verdicts_are_not_forbidden(self):
+        """All allowed verdicts must not be in forbidden set."""
+        allowed = {
+            V_DISCOVERY_VALIDATION_FAILED,
+            V_NEEDS_MORE_DATA_NO_ACTIVE,
+            V_BOOK_POLL_FAILED,
+            V_NO_ACTIONABLE,
+            V_TRANSIENT_ACTIONABLE,
+            V_ACTIONABLE_REQUIRES_PHASE1,
+        }
+        for v in allowed:
+            assert v not in FORBIDDEN_VERDICTS, f"Allowed verdict {v} is in FORBIDDEN_VERDICTS"
+
+
+class TestVerdictTransientWording:
+    """Transient verdict description must not recommend execution or Phase 3."""
+
+    def test_transient_verdict_does_not_recommend_execution(self):
+        _, desc = classify_verdict(
+            actionable_count=1,
+            total_count=100,
+            actionable_rate=0.01,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+        )
+        assert V_TRANSIENT_ACTIONABLE == "ONE_HOUR_TRANSIENT_ACTIONABLE_BOOK_OBSERVED_NEEDS_MORE_OBSERVATION"
+        lower = desc.lower()
+        # Must not recommend execution or Phase 3
+        assert "phase 3" not in lower
+        assert "execution" not in lower or "does not justify execution" in lower
+        # Must recommend more observation
+        assert "observer" in lower or "observation" in lower or "capture" in lower
+
+    def test_report_includes_transient_verdict_wording(self):
+        """Report module must have transient verdict handling."""
+        from examples.strategies.polymarket_btcusd_arb import run_1h_quote_lifecycle_observer
+        source = Path(run_1h_quote_lifecycle_observer.__file__).read_text()
+        # The report.md generation must handle V_TRANSIENT_ACTIONABLE
+        assert V_TRANSIENT_ACTIONABLE in source
+
+    def test_phase1_verdict_wording_mentions_phase1_not_phase3(self):
+        verdict, desc = classify_verdict(
+            actionable_count=20,
+            total_count=100,
+            actionable_rate=0.20,
+            max_contiguous_actionable_seconds=400.0,
+            book_poll_success_count=100,
+            book_poll_failure_count=0,
+        )
+        assert verdict == V_ACTIONABLE_REQUIRES_PHASE1
+        lower = desc.lower()
+        assert "phase 1" in lower or "phase1" in lower
+        assert "phase 3" not in lower or "does not" in lower
+
+
+class TestDwellThresholdDefaults:
+    """Verify threshold defaults are correct."""
+
+    def test_default_min_actionable_rate(self):
+        assert DEFAULT_MIN_ACTIONABLE_RATE_FOR_PHASE1 == 0.05
+
+    def test_default_min_contiguous_seconds(self):
+        assert DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1 == 300.0

@@ -686,3 +686,53 @@ Active market availability and quote quality remain to be observed.
 - Duration discovery fix tests added to test_duration_spread_probe.py
 - All existing safety tests must still pass
 - No execution code added
+
+## DQO-2 1h Actionable Dwell Threshold Fix
+
+Branch: `polymarket-btc-updown-1h-quote-lifecycle-v1`
+Commit before change: `f0eb7b7717`
+
+### Problem
+A single actionable two-sided snapshot (e.g. 5 seconds within a 1h lifecycle) was enough to emit `ONE_HOUR_ACTIONABLE_BOOK_OBSERVED_REQUIRES_PHASE1_BACKTEST`. That verdict is too loose. Transient book flickers or API artifacts must not justify a Phase 1 backtest.
+
+### Thresholds Added
+- `min_actionable_rate_for_phase1 = 0.05` (at least 5% of snapshots must be `TWO_SIDED_BOOK`)
+- `min_contiguous_actionable_seconds_for_phase1 = 300` (at least 300s contiguous actionable dwell)
+- Both must pass to emit `ONE_HOUR_ACTIONABLE_BOOK_OBSERVED_REQUIRES_PHASE1_BACKTEST`
+- If actionable books exist but either threshold fails, emit new verdict `ONE_HOUR_TRANSIENT_ACTIONABLE_BOOK_OBSERVED_NEEDS_MORE_OBSERVATION`
+
+### New Verdict Added
+`ONE_HOUR_TRANSIENT_ACTIONABLE_BOOK_OBSERVED_NEEDS_MORE_OBSERVATION` — actionable snapshots appeared but insufficient dwell/rate to justify Phase 1.
+
+### Forbidden Verdicts Expanded
+`EXECUTION_READY` and `PAPER_TRADING_READY` added to forbidden set alongside `ALLOW_PHASE_3`, `READY_FOR_EXECUTION`, `LIVE_TRADING_READY`.
+
+### Classify Verdict Function
+`classify_verdict()` extracted as a pure function with explicit thresholds, replacing inline if/elif logic in `main()`.
+
+### CLI Options Added
+- `--min-actionable-rate-for-phase1` (default: 0.05)
+- `--min-contiguous-actionable-seconds-for-phase1` (default: 300)
+
+### Summary JSON Fields Added
+- `min_actionable_rate_for_phase1`
+- `min_contiguous_actionable_seconds_for_phase1`
+
+### Report.md Fields Added
+- Min actionable rate threshold
+- Min contiguous seconds threshold
+
+### Tests Added
+18 new tests across 4 test classes:
+- `TestVerdictClassificationWithDwellThresholds` (9 tests: zero actionable, single snapshot, rate-below-threshold, contiguous-below-threshold, both-pass, exact-threshold-rate, exact-threshold-contiguous, all-polls-failed, exchange-bound-no-contribution)
+- `TestVerdictForbiddenValues` (3 tests: forbidden set expanded, transient not forbidden, all allowed not forbidden)
+- `TestVerdictTransientWording` (3 tests: no execution recommendation, report includes transient, Phase 1 not Phase 3)
+- `TestDwellThresholdDefaults` (2 tests: default values correct)
+
+### Tests Run
+- 72 observer tests pass (54 existing + 18 new)
+- 273 total tests pass (72 + parity + other modules)
+- Safety checks: pass, zero violations
+
+### Why Single-Snapshot Actionable Is Insufficient
+A momentary 0.01/0.99-to-normal book transition lasting seconds does not demonstrate sustained two-sided liquidity. A Phase 1 backtest requires markets with meaningful dwell — enough time and enough snapshots for the strategy to enter, hold, and exit. The 5%/300s thresholds represent minimum evidence that a market has actionable books persisting long enough to be tradeable.

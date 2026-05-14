@@ -69,10 +69,78 @@ V_DISCOVERY_VALIDATION_FAILED = "DISCOVERY_VALIDATION_FAILED"
 V_NEEDS_MORE_DATA_NO_ACTIVE = "NEEDS_MORE_DATA_NO_ACTIVE_1H_MARKET"
 V_BOOK_POLL_FAILED = "ONE_HOUR_BOOK_POLL_FAILED"
 V_NO_ACTIONABLE = "ONE_HOUR_NO_ACTIONABLE_BOOK_OBSERVED"
+V_TRANSIENT_ACTIONABLE = "ONE_HOUR_TRANSIENT_ACTIONABLE_BOOK_OBSERVED_NEEDS_MORE_OBSERVATION"
 V_ACTIONABLE_REQUIRES_PHASE1 = "ONE_HOUR_ACTIONABLE_BOOK_OBSERVED_REQUIRES_PHASE1_BACKTEST"
 
 # Forbidden verdicts that must never appear
-FORBIDDEN_VERDICTS = {"ALLOW_PHASE_3", "READY_FOR_EXECUTION", "LIVE_TRADING_READY"}
+FORBIDDEN_VERDICTS = {
+    "ALLOW_PHASE_3",
+    "READY_FOR_EXECUTION",
+    "LIVE_TRADING_READY",
+    "EXECUTION_READY",
+    "PAPER_TRADING_READY",
+}
+
+# Default dwell thresholds for actionable-book verdict
+DEFAULT_MIN_ACTIONABLE_RATE_FOR_PHASE1 = 0.05
+DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1 = 300.0
+
+
+def classify_verdict(
+    actionable_count: int,
+    total_count: int,
+    actionable_rate: float,
+    max_contiguous_actionable_seconds: float,
+    book_poll_success_count: int,
+    book_poll_failure_count: int,
+    min_actionable_rate: float = DEFAULT_MIN_ACTIONABLE_RATE_FOR_PHASE1,
+    min_contiguous_seconds: float = DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1,
+) -> tuple[str, str]:
+    """Classify the observation verdict based on actionable book statistics.
+
+    Returns (verdict_constant, verdict_description).
+
+    A single 5-second actionable snapshot is not enough to justify a Phase 1
+    backtest. Actionable liquidity must demonstrate dwell: both a minimum
+    rate across snapshots and a minimum contiguous duration.
+    """
+    all_polls_failed = book_poll_success_count == 0 and book_poll_failure_count > 0
+
+    if all_polls_failed:
+        return V_BOOK_POLL_FAILED, (
+            "Book polling failed for the selected 1h market. "
+            "This is not evidence against product existence."
+        )
+
+    any_actionable = actionable_count > 0
+
+    if not any_actionable:
+        return V_NO_ACTIONABLE, (
+            "No actionable two-sided 1h books were observed in this run. "
+            "This is evidence against the 1h longer-duration escape hatch "
+            "for the observed window only. It is not a global mathematical proof."
+        )
+
+    # Actionable books exist — check dwell thresholds
+    rate_passes = actionable_rate >= min_actionable_rate
+    contiguous_passes = max_contiguous_actionable_seconds >= min_contiguous_seconds
+
+    if rate_passes and contiguous_passes:
+        return V_ACTIONABLE_REQUIRES_PHASE1, (
+            "1h Binance-referenced BTC UpDown showed actionable two-sided book quality "
+            "in live observation with sufficient dwell. This does not justify execution "
+            "or Phase 3. It justifies a new Phase 1 backtest hypothesis for 1h BTC "
+            "UpDown on a separate branch."
+        )
+
+    # Actionable books exist but failed at least one dwell threshold
+    rate_str = f"rate={actionable_rate:.4f} (threshold={min_actionable_rate})"
+    contiguous_str = f"contiguous={max_contiguous_actionable_seconds:.1f}s (threshold={min_contiguous_seconds:.0f}s)"
+    return V_TRANSIENT_ACTIONABLE, (
+        f"Some actionable two-sided book snapshots appeared, but dwell threshold was "
+        f"not met ({rate_str}, {contiguous_str}). Not enough dwell or lifecycle coverage "
+        f"exists to justify a Phase 1 backtest yet. Repeat observer-only 1h lifecycle captures."
+    )
 
 
 @dataclass(frozen=True)
@@ -366,6 +434,8 @@ def _write_report_md(
     lines.append(f"| Actionable TWO_SIDED_BOOK count | {actionable_count} |")
     lines.append(f"| Actionable TWO_SIDED_BOOK rate | {actionable_rate:.4f} |")
     lines.append(f"| Max contiguous actionable seconds | {max_contiguous:.1f} |")
+    lines.append(f"| Min actionable rate threshold | {summary.get('min_actionable_rate_for_phase1', 0.05)} |")
+    lines.append(f"| Min contiguous seconds threshold | {summary.get('min_contiguous_actionable_seconds_for_phase1', 300)} |")
     lines.append("")
 
     # Quote quality counts
@@ -413,6 +483,11 @@ def _write_report_md(
         lines.append("No actionable two-sided 1h books were observed in this run.")
         lines.append("This is evidence against the 1h longer-duration escape hatch for the")
         lines.append("observed window only. It is not a global mathematical proof.\n")
+    elif verdict == V_TRANSIENT_ACTIONABLE:
+        lines.append("Some actionable two-sided book snapshots appeared, but not enough dwell")
+        lines.append("or lifecycle coverage exists to justify a Phase 1 backtest yet.")
+        lines.append("Recommend more observer-only 1h lifecycle captures.")
+        lines.append("This does not recommend execution or Phase 3.\n")
     elif verdict == V_NEEDS_MORE_DATA_NO_ACTIVE:
         lines.append("No active 1h BTC UpDown market was available during this run.")
         lines.append("This produces no liquidity evidence and must be treated as NEEDS_MORE_DATA.\n")
@@ -513,6 +588,18 @@ def main() -> int:
         default=False,
         help="Exit nonzero if known slug validation fails",
     )
+    parser.add_argument(
+        "--min-actionable-rate-for-phase1",
+        type=float,
+        default=DEFAULT_MIN_ACTIONABLE_RATE_FOR_PHASE1,
+        help=f"Minimum actionable two-sided book rate to justify Phase 1 backtest (default: {DEFAULT_MIN_ACTIONABLE_RATE_FOR_PHASE1})",
+    )
+    parser.add_argument(
+        "--min-contiguous-actionable-seconds-for-phase1",
+        type=float,
+        default=DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1,
+        help=f"Minimum contiguous actionable seconds to justify Phase 1 backtest (default: {DEFAULT_MIN_CONTIGUOUS_ACTIONABLE_SECONDS_FOR_PHASE1})",
+    )
     argv = parser.parse_args()
 
     # Phase banner
@@ -604,6 +691,8 @@ def main() -> int:
             "first_actionable_ts_event_ns": None,
             "last_actionable_ts_event_ns": None,
             "max_contiguous_actionable_seconds": 0.0,
+            "min_actionable_rate_for_phase1": argv.min_actionable_rate_for_phase1,
+            "min_contiguous_actionable_seconds_for_phase1": argv.min_contiguous_actionable_seconds_for_phase1,
             "overall_verdict": V_DISCOVERY_VALIDATION_FAILED,
             "verdict_description": "Known 1h slug validation failed. Cannot proceed.",
             "limitations": [
@@ -716,6 +805,8 @@ def main() -> int:
             "first_actionable_ts_event_ns": None,
             "last_actionable_ts_event_ns": None,
             "max_contiguous_actionable_seconds": 0.0,
+            "min_actionable_rate_for_phase1": argv.min_actionable_rate_for_phase1,
+            "min_contiguous_actionable_seconds_for_phase1": argv.min_contiguous_actionable_seconds_for_phase1,
             "overall_verdict": V_NEEDS_MORE_DATA_NO_ACTIVE,
             "verdict_description": "No active 1h BTC UpDown market was available during this run.",
             "limitations": [
@@ -884,32 +975,21 @@ def main() -> int:
     print(f"  Actionable TWO_SIDED_BOOK count: {actionable_stats['actionable_two_sided_book_count']}")
     print(f"  Actionable rate: {actionable_stats['actionable_two_sided_book_rate']:.4f}")
     print(f"  Max contiguous actionable: {actionable_stats['max_contiguous_actionable_seconds']:.1f}s")
+    print(f"  Min actionable rate threshold: {argv.min_actionable_rate_for_phase1}")
+    print(f"  Min contiguous seconds threshold: {argv.min_contiguous_actionable_seconds_for_phase1}")
     print(f"  Quote quality counts: {qq_counts}")
 
-    # Determine verdict
-    any_actionable = actionable_stats["actionable_two_sided_book_count"] > 0
-    all_polls_failed = success_count == 0 and failure_count > 0
-
-    if all_polls_failed:
-        overall_verdict = V_BOOK_POLL_FAILED
-        verdict_description = (
-            "Book polling failed for the selected 1h market. "
-            "This is not evidence against product existence."
-        )
-    elif any_actionable:
-        overall_verdict = V_ACTIONABLE_REQUIRES_PHASE1
-        verdict_description = (
-            "1h Binance-referenced BTC UpDown showed actionable two-sided book quality "
-            "in live observation. This does not justify execution or Phase 3. "
-            "It justifies a new Phase 1 backtest hypothesis for 1h BTC UpDown on a separate branch."
-        )
-    else:
-        overall_verdict = V_NO_ACTIONABLE
-        verdict_description = (
-            "No actionable two-sided 1h books were observed in this run. "
-            "This is evidence against the 1h longer-duration escape hatch "
-            "for the observed window only. It is not a global mathematical proof."
-        )
+    # Determine verdict using dwell-threshold-aware classifier
+    overall_verdict, verdict_description = classify_verdict(
+        actionable_count=actionable_stats["actionable_two_sided_book_count"],
+        total_count=len(snapshots),
+        actionable_rate=actionable_stats["actionable_two_sided_book_rate"],
+        max_contiguous_actionable_seconds=actionable_stats["max_contiguous_actionable_seconds"],
+        book_poll_success_count=success_count,
+        book_poll_failure_count=failure_count,
+        min_actionable_rate=argv.min_actionable_rate_for_phase1,
+        min_contiguous_seconds=argv.min_contiguous_actionable_seconds_for_phase1,
+    )
 
     # Verify verdict is not forbidden
     assert overall_verdict not in FORBIDDEN_VERDICTS, f"Verdict {overall_verdict} is forbidden"
@@ -955,6 +1035,8 @@ def main() -> int:
         "first_actionable_ts_event_ns": actionable_stats["first_actionable_ts_event_ns"],
         "last_actionable_ts_event_ns": actionable_stats["last_actionable_ts_event_ns"],
         "max_contiguous_actionable_seconds": actionable_stats["max_contiguous_actionable_seconds"],
+        "min_actionable_rate_for_phase1": argv.min_actionable_rate_for_phase1,
+        "min_contiguous_actionable_seconds_for_phase1": argv.min_contiguous_actionable_seconds_for_phase1,
         "overall_verdict": overall_verdict,
         "verdict_description": verdict_description,
         "limitations": [
@@ -975,6 +1057,8 @@ def main() -> int:
     print(f"Actionable count: {actionable_stats['actionable_two_sided_book_count']}")
     print(f"Actionable rate: {actionable_stats['actionable_two_sided_book_rate']:.4f}")
     print(f"Max contiguous actionable: {actionable_stats['max_contiguous_actionable_seconds']:.1f}s")
+    print(f"Min actionable rate threshold: {argv.min_actionable_rate_for_phase1}")
+    print(f"Min contiguous seconds threshold: {argv.min_contiguous_actionable_seconds_for_phase1}")
 
     return 0
 
