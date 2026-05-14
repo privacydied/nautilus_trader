@@ -60,11 +60,69 @@ python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spo
 - Quiet captures (price movement far below the cost wall) produce `NEEDS_MORE_DATA`
 - Summary/report aggregation filters non-finite (`NaN`/`inf`) return and bps values before means, medians, rankings, MCPT skip reasons, and candidate gates; malformed market data must not poison a whole group.
 
+### Step 3: MCPT Export
+
+Export candidate groups for Monte Carlo Permutation Testing.
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_mcpt_export \
+    --capture-dir data/derivatives_spot_capture_v2 \
+    --report-dir reports/derivatives_spot_lead_lag_v2 \
+    --out mcpt_export \
+    --min-events 30 \
+    --cost-floor-bps 50
+```
+
+### Step 4: Permutation/Null Test
+
+If MCPT export finds candidate groups, test whether the observed edge survives randomized source timing.
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_permutation_null \
+    --capture-dir data/derivatives_spot_capture_v2 \
+    --report-dir reports/derivatives_spot_lead_lag_v2 \
+    --out null_test_results \
+    --iterations 1000 \
+    --seed 42 \
+    --shift-mode circular_time_shift
+```
+
+Shift modes: `circular_time_shift` (default) preserves inter-event intervals; `block_time_shift` preserves intra-block clustering (use `--block-size N`).
+
+### Step 5: Latency Diagnostics
+
+Check clock alignment and lead/lag between venues.
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_latency_diagnostics \
+    --capture-dir data/derivatives_spot_capture_v2 \
+    --out latency_diagnostics
+```
+
+### Step 6: Corpus Aggregation
+
+Aggregate results across multiple capture+evaluation runs.
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_report_corpus \
+    --report-dirs reports/capture1 reports/capture2 reports/capture3 \
+    --out corpus_aggregation
+```
+
 ### Allowed verdicts
 
 - `REJECTED` -- enough overlap, movement, events; no edge
 - `NEEDS_MORE_DATA` -- non-overlapping, too short, too quiet, or too few events
 - `CANDIDATE_FOR_LONGER_OBSERVATION` -- gates pass, needs longer-horizon validation
+- `NULL_REJECTED_DIAGNOSTIC` -- null test only; does NOT promote to a general REJECTED verdict
+
+### Key design rules (full)
+
+- Never use null test results to tune signal parameters
+- Never promote a null-rejected group to candidate status
+- Corpus aggregation sorts by consistency (num_captures), NOT by best returns
+- A null pass does NOT mean the signal is tradeable
+- `NULL_REJECTED_DIAGNOSTIC` is diagnostic evidence only, never a full-hypothesis REJECTED
 
 ### Binance USD-M perp WebSocket
 

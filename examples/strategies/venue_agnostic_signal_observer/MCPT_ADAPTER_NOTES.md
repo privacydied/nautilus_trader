@@ -1,0 +1,52 @@
+# MCPT Adapter Notes
+
+## What MCPT export does
+
+The MCPT adapter selects candidate or near-candidate groups from an evaluation report and exports their event return series as CSV files suitable for external Monte Carlo Permutation Testing tools.
+
+## When to run MCPT export
+
+Only after evaluation (Step 2). Only when `summary.json` contains groups that are candidates or near-candidates (positive mean_net_bps above cost floor, sufficient event count).
+
+Groups that are cost-floor dust (mean_net_bps well below round-trip costs) are skipped. Groups with insufficient events (< `min_events`) are skipped.
+
+## Relationship to native permutation null test
+
+MCPT export produces data for external permutation tools. The native permutation null test (`permutation_null.py` / `run_permutation_null.py`) is a self-contained alternative that:
+
+1. Reads the same report directory and capture directory
+2. Selects null-worthy groups using compatible but slightly broader criteria
+3. Runs circular or block time shifts internally
+4. Computes empirical p-values and null distribution statistics
+5. Produces a verdict without needing external tools
+
+You can use either or both. The native null test is recommended for quick falsification. MCPT export + external tools are recommended for formal publication.
+
+## Key parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--min-events` | 30 | Minimum event count for a group to be worth testing |
+| `--cost-floor-bps` | 50.0 | Minimum cost floor in basis points |
+| `--max-groups` | 3 | Maximum groups to export/test per run |
+
+## Output format
+
+### MCPT export (CSV per group)
+- Event-level return series with timestamps, directions, forward returns
+- Metadata header with group identity and evaluation parameters
+
+### Native null test (JSON + markdown)
+- Per-group null distribution statistics (p50, p95, p99 of null mean_net_bps)
+- Empirical p-value computation
+- Win rate comparison against null median
+- `candidate_survives_null` boolean verdict
+- `NULL_REJECTED_DIAGNOSTIC` or `NO_MCPT_WORTHY_GROUPS` status when appropriate
+
+## Important constraints
+
+- MCPT and null tests are **falsification tools only**. They test whether observed results could arise by chance.
+- A null pass does NOT prove a signal is tradeable.
+- A null failure is **diagnostic evidence**, not a general REJECTED verdict for the hypothesis.
+- Never use null test results to optimize signal parameters -- that is p-hacking.
+- The null test's `NULL_REJECTED_DIAGNOSTIC` prefix is deliberate: it must not be collapsed into the main `REJECTED` verdict taxonomy.
