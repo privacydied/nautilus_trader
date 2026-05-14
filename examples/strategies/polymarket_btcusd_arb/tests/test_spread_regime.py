@@ -697,3 +697,89 @@ class TestExchangeBoundReportFields:
         verdict = classify_verdict(summary)
         assert reason == "no_usable_two_sided_book"
         assert verdict == "SPREAD_REGIME_STRUCTURALLY_TOO_WIDE"
+
+
+# --- DQO-2C: Near-boundary quote classification fix ---
+
+class TestNearBoundaryQuoteClassification:
+    """DQO-2C: Near-boundary quotes (bid <= 0.02 AND ask >= 0.98) must be
+    classified as EXCHANGE_BOUND_TWO_SIDED_BOOK, not TWO_SIDED_BOOK.
+
+    The original classifier only checked exact 0.01/0.99 bounds, causing
+    0.001/0.999 quotes (99.8% spread) to be misclassified as actionable.
+    """
+
+    def test_001_099_remains_exchange_bound(self):
+        """bid=0.01, ask=0.99 remains EXCHANGE_BOUND_TWO_SIDED_BOOK."""
+        assert classify_quote_quality(0.01, 0.99) == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK
+
+    def test_0001_0999_is_exchange_bound_not_actionable(self):
+        """bid=0.001, ask=0.999 is EXCHANGE_BOUND_TWO_SIDED_BOOK (the DQO-2B false positive)."""
+        assert classify_quote_quality(0.001, 0.999) == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK
+
+    def test_0001_0999_not_actionable(self):
+        """0.001/0.999 must NOT be TWO_SIDED_BOOK or actionable."""
+        qq = classify_quote_quality(0.001, 0.999)
+        assert qq != QuoteQuality.TWO_SIDED_BOOK
+        assert is_actionable_two_sided(qq) is False
+
+    def test_02_98_is_exchange_bound(self):
+        """bid=0.02, ask=0.98 is at the boundary threshold → non-actionable."""
+        assert classify_quote_quality(0.02, 0.98) == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK
+
+    def test_0199_0981_is_exchange_bound(self):
+        """bid=0.0199, ask=0.981 is still within boundary band → non-actionable."""
+        assert classify_quote_quality(0.0199, 0.981) == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK
+
+    def test_021_0979_is_actionable_two_sided(self):
+        """bid=0.021, ask=0.979 is just outside boundary band → actionable TWO_SIDED_BOOK."""
+        assert classify_quote_quality(0.021, 0.979) == QuoteQuality.TWO_SIDED_BOOK
+
+    def test_021_0979_is_actionable(self):
+        """bid=0.021, ask=0.979 must be actionable."""
+        qq = classify_quote_quality(0.021, 0.979)
+        assert is_actionable_two_sided(qq) is True
+
+    def test_bid_near_boundary_ask_normal(self):
+        """bid=0.01 with ask=0.52: only bid is near-boundary, ask is not → TWO_SIDED_BOOK."""
+        assert classify_quote_quality(0.01, 0.52) == QuoteQuality.TWO_SIDED_BOOK
+
+    def test_ask_near_boundary_bid_normal(self):
+        """bid=0.48 with ask=0.99: only ask is near-boundary, bid is not → TWO_SIDED_BOOK."""
+        assert classify_quote_quality(0.48, 0.99) == QuoteQuality.TWO_SIDED_BOOK
+
+    def test_one_sided_bid_near_boundary(self):
+        """bid=0.001, ask=None remains ONE_SIDED_BOOK regardless of boundary."""
+        assert classify_quote_quality(0.001, None) == QuoteQuality.ONE_SIDED_BOOK
+
+    def test_one_sided_ask_near_boundary(self):
+        """bid=None, ask=0.999 remains ONE_SIDED_BOOK regardless of boundary."""
+        assert classify_quote_quality(None, 0.999) == QuoteQuality.ONE_SIDED_BOOK
+
+    def test_near_boundary_synthetic_fallback(self):
+        """Near-boundary synthetic quotes → FALLBACK_MIN_MAX."""
+        assert classify_quote_quality(0.001, 0.999, is_synthetic_fallback=True) == QuoteQuality.FALLBACK_MIN_MAX
+
+    def test_near_boundary_with_real_size(self):
+        """Near-boundary with genuine size is still EXCHANGE_BOUND, not actionable."""
+        qq = classify_quote_quality(0.001, 0.999, 40630.0, 1742.16)
+        assert qq == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK
+        assert is_actionable_two_sided(qq) is False
+
+    def test_all_boundary_variants_non_actionable(self):
+        """All known Polymarket boundary variants must be non-actionable."""
+        boundary_cases = [
+            (0.01, 0.99),    # exact exchange bounds
+            (0.001, 0.999),  # mill-level near-boundary (DQO-2B false positive)
+            (0.02, 0.98),    # threshold boundary
+            (0.015, 0.985),  # inside boundary band
+            (0.005, 0.995),  # half-cent level
+        ]
+        for bid, ask in boundary_cases:
+            qq = classify_quote_quality(bid, ask)
+            assert qq == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK, (
+                f"bid={bid}, ask={ask} should be EXCHANGE_BOUND but got {qq}"
+            )
+            assert is_actionable_two_sided(qq) is False, (
+                f"bid={bid}, ask={ask} should not be actionable"
+            )

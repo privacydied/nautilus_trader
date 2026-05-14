@@ -70,6 +70,13 @@ POLYMARKET_MAX_TOKEN_PRICE = 0.99
 # Tolerance for floating-point comparison of min/max bounds
 POLYMARKET_PRICE_TOLERANCE = 1e-6
 
+# Near-boundary thresholds: quotes at or beyond these bounds are
+# non-actionable boundary liquidity regardless of exact price level.
+# A bid <= 0.02 and ask >= 0.98 represent near-boundary quotes with
+# spreads of ~96% or wider — too wide for any fair-probability strategy.
+POLYMARKET_NEAR_BOUNDARY_BID_MAX = 0.02
+POLYMARKET_NEAR_BOUNDARY_ASK_MIN = 0.98
+
 
 # --- Quote Quality Classification ---
 
@@ -77,20 +84,22 @@ class QuoteQuality:
     """Classification of quote quality for a spread observation.
 
     TWO_SIDED_BOOK:
-        Real bid and ask levels from the CLOB, neither at exchange min/max bounds.
-        These are actionable two-sided quotes with genuine price discovery.
+        Real bid and ask levels from the CLOB, neither at nor near exchange
+        boundary levels. Both sides show genuine price discovery away from
+        the extreme price bounds. These are actionable two-sided quotes.
 
     EXCHANGE_BOUND_TWO_SIDED_BOOK:
-        Real bid and ask levels exist at the CLOB, but best bid is at the
-        exchange minimum (0.01) and best ask is at the exchange maximum (0.99).
+        Real bid and ask levels exist at the CLOB, but the quote is at or
+        near exchange boundary levels. This covers both exact bounds
+        (0.01/0.99) and near-boundary quotes (e.g., 0.001/0.999, 0.02/0.98).
         These are real resting orders with genuine size — not synthetic, not
-        loader defaults, not empty-book placeholders. However, they sit at the
-        absolute price bounds of the exchange and provide no actionable two-sided
-        liquidity for a fair-probability strategy. The spread (19,600 bps) is
-        technically real but economically meaningless.
-        This is a distinct category from TWO_SIDED_BOOK (actionable) and from
-        FALLBACK_MIN_MAX (synthetic/default values). It correctly captures that
-        real boundary orders exist, but they are non-actionable.
+        loader defaults, not empty-book placeholders. However, they sit at
+        or near the absolute price bounds of the exchange and provide no
+        actionable two-sided liquidity for a fair-probability strategy.
+        Spreads at or near 96%+ are economically meaningless.
+
+        Boundary rule: bid <= 0.02 AND ask >= 0.98 is classified as
+        EXCHANGE_BOUND_TWO_SIDED_BOOK, not TWO_SIDED_BOOK.
 
     ONE_SIDED_BOOK:
         Only one side of the book exists (bid or ask, not both).
@@ -132,15 +141,16 @@ def classify_quote_quality(
     Returns one of the QuoteQuality constants.
 
     The is_synthetic_fallback parameter distinguishes between:
-    - Real CLOB orders at exchange bounds (EXCHANGE_BOUND_TWO_SIDED_BOOK)
+    - Real CLOB orders at/near exchange bounds (EXCHANGE_BOUND_TWO_SIDED_BOOK)
     - Synthetic/default values from missing data (FALLBACK_MIN_MAX)
 
-    When is_synthetic_fallback=False (default), 0.01/0.99 is classified as
-    EXCHANGE_BOUND_TWO_SIDED_BOOK because the values come from real CLOB
-    order book data.
+    Boundary rule (near-boundary fix):
+    Quotes with bid <= 0.02 AND ask >= 0.98 are classified as
+    EXCHANGE_BOUND_TWO_SIDED_BOOK, not TWO_SIDED_BOOK. This prevents
+    near-boundary quotes like 0.001/0.999 (99.8% spread) from being
+    misclassified as actionable.
 
-    When is_synthetic_fallback=True, 0.01/0.99 is classified as FALLBACK_MIN_MAX
-    because the values were fabricated by the data loader as a fallback.
+    Only quotes with bid > 0.02 AND ask < 0.98 qualify as TWO_SIDED_BOOK.
     """
     # Neither side present
     if best_bid is None and best_ask is None:
@@ -157,16 +167,18 @@ def classify_quote_quality(
     if best_bid <= 0.0 or best_ask <= 0.0:
         return QuoteQuality.INVALID_BOOK
 
-    # Check if both sides are at exchange min/max bounds
-    bid_is_min = abs(best_bid - POLYMARKET_MIN_TOKEN_PRICE) < POLYMARKET_PRICE_TOLERANCE
-    ask_is_max = abs(best_ask - POLYMARKET_MAX_TOKEN_PRICE) < POLYMARKET_PRICE_TOLERANCE
+    # Check if both sides are at or near exchange boundary levels.
+    # This covers exact bounds (0.01/0.99) and near-boundary quotes
+    # (0.001/0.999, 0.02/0.98, etc.) that are all non-actionable.
+    bid_at_or_near_min = best_bid <= POLYMARKET_NEAR_BOUNDARY_BID_MAX
+    ask_at_or_near_max = best_ask >= POLYMARKET_NEAR_BOUNDARY_ASK_MIN
 
-    if bid_is_min and ask_is_max:
+    if bid_at_or_near_min and ask_at_or_near_max:
         if is_synthetic_fallback:
             return QuoteQuality.FALLBACK_MIN_MAX
         return QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK
 
-    # Both sides present, not at min/max bounds, not invalid
+    # Both sides present, away from boundary levels, not invalid
     return QuoteQuality.TWO_SIDED_BOOK
 
 

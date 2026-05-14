@@ -288,6 +288,162 @@ def compute_actionable_stats(snapshots: list[LifecycleSnapshot]) -> dict[str, An
     }
 
 
+def reclassify_snapshots_file(
+    snapshots_path: Path,
+    report_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Reclassify snapshots from a JSONL file using updated quote-quality rules.
+
+    Reads the original snapshots, re-runs classify_quote_quality on each,
+    recalculates actionable stats, and writes a corrected report directory.
+    Returns a dict with corrected summary fields.
+
+    This is a narrow offline reclassification path — no API calls, no keys,
+    no orders. It re-reads captured data and produces a corrected report.
+    """
+    if not snapshots_path.exists():
+        print(f"ERROR: snapshots file not found: {snapshots_path}")
+        return {"error": "snapshots file not found"}
+
+    # Read original snapshots
+    snapshots_raw: list[dict] = []
+    with open(snapshots_path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                snapshots_raw.append(json.loads(line))
+
+    print(f"Reclassifying {len(snapshots_raw)} snapshots from {snapshots_path}")
+
+    # Reclassify each snapshot
+    corrected: list[LifecycleSnapshot] = []
+    original_actionable_count = 0
+    corrected_actionable_count = 0
+    near_boundary_count = 0
+
+    for raw in snapshots_raw:
+        best_bid = raw.get("best_bid")
+        best_ask = raw.get("best_ask")
+        book_poll_success = raw.get("book_poll_success", True)
+
+        if book_poll_success and best_bid is not None and best_ask is not None:
+            new_qq = classify_quote_quality(best_bid, best_ask)
+            new_actionable = is_actionable_two_sided(new_qq)
+            # Track original classification for comparison
+            orig_qq = raw.get("quote_quality", "")
+            if orig_qq == "TWO_SIDED_BOOK" and new_qq == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK:
+                near_boundary_count += 1
+                original_actionable_count += 1  # was actionable under old rules
+            elif orig_qq == "TWO_SIDED_BOOK" and new_qq == QuoteQuality.TWO_SIDED_BOOK:
+                original_actionable_count += 1
+                corrected_actionable_count += 1
+        else:
+            new_qq = raw.get("quote_quality", QuoteQuality.MISSING_BOOK)
+            new_actionable = raw.get("actionable_two_sided_book", False)
+
+        snap = LifecycleSnapshot(
+            ts_event_ns=raw.get("ts_event_ns", 0),
+            ts_recv_ns=raw.get("ts_recv_ns", 0),
+            market_slug=raw.get("market_slug", ""),
+            market_title=raw.get("market_title", ""),
+            duration_label=raw.get("duration_label", "1h"),
+            duration_seconds=raw.get("duration_seconds", 3600),
+            reference_source_kind=raw.get("reference_source_kind", "BINANCE_BTCUSDT"),
+            product_exists=raw.get("product_exists", True),
+            is_active=raw.get("is_active", True),
+            is_closed=raw.get("is_closed", False),
+            seconds_to_start=raw.get("seconds_to_start"),
+            seconds_to_expiry=raw.get("seconds_to_expiry", 0),
+            timing_state=raw.get("timing_state", TIMING_UNKNOWN),
+            book_poll_success=book_poll_success,
+            book_poll_error=raw.get("book_poll_error"),
+            best_bid=best_bid,
+            best_ask=best_ask,
+            best_bid_size=raw.get("best_bid_size"),
+            best_ask_size=raw.get("best_ask_size"),
+            spread_bps=raw.get("spread_bps"),
+            quote_quality=new_qq,
+            actionable_two_sided_book=new_actionable,
+            lifecycle_bucket=raw.get("lifecycle_bucket", "unknown"),
+            raw_source=raw.get("raw_source", "clob_poll"),
+        )
+        corrected.append(snap)
+
+    # Compute corrected stats
+    stats = compute_actionable_stats(corrected)
+    qq_counts = build_quote_quality_counts(corrected)
+    bucket_counts = build_lifecycle_bucket_counts(corrected)
+    total = len(corrected)
+    poll_success = sum(1 for s in corrected if s.book_poll_success)
+    poll_fail = sum(1 for s in corrected if not s.book_poll_success)
+    in_lifecycle = sum(1 for s in corrected if s.timing_state == TIMING_IN_LIFECYCLE)
+    pre_start = sum(1 for s in corrected if s.timing_state == TIMING_PRE_START)
+
+    # Determine corrected verdict
+    verdict, verdict_desc = classify_verdict(
+        actionable_count=stats["actionable_two_sided_book_count"],
+        total_count=total,
+        actionable_rate=stats["actionable_two_sided_book_rate"],
+        max_contiguous_actionable_seconds=stats["max_contiguous_actionable_seconds"],
+        book_poll_success_count=poll_success,
+        book_poll_failure_count=poll_fail,
+        in_lifecycle_snapshot_count=in_lifecycle,
+        pre_start_snapshot_count=pre_start,
+    )
+
+    # Build corrected summary
+    summary = {
+        "run_id": f"{raw.get('run_id', 'unknown')}-reclassified-dqo2c",
+        "original_run_id": raw.get("run_id", "unknown"),
+        "branch": BRANCH,
+        "known_slug_validation": "PASS",
+        "selected_market": raw.get("market_slug", ""),
+        "duration_requested": "1h",
+        "reference_source": "BINANCE_BTCUSDT",
+        "observation_duration_seconds": raw.get("observation_duration_seconds", 3900),
+        "poll_seconds": raw.get("poll_seconds", 5),
+        "snapshot_count": total,
+        "book_poll_success_count": poll_success,
+        "book_poll_failure_count": poll_fail,
+        "quote_quality_counts": qq_counts,
+        "quote_quality_counts_by_lifecycle_bucket": bucket_counts,
+        "actionable_two_sided_book_count": stats["actionable_two_sided_book_count"],
+        "actionable_two_sided_book_rate": stats["actionable_two_sided_book_rate"],
+        "first_actionable_ts_event_ns": stats.get("first_actionable_ts_event_ns"),
+        "last_actionable_ts_event_ns": stats.get("last_actionable_ts_event_ns"),
+        "max_contiguous_actionable_seconds": stats["max_contiguous_actionable_seconds"],
+        "overall_verdict": verdict,
+        "near_boundary_reclassified_count": near_boundary_count,
+        "original_actionable_count": original_actionable_count,
+        "corrected_actionable_count": corrected_actionable_count,
+        "limitations": [
+            "Reclassified offline from captured snapshots using updated near-boundary rules.",
+            "Near-boundary quotes (bid <= 0.02 AND ask >= 0.98) are now EXCHANGE_BOUND_TWO_SIDED_BOOK.",
+            "Original DQO-2B run misclassified 0.001/0.999 as TWO_SIDED_BOOK.",
+            "Product existence is separate from active market availability.",
+            "Active market availability is separate from book poll success.",
+            "Book poll success is separate from actionable two-sided liquidity.",
+        ],
+    }
+
+    # Write reports if a report dir is specified
+    if report_dir is not None:
+        report_dir.mkdir(parents=True, exist_ok=True)
+        (report_dir / "summary.json").write_text(
+            json.dumps(summary, indent=2, default=str)
+        )
+        with open(report_dir / "snapshots_reclassified.jsonl", "w") as f:
+            for s in corrected:
+                f.write(json.dumps(asdict(s), default=str) + "\n")
+        print(f"Reclassified report written to: {report_dir}")
+        print(f"  Original actionable count: {original_actionable_count}")
+        print(f"  Near-boundary reclassified: {near_boundary_count}")
+        print(f"  Corrected actionable count: {corrected_actionable_count}")
+        print(f"  Corrected verdict: {verdict}")
+
+    return summary
+
+
 def build_quote_quality_counts(snapshots: list[LifecycleSnapshot]) -> dict[str, int]:
     """Count snapshots by quote quality."""
     counts: dict[str, int] = {}
@@ -705,7 +861,34 @@ def main() -> int:
         default=DEFAULT_MAX_WAIT_FOR_START_SECONDS,
         help="Maximum seconds to wait for a pre-start market to enter its lifecycle (default: 0, no wait)",
     )
+    parser.add_argument(
+        "--reclassify-snapshots",
+        type=Path,
+        default=None,
+        help="Path to snapshots.jsonl to reclassify with updated quote-quality rules. "
+             "Writes a corrected report without re-polling the API.",
+    )
     argv = parser.parse_args()
+
+    # --- Handle reclassification mode ---
+    if argv.reclassify_snapshots is not None:
+        print("PHASE=DQO-2C_RECLASSIFY")
+        print("OBSERVER_ONLY=1")
+        print("NO_ORDERS=1")
+        print("NO_KEYS=1")
+        print(f"BRANCH={BRANCH}")
+        snapshots_path = argv.reclassify_snapshots
+        original_report_dir = snapshots_path.parent
+        corrected_dir = Path(str(original_report_dir) + "-reclassified-dqo2c")
+        result = reclassify_snapshots_file(snapshots_path, report_dir=corrected_dir)
+        if "error" in result:
+            return 1
+        print(f"\nCorrections applied:")
+        print(f"  Near-boundary reclassified: {result.get('near_boundary_reclassified_count', 'N/A')}")
+        print(f"  Original actionable count: {result.get('original_actionable_count', 'N/A')}")
+        print(f"  Corrected actionable count: {result.get('corrected_actionable_count', 'N/A')}")
+        print(f"  Corrected verdict: {result.get('overall_verdict', 'N/A')}")
+        return 0
 
     # Phase banner
     print("PHASE=DQO-2_ONE_HOUR_QUOTE_LIFECYCLE")

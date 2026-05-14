@@ -1082,3 +1082,164 @@ class TestLifecycleSnapshotTimingField:
     def test_timing_state_unknown(self):
         snap = _make_snapshot(timing_state=TIMING_UNKNOWN)
         assert snap.timing_state == TIMING_UNKNOWN
+
+
+# --- DQO-2C: Near-boundary false-positive correction tests ---
+
+class TestNearBoundaryVerdictCorrection:
+    """DQO-2C: Near-boundary quotes (0.001/0.999, 0.02/0.98) must NOT
+    trigger ACTIONABLE_BOOK_OBSERVED verdicts.
+
+    The DQO-2B run misclassified 154 snapshots of 0.001/0.999 as
+    TWO_SIDED_BOOK, producing a false-positive ACTIONABLE verdict.
+    With the near-boundary fix, these are EXCHANGE_BOUND_TWO_SIDED_BOOK
+    and the verdict must be NO_ACTIONABLE_BOOK_OBSERVED.
+    """
+
+    def test_near_boundary_0001_0999_snapshot_not_actionable(self):
+        """0.001/0.999 snapshots must not be actionable after the fix."""
+        snap = _make_snapshot(best_bid=0.001, best_ask=0.999)
+        assert snap.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK
+        assert snap.actionable_two_sided_book is False
+
+    def test_near_boundary_02_98_snapshot_not_actionable(self):
+        """0.02/0.98 snapshots must not be actionable after the fix."""
+        snap = _make_snapshot(best_bid=0.02, best_ask=0.98)
+        assert snap.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK
+        assert snap.actionable_two_sided_book is False
+
+    def test_exchange_bound_001_099_still_not_actionable(self):
+        """0.01/0.99 must still be classified as EXCHANGE_BOUND (not actionable)."""
+        snap = _make_snapshot(best_bid=0.01, best_ask=0.99)
+        assert snap.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK
+        assert snap.actionable_two_sided_book is False
+
+    def test_near_boundary_only_does_not_trigger_actionable_verdict(self):
+        """154 near-boundary 0.001/0.999 + 349 exchange-bound 0.01/0.99 → NO_ACTIONABLE."""
+        # Mimic DQO-2B run composition
+        near_boundary = [
+            _make_snapshot(
+                best_bid=0.001, best_ask=0.999,
+                ts_event_ns=1_777_000_000_000_000_000 + i * 5_000_000_000,
+            )
+            for i in range(154)
+        ]
+        exchange_bound = [
+            _make_snapshot(
+                best_bid=0.01, best_ask=0.99,
+                ts_event_ns=1_777_000_000_000_000_000 + (154 + i) * 5_000_000_000,
+            )
+            for i in range(349)
+        ]
+        all_snaps = near_boundary + exchange_bound
+        stats = compute_actionable_stats(all_snaps)
+        assert stats["actionable_two_sided_book_count"] == 0, (
+            f"Near-boundary quotes should not be actionable, got {stats['actionable_two_sided_book_count']}"
+        )
+        assert stats["actionable_two_sided_book_rate"] == 0.0
+        assert stats["max_contiguous_actionable_seconds"] == 0.0
+
+    def test_near_boundary_does_not_contribute_to_contiguous_actionable(self):
+        """Near-boundary quotes contribute zero contiguous actionable seconds."""
+        snaps = [
+            _make_snapshot(
+                best_bid=0.001, best_ask=0.999,
+                ts_event_ns=1_777_000_000_000_000_000 + i * 5_000_000_000,
+            )
+            for i in range(100)
+        ]
+        stats = compute_actionable_stats(snaps)
+        assert stats["max_contiguous_actionable_seconds"] == 0.0
+
+    def test_dqO2b_composition_verdict_no_actionable(self):
+        """Full DQO-2B composition (0.01/0.99 + 0.001/0.999 + 0.001/None) → NO_ACTIONABLE."""
+        exchange_bound = [
+            _make_snapshot(best_bid=0.01, best_ask=0.99, seconds_to_expiry=1800 - i * 5)
+            for i in range(349)
+        ]
+        near_boundary = [
+            _make_snapshot(best_bid=0.001, best_ask=0.999, seconds_to_expiry=1200 - i * 5)
+            for i in range(154)
+        ]
+        one_sided = [
+            _make_snapshot(best_bid=0.001, best_ask=None, seconds_to_expiry=600 - i * 5)
+            for i in range(271)
+        ]
+        all_snaps = exchange_bound + near_boundary + one_sided
+        total_count = len(all_snaps)
+        stats = compute_actionable_stats(all_snaps)
+        verdict, desc = classify_verdict(
+            actionable_count=stats["actionable_two_sided_book_count"],
+            total_count=total_count,
+            actionable_rate=stats["actionable_two_sided_book_rate"],
+            max_contiguous_actionable_seconds=stats["max_contiguous_actionable_seconds"],
+            book_poll_success_count=total_count,
+            book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=636,
+        )
+        assert verdict == V_NO_ACTIONABLE, (
+            f"Expected NO_ACTIONABLE, got {verdict}: {desc}"
+        )
+
+    def test_genuine_actionable_still_triggers_actionable_verdict(self):
+        """Genuine actionable quotes (bid=0.48, ask=0.52) still work after the fix."""
+        snaps = [
+            _make_snapshot(
+                best_bid=0.48, best_ask=0.52,
+                ts_event_ns=1_777_000_000_000_000_000 + i * 5_000_000_000,
+            )
+            for i in range(100)
+        ]
+        stats = compute_actionable_stats(snaps)
+        assert stats["actionable_two_sided_book_count"] == 100
+        assert stats["actionable_two_sided_book_rate"] == 1.0
+        assert stats["max_contiguous_actionable_seconds"] > 0
+
+    def test_mixed_genuine_and_near_boundary_actionable_count(self):
+        """Only genuine TWO_SIDED_BOOK contributes to actionable count."""
+        snaps = [
+            _make_snapshot(best_bid=0.48, best_ask=0.52,
+                          ts_event_ns=1_777_000_000_000_000_000),
+            _make_snapshot(best_bid=0.001, best_ask=0.999,
+                          ts_event_ns=1_777_000_000_000_000 + 5_000_000_000),
+            _make_snapshot(best_bid=0.01, best_ask=0.99,
+                          ts_event_ns=1_777_000_000_000_000 + 10_000_000_000),
+        ]
+        stats = compute_actionable_stats(snaps)
+        assert stats["actionable_two_sided_book_count"] == 1
+        assert stats["actionable_two_sided_book_rate"] == pytest.approx(1/3)
+
+
+class TestNearBoundaryReportWording:
+    """DQO-2C: Report must state near-boundary books are non-actionable."""
+
+    def test_summary_actionable_count_excludes_near_boundary(self):
+        """summary.json actionable count must exclude near-boundary quotes."""
+        snaps = [
+            _make_snapshot(best_bid=0.001, best_ask=0.999,
+                          ts_event_ns=1_777_000_000_000_000_000 + i * 5_000_000_000)
+            for i in range(154)
+        ]
+        stats = compute_actionable_stats(snaps)
+        assert stats["actionable_two_sided_book_count"] == 0
+
+    def test_lifecycle_bucket_csv_excludes_near_boundary_as_actionable(self):
+        """quote_quality_by_lifecycle_bucket.csv must not count near-boundary as actionable."""
+        near_boundary_snaps = [
+            _make_snapshot(best_bid=0.001, best_ask=0.999, seconds_to_expiry=1500)
+            for _ in range(10)
+        ]
+        # All should be EXCHANGE_BOUND_TWO_SIDED_BOOK, not TWO_SIDED_BOOK
+        for snap in near_boundary_snaps:
+            assert snap.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK
+            assert snap.actionable_two_sided_book is False
+
+    def test_verdict_description_mentions_boundary_when_no_actionable(self):
+        """When near-boundary results in NO_ACTIONABLE, verdict description is correct."""
+        verdict, desc = classify_verdict(
+            actionable_count=0, total_count=774, actionable_rate=0.0,
+            max_contiguous_actionable_seconds=0.0,
+            book_poll_success_count=774, book_poll_failure_count=0,
+            in_lifecycle_snapshot_count=636,
+        )
+        assert verdict == V_NO_ACTIONABLE

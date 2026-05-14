@@ -1064,10 +1064,71 @@ Yes. 636/774 snapshots (82.2%) were in-lifecycle. This is a lifecycle-valid obse
 No. The near-boundary 0.001/0.999 quotes are structurally non-actionable at 99.8% spread. No genuine two-sided liquidity was observed. This is evidence against the 1h longer-duration escape hatch, constrained to this single market observation.
 
 ### Required Classifier Fix
-The exchange-bound check should be expanded to classify near-boundary quotes (e.g., bid < 0.02 AND ask > 0.98) as NEAR_BOUNDARY_TWO_SIDED_BOOK or included in EXCHANGE_BOUND_TWO_SIDED_BOOK. Without this fix, the classifier produces false-positive "actionable" verdicts for 0.001/0.999 quotes that are 99.8% wide.
+The exchange-bound check has been expanded in DQO-2C to classify near-boundary quotes (bid <= 0.02 AND ask >= 0.98) as EXCHANGE_BOUND_TWO_SIDED_BOOK. The fix is implemented on branch `polymarket-btc-updown-1h-near-boundary-fix-v3`.
 
 ### Safety
 - No orders: PASS
 - No keys: PASS
 - No execution client imports: PASS
 - No on-chain calls: PASS
+
+## DQO-2C Near-Boundary Quote Classifier Fix
+
+### Branch
+`polymarket-btc-updown-1h-near-boundary-fix-v3`
+
+### Original Run ID
+`20260514T131139Z`
+
+### Original False-Positive Verdict
+`ONE_HOUR_ACTIONABLE_BOOK_OBSERVED_REQUIRES_PHASE1_BACKTEST`
+
+### Root Cause
+The exact-boundary classifier in `classify_quote_quality()` only checked for exact `0.01/0.99` equality (with `1e-6` tolerance). This missed near-boundary quotes like `0.001/0.999` (99.8% spread) which are functionally equivalent to exchange-bound non-actionable liquidity.
+
+### Boundary-Band Rule
+Added `POLYMARKET_NEAR_BOUNDARY_BID_MAX = 0.02` and `POLYMARKET_NEAR_BOUNDARY_ASK_MIN = 0.98`.
+
+Classification rule:
+- If `bid <= 0.02 AND ask >= 0.98` → `EXCHANGE_BOUND_TWO_SIDED_BOOK` (non-actionable)
+- If `bid > 0.02 AND ask < 0.98` → `TWO_SIDED_BOOK` (actionable)
+
+This replaces the exact-equality check. Values:
+- `0.01 / 0.99` → EXCHANGE_BOUND (exact bound, was already caught)
+- `0.001 / 0.999` → EXCHANGE_BOUND (near-boundary, NEW — was incorrectly TWO_SIDED_BOOK)
+- `0.02 / 0.98` → EXCHANGE_BOUND (near-boundary threshold, inclusive)
+- `0.021 / 0.979` → TWO_SIDED_BOOK (actionable)
+
+### Tests Run
+323 passed (97 observer tests + 98 spread_regime tests + 128 parity tests, including 25 new DQO-2C tests)
+
+### Safety Check
+PASS (no orders, no keys, no execution, no on-chain calls)
+
+### Reclassified Report
+`reports/polymarket_btcusd_arb/one_hour_quote_lifecycle/20260514T131139Z-reclassified-dqo2c/`
+
+### Corrected Quote Quality Counts
+- EXCHANGE_BOUND_TWO_SIDED_BOOK: 503 (was 349; includes 154 reclassified from TWO_SIDED_BOOK)
+- ONE_SIDED_BOOK: 271 (unchanged)
+- TWO_SIDED_BOOK: 0 (was 154; all were near-boundary 0.001/0.999)
+
+### Corrected Actionable Count/Rate
+0 / 0.0 (was 154 / 0.1990)
+
+### Corrected Max Contiguous Actionable Seconds
+0.0s (was 793.5s; all were near-boundary false positives)
+
+### Corrected Verdict
+`ONE_HOUR_NO_ACTIONABLE_BOOK_OBSERVED`
+
+### Whether a 1h Phase 1 Backtest Is Justified
+No. No genuine actionable two-sided book was observed. The DQO-2B machine verdict was a classifier false positive.
+
+### Whether Execution Is Justified
+No. Never.
+
+### No Phase 1 1h backtest is justified from the DQO-2B run because no genuine actionable two-sided book was observed.
+### Do not proceed to Phase 3.
+### Do not execute.
+### The DQO-2B machine verdict was a classifier false positive caused by near-boundary 0.001/0.999 quotes.
