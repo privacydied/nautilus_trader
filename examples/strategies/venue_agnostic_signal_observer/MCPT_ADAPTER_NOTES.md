@@ -105,3 +105,18 @@ python -m examples.strategies.venue_agnostic_signal_observer.run_permutation_nul
 - A null failure is **diagnostic evidence**, not a general REJECTED verdict for the hypothesis.
 - Never use null test results to optimize signal parameters -- that is p-hacking.
 - The null test's `NULL_REJECTED_DIAGNOSTIC` prefix is deliberate: it must not be collapsed into the main `REJECTED` verdict taxonomy.
+## Files Changed
+
+  ┌───────────────────────────────────┬─────────────────────────────────────┐
+  │               File                │               Change                │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ forward_returns_gpu.py            │ New — GPU forward-return kernel     │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ tests/test_forward_returns_gpu.py │ New — 16 focused tests              │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ run_derivatives_spot_lead_lag.py  │ Modified — 3 CLI args + GPU routing │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ MCPT_ADAPTER_NOTES.md             │ Updated                             │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ DERIVATIVES_V2_CAPTURE_RUNBOOK.md │ Updated                             │
+  └───────────────────────────────────┴─────────────────────────────────────┘

@@ -186,3 +186,18 @@ Output: per-config aggregation showing:
 - `NEEDS_MORE_DATA` -- insufficient overlap, too quiet, or too few events
 - `CANDIDATE_FOR_LONGER_OBSERVATION` -- passes gates, needs more windows
 - `NULL_REJECTED_DIAGNOSTIC` -- null test only; does NOT promote to a general REJECTED verdict
+## Files Changed
+
+  ┌───────────────────────────────────┬─────────────────────────────────────┐
+  │               File                │               Change                │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ forward_returns_gpu.py            │ New — GPU forward-return kernel     │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ tests/test_forward_returns_gpu.py │ New — 16 focused tests              │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ run_derivatives_spot_lead_lag.py  │ Modified — 3 CLI args + GPU routing │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ MCPT_ADAPTER_NOTES.md             │ Updated                             │
+  ├───────────────────────────────────┼─────────────────────────────────────┤
+  │ DERIVATIVES_V2_CAPTURE_RUNBOOK.md │ Updated                             │
+  └───────────────────────────────────┴─────────────────────────────────────┘
