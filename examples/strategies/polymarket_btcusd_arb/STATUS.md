@@ -736,3 +736,51 @@ A single actionable two-sided snapshot (e.g. 5 seconds within a 1h lifecycle) wa
 
 ### Why Single-Snapshot Actionable Is Insufficient
 A momentary 0.01/0.99-to-normal book transition lasting seconds does not demonstrate sustained two-sided liquidity. A Phase 1 backtest requires markets with meaningful dwell — enough time and enough snapshots for the strategy to enter, hold, and exit. The 5%/300s thresholds represent minimum evidence that a market has actionable books persisting long enough to be tradeable.
+
+## DQO-2 Live 1h Quote Lifecycle Run
+
+### Command
+```
+PYTHONUNBUFFERED=1 .venv/bin/python -u -m examples.strategies.polymarket_btcusd_arb.run_1h_quote_lifecycle_observer \
+  --duration-seconds 3900 --poll-seconds 5 --duration 1h \
+  --known-slug bitcoin-up-or-down-may-13-2026-11pm-et \
+  --min-actionable-rate-for-phase1 0.05 \
+  --min-contiguous-actionable-seconds-for-phase1 300
+```
+
+### Known Slug Validation
+PASSED: `bitcoin-up-or-down-may-13-2026-11pm-et` validated as 1h, active, BINANCE_BTCUSDT reference.
+
+### Active 1h Markets Found
+2 active 1h markets:
+- `bitcoin-up-or-down-may-16-2026-1am-et` (active, BINANCE_BTCUSDT)
+- `bitcoin-up-or-down-may-13-2026-11pm-et` (active, BINANCE_BTCUSDT)
+
+### Selected Market Slug
+`bitcoin-up-or-down-may-16-2026-1am-et`
+
+### Observation Results
+- Snapshot count: 775
+- Book poll successes: 775
+- Book poll failures: 0
+- Quote quality: 100% EXCHANGE_BOUND_TWO_SIDED_BOOK (775/775)
+- Actionable two-sided book count: 0
+- Actionable two-sided book rate: 0.0000
+- Max contiguous actionable seconds: 0.0s
+- Lifecycle bucket: pre_start for all 775 snapshots
+- Every snapshot: bid=0.01, ask=0.99
+
+### Thresholds
+- Min actionable rate threshold: 0.05
+- Min contiguous seconds threshold: 300.0
+
+### Overall Verdict
+`ONE_HOUR_NO_ACTIONABLE_BOOK_OBSERVED`
+
+### Scientific Interpretation
+No actionable two-sided 1h books were observed in this run. The market showed only exchange-bound 0.01/0.99 quotes for the entire 65-minute observation window. This is evidence against the 1h longer-duration escape hatch for the observed window only. It is not a global mathematical proof.
+
+The 1h market, despite using Binance BTC/USDT reference (not delayed Chainlink), exhibited the same exchange-bound book structure as 5m and 15m products. The market never transitioned from pre_start to active trading within the observation period.
+
+### Next Recommendation
+Do not proceed with Phase 1 backtest for 1h. More observer-only lifecycle captures at different times (near market start, during active hours) may be useful, but no backtest is justified from this run alone. Do not recommend execution. Do not recommend Phase 3.
