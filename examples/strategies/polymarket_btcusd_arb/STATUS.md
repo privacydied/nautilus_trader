@@ -939,3 +939,135 @@ This run produced no 1h lifecycle evidence. The Polymarket 1h BTC UpDown product
 
 ### Next Recommendation
 Re-run the observer when an active 1h BTC UpDown market enters its lifecycle window (start_ns <= now < end_ns). No backtest is justified from this run. No execution. No Phase 3.
+
+## DQO-2B Explicit 1h Lifecycle Run
+
+### Command
+```
+PYTHONUNBUFFERED=1 .venv/bin/python -u -m examples.strategies.polymarket_btcusd_arb.run_1h_quote_lifecycle_observer \
+  --market-slug bitcoin-up-or-down-may-14-2026-8am-et \
+  --duration-seconds 3900 --poll-seconds 5 --duration 1h \
+  --known-slug bitcoin-up-or-down-may-13-2026-11pm-et \
+  --min-actionable-rate-for-phase1 0.05 \
+  --min-contiguous-actionable-seconds-for-phase1 300 \
+  --max-wait-for-start-seconds 900
+```
+
+### Selected Slug
+`bitcoin-up-or-down-may-14-2026-8am-et`
+
+### Market Start/End
+- start_ns: 1778587334797890048
+- end_ns: 1778763600000000000
+- selected_market_timing_state: IN_LIFECYCLE (confirmed at observation start)
+
+### Run ID
+`20260514T131139Z`
+
+### Report Directory
+`reports/polymarket_btcusd_arb/one_hour_quote_lifecycle/20260514T131139Z/`
+
+### Known Slug Validation
+PASSED: `bitcoin-up-or-down-may-13-2026-11pm-et` validated as 1h, active (closed/resolved), BINANCE_BTCUSDT reference.
+
+### Snapshot Count
+774
+
+### Pre-start Snapshot Count
+0
+
+### In-lifecycle Snapshot Count
+636
+
+### Expired Snapshot Count
+138
+
+### Quote Quality Counts
+- EXCHANGE_BOUND_TWO_SIDED_BOOK: 349 (bid=0.01, ask=0.99)
+- TWO_SIDED_BOOK: 154 (bid=0.001, ask=0.999)
+- ONE_SIDED_BOOK: 271 (bid=0.001, ask=None)
+
+### Quote Quality by Lifecycle Bucket
+| Bucket | EXCHANGE_BOUND | TWO_SIDED | ONE_SIDED | Total |
+|--------|---------------|-----------|-----------|-------|
+| gt_45m | 101 | 0 | 0 | 101 |
+| 30m_to_45m | 178 | 0 | 0 | 178 |
+| 15m_to_30m | 70 | 108 | 0 | 178 |
+| 5m_to_15m | 0 | 46 | 73 | 119 |
+| 1m_to_5m | 0 | 0 | 48 | 48 |
+| 0m_to_1m | 0 | 0 | 12 | 12 |
+| expired | 0 | 0 | 138 | 138 |
+
+### Actionable Two-sided Book Count/Rate
+154 / 0.1990 (19.9% of total snapshots)
+
+### Max Contiguous Actionable Seconds
+793.5s
+
+### Lifecycle Coverage
+- In-lifecycle coverage: 636/774 snapshots (82.2%)
+- Lifecycle coverage rate: 81.5%
+- In-lifecycle duration observed: ~53 minutes
+
+### Overall Verdict (Machine)
+`ONE_HOUR_ACTIONABLE_BOOK_OBSERVED_REQUIRES_PHASE1_BACKTEST`
+
+### CRITICAL CLASSIFICATION CAVEAT — Near-Boundary False Positive
+
+The machine verdict is a **false positive**. All 154 "actionable" TWO_SIDED_BOOK snapshots have:
+
+- bid = 0.001 (1 mill)
+- ask = 0.999 (999 mills)
+- spread_bps = 19,960 (99.8% wide)
+- Unique bid values: {0.001}
+- Unique ask values: {0.999}
+
+These are **near-boundary quotes** that are functionally equivalent to the 0.01/0.99 exchange-bound pattern:
+- 0.01/0.99 = 98% spread, classified as EXCHANGE_BOUND_TWO_SIDED_BOOK (non-actionable)
+- 0.001/0.999 = 99.8% spread, classified as TWO_SIDED_BOOK (actionable) — **MISCLASSIFIED**
+
+The current classifier only checks for the exact Polymarket minimum (0.01) and maximum (0.99) with 1e-6 tolerance. It does not catch near-boundary prices (0.001 and 0.999) that represent the same non-actionable boundary behavior at a different price precision.
+
+Neither 0.01/0.99 nor 0.001/0.999 provides actionable two-sided liquidity for a fair-probability strategy:
+
+- 0.01/0.99 spread: 9,800 bps (98%)
+- 0.001/0.999 spread: 19,960 bps (99.8%)
+
+Both are structurally non-actionable. The 1h market transitions between these two states but never shows genuine price discovery away from boundary levels.
+
+### Sentence-Level Correction
+
+The machine verdict `ONE_HOUR_ACTIONABLE_BOOK_OBSERVED_REQUIRES_PHASE1_BACKTEST` is incorrect because the "actionable" classification is a near-boundary false positive. The corrected verdict is:
+
+**ONE_HOUR_NO_ACTIONABLE_BOOK_OBSERVED**
+
+No genuine two-sided liquidity was observed at any point during the 1h lifecycle. The market showed only:
+1. EXCHANGE_BOUND_TWO_SIDED_BOOK (0.01/0.99) — 349 snapshots
+2. Near-boundary TWO_SIDED_BOOK (0.001/0.999, 99.8% spread) — 154 snapshots (misclassified)
+3. ONE_SIDED_BOOK (0.001/None) — 271 snapshots
+
+### Book Lifecycle Dynamics Observed
+
+The 1h BTC UpDown market showed a clear lifecycle pattern:
+1. **gt_45m to 30m_to_45m** (0-45 min to expiry): EXCHANGE_BOUND 0.01/0.99 only
+2. **15m_to_30m**: Mix of EXCHANGE_BOUND (70) and near-boundary 0.001/0.999 (108)
+3. **5m_to_15m**: Near-boundary 0.001/0.999 (46) and ONE_SIDED 0.001/None (73)
+4. **1m_to_5m and below**: ONE_SIDED 0.001/None only
+5. **Expired**: ONE_SIDED only
+
+This is a deterministic decay pattern — the market transitions from 0.01/0.99 → 0.001/0.999 → ask disappears entirely. At no point does genuine price discovery (bid > 0.02 and ask < 0.98) occur.
+
+### Whether the Run Supports a Lifecycle Quote-quality Conclusion
+Yes. 636/774 snapshots (82.2%) were in-lifecycle. This is a lifecycle-valid observation.
+
+### Whether a New Phase 1 1h Backtest Is Justified
+No. The near-boundary 0.001/0.999 quotes are structurally non-actionable at 99.8% spread. No genuine two-sided liquidity was observed. This is evidence against the 1h longer-duration escape hatch, constrained to this single market observation.
+
+### Required Classifier Fix
+The exchange-bound check should be expanded to classify near-boundary quotes (e.g., bid < 0.02 AND ask > 0.98) as NEAR_BOUNDARY_TWO_SIDED_BOOK or included in EXCHANGE_BOUND_TWO_SIDED_BOOK. Without this fix, the classifier produces false-positive "actionable" verdicts for 0.001/0.999 quotes that are 99.8% wide.
+
+### Safety
+- No orders: PASS
+- No keys: PASS
+- No execution client imports: PASS
+- No on-chain calls: PASS
