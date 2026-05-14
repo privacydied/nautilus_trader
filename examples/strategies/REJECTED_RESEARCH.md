@@ -97,3 +97,16 @@ The first real empirical run (2026-05-13 03:17-03:27 UTC) produced:
 - No retry logic in REST fetchers
 - Pickle coupling in btcusd_research/reports.py
 - Baseline window of 60s is too large for 300-600s captures (9 NEEDS_MORE_DATA)
+
+## Open Study Infrastructure Notes
+
+Completed diagnostic infrastructure for derivatives-source spot lead-lag v2:
+
+- GPU permutation/null tests
+- GPU forward returns with CPU/GPU parity
+- Lead/lag heatmap diagnostics
+- Cost sensitivity diagnostics
+- Cross-capture consistency aggregation
+- Candidate falsification summary
+
+This is not a rejection entry and does not change the existing `OPEN_IMPLEMENTATION` status. Registry status should only change after valid empirical capture/evaluation evidence requires it.

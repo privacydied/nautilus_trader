@@ -205,6 +205,16 @@ Derivatives-source to spot-target flow:
 3. `run_derivatives_spot_lead_lag.py` clips to overlap windows, generates derivative-source trade-flow impulse signals, evaluates spot forward returns, classifies OI buckets, accounts for cost floor, and writes verdict artifacts.
 4. `run_mcpt_export.py` selects candidate groups and exports event-return CSVs if a group is worth MCPT falsification.
 
+Completed derivatives-source spot-target diagnostics now include:
+- GPU permutation/null tests
+- GPU forward returns with CPU/GPU parity
+- Lead/lag heatmap diagnostics
+- Cost sensitivity diagnostics
+- Cross-capture consistency aggregation
+- Candidate falsification summary
+
+These are diagnostic-only research tools and do not create execution readiness.
+
 Important rules encoded in source/tests:
 - No auth, no orders, no private keys, no execution.
 - FAST_DIAGNOSTIC capture mode cannot produce a final REJECTED verdict.

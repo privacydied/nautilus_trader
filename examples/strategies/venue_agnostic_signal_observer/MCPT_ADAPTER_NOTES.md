@@ -152,3 +152,16 @@ CLI args added to `run_lead_lag_heatmap.py`:
   ├─────────────────────────────────────┼──────────────────────────────────────────┤
   │ DERIVATIVES_V2_CAPTURE_RUNBOOK.md   │ Updated                                 │
   └─────────────────────────────────────┴──────────────────────────────────────────┘
+
+## Completed Derivatives-Spot Diagnostic Infrastructure
+
+The derivatives-source -> spot-target observer now has the following diagnostic-only infrastructure completed:
+
+- GPU permutation/null tests
+- GPU forward returns with CPU/GPU parity
+- Lead/lag heatmap diagnostics
+- Cost sensitivity diagnostics
+- Cross-capture consistency aggregation
+- Candidate falsification summary
+
+These components are public-data research diagnostics only. They do not add execution, orders, private-key handling, live trading paths, threshold changes, verdict-rule changes, or registry updates by themselves.

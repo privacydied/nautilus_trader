@@ -155,3 +155,16 @@ Side inference from `m` field:
 `GET https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT`
 
 Open interest costs low request weight. At 3 symbols x 5-second polling, this is ~36 requests/minute, well within the 2400 weight/minute limit. Future symbol expansion must keep polling bounded.
+
+## Completed Derivatives-Spot Diagnostic Infrastructure
+
+The derivatives-source -> spot-target observer now has the following diagnostic-only infrastructure completed:
+
+- GPU permutation/null tests
+- GPU forward returns with CPU/GPU parity
+- Lead/lag heatmap diagnostics
+- Cost sensitivity diagnostics
+- Cross-capture consistency aggregation
+- Candidate falsification summary
+
+These components are public-data research diagnostics only. They do not add execution, orders, private-key handling, live trading paths, threshold changes, verdict-rule changes, or registry updates by themselves.
