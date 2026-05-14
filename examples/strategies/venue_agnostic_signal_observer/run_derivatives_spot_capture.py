@@ -28,6 +28,13 @@ from .symbol_aliases import resolve_symbol
 
 _MS_TO_NS = 1_000_000
 
+# WebSocket endpoint constants — testable and visible.
+# Binance USD-M futures uses the /market routed path for combined streams.
+# The unrouted /stream endpoint may connect but will not push data.
+BINANCE_PERP_WS_BASE = "wss://fstream.binance.com/market/stream"
+# Kraken WebSocket v2 API (v2 subscription format required).
+KRAKEN_WS_URL = "wss://ws.kraken.com/v2"
+
 
 def _ts_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
@@ -68,6 +75,7 @@ class StreamStats:
         self.status: str = "missing"
         self.reconnect_count: int = 0
         self.error_summary: str | None = None
+        self.diagnostics: list[str] = []  # Preflight diagnostic messages
 
     def to_dict(self) -> dict:
         return {
@@ -81,6 +89,7 @@ class StreamStats:
             "status": self.status,
             "reconnect_count": self.reconnect_count,
             "error_summary": self.error_summary,
+            "diagnostics": self.diagnostics,
         }
 
 
@@ -343,20 +352,38 @@ async def _with_reconnect_loop(
 
 async def _binance_perp_handler(raw_to_canonical, files, stats, run_id, out_dir):
     """Binance perp message handler for _with_reconnect_loop."""
+    first_message_seen = False
+
     async def _on_connect(ws, backend):
         # Binance combined streams auto-send after connect — no subscribe needed.
         pass
 
     async def _on_message(data, ws, backend):
+        nonlocal first_message_seen
         # Combined stream: {"stream":"btcusdt@aggTrade","data":{...}}
         if "data" in data:
             payload = data["data"]
             stream_label = data.get("stream", "")
             raw = stream_label.split("@")[0]
+            if not first_message_seen:
+                first_message_seen = True
+                for sk in stats:
+                    if sk.startswith("binance_perp_"):
+                        stats[sk].diagnostics.append("ws_received_first_message")
+                print(f"  [BINANCE_PERP] First message received: stream={stream_label}")
         elif data.get("e") == "aggTrade":
             payload = data
             raw = payload.get("s", "").lower()
+            if not first_message_seen:
+                first_message_seen = True
+                for sk in stats:
+                    if sk.startswith("binance_perp_"):
+                        stats[sk].diagnostics.append("ws_received_first_message")
         else:
+            # Log non-trade messages for diagnostics
+            evt = data.get("event", data.get("e", ""))
+            if evt and not first_message_seen:
+                print(f"  [BINANCE_PERP] Non-trade event before first data: {evt}")
             return True  # not a trade message, keep going
 
         if raw not in raw_to_canonical:
@@ -395,6 +422,28 @@ async def _binance_perp_handler(raw_to_canonical, files, stats, run_id, out_dir)
     return _on_connect, _on_message
 
 
+def build_binance_perp_ws_url(symbols: list[str]) -> str:
+    """Build Binance USD-M perp combined aggTrade WebSocket URL.
+
+    Uses the /market routed endpoint as required by Binance USD-M futures
+    combined stream API. The unrouted /stream endpoint may connect but
+    will not push data for aggTrade streams.
+
+    Args:
+        symbols: List of canonical symbol strings like ['BTC/USDT', 'ETH/USDT'].
+
+    Returns:
+        WebSocket URL string, e.g.
+        'wss://fstream.binance.com/market/stream?streams=btcusdt@aggTrade/ethusdt@aggTrade'
+    """
+    stream_names: list[str] = []
+    for sym in symbols:
+        canon = resolve_symbol(sym)
+        raw = f"{canon.asset}{canon.quote}".lower()
+        stream_names.append(f"{raw}@aggTrade")
+    return f"{BINANCE_PERP_WS_BASE}?streams={'/'.join(stream_names)}"
+
+
 async def capture_binance_perp(
     out_dir: Path,
     run_id: str,
@@ -405,7 +454,7 @@ async def capture_binance_perp(
 ) -> str | None:
     """Capture Binance USD-M perp aggTrade trades via combined WebSocket.
 
-    WebSocket URL: wss://fstream.binance.com/stream?streams=btcusdt@aggTrade/...
+    WebSocket URL: wss://fstream.binance.com/market/stream?streams=btcusdt@aggTrade/...
     Side from 'm' field: m=True -> seller aggressor -> side='sell'
                           m=False -> buyer aggressor -> side='buy'
     """
@@ -425,7 +474,7 @@ async def capture_binance_perp(
         print("  [WARN] No valid Binance perp symbols")
         return
 
-    url = f"wss://fstream.binance.com/stream?streams={'/'.join(stream_names)}"
+    url = build_binance_perp_ws_url(symbols)
     print(f"  [BINANCE_PERP] Connecting: {url}")
 
     # Open file handles
@@ -477,7 +526,13 @@ async def capture_binance_perp(
 # ---------------------------------------------------------------------------
 
 async def _kraken_handler(files, stats, symbols):
-    """Kraken spot message handler for _with_reconnect_loop."""
+    """Kraken spot message handler for _with_reconnect_loop.
+
+    Uses Kraken WebSocket v2 protocol (wss://ws.kraken.com/v2).
+    v2 trade messages are dicts with ``channel`` and ``data`` keys.
+    """
+    subscribed_symbols: set[str] = set()
+
     async def _on_connect(ws, backend):
         sub = {
             "method": "subscribe",
@@ -486,25 +541,58 @@ async def _kraken_handler(files, stats, symbols):
         await _ws_send(ws, backend, json.dumps(sub))
 
     async def _on_message(data, ws, backend):
-        # Kraken trade messages are arrays: [channel_id, [trades...], channel_name, symbol]
-        if not isinstance(data, list) or len(data) < 4:
-            return True
-        if data[2] != "trade":
+        # Kraken v2 trade messages are dicts:
+        #   {"channel": "trade", "type": "update", "data": [{"symbol": "BTC/USD", ...}]}
+        # Non-trade messages (heartbeat, subscription ack, status) are dicts too.
+        if not isinstance(data, dict):
             return True
 
-        symbol = data[3]
-        trades_list = data[1]
-        canon_sym = _normalize_kraken_symbol(symbol)
-        if canon_sym not in files:
+        # Log subscription acks
+        if data.get("method") == "subscribe":
+            result = data.get("result", {})
+            success = data.get("success", False)
+            sym = result.get("symbol", "")
+            if success:
+                subscribed_symbols.add(sym)
+                print(f"  [KRAKEN] Subscribe ack: {sym} success=True")
+                canon = _normalize_kraken_symbol(sym) if sym else sym
+                sk = f"kraken_{canon}"
+                if sk in stats:
+                    stats[sk].diagnostics.append(f"subscribe_ack: {sym} success=True")
+            else:
+                error_msg = data.get("error", "unknown")
+                print(f"  [KRAKEN] Subscribe FAIL: {sym} success=False error={error_msg}")
+                canon = _normalize_kraken_symbol(sym) if sym else sym
+                sk = f"kraken_{canon}"
+                if sk in stats:
+                    stats[sk].diagnostics.append(f"subscribe_rejected: {sym} error={error_msg}")
+                    stats[sk].status = "failed"
+            return True
+
+        if data.get("channel") != "trade":
+            return True
+
+        trades_list = data.get("data", [])
+        if not isinstance(trades_list, list):
             return True
 
         for t in trades_list:
+            if not isinstance(t, dict):
+                continue
+            symbol = t.get("symbol", "")
+            canon_sym = _normalize_kraken_symbol(symbol)
+            if canon_sym not in files:
+                continue
             try:
                 price = float(t["price"])
                 size = float(t["qty"])
                 side = t.get("side", "unknown")
-                ts_seconds = float(t["timestamp"])
-                ts_ns = int(ts_seconds * 1_000_000_000)
+                ts_str = t.get("timestamp", "")
+                if ts_str:
+                    dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    ts_ns = int(dt.timestamp() * 1_000_000_000)
+                else:
+                    continue
             except (KeyError, ValueError, TypeError):
                 continue
 
@@ -521,7 +609,7 @@ async def _kraken_handler(files, stats, symbols):
                 price=price,
                 size=size,
                 side=side,
-                trade_id=str(t.get("id", "")),
+                trade_id=str(t.get("trade_id", "")),
             )
             files[canon_sym].write(tick.to_json() + "\n")
         return True
@@ -538,7 +626,7 @@ async def capture_kraken_spot(
     stop_event: asyncio.Event,
 ) -> str | None:
     """Capture Kraken spot trades via WebSocket."""
-    url = "wss://ws.kraken.com"
+    url = KRAKEN_WS_URL
     print(f"  [KRAKEN] Connecting: {url}")
 
     # Open files
@@ -1022,6 +1110,23 @@ def main() -> None:
             continue
 
     overlap_info = compute_overlap_windows(stats, base_assets)
+
+    # Post-capture zero-tick diagnostics
+    zero_tick_streams = [
+        name for name, s in stats.items()
+        if s.tick_count == 0 and s.status != "missing"
+    ]
+    for name in zero_tick_streams:
+        s = stats[name]
+        if "ws_received_first_message" not in s.diagnostics:
+            s.diagnostics.append("zero_ticks_no_ws_data")
+            print(f"  [DIAG] {name}: 0 ticks, no WebSocket data frames received")
+        elif s.tick_count == 0:
+            s.diagnostics.append("zero_ticks_parser_may_have_dropped")
+            print(f"  [DIAG] {name}: 0 ticks, WS data frames received but parser may have dropped all")
+    for name, s in stats.items():
+        if s.tick_count > 0 and "ws_received_first_message" not in s.diagnostics:
+            s.diagnostics.append("ticks_received_no_ws_diag_marker")
 
     # Build manifest
     manifest = {
