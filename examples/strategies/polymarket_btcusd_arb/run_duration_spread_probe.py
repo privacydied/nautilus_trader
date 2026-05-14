@@ -317,13 +317,16 @@ def _write_duration_report_md(
 
     # Comparison to 15m baseline
     lines.append("## Comparison To 15m Baseline\n")
-    baseline_15m = duration_stats.get(DURATION_15M)
-    if baseline_15m:
-        lines.append(f"15m markets observed: {baseline_15m.get('event_count', 0)}")
-        lines.append(f"15m EXCHANGE_BOUND_TWO_SIDED_BOOK: {baseline_15m.get('exchange_bound_two_sided_book_count', 0)}")
-        lines.append(f"15m actionable two-sided book: {baseline_15m.get('actionable_two_sided_book_count', 0)}")
+    baseline_15m_direct = duration_stats.get(DURATION_15M)
+    if baseline_15m_direct:
+        lines.append(f"15m markets directly observed in this probe: {baseline_15m_direct.get('event_count', 0)}")
+        lines.append(f"15m EXCHANGE_BOUND_TWO_SIDED_BOOK (this probe): {baseline_15m_direct.get('exchange_bound_two_sided_book_count', 0)}")
+        lines.append(f"15m actionable two-sided book (this probe): {baseline_15m_direct.get('actionable_two_sided_book_count', 0)}")
     else:
-        lines.append("No 15m baseline data included in this probe.")
+        lines.append("No 15m markets were directly observed in this duration probe.")
+        lines.append("15m markets were previously analysed in the spread-regime study")
+        lines.append("(2026-05-14, 1,127 events from live observer), which found 100%")
+        lines.append("EXCHANGE_BOUND_TWO_SIDED_BOOK with zero actionable two-sided books.")
     lines.append("")
 
     # Verdict
@@ -345,7 +348,11 @@ def _write_duration_report_md(
         lines.append("Do not execute. Retry when markets are active.")
     elif probe_verdict == V_NO_USABLE:
         lines.append("No execution is justified. No Phase 3 is justified.")
-        lines.append("BTC UpDown markets at the observed durations did not show actionable two-sided liquidity in this sample.")
+        lines.append("BTC UpDown markets at the observed durations did not show actionable two-sided liquidity in this probe sample.")
+        lines.append("5m markets were directly observed in this duration probe (100% EXCHANGE_BOUND_TWO_SIDED_BOOK).")
+        lines.append("15m markets were previously shown by the spread-regime study (1,127 events) to have the same exchange-bound condition.")
+        lines.append("1h and 4h UpDown markets were not found — they do not appear to exist on Polymarket.")
+        lines.append("BTC UpDown maker fair-probability arb is rejected for all currently available durations.")
     elif probe_verdict == V_TOO_FEW:
         lines.append("Insufficient data to conclude. Needs more observation windows.")
         lines.append("Do not execute. Do not start Phase 3.")

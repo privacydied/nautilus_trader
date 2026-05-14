@@ -529,14 +529,21 @@ by EXCHANGE_BOUND_TWO_SIDED_BOOK (0.01/0.99 boundary quotes).
 - 15m UpDown markets: ~4 active at any given time
 - Polymarket BTC UpDown product currently only supports 5m and 15m durations
 
-### Probe Results (5m and 15m, 2026-05-14)
-- Markets observed: 10
-- Events collected: 30
-- Actionable two-sided book count: 0
-- Exchange-bound two-sided book count: 30 (100%)
-- Median spread: 19,600 bps (i.e., 0.98 or bid=0.01/ask=0.99)
-- Verdict: DURATION_SPREAD_NO_USABLE_BOOKS
-- Reason: dominated_by_exchange_bound_two_sided_book
+### Probe Results (2026-05-14)
+- **5m markets (directly observed in this probe):**
+  - Markets observed: 10 (all 5m)
+  - Events collected: 30
+  - Actionable two-sided book count: 0
+  - Exchange-bound two-sided book count: 30 (100%)
+  - Median spread: 19,600 bps (i.e., 0.98 or bid=0.01/ask=0.99)
+  - Verdict per duration: DURATION_SPREAD_NO_USABLE_BOOKS
+  - Reason: dominated_by_exchange_bound_two_sided_book
+- **15m markets (prior evidence, not re-sampled in this probe):**
+  - Prior spread-regime study (2026-05-14, 1,127 events from live observer)
+  - Actionable two-sided book count: 0
+  - Exchange-bound two-sided book count: 1,127 (100%)
+  - Verdict: SPREAD_REGIME_STRUCTURALLY_TOO_WIDE
+  - Reason: no_usable_two_sided_book
 
 ### Probe Results (1h, 4h - 2026-05-14)
 - Markets discovered: 0
@@ -545,15 +552,21 @@ by EXCHANGE_BOUND_TWO_SIDED_BOOK (0.01/0.99 boundary quotes).
 - 1h and 4h BTC UpDown markets do not exist on Polymarket
 
 ### Conclusion
-Polymarket BTC UpDown markets at 5m and 15m durations are dominated by
-EXCHANGE_BOUND_TWO_SIDED_BOOK (0.01/0.99 boundary quotes) with zero
-actionable two-sided liquidity. 1h and 4h durations do not exist at all.
+Across the currently available BTC UpDown product set, no actionable two-sided
+book was found:
+- **5m** (directly observed in this duration probe): 100% EXCHANGE_BOUND_TWO_SIDED_BOOK, 0 actionable two-sided books out of 30 events
+- **15m** (established by prior spread-regime study): 100% EXCHANGE_BOUND_TWO_SIDED_BOOK, 0 actionable two-sided books out of 1,127 events
+- **1h** (no active/product markets discovered): does not appear to exist on Polymarket
+- **4h** (no active/product markets discovered): does not appear to exist on Polymarket
+
+
 
 ### Recommendation
-No execution is justified. BTC UpDown markets at 5m and 15m durations showed
-no actionable two-sided liquidity. 1h and 4h UpDown markets do not exist on
-Polymarket. This confirms the earlier 15m rejection finding extends to all
-currently available UpDown durations.
+No execution is justified. No Phase 3 is justified. BTC UpDown maker
+fair-probability arb is rejected for all currently available Polymarket BTC
+UpDown durations. The prior 15m rejection finding is confirmed and extended
+to all available UpDown durations (5m, 15m). 1h and 4h markets are not offered
+by Polymarket, so the hypothesised longer-duration escape hatch does not exist.
 
 ### Safety
 - No orders: PASS
@@ -566,3 +579,53 @@ currently available UpDown durations.
 - 29 duration spread probe tests pass (all unit tests, no network)
 - 182 total tests pass (153 existing + 29 new)
 - AST safety checks pass
+
+## BTC UpDown Duration Probe Final Archive Decision
+
+### Archive Verdict
+BTC_UPDOWN_REJECTED_ALL_CURRENT_DURATIONS
+
+### Final Reason
+no_usable_two_sided_book_and_no_longer_duration_products
+
+### Evidence Provenance
+- 5m: directly observed in this duration probe — 30 events, 100% EXCHANGE_BOUND_TWO_SIDED_BOOK, 0 actionable
+- 15m: established by prior spread-regime/live-observer study — 1,127 events, 100% EXCHANGE_BOUND_TWO_SIDED_BOOK, 0 actionable
+- 1h: not found — appears not offered by Polymarket
+- 4h: not found — appears not offered by Polymarket
+
+### Branch
+- Branch: polymarket-btc-updown-duration-spread-v1
+- Base branch: develop (commit 113b527b42)
+- Squash-merged into develop at: c4c4f7b1de
+
+### Reports
+- Duration probe report directory: reports/polymarket_btcusd_arb/duration_spread_probe/20260514T025823Z/
+- Prior spread-regime report directory: reports/polymarket_btcusd_arb/spread_regime/20260514T022052Z/
+
+### Tags
+- polymarket-btc-updown-duration-spread-no-usable-book-2026-05-14
+- polymarket-btc-updown-all-current-durations-rejected-2026-05-14
+
+### Why Phase 3 is Blocked
+No executable two-sided book exists at any currently available duration.
+Polymarket does not offer longer-duration (1h, 4h) BTC UpDown products that
+might attract different liquidity.
+
+### Why Execution is Blocked
+Exchange-bound quotes (0.01 bid / 0.99 ask) at all durations make any
+maker-fair-probability-arb strategy economically non-viable. The spread
+is ~19,600 bps regardless of duration.
+
+### Safety Confirmation
+- No orders: PASS
+- No keys: PASS
+- No execution client imports: PASS
+- No on-chain calls: PASS
+
+### Recommendation
+Do not execute.
+Do not start Phase 3.
+Do not continue BTC UpDown under this hypothesis.
+Future Polymarket BTC research must be a separate hypothesis outside BTC UpDown,
+or require a product/liquidity regime change on Polymarket's side.
