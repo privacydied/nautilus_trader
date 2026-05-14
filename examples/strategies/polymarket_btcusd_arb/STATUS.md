@@ -384,3 +384,118 @@ reports/polymarket_btcusd_arb/evidence_review/20260514T012205Z/
 
 ## Final Archive File
 examples/strategies/polymarket_btcusd_arb/FINAL_RESEARCH_STATUS.md
+
+## Post-Archive Note
+This research track is archived as REJECTED_FOR_CURRENT_LIVE_CONDITIONS.
+Future studies (spread regime, wider thresholds, different durations) are separate hypothesis branches and must not modify this archive verdict.
+Squash-merged into develop. Tag: polymarket-btc-15m-updown-rejected-live-2026-05-14.
+
+## Spread Regime Quote-Semantics Audit
+
+### Finding
+All 1,127 observed Polymarket BTC 15m UpDown quotes had best_bid=0.01 / best_ask=0.99.
+These are NOT empty-book or fallback default values. They are real resting CLOB orders
+with genuine size (verified via live CLOB API: bid size ~8,298, ask size ~8,291 at the
+time of audit). However, they represent lottery-market liquidity at exchange minimum
+($0.01) and maximum ($0.99) price bounds — not actionable two-sided spread.
+
+### Quote Quality Classification
+- TWO_SIDED_BOOK: 0 (0.0%) — genuine two-sided quotes away from bounds
+- FALLBACK_MIN_MAX: 1,127 (100.0%) — at exchange min/max bounds
+- ONE_SIDED_BOOK: 0
+- EMPTY_BOOK: 0
+- MISSING_BOOK: 0
+- INVALID_BOOK: 0
+
+### Verdict
+- Verdict: SPREAD_REGIME_STRUCTURALLY_TOO_WIDE
+- Reason: no_usable_two_sided_book
+- The 0.01/0.99 quotes are real CLOB levels with genuine size, but they provide
+  no usable two-sided liquidity for a fair-probability strategy.
+- Originally classified as FALLBACK_MIN_MAX, corrected to EXCHANGE_BOUND_TWO_SIDED_BOOK
+  because these are real CLOB resting orders at exchange price bounds, NOT synthetic
+  defaults or data artifacts.
+
+### Report Directory
+reports/polymarket_btcusd_arb/spread_regime/20260514T022052Z/
+
+### Tests Run
+84 spread regime tests (including new exchange-bound vs fallback taxonomy).
+Full suite: 153 passed.
+
+### Safety
+- No orders
+- No keys
+- No execution client imports
+- No on-chain calls
+
+## Spread Regime Taxonomy Correction
+
+### Change
+Renamed FALLBACK_MIN_MAX to EXCHANGE_BOUND_TWO_SIDED_BOOK for real CLOB orders at
+exchange min/max bounds (0.01/0.99). FALLBACK_MIN_MAX is now reserved exclusively
+for synthetic/default values from missing-data fallbacks.
+
+### Rationale
+The 0.01/0.99 quotes are real Polymarket CLOB resting orders with genuine size
+(verified via live API: bid size ~8,298, ask size ~8,291). They are NOT data
+artifacts, NOT loader defaults, NOT empty-book placeholders. Classifying them as
+FALLBACK_MIN_MAX was misleading — it implied they were synthetic fallbacks when
+they are actually real boundary liquidity that happens to be non-actionable.
+
+### Quote Quality Taxonomy (corrected)
+- TWO_SIDED_BOOK: actionable two-sided quotes away from exchange bounds
+- EXCHANGE_BOUND_TWO_SIDED_BOOK: real CLOB orders at exchange min/max bounds
+  (real orders, real size, but non-actionable for fair-probability strategies)
+- ONE_SIDED_BOOK: only one side of the book exists
+- EMPTY_BOOK: both sides are None
+- FALLBACK_MIN_MAX: synthetic/default values from missing-data fallback only
+- MISSING_BOOK: no usable book payload
+- INVALID_BOOK: bid > ask or other boundary violations
+
+### Final Quote Quality Counts
+- TWO_SIDED_BOOK: 0 (0.0%) — actionable two-sided quotes away from bounds
+- EXCHANGE_BOUND_TWO_SIDED_BOOK: 1,127 (100.0%) — real CLOB boundary orders
+- FALLBACK_MIN_MAX: 0 (0.0%) — synthetic default values
+- ONE_SIDED_BOOK: 0
+- EMPTY_BOOK: 0
+- MISSING_BOOK: 0
+- INVALID_BOOK: 0
+- Actionable two-sided book: 0 (0.0%)
+
+### New Fields in SpreadRegimeSummary
+- exchange_bound_two_sided_book_count: 1127
+- pct_exchange_bound_two_sided_book: 100.0
+- actionable_two_sided_book_count: 0
+- pct_actionable_two_sided_book: 0.0
+- fallback_min_max_count: 0
+- pct_fallback_min_max: 0.0
+
+### Final Diagnosis
+EXCHANGE_BOUND_TWO_SIDED_BOOK dominated the sample. BTC 15m UpDown had real
+but non-actionable boundary liquidity, with no usable two-sided market for the
+tested fair-probability strategy.
+
+### Verdict (unchanged)
+- SPREAD_REGIME_STRUCTURALLY_TOO_WIDE
+- Reason: no_usable_two_sided_book
+
+### Report Directory (taxonomically corrected)
+reports/polymarket_btcusd_arb/spread_regime/20260514T022052Z/
+
+### Tests Run
+84 spread regime tests including:
+- test_exchange_bound_two_sided_book_quote_quality
+- test_real_001_099_orders_are_not_fallback_min_max
+- test_fallback_min_max_only_for_synthetic_defaults
+- test_actionable_two_sided_book_excludes_exchange_bound_book
+- test_summary_counts_exchange_bound_books
+- test_report_distinguishes_boundary_quotes_from_fallbacks
+- test_verdict_reason_remains_no_usable_two_sided_book
+Full suite: 153 passed.
+
+### Safety
+- No orders
+- No keys
+- No execution client imports
+- No on-chain calls
