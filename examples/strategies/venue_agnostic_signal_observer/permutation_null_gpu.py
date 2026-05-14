@@ -18,6 +18,7 @@ compute_null_distribution_gpu(...)  -- GPU version of compute_null_distribution
 from __future__ import annotations
 
 import math
+import random
 from typing import Any
 
 
@@ -188,13 +189,14 @@ def compute_null_distribution_gpu(
     # src_ts offsets relative to ts_min for circular shift
     src_offsets = src_ts - ts_min  # shape [N]
 
-    # Precompute all permutation offsets on CPU from a single seeded generator.
-    # This makes --batch-size a pure speed knob: same seed always produces the
-    # same null universe regardless of chunk_size.
-    cpu_gen = torch.Generator()
-    cpu_gen.manual_seed(seed)
-    all_offsets_cpu = torch.randint(
-        0, duration, (iterations,), dtype=torch.int64, generator=cpu_gen
+    # Precompute all permutation offsets using Python's random.Random (stdlib,
+    # Mersenne Twister). Stable across PyTorch versions, OS, and hardware.
+    # Makes --batch-size a pure speed knob: same (seed, iterations, duration)
+    # always produces the same null universe.
+    rng = random.Random(seed)
+    all_offsets_cpu = torch.tensor(
+        [rng.randrange(duration) for _ in range(iterations)],
+        dtype=torch.int64,
     )
 
     for chunk_start in range(0, iterations, chunk_size):

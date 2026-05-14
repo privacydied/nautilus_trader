@@ -16,6 +16,7 @@ Audited source population:
 
 Important caveat: `examples/strategies/polymarket_btcusd_arb` currently has no visible `.py` source files in the worktree; only bytecode/cache artifacts were discoverable by the auditing subagent. That package is therefore an operational integrity risk even though bytecode metadata/disassembly exposes much of the intended design.
 
+// its in a different branch
 ---
 
 ## 1. Executive Summary
