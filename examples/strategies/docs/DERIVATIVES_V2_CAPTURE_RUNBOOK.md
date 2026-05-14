@@ -166,9 +166,16 @@ If no overlap or insufficient overlap:
 
 ## Phase 5 -- Evaluation Command
 
+**CRITICAL: always pass `--capture-mode` matching the gate decision.** Omitting it
+means the evaluator cannot enforce verdict rules (e.g., FAST_DIAGNOSTIC must
+never produce REJECTED). Do not use bare defaults when the runbook specifies a
+mode.
+
+### FAST_DIAGNOSTIC evaluation
+
 ```bash
 python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_lead_lag \
-  --capture-dir CAPTURE_DIR \
+  --capture-dir data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_YYYYMMDD_HHMMSS \
   --source-venues binance_perp \
   --target-venues kraken,coinbase \
   --symbols BTC/USD,ETH/USD,SOL/USD \
@@ -181,8 +188,37 @@ python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spo
   --slippage-bps 5 \
   --quote-mismatch-buffer-bps 5 \
   --min-events 50 \
-  --out REPORT_DIR
+  --capture-mode FAST_DIAGNOSTIC \
+  --out reports/derivatives_spot_lead_lag_v2_FAST_DIAGNOSTIC_YYYYMMDD_HHMMSS
 ```
+
+Allowed verdicts: NEEDS_MORE_DATA, MARKET_MODERATE_DIAGNOSTIC,
+SINGLE_PAIR_CANDIDATE_DIAGNOSTIC, CANDIDATE_FOR_LONGER_OBSERVATION.
+**REJECTED is forbidden.**
+
+### FULL_ACTIVE evaluation
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_lead_lag \
+  --capture-dir data/derivatives_spot_capture_v2_ACTIVE_YYYYMMDD_HHMMSS \
+  --source-venues binance_perp \
+  --target-venues kraken,coinbase \
+  --symbols BTC/USD,ETH/USD,SOL/USD \
+  --signal-types notional_burst,large_trade,signed_imbalance \
+  --lookbacks-ms 1000,5000,10000,30000 \
+  --baseline-window-ms 60000 \
+  --horizons-ms 1000,2000,5000,10000,30000,60000,300000 \
+  --cooldown-ms 10000 \
+  --fee-bps 40 \
+  --slippage-bps 5 \
+  --quote-mismatch-buffer-bps 5 \
+  --min-events 50 \
+  --capture-mode FULL_ACTIVE \
+  --out reports/derivatives_spot_lead_lag_v2_ACTIVE_YYYYMMDD_HHMMSS
+```
+
+All verdicts allowed including REJECTED (only when all full-active conditions
+are met).
 
 Evaluation requirements:
 
@@ -279,6 +315,61 @@ These determine `FAST_DIAGNOSTIC_CAPTURE_ONLY`:
 - AND `eth_fast_market_state` in (ACTIVE, BUILDING)
 
 If either ETH path or BTC path passes: `FAST_DIAGNOSTIC_CAPTURE_ONLY`.
+
+---
+
+## Phase 8 -- MCPT Export (Post-Evaluation)
+
+After evaluation, run the MCPT export adapter. This decides whether any group
+is MCPT-worthy and exports candidate event return series if so.
+
+### FAST_DIAGNOSTIC MCPT export
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_mcpt_export \
+  --report-dir reports/derivatives_spot_lead_lag_v2_FAST_DIAGNOSTIC_YYYYMMDD_HHMMSS \
+  --min-events 50 \
+  --cost-floor-bps 50 \
+  --max-groups 3
+```
+
+FAST_DIAGNOSTIC MCPT exports are **diagnostic only**. They cannot support final
+rejection. If the evaluation verdict was MARKET_MODERATE_DIAGNOSTIC, MCPT
+results add context but never override the single-window limitation.
+
+### FULL_ACTIVE MCPT export
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_mcpt_export \
+  --report-dir reports/derivatives_spot_lead_lag_v2_ACTIVE_YYYYMMDD_HHMMSS \
+  --min-events 50 \
+  --cost-floor-bps 50 \
+  --max-groups 3
+```
+
+FULL_ACTIVE MCPT exports carry more weight because the underlying capture
+satisfies all gate conditions. A candidate that survives MCPT falsification
+from a FULL_ACTIVE capture is a stronger finding than one from FAST_DIAGNOSTIC.
+
+### Output
+
+- If no candidate exists: prints `MCPT_SKIPPED: <reason>` and writes
+  `mcpt_export_summary.json` with `mcpt_skipped: true`.
+- If candidates exist: writes CSVs to `<report-dir>/mcpt_inputs/`, one per
+  candidate group, plus the summary JSON.
+- See `examples/strategies/docs/MCPT_ADAPTER_NOTES.md` for the exported CSV
+  schema and MCPT approach descriptions.
+
+### MCPT Approaches (future)
+
+When a candidate survives evaluation and MCPT export identifies it:
+
+- **Approach A (recommended)**: Permute source tick data, re-run signal
+  generator and evaluator on permuted data, compute p-value. This is the
+  full neurotrader-style bar/path permutation. Requires raw capture data.
+- **Approach B (quick sanity check)**: Bootstrap/shuffle the exported event
+  return series. Weaker test — does not account for temporal structure.
+  **Does not prove a strategy survives MCPT.** Only useful as a fast diagnostic.
 
 ---
 

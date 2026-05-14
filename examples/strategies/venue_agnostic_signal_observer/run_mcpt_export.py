@@ -7,12 +7,13 @@ is MCPT-worthy, and exports candidate event return series CSVs.
 Does NOT actually run MCPT. This is adapter/export plumbing only.
 
 Usage:
-    python -m venue_agnostic_signal_observer.run_mcpt_export \\
-        --report-dir reports/derivatives_spot_lead_lag_v2_FAST_DIAGNOSTIC_... \\
-        --out reports/mcpt_inputs \\
-        --min-events 30 \\
+    python -m examples.strategies.venue_agnostic_signal_observer.run_mcpt_export \\
+        --report-dir reports/derivatives_spot_lead_lag_v2_ACTIVE_YYYYMMDD_HHMMSS \\
+        --min-events 50 \\
         --max-groups 3 \\
         --cost-floor-bps 50
+
+See DERIVATIVES_V2_CAPTURE_RUNBOOK.md Phase 8 for the complete post-capture sequence.
 """
 from __future__ import annotations
 

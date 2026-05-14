@@ -49,6 +49,11 @@ def is_mcpt_worthy_group(
     """Decide whether MCPT is worth running on a group.
 
     Returns (worthy, reason).
+
+    Note: FAST_DIAGNOSTIC captures cannot produce final REJECTED verdicts
+    by design. This function does not enforce that here — it is a pure
+    statistical gate. The capture-mode verdict remapping happens upstream
+    in run_derivatives_spot_lead_lag.py.
     """
     # --- Hard skip: too few events ---
     count = valid_count if valid_count is not None else 0

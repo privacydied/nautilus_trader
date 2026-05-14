@@ -46,33 +46,118 @@ OHLC bars to permute.
 
 **Two approaches to bridge this gap:**
 
-### Approach A: Permute the Source Tick Data, Re-run Signal+Evaluation (Recommended)
+## Approach Comparison
 
-This is the conceptually correct approach:
+### Approach A: Permute Source Tick Data, Re-run Signal+Evaluation (Recommended)
+
+This is the conceptually correct MCPT route, matching neurotrader888's bar-permutation
+methodology. The key insight: MCPT falsifies a *strategy*, not a *return series*.
+Permuting the raw data and re-running the signal generator preserves the strategy's
+selection logic (e.g., "fire on notional burst ratio >= 3x") while destroying temporal
+patterns, producing a null distribution of strategy performance under random data.
+
+Steps:
 1. Take the original captured trade tick data (source + target).
-2. Permute the source tick timestamps (or shuffle source-side intra-bar structure).
+2. Permute source tick timestamps (or shuffle source-side intra-bar structure using
+   `bar_permute.get_permutation` reconstructed from tick data).
 3. Re-run `TradeFlowImpulseSignalGenerator` on the permuted source data.
 4. Re-evaluate forward returns on the real target data.
 5. Compare the resulting mean_net_bps distribution to the observed candidate's mean_net_bps.
 6. Compute p-value = fraction of permutations where permuted performance >= observed.
 
-This requires the **raw capture data** (not just the report), so it can only run
-after a capture session.
+Requires raw capture data (not just the report). This is the only approach that
+constitutes a proper MCPT falsification.
 
-### Approach B: Simple Bootstrap on Event Returns (Quick Falsification)
+### Approach B: Bootstrap on Exported Event Returns (Quick Sanity Check Only)
 
-If we only have the event return series (from our exported CSVs):
-1. Treat the signed net returns as a return series.
-2. Bootstrap or shuffle the returns N times.
-3. Recompute mean and win rate for each shuffle.
-4. Compute p-value = fraction where shuffled mean >= observed mean.
+Treat the signed net returns from the exported CSV as a return series, then:
+1. Bootstrap/shuffle the returns N times.
+2. Recompute mean and win rate for each shuffle.
+3. Compute p-value = fraction where shuffled mean >= observed mean.
 
-This is a weaker test (doesn't account for temporal structure) but works
-with just the exported CSV data.
+**This is a weaker test.** It does not account for temporal structure, signal selection
+bias, or look-ahead effects. It answers "could random returns produce this mean?" —
+not "could random data fool the signal generator into producing these signals?"
+
+**Approach B does not prove a strategy survives MCPT.** It is only useful as a fast
+diagnostic sanity check. Any candidate worth pursuing must eventually be tested with
+Approach A.
 
 ---
 
-## Exported Candidate CSV Format
+## Command to Run After Capture
+
+### Step 1: Evaluate (pick the correct capture-mode)
+
+FAST_DIAGNOSTIC:
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_lead_lag \
+  --capture-dir data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_YYYYMMDD_HHMMSS \
+  --source-venues binance_perp \
+  --target-venues kraken,coinbase \
+  --symbols BTC/USD,ETH/USD,SOL/USD \
+  --signal-types notional_burst,large_trade,signed_imbalance \
+  --lookbacks-ms 1000,5000,10000,30000 \
+  --baseline-window-ms 60000 \
+  --horizons-ms 1000,2000,5000,10000,30000,60000,300000 \
+  --cooldown-ms 10000 \
+  --fee-bps 40 \
+  --slippage-bps 5 \
+  --quote-mismatch-buffer-bps 5 \
+  --min-events 50 \
+  --capture-mode FAST_DIAGNOSTIC \
+  --out reports/derivatives_spot_lead_lag_v2_FAST_DIAGNOSTIC_YYYYMMDD_HHMMSS
+```
+
+FULL_ACTIVE:
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_lead_lag \
+  --capture-dir data/derivatives_spot_capture_v2_ACTIVE_YYYYMMDD_HHMMSS \
+  --source-venues binance_perp \
+  --target-venues kraken,coinbase \
+  --symbols BTC/USD,ETH/USD,SOL/USD \
+  --signal-types notional_burst,large_trade,signed_imbalance \
+  --lookbacks-ms 1000,5000,10000,30000 \
+  --baseline-window-ms 60000 \
+  --horizons-ms 1000,2000,5000,10000,30000,60000,300000 \
+  --cooldown-ms 10000 \
+  --fee-bps 40 \
+  --slippage-bps 5 \
+  --quote-mismatch-buffer-bps 5 \
+  --min-events 50 \
+  --capture-mode FULL_ACTIVE \
+  --out reports/derivatives_spot_lead_lag_v2_ACTIVE_YYYYMMDD_HHMMSS
+```
+
+### Step 2: Export MCPT candidates
+
+```bash
+# Use the report dir from Step 1:
+python -m examples.strategies.venue_agnostic_signal_observer.run_mcpt_export \
+  --report-dir reports/derivatives_spot_lead_lag_v2_FAST_DIAGNOSTIC_YYYYMMDD_HHMMSS \
+  --min-events 50 \
+  --cost-floor-bps 50 \
+  --max-groups 3
+```
+
+Or for FULL_ACTIVE:
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_mcpt_export \
+  --report-dir reports/derivatives_spot_lead_lag_v2_ACTIVE_YYYYMMDD_HHMMSS \
+  --min-events 50 \
+  --cost-floor-bps 50 \
+  --max-groups 3
+```
+
+If candidates exist, exported CSVs will appear in `<report-dir>/mcpt_inputs/`.
+If no candidates (all cost-floor dust), will print `MCPT_SKIPPED: ...`.
+
+### Complete Tomorrow Sequence
+
+```
+gate → preflight → capture (with correct --duration-seconds) → 
+evaluation (with --capture-mode) → MCPT export
+```
 
 Our `mcpt_export.py` produces CSVs with these columns:
 
@@ -118,31 +203,4 @@ survives evaluation, we can either:
 
 ---
 
-## Command to Run After Tomorrow's Capture
-
-```bash
-# After running derivatives evaluation:
-python -m venue_agnostic_signal_observer.run_derivatives_spot_lead_lag \
-    --capture-dir data/derivatives_spot_capture_v2 \
-    --out reports/derivatives_spot_lead_lag_v2
-
-# Then export MCPT candidates:
-python -m venue_agnostic_signal_observer.run_mcpt_export \
-    --report-dir reports/derivatives_spot_lead_lag_v2 \
-    --min-events 30 \
-    --cost-floor-bps 50 \
-    --max-groups 3
-```
-
-If candidates exist, exported CSVs will appear in `<report-dir>/mcpt_inputs/`.
-If no candidates (all cost-floor dust), will print `MCPT_SKIPPED: ...`.
-
----
-
-## Files in This Adapter
-
-| File | Purpose |
-|---|---|
-| `mcpt_export.py` | Pure functions: `is_mcpt_worthy_group()`, `select_mcpt_candidate_groups()`, `export_mcpt_candidate_series()`, `export_mcpt_summary()` |
-| `run_mcpt_export.py` | CLI wrapper that loads a report, selects candidates, exports CSVs |
-| `tests/test_mcpt_export.py` | Focused unit tests for the export logic |
+## Exported Candidate CSV Format
