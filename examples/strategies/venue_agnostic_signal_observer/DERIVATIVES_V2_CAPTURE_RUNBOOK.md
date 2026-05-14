@@ -66,6 +66,7 @@ Important rules:
 - GPU forward returns accelerate the events × horizons inner loop only. All signal generation, OI bucketing, baseline evaluation, grouping, verdict rules, and report writing are unchanged.
 - GPU forward returns do **not** update `REJECTED_RESEARCH.md`.
 - GPU forward returns do **not** permit live trading or execution.
+- Lead/lag heatmaps are diagnostics only; they do not promote or reject a strategy by themselves.
 
 ## Step 3: MCPT Export
 
@@ -201,3 +202,8 @@ Output: per-config aggregation showing:
   ├───────────────────────────────────┼─────────────────────────────────────┤
   │ DERIVATIVES_V2_CAPTURE_RUNBOOK.md │ Updated                             │
   └───────────────────────────────────┴─────────────────────────────────────┘
+
+
+## Lead/Lag Heatmap Diagnostics
+
+The optional heatmap runner reads existing capture data only and emits a JSON summary, CSV table, and Markdown report. It is diagnostic only: it cannot create candidates, cannot update registries, and cannot change verdict rules.
