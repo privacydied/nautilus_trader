@@ -189,21 +189,75 @@ Output: per-config aggregation showing:
 - `NULL_REJECTED_DIAGNOSTIC` -- null test only; does NOT promote to a general REJECTED verdict
 ## Files Changed
 
-  ┌───────────────────────────────────┬─────────────────────────────────────┐
-  │               File                │               Change                │
-  ├───────────────────────────────────┼─────────────────────────────────────┤
-  │ forward_returns_gpu.py            │ New — GPU forward-return kernel     │
-  ├───────────────────────────────────┼─────────────────────────────────────┤
-  │ tests/test_forward_returns_gpu.py │ New — 16 focused tests              │
-  ├───────────────────────────────────┼─────────────────────────────────────┤
-  │ run_derivatives_spot_lead_lag.py  │ Modified — 3 CLI args + GPU routing │
-  ├───────────────────────────────────┼─────────────────────────────────────┤
-  │ MCPT_ADAPTER_NOTES.md             │ Updated                             │
-  ├───────────────────────────────────┼─────────────────────────────────────┤
-  │ DERIVATIVES_V2_CAPTURE_RUNBOOK.md │ Updated                             │
-  └───────────────────────────────────┴─────────────────────────────────────┘
+┌─────────────────────────────────────┬──────────────────────────────────────────┐
+  │               File                  │               Change                     │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ forward_returns_gpu.py              │ New — GPU forward-return kernel          │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ lead_lag_heatmap_gpu.py             │ New — GPU lead/lag heatmap diagnostics  │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ run_lead_lag_heatmap.py             │ New — CLI runner for heatmap            │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ tests/test_forward_returns_gpu.py   │ New — 16 focused tests                  │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ tests/test_lead_lag_heatmap_gpu.py  │ New — 22 focused tests                  │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ run_derivatives_spot_lead_lag.py    │ Modified — 3 CLI args + GPU routing    │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ MCPT_ADAPTER_NOTES.md               │ Updated                                 │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ DERIVATIVES_V2_CAPTURE_RUNBOOK.md   │ Updated                                 │
+  └─────────────────────────────────────┴──────────────────────────────────────────┘
 
 
-## Lead/Lag Heatmap Diagnostics
+## Step 7b: Lead/Lag Heatmap Diagnostics (optional)
 
-The optional heatmap runner reads existing capture data only and emits a JSON summary, CSV table, and Markdown report. It is diagnostic only: it cannot create candidates, cannot update registries, and cannot change verdict rules.
+Compute correlation-style lead/lag diagnostics between source event/flow series and target return series across lag buckets. This is a **diagnostic microscope** — it cannot create trade candidates, change verdicts, update registries, or alter evaluator behavior.
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_lead_lag_heatmap \
+    --capture-dir data/derivatives_spot_capture_v2 \
+    --out lead_lag_heatmap \
+    --engine cpu \
+    --lags-ms 100,250,500,1000,2000,5000,10000,30000 \
+    --bucket-ms 250 \
+    --min-samples 50
+```
+
+### Optional: GPU-accelerated heatmap
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_lead_lag_heatmap \
+    --capture-dir data/derivatives_spot_capture_v2 \
+    --out lead_lag_heatmap_gpu \
+    --engine gpu \
+    --device cuda:0 \
+    --batch-size 8192 \
+    --lags-ms 100,250,500,1000,2000,5000,10000,30000 \
+    --bucket-ms 250 \
+    --min-samples 50
+```
+
+CLI args:
+
+| Arg | Default | Description |
+|---|---|---|
+| `--capture-dir` | (required) | Path to capture data directory |
+| `--report-dir` | (optional) | Path to evaluated signal groups (for metadata enrichment) |
+| `--out` | (required) | Output directory |
+| `--engine` | `cpu` | `cpu` or `gpu` |
+| `--device` | `cuda:0` | CUDA device for `--engine gpu` |
+| `--batch-size` | `8192` | Tensor chunk size for GPU processing |
+| `--lags-ms` | `100,250,500,1000,2000,5000,10000,30000` | Lag buckets in milliseconds |
+| `--bucket-ms` | `250` | Resampling bucket width in milliseconds |
+| `--min-samples` | `50` | Minimum overlapping buckets to produce a correlation |
+
+Important rules:
+- `--engine cpu` is the default and produces deterministic output.
+- `--engine gpu` is explicit. If CUDA is unavailable, the run exits with `GPU_UNAVAILABLE_DIAGNOSTIC` — it does **not** silently fall back to CPU.
+- CPU/GPU produce bit-identical verdicts and matching float values within tolerance.
+- Heatmap diagnostics are **diagnostic only** — they cannot promote or reject a strategy by themselves.
+- Allowed diagnostic verdicts: `LEAD_LAG_DIAGNOSTIC_READY`, `INSUFFICIENT_OVERLAP`, `INSUFFICIENT_SAMPLES`, `NO_SIGNAL_SERIES`, `GPU_UNAVAILABLE_DIAGNOSTIC`.
+- Forbidden verdicts: `REJECTED`, `CANDIDATE`, `CANDIDATE_FOR_LONGER_OBSERVATION`.
+
+Output: `lead_lag_heatmap_summary.json`, `lead_lag_heatmap.csv`, `lead_lag_heatmap.md`.

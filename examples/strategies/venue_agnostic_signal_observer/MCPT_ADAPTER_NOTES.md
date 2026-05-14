@@ -98,6 +98,32 @@ python -m examples.strategies.venue_agnostic_signal_observer.run_permutation_nul
   --cost-floor-bps 50
 ```
 
+## Lead/Lag Heatmap Diagnostics (optional, diagnostic-only)
+
+The lead/lag heatmap module (`lead_lag_heatmap_gpu.py`) computes correlation-style diagnostics between source event/flow series and target return series across lag buckets. It is a diagnostic microscope — it cannot create trade candidates, change verdicts, update registries, or alter evaluator behavior.
+
+- **CPU is the default.** `--engine cpu` produces deterministic output.
+- `--engine gpu` uses chunked CUDA tensors for the cross-correlation inner loop.
+- **No hidden CPU fallback.** If `--engine gpu` is requested and CUDA is unavailable, the run exits with `GPU_UNAVAILABLE_DIAGNOSTIC`.
+- CPU/GPU produce matching verdicts and float values within tolerance.
+- Allowed diagnostic verdicts: `LEAD_LAG_DIAGNOSTIC_READY`, `INSUFFICIENT_OVERLAP`, `INSUFFICIENT_SAMPLES`, `NO_SIGNAL_SERIES`, `GPU_UNAVAILABLE_DIAGNOSTIC`.
+- **Forbidden verdicts**: `REJECTED`, `CANDIDATE`, `CANDIDATE_FOR_LONGER_OBSERVATION`. The module raises `ValueError` on these.
+- Heatmaps cannot promote or reject a strategy by themselves.
+
+CLI args added to `run_lead_lag_heatmap.py`:
+
+| Arg | Default | Description |
+|---|---|---|
+| `--capture-dir` | (required) | Path to capture data directory |
+| `--report-dir` | (optional) | Path to evaluated signal groups |
+| `--out` | (required) | Output directory |
+| `--engine` | `cpu` | `cpu` or `gpu` |
+| `--device` | `cuda:0` | CUDA device for `--engine gpu` |
+| `--batch-size` | `8192` | Tensor chunk size for GPU processing |
+| `--lags-ms` | `100,250,500,1000,2000,5000,10000,30000` | Lag buckets in milliseconds |
+| `--bucket-ms` | `250` | Resampling bucket width in milliseconds |
+| `--min-samples` | `50` | Minimum overlapping buckets to produce a correlation |
+
 ## Important constraints
 
 - MCPT and null tests are **falsification tools only**. They test whether observed results could arise by chance.
@@ -107,16 +133,22 @@ python -m examples.strategies.venue_agnostic_signal_observer.run_permutation_nul
 - The null test's `NULL_REJECTED_DIAGNOSTIC` prefix is deliberate: it must not be collapsed into the main `REJECTED` verdict taxonomy.
 ## Files Changed
 
-  ┌───────────────────────────────────┬─────────────────────────────────────┐
-  │               File                │               Change                │
-  ├───────────────────────────────────┼─────────────────────────────────────┤
-  │ forward_returns_gpu.py            │ New — GPU forward-return kernel     │
-  ├───────────────────────────────────┼─────────────────────────────────────┤
-  │ tests/test_forward_returns_gpu.py │ New — 16 focused tests              │
-  ├───────────────────────────────────┼─────────────────────────────────────┤
-  │ run_derivatives_spot_lead_lag.py  │ Modified — 3 CLI args + GPU routing │
-  ├───────────────────────────────────┼─────────────────────────────────────┤
-  │ MCPT_ADAPTER_NOTES.md             │ Updated                             │
-  ├───────────────────────────────────┼─────────────────────────────────────┤
-  │ DERIVATIVES_V2_CAPTURE_RUNBOOK.md │ Updated                             │
-  └───────────────────────────────────┴─────────────────────────────────────┘
+  ┌─────────────────────────────────────┬──────────────────────────────────────────┐
+  │               File                  │               Change                     │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ forward_returns_gpu.py              │ New — GPU forward-return kernel          │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ lead_lag_heatmap_gpu.py             │ New — GPU lead/lag heatmap diagnostics  │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ run_lead_lag_heatmap.py             │ New — CLI runner for heatmap            │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ tests/test_forward_returns_gpu.py   │ New — 16 focused tests                  │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ tests/test_lead_lag_heatmap_gpu.py  │ New — 22 focused tests                  │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ run_derivatives_spot_lead_lag.py    │ Modified — 3 CLI args + GPU routing    │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ MCPT_ADAPTER_NOTES.md               │ Updated                                 │
+  ├─────────────────────────────────────┼──────────────────────────────────────────┤
+  │ DERIVATIVES_V2_CAPTURE_RUNBOOK.md   │ Updated                                 │
+  └─────────────────────────────────────┴──────────────────────────────────────────┘

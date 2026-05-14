@@ -109,6 +109,24 @@ python -m examples.strategies.venue_agnostic_signal_observer.run_report_corpus \
     --out corpus_aggregation
 ```
 
+### Step 7: Lead/Lag Heatmap Diagnostics (optional)
+
+Compute correlation-style diagnostics between source and target series across lag buckets. This is a diagnostic microscope — it cannot create candidates, change verdicts, or alter evaluator behavior.
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_lead_lag_heatmap \
+    --capture-dir data/derivatives_spot_capture_v2 \
+    --out lead_lag_heatmap \
+    --engine cpu \
+    --lags-ms 100,250,500,1000,2000,5000,10000,30000 \
+    --bucket-ms 250 \
+    --min-samples 50
+```
+
+Optional GPU acceleration (`--engine gpu --device cuda:0`). No hidden CPU fallback. Diagnostic-only verdicts: `LEAD_LAG_DIAGNOSTIC_READY`, `INSUFFICIENT_OVERLAP`, `INSUFFICIENT_SAMPLES`, `NO_SIGNAL_SERIES`, `GPU_UNAVAILABLE_DIAGNOSTIC`. Forbidden verdicts: `REJECTED`, `CANDIDATE`.
+
+Output: `lead_lag_heatmap_summary.json`, `lead_lag_heatmap.csv`, `lead_lag_heatmap.md`.
+
 ### Allowed verdicts
 
 - `REJECTED` -- enough overlap, movement, events; no edge
