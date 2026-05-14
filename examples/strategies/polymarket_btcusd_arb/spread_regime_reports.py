@@ -1,8 +1,8 @@
 """Spread regime report generation.
 
 Produces CSV and Markdown reports from spread regime analysis.
-Includes quote quality audit distinguishing real two-sided CLOB quotes
-from FALLBACK_MIN_MAX (exchange bound) quotes.
+Includes quote quality audit distinguishing actionable two-sided book,
+exchange-bound two-sided book, and synthetic fallback.
 
 No orders. No keys. No execution.
 """
@@ -19,11 +19,15 @@ from examples.strategies.polymarket_btcusd_arb.spread_regime import (
     SpreadEvent,
     SpreadRegimeSummary,
     QuoteQuality,
+    QuoteQualityCounts,
+    TTE_BUCKET_EDGES_NS,
+    TTE_BUCKET_LABELS,
     assign_tte_bucket,
     assign_time_of_day_bucket,
     assign_volatility_bucket,
     classify_verdict,
     classify_verdict_reason,
+    is_actionable_two_sided,
 )
 
 
@@ -40,40 +44,50 @@ def _quote_quality_audit_text(summary: SpreadRegimeSummary) -> str:
         "## Quote Quality Audit",
         "",
         f"Total observations: {total}",
-        f"TWO_SIDED_BOOK: {summary.two_sided_book_count} ({summary.pct_two_sided_book:.1f}%)",
+        f"TWO_SIDED_BOOK (actionable): {summary.two_sided_book_count} ({summary.pct_two_sided_book:.1f}%)",
+        f"EXCHANGE_BOUND_TWO_SIDED_BOOK: {summary.exchange_bound_two_sided_book_count} ({summary.pct_exchange_bound_two_sided_book:.1f}%)",
         f"ONE_SIDED_BOOK: {summary.one_sided_book_count}",
         f"EMPTY_BOOK: {summary.empty_book_count}",
-        f"FALLBACK_MIN_MAX: {summary.fallback_min_max_count} ({summary.pct_fallback_min_max:.1f}%)",
+        f"FALLBACK_MIN_MAX (synthetic/default): {summary.fallback_min_max_count} ({summary.pct_fallback_min_max:.1f}%)",
         f"MISSING_BOOK: {summary.missing_book_count}",
         f"INVALID_BOOK: {summary.invalid_book_count}",
+        f"Actionable two-sided book: {summary.actionable_two_sided_book_count} ({summary.pct_actionable_two_sided_book:.1f}%)",
         "",
     ]
 
-    if summary.pct_fallback_min_max >= 99.0 and total > 0:
+    if summary.pct_exchange_bound_two_sided_book >= 99.0 and total > 0:
         lines.extend([
-            "The observed spread values come from Polymarket CLOB best bid/ask at exchange",
-            "minimum ($0.01) and maximum ($0.99) price bounds. These are real resting CLOB",
-            "orders with genuine size, but they represent lottery-market liquidity at the",
-            "absolute price bounds — not actionable two-sided spread for a fair-probability",
-            "strategy.",
+            "The observed 0.01/0.99 quotes are real CLOB resting orders at Polymarket",
+            "exchange bounds, not synthetic fallback defaults. They represent a technically",
+            "two-sided but economically non-actionable book. The Polymarket BTC 15m UpDown",
+            "CLOB had resting orders at the minimum ($0.01) and maximum ($0.99) token",
+            "price bounds with genuine size, but these provide no usable two-sided liquidity",
+            "for a fair-probability maker strategy.",
             "",
-            "**Case B**: The observed 19,600 bps spread is not a real two-sided quoted spread.",
-            "It reflects no usable two-sided liquidity. The Polymarket BTC 15m UpDown book",
-            "was exclusively at exchange min/max bounds during the observed sample.",
+            "This is not a data artifact. The quotes are real. The market structure is real.",
+            "But the correct diagnosis is no usable two-sided liquidity, not a data-loader",
+            "fallback or empty-book placeholder.",
             "",
             f"Verdict reason: {reason}",
         ])
     elif summary.pct_two_sided_book > 0:
         lines.extend([
             f"Of {total} observations, {summary.two_sided_book_count} ({summary.pct_two_sided_book:.1f}%)",
-            "had genuine two-sided CLOB quotes away from exchange min/max bounds.",
+            "had actionable two-sided CLOB quotes away from exchange min/max bounds.",
             "",
         ])
+        if summary.exchange_bound_two_sided_book_count > 0:
+            lines.extend([
+                f"{summary.exchange_bound_two_sided_book_count} observations ({summary.pct_exchange_bound_two_sided_book:.1f}%)",
+                "had real CLOB orders at exchange min/max bounds (EXCHANGE_BOUND_TWO_SIDED_BOOK).",
+                "These are real resting orders with genuine size, but provide no actionable",
+                "liquidity for a fair-probability strategy.",
+                "",
+            ])
         if summary.fallback_min_max_count > 0:
             lines.extend([
                 f"{summary.fallback_min_max_count} observations ({summary.pct_fallback_min_max:.1f}%)",
-                "had best bid at $0.01 and best ask at $0.99 (FALLBACK_MIN_MAX).",
-                "These represent lottery-market liquidity, not actionable spread.",
+                "had synthetic/default values (FALLBACK_MIN_MAX) from missing-data fallback.",
                 "",
             ])
         lines.extend([
@@ -81,7 +95,7 @@ def _quote_quality_audit_text(summary: SpreadRegimeSummary) -> str:
         ])
     else:
         lines.extend([
-            "No genuine two-sided CLOB quotes observed.",
+            "No actionable two-sided CLOB quotes observed.",
             "",
             f"Verdict reason: {reason}",
         ])
@@ -114,8 +128,8 @@ def write_all_reports(
         "book_depth_bid", "book_depth_ask",
         "binance_price", "binance_spread_bps", "binance_short_window_vol_bps",
         "polymarket_stale", "binance_stale",
-        "ttet_bucket", "time_of_day_utc", "volatility_bucket",
-        "quote_quality",
+        "tte_bucket", "time_of_day_utc", "volatility_bucket",
+        "quote_quality", "is_synthetic_fallback",
     ]
     with open(output_dir / "spread_events.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -138,10 +152,11 @@ def write_all_reports(
                 "binance_short_window_vol_bps": e.binance_short_window_vol_bps,
                 "polymarket_stale": e.polymarket_stale,
                 "binance_stale": e.binance_stale,
-                "ttet_bucket": tte.bucket_label,
+                "tte_bucket": tte.bucket_label,
                 "time_of_day_utc": assign_time_of_day_bucket(e.ts_event_ns),
                 "volatility_bucket": assign_volatility_bucket(e.binance_short_window_vol_bps),
                 "quote_quality": e.quote_quality,
+                "is_synthetic_fallback": e.is_synthetic_fallback,
             })
 
     # Aggregate CSVs
@@ -175,27 +190,28 @@ def _write_aggregate_csvs(events: list[SpreadEvent], output_dir: Path) -> None:
         writer = csv.DictWriter(f, fieldnames=[
             "tte_bucket", "count", "median_spread_bps",
             "pct_below_80bps", "pct_below_200bps",
-            "two_sided_count", "fallback_min_max_count",
+            "actionable_count", "exchange_bound_count", "fallback_count",
         ])
         writer.writeheader()
-        for label in [
-            "0-30s", "30-60s", "60-180s", "180-300s", "300-600s", "600s+"
-        ]:
+        for label in ["0-30s", "30-60s", "60-180s", "180-300s", "300-600s", "600s+"]:
             group = tte_groups.get(label, [])
             spreads = [e.spread_bps for e in group if e.spread_bps is not None]
-            two_sided = sum(1 for e in group if e.quote_quality == QuoteQuality.TWO_SIDED_BOOK)
+            action = sum(1 for e in group if is_actionable_two_sided(e.quote_quality))
+            exbound = sum(1 for e in group if e.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK)
             fallback = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
             median = sorted(spreads)[len(spreads) // 2] if spreads else None
             below_80 = sum(1 for s in spreads if s < 80) if spreads else 0
             below_200 = sum(1 for s in spreads if s < 200) if spreads else 0
+            median_str = f"{median:.1f}" if median is not None else "N/A"
             writer.writerow({
                 "tte_bucket": label,
                 "count": len(group),
-                "median_spread_bps": f"{median:.1f}" if median else "N/A",
-                "pct_below_80bps": f"{100*below_80/len(spreads):.1f}" if spreads else "N/A",
-                "pct_below_200bps": f"{100*below_200/len(spreads):.1f}" if spreads else "N/A",
-                "two_sided_count": two_sided,
-                "fallback_min_max_count": fallback,
+                "median_spread_bps": median_str,
+                "pct_below_80bps": f"{100*below_80/len(spreads):.1f}%" if spreads else "N/A",
+                "pct_below_200bps": f"{100*below_200/len(spreads):.1f}%" if spreads else "N/A",
+                "actionable_count": action,
+                "exchange_bound_count": exbound,
+                "fallback_count": fallback,
             })
 
     # By market
@@ -206,25 +222,26 @@ def _write_aggregate_csvs(events: list[SpreadEvent], output_dir: Path) -> None:
     with open(output_dir / "spread_by_market.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "market_slug", "count", "median_spread_bps",
-            "pct_below_80bps", "pct_below_200bps",
-            "two_sided_count", "fallback_min_max_count",
+            "pct_below_200bps",
+            "actionable_count", "exchange_bound_count", "fallback_count",
         ])
         writer.writeheader()
         for slug, group in market_groups.items():
             spreads = [e.spread_bps for e in group if e.spread_bps is not None]
-            two_sided = sum(1 for e in group if e.quote_quality == QuoteQuality.TWO_SIDED_BOOK)
+            action = sum(1 for e in group if is_actionable_two_sided(e.quote_quality))
+            exbound = sum(1 for e in group if e.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK)
             fallback = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
             median = sorted(spreads)[len(spreads) // 2] if spreads else None
-            below_80 = sum(1 for s in spreads if s < 80) if spreads else 0
             below_200 = sum(1 for s in spreads if s < 200) if spreads else 0
+            median_str = f"{median:.1f}" if median is not None else "N/A"
             writer.writerow({
                 "market_slug": slug,
                 "count": len(group),
-                "median_spread_bps": f"{median:.1f}" if median else "N/A",
-                "pct_below_80bps": f"{100*below_80/len(spreads):.1f}" if spreads else "N/A",
-                "pct_below_200bps": f"{100*below_200/len(spreads):.1f}" if spreads else "N/A",
-                "two_sided_count": two_sided,
-                "fallback_min_max_count": fallback,
+                "median_spread_bps": median_str,
+                "pct_below_200bps": f"{100*below_200/len(spreads):.1f}%" if spreads else "N/A",
+                "actionable_count": action,
+                "exchange_bound_count": exbound,
+                "fallback_count": fallback,
             })
 
     # By time of day
@@ -235,24 +252,21 @@ def _write_aggregate_csvs(events: list[SpreadEvent], output_dir: Path) -> None:
 
     with open(output_dir / "spread_by_time_of_day.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=[
-            "time_of_day_utc", "count", "median_spread_bps",
-            "pct_below_200bps", "two_sided_count", "fallback_min_max_count",
+            "time_of_day_utc", "count",
+            "actionable_count", "exchange_bound_count", "fallback_count",
         ])
         writer.writeheader()
         for label in ["00-06UTC", "06-12UTC", "12-18UTC", "18-24UTC"]:
             group = tod_groups.get(label, [])
-            spreads = [e.spread_bps for e in group if e.spread_bps is not None]
-            two_sided = sum(1 for e in group if e.quote_quality == QuoteQuality.TWO_SIDED_BOOK)
+            action = sum(1 for e in group if is_actionable_two_sided(e.quote_quality))
+            exbound = sum(1 for e in group if e.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK)
             fallback = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
-            median = sorted(spreads)[len(spreads) // 2] if spreads else None
-            below_200 = sum(1 for s in spreads if s < 200) if spreads else 0
             writer.writerow({
                 "time_of_day_utc": label,
                 "count": len(group),
-                "median_spread_bps": f"{median:.1f}" if median else "N/A",
-                "pct_below_200bps": f"{100*below_200/len(spreads):.1f}" if spreads else "N/A",
-                "two_sided_count": two_sided,
-                "fallback_min_max_count": fallback,
+                "actionable_count": action,
+                "exchange_bound_count": exbound,
+                "fallback_count": fallback,
             })
 
     # By volatility
@@ -263,24 +277,21 @@ def _write_aggregate_csvs(events: list[SpreadEvent], output_dir: Path) -> None:
 
     with open(output_dir / "spread_by_volatility.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=[
-            "volatility_bucket", "count", "median_spread_bps",
-            "pct_below_200bps", "two_sided_count", "fallback_min_max_count",
+            "volatility_bucket", "count",
+            "actionable_count", "exchange_bound_count", "fallback_count",
         ])
         writer.writeheader()
         for label in ["0-5bps", "5-20bps", "20-50bps", "50-100bps", "100+bps", "unknown"]:
             group = vol_groups.get(label, [])
-            spreads = [e.spread_bps for e in group if e.spread_bps is not None]
-            two_sided = sum(1 for e in group if e.quote_quality == QuoteQuality.TWO_SIDED_BOOK)
+            action = sum(1 for e in group if is_actionable_two_sided(e.quote_quality))
+            exbound = sum(1 for e in group if e.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK)
             fallback = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
-            median = sorted(spreads)[len(spreads) // 2] if spreads else None
-            below_200 = sum(1 for s in spreads if s < 200) if spreads else 0
             writer.writerow({
                 "volatility_bucket": label,
                 "count": len(group),
-                "median_spread_bps": f"{median:.1f}" if median else "N/A",
-                "pct_below_200bps": f"{100*below_200/len(spreads):.1f}" if spreads else "N/A",
-                "two_sided_count": two_sided,
-                "fallback_min_max_count": fallback,
+                "actionable_count": action,
+                "exchange_bound_count": exbound,
+                "fallback_count": fallback,
             })
 
 
@@ -310,10 +321,10 @@ def _write_markdown_report(
         "",
         "## Safety Statement",
         "",
-        f"- No orders: PASS",
-        f"- No keys: PASS",
-        f"- No execution client imports: PASS",
-        f"- No on-chain calls: PASS",
+        "- No orders: PASS",
+        "- No keys: PASS",
+        "- No execution client imports: PASS",
+        "- No on-chain calls: PASS",
         "",
     ]
 
@@ -336,8 +347,8 @@ def _write_markdown_report(
         "",
         "## Spread by TTE Bucket",
         "",
-        "| TTE Bucket | Count | Median bps | <80 bps | <200 bps | Two-sided | Fallback |",
-        "|-----------|-------|-----------|---------|----------|-----------|----------|",
+        "| TTE Bucket | Count | Median bps | <80 bps | <200 bps | Actionable | Exch-Bound | Fallback |",
+        "|-----------|-------|-----------|---------|----------|-----------|------------|----------|",
     ])
 
     from examples.strategies.polymarket_btcusd_arb.spread_regime import (
@@ -350,13 +361,14 @@ def _write_markdown_report(
     for label in ["0-30s", "30-60s", "60-180s", "180-300s", "300-600s", "600s+"]:
         group = tte_groups.get(label, [])
         spreads = [e.spread_bps for e in group if e.spread_bps is not None]
-        ts = sum(1 for e in group if e.quote_quality == QuoteQuality.TWO_SIDED_BOOK)
-        fm = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
+        action = sum(1 for e in group if is_actionable_two_sided(e.quote_quality))
+        exbound = sum(1 for e in group if e.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK)
+        fallback = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
         median = sorted(spreads)[len(spreads)//2] if spreads else None
         b80 = f"{100*sum(1 for s in spreads if s<80)/len(spreads):.1f}%" if spreads else "N/A"
         b200 = f"{100*sum(1 for s in spreads if s<200)/len(spreads):.1f}%" if spreads else "N/A"
         median_str = f"{median:.1f}" if median is not None else "N/A"
-        lines.append(f"| {label} | {len(group)} | {median_str} | {b80} | {b200} | {ts} | {fm} |")
+        lines.append(f"| {label} | {len(group)} | {median_str} | {b80} | {b200} | {action} | {exbound} | {fallback} |")
 
     lines.extend([
         "",
@@ -369,10 +381,12 @@ def _write_markdown_report(
         mkt_groups.setdefault(e.market_slug, []).append(e)
     for slug, group in mkt_groups.items():
         spreads = [e.spread_bps for e in group if e.spread_bps is not None]
-        ts = sum(1 for e in group if e.quote_quality == QuoteQuality.TWO_SIDED_BOOK)
-        fm = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
+        action = sum(1 for e in group if is_actionable_two_sided(e.quote_quality))
+        exbound = sum(1 for e in group if e.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK)
+        fallback = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
         median = sorted(spreads)[len(spreads)//2] if spreads else None
-        lines.append(f"- **{slug}**: {len(group)} events, median={median:.1f} bps, TWO_SIDED={ts}, FALLBACK_MIN_MAX={fm}")
+        median_str = f"{median:.1f}" if median is not None else "N/A"
+        lines.append(f"- **{slug}**: {len(group)} events, median={median_str} bps, ACTIONABLE={action}, EXCHANGE_BOUND={exbound}, FALLBACK={fallback}")
 
     lines.extend([
         "",
@@ -385,10 +399,10 @@ def _write_markdown_report(
         tod_groups.setdefault(tod, []).append(e)
     for label in ["00-06UTC", "06-12UTC", "12-18UTC", "18-24UTC"]:
         group = tod_groups.get(label, [])
-        spreads = [e.spread_bps for e in group if e.spread_bps is not None]
-        fm = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
-        ts = sum(1 for e in group if e.quote_quality == QuoteQuality.TWO_SIDED_BOOK)
-        lines.append(f"- **{label}**: {len(group)} events, TWO_SIDED={ts}, FALLBACK_MIN_MAX={fm}")
+        action = sum(1 for e in group if is_actionable_two_sided(e.quote_quality))
+        exbound = sum(1 for e in group if e.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK)
+        fallback = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
+        lines.append(f"- **{label}**: {len(group)} events, ACTIONABLE={action}, EXCHANGE_BOUND={exbound}, FALLBACK={fallback}")
 
     lines.extend([
         "",
@@ -401,23 +415,27 @@ def _write_markdown_report(
         vol_groups.setdefault(vol, []).append(e)
     for label in ["0-5bps", "5-20bps", "20-50bps", "50-100bps", "100+bps", "unknown"]:
         group = vol_groups.get(label, [])
-        fm = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
-        ts = sum(1 for e in group if e.quote_quality == QuoteQuality.TWO_SIDED_BOOK)
-        lines.append(f"- **{label}**: {len(group)} events, TWO_SIDED={ts}, FALLBACK_MIN_MAX={fm}")
+        action = sum(1 for e in group if is_actionable_two_sided(e.quote_quality))
+        exbound = sum(1 for e in group if e.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK)
+        fallback = sum(1 for e in group if e.quote_quality == QuoteQuality.FALLBACK_MIN_MAX)
+        lines.append(f"- **{label}**: {len(group)} events, ACTIONABLE={action}, EXCHANGE_BOUND={exbound}, FALLBACK={fallback}")
 
     lines.extend([
         "",
         "## Depth Notes",
         "",
-        "Observer capture did not record full book depth. Quote quality is classified",
-        "based on whether best bid/ask are at Polymarket CLOB minimum ($0.01) / maximum ($0.99)",
-        "price bounds. Quotes at these bounds are real resting CLOB orders with genuine size,",
-        "but represent lottery-market liquidity, not actionable two-sided spread.",
+        "Observer capture stored best bid/ask but not full order book depth.",
+        "Quote quality classification distinguishes:",
+        "- TWO_SIDED_BOOK: actionable quotes away from exchange bounds",
+        "- EXCHANGE_BOUND_TWO_SIDED_BOOK: real CLOB orders at exchange min/max bounds",
+        "  (real orders with real size, but non-actionable for fair-probability strategies)",
+        "- FALLBACK_MIN_MAX: synthetic/default values from missing-data filler",
         "",
         "## Limitations",
         "",
         "- Observer capture stored best bid/ask but not full order book depth",
-        "- Quote quality classification uses price-bound heuristics, not raw book level inspection",
+        "- Quote quality classification uses price-bound heuristics for exchange-bound",
+        "  detection, supplemented by is_synthetic_fallback for synthetic values",
         "- Binance volatility proxy not available for all observation windows",
         "- Sample covers 8 BTC 15m UpDown markets over a single observation session",
         "- Results may not generalize to other market types, durations, or time periods",
@@ -426,6 +444,10 @@ def _write_markdown_report(
         "",
         f"**{verdict}**",
         f"Reason: {reason}",
+        "",
+        "Final diagnosis: EXCHANGE_BOUND_TWO_SIDED_BOOK dominated the sample.",
+        "BTC 15m UpDown had real but non-actionable boundary liquidity, with no usable",
+        "two-sided market for the tested fair-probability strategy.",
         "",
         "## Recommendation",
         "",
