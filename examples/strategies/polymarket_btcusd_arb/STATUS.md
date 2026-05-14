@@ -788,5 +788,88 @@ No actionable two-sided 1h books were observed in this run. The market showed on
 
 The 1h market, despite using Binance BTC/USDT reference (not delayed Chainlink), exhibited the same exchange-bound book structure as 5m and 15m products. The market never transitioned from pre_start to active trading within the observation period.
 
+**BUG IDENTIFIED**: The prior run selected `bitcoin-up-or-down-may-16-2026-2am-et` on May 14, meaning the market's 1h lifecycle had not yet started. All 774 snapshots were `pre_start`. The `ONE_HOUR_NO_ACTIONABLE_BOOK_OBSERVED` verdict was therefore invalid — it was based on pre-start liquidity only, not on in-lifecycle observations. This run does NOT answer whether 1h markets have actionable books during their actual event lifecycle.
+
 ### Next Recommendation
 Do not proceed with Phase 1 backtest for 1h. More observer-only lifecycle captures at different times (near market start, during active hours) may be useful, but no backtest is justified from this run alone. Do not recommend execution. Do not recommend Phase 3.
+
+## DQO-2B Lifecycle Window Selection Fix
+
+### Branch
+`polymarket-btc-updown-1h-lifecycle-window-fix-v2`
+
+### Starting Commit
+`f0eb7b7717` (polymarket-btc-updown-1h-quote-lifecycle-v1)
+
+### Bug Corrected
+The prior DQO-2 run selected `bitcoin-up-or-down-may-16-2026-2am-et` on May 14. All 774 snapshots were `pre_start` lifecycle bucket. The verdict `ONE_HOUR_NO_ACTIONABLE_BOOK_OBSERVED` was invalid because it was based entirely on pre-start liquidity, not in-lifecycle observations.
+
+The code did not distinguish:
+1. Product exists
+2. Market is open for pre-start trading
+3. Market is inside the actual event lifecycle
+4. Market is expired
+5. Observation had enough in-lifecycle coverage for a quote-quality verdict
+
+### New Verdict
+`NEEDS_MORE_DATA_MARKET_NOT_STARTED` — The selected 1h market was open for trading but remained entirely pre_start during the observation window. No lifecycle quote-quality conclusion can be drawn.
+
+This verdict is NOT a negative liquidity verdict. It means the observation window did not overlap the actual 1h event lifecycle.
+
+### Lifecycle Validity Rule
+A quote-quality verdict (`ONE_HOUR_NO_ACTIONABLE_BOOK_OBSERVED`, `ONE_HOUR_TRANSIENT_ACTIONABLE_BOOK_OBSERVED_NEEDS_MORE_OBSERVATION`, or `ONE_HOUR_ACTIONABLE_BOOK_OBSERVED_REQUIRES_PHASE1_BACKTEST`) is only valid if the observation includes at least one in-lifecycle snapshot (`start_ns <= ts_event_ns < end_ns`).
+
+If every snapshot is `pre_start`, the verdict MUST be `NEEDS_MORE_DATA_MARKET_NOT_STARTED`.
+
+### Market Selection Fix
+- Selection now prefers active 1h Binance-referenced markets that are currently in-lifecycle (`start_ns <= now_ns < end_ns`)
+- If no in-lifecycle market exists, it checks for pre-start markets whose start is within `--max-wait-for-start-seconds`
+- Default `--max-wait-for-start-seconds 0` means no waiting — exits with `NEEDS_MORE_DATA_MARKET_NOT_STARTED` or `NEEDS_MORE_DATA_NO_ACTIVE_1H_MARKET`
+- `--max-wait-for-start-seconds 900` allows up to 15 minutes of waiting for market start
+
+### Timing State Classification
+Added `classify_snapshot_timing_state()` and `classify_market_timing_state()`:
+- `PRE_START_OPEN_FOR_TRADING`: `ts < start_ns`
+- `IN_LIFECYCLE`: `start_ns <= ts < end_ns`
+- `EXPIRED`: `ts >= end_ns`
+- `UNKNOWN_TIMING`: start_ns or end_ns is None
+
+### Summary/Report Fields Added
+- `timing_state_counts`
+- `pre_start_snapshot_count`
+- `in_lifecycle_snapshot_count`
+- `expired_snapshot_count`
+- `lifecycle_coverage_seconds`
+- `lifecycle_coverage_rate`
+- `all_snapshots_pre_start`
+- `selected_market_timing_state`
+- `max_wait_for_start_seconds`
+- `waited_for_start_seconds`
+- `timing_state` on each snapshot
+
+### Report.md Wording Added
+- "A market being active/open for trading does not necessarily mean the event lifecycle has started."
+- "This run observed pre-start liquidity only. It does not establish whether the 1h market has actionable two-sided books during the actual event lifecycle." (when all pre-start)
+- Lifecycle timing table showing PRE_START/IN_LIFECYCLE/EXPIRED counts
+- Coverage rate display when in-lifecycle observations exist
+
+### Tests Added
+25 new tests across 5 new test classes:
+- `TestSnapshotTimingState` (4 tests: pre-start, in-lifecycle, expired, unknown)
+- `TestMarketTimingState` (4 tests: pre-start, in-lifecycle, expired, unknown)
+- `TestVerdictLifecycleValidity` (9 tests: all-pre-start, all-pre-start-not-no-actionable, in-lifecycle-no-actionable, in-lifecycle-transient, in-lifecycle-dwell-qualified, mixed-mixed, constant-value, not-forbidden, pre-start-with-actionable)
+- `TestReportWordingLifecycleTiming` (3 tests: pre-start wording, market-not-started verdict in source, concept separation)
+- `TestLifecycleSnapshotTimingField` (4 tests: field exists, pre-start, expired, unknown)
+- Updated existing `TestVerdictClassificationWithDwellThresholds` (9 tests updated with new params)
+- Updated `TestVerdictTransientWording` (3 tests updated with new params)
+- Updated `TestVerdictForbiddenValues` to include V_NEEDS_MORE_DATA_MARKET_NOT_STARTED
+- Updated `TestDwellThresholdDefaults` to include DEFAULT_MAX_WAIT_FOR_START_SECONDS
+
+### Tests Run
+298 passed, 0 failed (72 existing observer + 25 new + 201 other modules)
+
+### Safety
+- No orders: PASS
+- No keys: PASS
+- No execution client imports: PASS
+- No on-chain calls: PASS
