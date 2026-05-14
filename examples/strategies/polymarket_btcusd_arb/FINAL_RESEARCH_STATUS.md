@@ -224,3 +224,45 @@ Do not add on-chain paths.
 Archive this BTC 15m UpDown research track as REJECTED_FOR_CURRENT_LIVE_CONDITIONS.
 The scaffold may be reused only for a separately scoped new hypothesis.
 ```
+
+## Duration Probe Correction — 2026-05-14
+
+### Superseded Finding
+The prior duration probe (branch `polymarket-btc-updown-duration-spread-v1`)
+concluded that "1h and 4h BTC UpDown markets do not exist on Polymarket" and
+archived this under `BTC_UPDOWN_REJECTED_ALL_CURRENT_DURATIONS`.
+
+This conclusion is **SUPERSEDED**.
+
+### What Changed
+User-supplied Polymarket URLs validated that 1h (hourly) and 4h BTC UpDown
+products exist:
+
+- 1h: `bitcoin-up-or-down-may-13-2026-11pm-et` (slug family: `bitcoin-up-or-down-*`)
+- 4h: `btc-updown-4h-1778716800` (slug family: `btc-updown-4h-*`)
+
+The prior probe's discovery logic was incomplete:
+
+1. Slug regex only matched `btc-updown-{dur}-{timestamp}`, missing `bitcoin-up-or-down-*`
+2. Title classifier didn't recognize "Hourly" as 1h indicator
+3. No known-slug validation mechanism existed
+4. Product existence was conflated with active market availability
+
+### Corrected Status
+- 1h products exist (Binance BTC/USDT reference)
+- 4h products exist (Chainlink BTC/USD reference — NOT Binance)
+- Product existence is separate from active market availability
+- Quote quality at these durations remains unobserved
+- The prior `BTC_UPDOWN_REJECTED_ALL_CURRENT_DURATIONS` is superseded
+
+### Corrected Branch
+`polymarket-btc-updown-duration-discovery-fix-v2`
+
+### Reports
+`reports/polymarket_btcusd_arb/duration_discovery_fix/<run_id>/`
+
+### Implications for Future Research
+- 1h Binance-based products: Fair-probability model may apply directly
+- 4h Chainlink-based products: Requires separate Chainlink-reference Phase 1 hypothesis
+- The 15m rejection still stands for BTC 15m UpDown under observed live conditions
+- The 5m exchange-bound finding still stands

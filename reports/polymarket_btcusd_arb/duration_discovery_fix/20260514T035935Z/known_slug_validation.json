@@ -1,0 +1,22 @@
+{
+  "bitcoin-up-or-down-may-13-2026-11pm-et": {
+    "product_exists": true,
+    "duration_label": "1h",
+    "duration_seconds": 3600,
+    "is_active": true,
+    "is_closed": false,
+    "resolution_source_kind": "BINANCE_BTCUSDT",
+    "yes_token_id": "33136433046764603922550063220515240217374494161230542422592733692657708940226",
+    "validation_source": "polymarket_gamma_api"
+  },
+  "btc-updown-4h-1778716800": {
+    "product_exists": true,
+    "duration_label": "4h",
+    "duration_seconds": 14400,
+    "is_active": true,
+    "is_closed": false,
+    "resolution_source_kind": "CHAINLINK_BTCUSD",
+    "yes_token_id": "16883442263138053228872948683019067684103343082407085748541972262033267547579",
+    "validation_source": "polymarket_gamma_api"
+  }
+}

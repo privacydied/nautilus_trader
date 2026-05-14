@@ -1,0 +1,5 @@
+duration,reference_source_kind,count
+5m,BINANCE_BTCUSDT,2
+15m,BINANCE_BTCUSDT,2
+1h,BINANCE_BTCUSDT,2
+4h,CHAINLINK_BTCUSD,1

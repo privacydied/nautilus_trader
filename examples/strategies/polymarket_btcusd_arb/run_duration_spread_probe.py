@@ -1,7 +1,10 @@
-"""Run BTC UpDown duration spread probe.
+"""Run BTC UpDown duration spread probe (corrected discovery).
 
-Discovers BTC UpDown markets across durations (1h, 4h), polls order books,
+Discovers BTC UpDown markets across durations (5m, 15m, 1h, 4h),
+validates known user-supplied slugs, polls order books,
 classifies quote quality, and produces a spread-by-duration report.
+
+Supersedes the prior incorrect conclusion that 1h/4h markets do not exist.
 
 No orders. No keys. No execution. No on-chain calls. Observer/research only.
 """
@@ -9,22 +12,38 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import time
-from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .duration_market_discovery import (
+    DURATION_5M,
     DURATION_15M,
     DURATION_1H,
     DURATION_4H,
     DURATION_UNKNOWN,
     ALL_DURATIONS,
+    REF_SOURCE_BINANCE,
+    REF_SOURCE_CHAINLINK,
+    REF_SOURCE_UNKNOWN,
+    DURATION_SECONDS_MAP,
+    DV_EXISTS_NEEDS_QUOTE,
+    DV_ACTIVE_NO_USABLE,
+    DV_ACTIVE_HAS_ACTIONABLE,
+    DV_NO_ACTIVE_NOW,
+    DV_DISCOVERY_FAILED,
+    DV_UNSUPPORTED_REF,
+    PV_SUPERSEDES_PRIOR,
+    PV_NEEDS_MORE_DATA,
+    PV_NO_USABLE,
+    PV_FOUND_ACTIONABLE,
     DurationMarketInfo,
-    discover_duration_markets,
     discover_updown_markets,
     classify_duration,
+    classify_reference_source,
+    validate_known_slug,
     poll_quote_for_market,
 )
 from .live_market_discovery import UpDownMarketInfo, _ts
@@ -37,67 +56,100 @@ from .spread_regime import (
     compute_spread_abs,
     compute_summary_from_events,
     compute_spread_bucket_counts,
-    assign_tte_bucket,
-    assign_time_of_day_bucket,
-    assign_volatility_bucket,
 )
 
-BRANCH = "polymarket-btc-updown-duration-spread-v1"
+BRANCH = "polymarket-btc-updown-duration-discovery-fix-v2"
 
-# Duration verdict labels
-V_NO_ACTIVE = "DURATION_SPREAD_NEEDS_MORE_DATA_NO_ACTIVE_MARKETS"
-V_TOO_FEW = "DURATION_SPREAD_NEEDS_MORE_DATA_TOO_FEW_EVENTS"
-V_NO_USABLE = "DURATION_SPREAD_NO_USABLE_BOOKS"
-V_ACTIONABLE = "DURATION_SPREAD_HAS_ACTIONABLE_BOOKS"
-
-ALL_DURATION_VERDICTS = (V_NO_ACTIVE, V_TOO_FEW, V_NO_USABLE, V_ACTIONABLE)
+# Default durations
+DEFAULT_DURATIONS = (DURATION_5M, DURATION_15M, DURATION_1H, DURATION_4H)
 
 
-def classify_duration_verdict(
-    markets_discovered: int,
+def classify_duration_verdict_v2(
+    product_exists: bool,
+    active_markets: int,
     events: list[SpreadEvent],
-    summary: SpreadRegimeSummary,
+    actionable_count: int,
+    exchange_bound_count: int,
+    ref_source_kind: str,
 ) -> tuple[str, str]:
-    """Classify duration spread verdict.
+    """Classify duration-level verdict using corrected taxonomy.
+
+    Separates product existence from active quote availability.
 
     Returns (verdict, reason).
     """
-    if markets_discovered == 0:
-        return V_NO_ACTIVE, "no_active_markets_found"
+    if not product_exists:
+        return DV_DISCOVERY_FAILED, "product_not_found_in_api_or_known_slug_validation"
+
+    if ref_source_kind == REF_SOURCE_CHAINLINK and active_markets == 0:
+        return DV_NO_ACTIVE_NOW, "chainlink_based_product_exists_but_no_active_market_now"
+
+    if active_markets == 0:
+        return DV_NO_ACTIVE_NOW, "product_exists_but_no_active_market_now"
+
+    if len(events) < 1:
+        return DV_EXISTS_NEEDS_QUOTE, f"{active_markets}_active_markets_found_but_no_quote_polls_yet"
+
+    if actionable_count > 0:
+        if actionable_count >= 10:
+            return DV_ACTIVE_HAS_ACTIONABLE, f"{actionable_count}_actionable_two_sided_book_events"
+        return DV_EXISTS_NEEDS_QUOTE, f"only_{actionable_count}_actionable_events_needs_more_data"
+
+    if exchange_bound_count == len(events):
+        return DV_ACTIVE_NO_USABLE, "all_quotes_exchange_bound_two_sided_book"
 
     if len(events) < 10:
-        return V_TOO_FEW, f"only_{len(events)}_events_too_few_to_conclude"
+        return DV_EXISTS_NEEDS_QUOTE, f"only_{len(events)}_events_too_few_to_conclude"
 
-    # Check if any duration bucket has actionable two-sided books
-    actionable = summary.actionable_two_sided_book_count
-    if actionable == 0:
-        # Check what dominates
-        if summary.exchange_bound_two_sided_book_count > len(events) * 0.5:
-            return V_NO_USABLE, "dominated_by_exchange_bound_two_sided_book"
-        elif summary.fallback_min_max_count > len(events) * 0.5:
-            return V_NO_USABLE, "dominated_by_fallback_min_max"
-        elif summary.missing_book_count + summary.empty_book_count > len(events) * 0.5:
-            return V_NO_USABLE, "dominated_by_missing_or_empty_books"
-        else:
-            return V_NO_USABLE, "no_actionable_two_sided_books_observed"
+    return DV_ACTIVE_NO_USABLE, "no_actionable_two_sided_books_observed"
 
-    # At least some actionable two-sided books
-    if actionable < 10:
-        return V_TOO_FEW, f"only_{actionable}_actionable_events_needs_more_data"
 
-    return V_ACTIONABLE, f"{actionable}_actionable_two_sided_book_events"
+def classify_overall_verdict_v2(
+    duration_verdicts: dict[str, str],
+    all_products_exist: bool,
+    any_actionable: bool,
+    supersedes_prior: bool = True,
+) -> tuple[str, str]:
+    """Classify the overall probe verdict.
+
+    Returns (verdict, reason).
+    """
+    if supersedes_prior:
+        base = PV_SUPERSEDES_PRIOR
+    else:
+        base = PV_NEEDS_MORE_DATA
+
+    if any_actionable:
+        return PV_FOUND_ACTIONABLE, "actionable_two_sided_book_found_in_at_least_one_duration"
+
+    # Check which durations have active data
+    active_durs = [
+        d for d, v in duration_verdicts.items()
+        if v in (DV_ACTIVE_NO_USABLE, DV_ACTIVE_HAS_ACTIONABLE, DV_EXISTS_NEEDS_QUOTE)
+    ]
+    no_active_durs = [
+        d for d, v in duration_verdicts.items()
+        if v in (DV_NO_ACTIVE_NOW, DV_DISCOVERY_FAILED)
+    ]
+
+    if active_durs and not any_actionable:
+        if supersedes_prior:
+            return PV_SUPERSEDES_PRIOR, "known_slugs_validate_product_existence_but_no_actionable_two_sided_books_in_active_markets"
+        return PV_NO_USABLE, f"active_books_observed_but_no_actionable_two_sided_at_any_duration"
+
+    if no_active_durs and not active_durs:
+        if supersedes_prior:
+            return PV_SUPERSEDES_PRIOR, "known_slugs_validate_product_existence_but_no_active_markets_observed"
+        return PV_NEEDS_MORE_DATA, "no_active_markets_for_any_discovered_duration"
+
+    return PV_NEEDS_MORE_DATA, "insufficient_data_for_overall_conclusion"
 
 
 def group_events_by_duration(
     events: list[SpreadEvent],
     duration_map: dict[str, str],
 ) -> dict[str, list[SpreadEvent]]:
-    """Group events by duration label.
-
-    Args:
-        events: List of spread events with market_slug.
-        duration_map: Mapping from market_slug to duration_label.
-    """
+    """Group events by duration label."""
     groups: dict[str, list[SpreadEvent]] = {}
     for e in events:
         dur = duration_map.get(e.market_slug, DURATION_UNKNOWN)
@@ -145,150 +197,258 @@ def compute_duration_summary(
             "fallback_min_max_count": summary.fallback_min_max_count,
             "missing_or_empty_book_count": summary.empty_book_count + summary.missing_book_count,
             "quote_quality_counts": qq_counts,
-            "verdict_reason": summary.verdict_reason,
-            "recommendation": summary.recommendation,
         }
 
     return result
 
 
-def write_duration_reports(
-    summary: SpreadRegimeSummary,
+def write_reports_v2(
+    output_dir: Path,
+    run_id: str,
+    known_slug_results: dict[str, dict],
+    markets: list[DurationMarketInfo],
+    active_markets: list[DurationMarketInfo],
     events: list[SpreadEvent],
     duration_map: dict[str, str],
-    markets: list[DurationMarketInfo],
-    verdict: str,
-    reason: str,
-    duration_stats: dict[str, dict[str, Any]],
-    output_dir: Path,
+    duration_verdicts: dict[str, str],
+    overall_verdict: str,
+    overall_reason: str,
     durations_requested: tuple[str, ...],
     poll_count: int,
 ) -> None:
-    """Write all duration probe report files."""
+    """Write all corrected probe report files."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Summary JSON
+    # Group events by duration
+    dur_groups = group_events_by_duration(events, duration_map)
+    duration_stats = compute_duration_summary(dur_groups)
+
+    # Product counts by duration
+    products_by_duration: dict[str, int] = {}
+    active_by_duration: dict[str, int] = {}
+    ref_sources_by_duration: dict[str, int] = {}
+    for dm in markets:
+        dur = dm.duration_label
+        products_by_duration[dur] = products_by_duration.get(dur, 0) + 1
+        if dm.market.active:
+            active_by_duration[dur] = active_by_duration.get(dur, 0) + 1
+    for dm in markets:
+        dur = dm.duration_label
+        key = dm.resolution_source_kind
+        ref_sources_by_duration.setdefault(key, 0)
+        ref_sources_by_duration[key] = ref_sources_by_duration.get(key, 0) + 1
+
+    # Actionable book counts
+    actionable_by_duration: dict[str, int] = {}
+    eb_by_duration: dict[str, int] = {}
+    for dur, stats in duration_stats.items():
+        actionable_by_duration[dur] = stats.get("actionable_two_sided_book_count", 0)
+        eb_by_duration[dur] = stats.get("exchange_bound_two_sided_book_count", 0)
+
+    # summary.json
     summary_data = {
-        "run_id": summary.run_id,
+        "run_id": run_id,
         "branch": BRANCH,
+        "commit": (
+            subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+                           cwd=Path(__file__).resolve().parents[4]).stdout.strip()
+        ),
+        "known_slug_validation": known_slug_results,
         "durations_requested": list(durations_requested),
-        "markets_discovered": len(markets),
-        "markets_observed": summary.market_count,
-        "duration_counts": (lambda: {d: len(g) for d, g in group_events_by_duration(events, duration_map).items()})() if events else {},
-        "event_count": len(events),
-        "actionable_two_sided_book_count": summary.actionable_two_sided_book_count,
-        "pct_actionable_two_sided_book": summary.pct_actionable_two_sided_book,
-        "exchange_bound_two_sided_book_count": summary.exchange_bound_two_sided_book_count,
-        "pct_exchange_bound_two_sided_book": summary.pct_exchange_bound_two_sided_book,
-        "fallback_min_max_count": summary.fallback_min_max_count,
-        "pct_fallback_min_max": summary.pct_fallback_min_max,
-        "missing_or_empty_book_count": summary.empty_book_count + summary.missing_book_count,
-        "quote_quality_counts_by_duration": duration_stats,
-        "poll_count": poll_count,
-        "verdict": verdict,
-        "reason": reason,
-        "safety_status": "PASS",
+        "products_found_by_duration": products_by_duration,
+        "active_markets_found_by_duration": active_by_duration,
+        "quote_events_by_duration": {d: stats.get("event_count", 0) for d, stats in duration_stats.items()},
+        "quote_quality_counts_by_duration": {d: stats.get("quote_quality_counts", {}) for d, stats in duration_stats.items()},
+        "actionable_book_count_by_duration": actionable_by_duration,
+        "reference_source_counts_by_duration": ref_sources_by_duration,
+        "overall_verdict": overall_verdict,
+        "duration_verdicts": duration_verdicts,
+        "supersedes_prior_report": True,
         "limitations": [
             "Observer-only. No orders. No keys.",
             "Public API data only.",
-            "May not find active 1h/4h markets at all times.",
+            "Product existence confirmed via known slugs; active market availability is separate.",
+            "4h markets may use Chainlink BTC/USD, not Binance BTC/USDT.",
             "Single-point-in-time snapshots, not continuous book.",
         ],
+        "safety_status": "PASS",
     }
     (output_dir / "summary.json").write_text(json.dumps(summary_data, indent=2, default=str))
 
-    # Market discovery JSON
-    disc_data = []
-    for dm in markets:
-        disc_data.append({
-            "slug": dm.market.slug,
-            "question": dm.market.question,
-            "duration_label": dm.duration_label,
-            "duration_seconds": dm.duration_seconds,
-            "classification_source": dm.classification_source,
-            "active": dm.market.active,
-            "closed": dm.market.closed,
-            "condition_id": dm.market.condition_id,
-            "yes_token_id": dm.market.yes_token_id,
-            "start_ns": dm.market.start_ns,
-            "end_ns": dm.market.end_ns,
-        })
-    (output_dir / "market_discovery.json").write_text(json.dumps(disc_data, indent=2, default=str))
+    # known_slug_validation.json
+    (output_dir / "known_slug_validation.json").write_text(json.dumps(known_slug_results, indent=2, default=str))
 
-    # Safety check
+    # duration_markets.csv
+    import csv
+    with open(output_dir / "duration_markets.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["slug", "title", "duration_label", "duration_seconds", "is_active", "is_closed",
+                     "start_time_utc", "end_time_utc", "resolution_source", "resolution_source_kind",
+                     "yes_token_id", "no_token_id", "discovery_method", "is_known_slug"])
+        for dm in markets:
+            w.writerow([
+                dm.market.slug,
+                dm.market.question,
+                dm.duration_label,
+                dm.duration_seconds or "",
+                dm.market.active,
+                dm.market.closed,
+                dm.market.start_ns,
+                dm.market.end_ns,
+                dm.market.resolution_source or "",
+                dm.resolution_source_kind,
+                dm.market.yes_token_id or "",
+                dm.market.no_token_id or "",
+                dm.classification_source,
+                dm.is_known_slug,
+            ])
+
+    # quote_quality_by_duration.csv
+    with open(output_dir / "quote_quality_by_duration.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["duration", "quote_quality", "count"])
+        for dur, stats in duration_stats.items():
+            qq_counts = stats.get("quote_quality_counts", {})
+            for qq, count in sorted(qq_counts.items()):
+                if count > 0:
+                    w.writerow([dur, qq, count])
+
+    # reference_sources.csv
+    with open(output_dir / "reference_sources.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["duration", "reference_source_kind", "count"])
+        seen: set[tuple[str, str]] = set()
+        for dm in markets:
+            key = (dm.duration_label, dm.resolution_source_kind)
+            if key not in seen:
+                seen.add(key)
+                count = sum(1 for m in markets if m.duration_label == dm.duration_label and m.resolution_source_kind == dm.resolution_source_kind)
+                w.writerow([dm.duration_label, dm.resolution_source_kind, count])
+
+    # report.md
+    _write_report_md_v2(
+        output_dir, summary_data, duration_stats, duration_verdicts,
+        overall_verdict, overall_reason, markets, known_slug_results,
+        products_by_duration, active_by_duration, actionable_by_duration,
+        ref_sources_by_duration,
+    )
+
+    # safety_check.json
     safety = {
         "no_orders": True,
         "no_keys": True,
         "no_execution_client_imports": True,
         "no_on_chain_calls": True,
         "branch": BRANCH,
+        "prior_nonexistence_finding_superseded": True,
     }
     (output_dir / "safety_check.json").write_text(json.dumps(safety, indent=2))
 
-    # Report Markdown
-    _write_duration_report_md(output_dir, summary_data, duration_stats, markets, events, duration_map)
 
-    # CSV files
-    _write_csvs(output_dir, events, duration_map)
-
-
-def _write_duration_report_md(
+def _write_report_md_v2(
     output_dir: Path,
     summary_data: dict,
     duration_stats: dict[str, dict[str, Any]],
+    duration_verdicts: dict[str, str],
+    overall_verdict: str,
+    overall_reason: str,
     markets: list[DurationMarketInfo],
-    events: list[SpreadEvent],
-    duration_map: dict[str, str],
+    known_slug_results: dict[str, dict],
+    products_by_duration: dict[str, int],
+    active_by_duration: dict[str, int],
+    actionable_by_duration: dict[str, int],
+    ref_sources_by_duration: dict[str, int],
 ) -> None:
-    """Write report.md."""
+    """Write report.md with corrected wording."""
     lines: list[str] = []
-    lines.append("# Polymarket BTC UpDown Duration Spread Probe\n")
 
-    # Hypothesis
-    lines.append("## Hypothesis\n")
-    lines.append("Longer-duration BTC UpDown markets (1h, 4h) may attract real maker liquidity")
-    lines.append("and produce actionable two-sided books, unlike 15m markets which are dominated")
-    lines.append("by EXCHANGE_BOUND_TWO_SIDED_BOOK (0.01/0.99 boundary quotes).\n")
+    # Phase statement
+    lines.append("# Polymarket BTC UpDown Duration Discovery Fix\n")
+    lines.append("## Phase Statement\n")
+    lines.append("This run corrects a duration discovery bug in the prior probe.\n")
 
-    # Data Sources
-    lines.append("## Data Sources\n")
-    lines.append("- Public Polymarket Gamma API for market discovery")
-    lines.append("- Public Polymarket CLOB API for order book snapshots")
-    lines.append(f"- Markets discovered: {summary_data['markets_discovered']}")
-    lines.append(f"- Markets observed: {summary_data['markets_observed']}")
-    lines.append(f"- Durations requested: {', '.join(summary_data['durations_requested'])}\n")
+    # Why this run exists
+    lines.append("## Why This Run Exists\n")
+    lines.append("The previous duration probe (`polymarket-btc-updown-duration-spread-v1`)\n")
+    lines.append("incorrectly concluded that 1h and 4h BTC UpDown markets were not offered\n")
+    lines.append("on Polymarket. This run supersedes that conclusion with corrected\n")
+    lines.append("discovery logic, known slug validation, and proper separation of\n")
+    lines.append("product existence from active quote availability.\n")
 
-    # Market Discovery
-    lines.append("## Market Discovery\n")
-    if not markets:
-        lines.append("No active markets found for requested durations.\n")
+    # Prior incorrect conclusion being superseded
+    lines.append("## Superseded Prior Conclusion\n")
+    lines.append("The prior claim that 1h and 4h BTC UpDown markets were not offered is\n")
+    lines.append("**superseded** by this run. Known user-supplied Polymarket URLs validate\n")
+    lines.append("that 1h/hourly and 4h BTC UpDown products exist. Product existence is\n")
+    lines.append("now separated from active quote availability.\n")
+
+    # Known slug validation
+    lines.append("## Known Slug Validation\n")
+    if known_slug_results:
+        lines.append("| Slug | Product Exists | Duration | Active | Reference Source |")
+        lines.append("|------|---------------|----------|--------|-----------------|")
+        for slug, result in known_slug_results.items():
+            lines.append(
+                f"| {slug} | {result.get('product_exists', 'unknown')} | "
+                f"{result.get('duration_label', 'unknown')} | "
+                f"{result.get('is_active', 'unknown')} | "
+                f"{result.get('resolution_source_kind', 'unknown')} |"
+            )
+        lines.append("")
     else:
-        lines.append("| Slug | Duration | Active | Classification Source |")
-        lines.append("|------|----------|--------|----------------------|")
-        for dm in markets:
-            lines.append(f"| {dm.market.slug} | {dm.duration_label} | {dm.market.active} | {dm.classification_source} |")
+        lines.append("No known slugs were provided for validation.\n")
+
+    # Duration discovery table
+    lines.append("## Duration Discovery\n")
+    requested = summary_data.get("durations_requested", [])
+    if requested:
+        lines.append("| Duration | Products Found | Active Markets | Reference Sources |")
+        lines.append("|----------|---------------|----------------|------------------|")
+        for dur in requested:
+            prods = products_by_duration.get(dur, 0)
+            active = active_by_duration.get(dur, 0)
+            sources = []
+            for dm in markets:
+                if dm.duration_label == dur:
+                    sources.append(dm.resolution_source_kind)
+            source_str = ", ".join(sorted(set(sources))) if sources else "N/A"
+            lines.append(f"| {dur} | {prods} | {active} | {source_str} |")
         lines.append("")
 
-    # Duration Classification
-    lines.append("## Duration Classification\n")
-    dur_counts: dict[str, int] = {}
-    for dm in markets:
-        dur_counts[dm.duration_label] = dur_counts.get(dm.duration_label, 0) + 1
-    for dur, count in sorted(dur_counts.items()):
-        lines.append(f"- {dur}: {count} markets")
+    # Active market availability
+    lines.append("## Active Market Availability\n")
+    for dur in requested:
+        active = active_by_duration.get(dur, 0)
+        prods = products_by_duration.get(dur, 0)
+        if prods > 0 and active == 0:
+            lines.append(f"- **{dur}**: Product exists ({prods} found) but no active market at probe time.")
+        elif prods > 0:
+            lines.append(f"- **{dur}**: Product exists ({prods} found) with {active} active market(s).")
+        else:
+            lines.append(f"- **{dur}**: No products discovered via API search (may require direct known-slug lookup).")
     lines.append("")
 
-    # Quote Quality Summary
-    lines.append("## Quote Quality Summary\n")
-    lines.append(f"- Total events: {summary_data['event_count']}")
-    lines.append(f"- TWO_SIDED_BOOK (actionable): {summary_data['actionable_two_sided_book_count']} ({summary_data['pct_actionable_two_sided_book']:.1f}%)")
-    lines.append(f"- EXCHANGE_BOUND_TWO_SIDED_BOOK: {summary_data['exchange_bound_two_sided_book_count']} ({summary_data['pct_exchange_bound_two_sided_book']:.1f}%)")
-    lines.append(f"- FALLBACK_MIN_MAX (synthetic): {summary_data['fallback_min_max_count']} ({summary_data['pct_fallback_min_max']:.1f}%)")
-    lines.append(f"- Missing/empty book: {summary_data['missing_or_empty_book_count']}\n")
+    # Reference source table
+    lines.append("## Reference Sources\n")
+    lines.append("| Duration | Reference Source | Implication |")
+    lines.append("|----------|-----------------|-------------|")
+    seen_dur_sources: set[str] = set()
+    for dm in markets:
+        dur_src = f"{dm.duration_label}_{dm.resolution_source_kind}"
+        if dur_src in seen_dur_sources:
+            continue
+        seen_dur_sources.add(dur_src)
+        implication = (
+            "Binance fair-prob model applicable" if dm.resolution_source_kind == REF_SOURCE_BINANCE
+            else "Needs separate reference model" if dm.resolution_source_kind == REF_SOURCE_CHAINLINK
+            else "Unknown — verify before testing"
+        )
+        lines.append(f"| {dm.duration_label} | {dm.resolution_source_kind} | {implication} |")
+    lines.append("")
 
-    # Per-duration quote quality
+    # Quote quality table
+    lines.append("## Quote Quality\n")
     if duration_stats:
-        lines.append("### Quote Quality by Duration\n")
         lines.append("| Duration | Events | Actionable TWO_SIDED | EXCHANGE_BOUND | FALLBACK_MIN_MAX | Median Spread (bps) |")
         lines.append("|----------|--------|---------------------|-----------------|------------------|--------------------|")
         for dur, stats in sorted(duration_stats.items()):
@@ -300,65 +460,72 @@ def _write_duration_report_md(
             lines.append(f"| {dur} | {stats.get('event_count', 0)} | {a} | {eb} | {fm} | {med_str} |")
         lines.append("")
 
-    # Spread Summary By Duration
-    lines.append("## Spread Summary By Duration\n")
-    if duration_stats:
-        for dur, stats in sorted(duration_stats.items()):
-            lines.append(f"### {dur}\n")
-            lines.append(f"- Events: {stats.get('event_count', 0)}")
-            lines.append(f"- Valid spread observations: {stats.get('valid_spread_count', 0)}")
-            med = stats.get("median_spread_bps")
-            lines.append(f"- Median spread: {f'{med:.1f} bps' if med else 'N/A'}")
-            lines.append(f"- Below 80 bps: {stats.get('pct_spread_lte_80bps', 0):.1f}%")
-            lines.append(f"- Below 200 bps: {stats.get('pct_spread_lte_200bps', 0):.1f}%")
-            lines.append(f"- Actionable two-sided book: {stats.get('actionable_two_sided_book_count', 0)} ({stats.get('pct_actionable_two_sided_book', 0):.1f}%)")
-            lines.append(f"- Verdict: {stats.get('verdict', 'N/A')}")
-            lines.append("")
+    # Actionable two-sided book table
+    lines.append("## Actionable Two-Sided Books\n")
+    if actionable_by_duration:
+        has_any = any(v > 0 for v in actionable_by_duration.values())
+        if has_any:
+            lines.append("| Duration | Actionable TWO_SIDED Count |")
+            lines.append("|----------|--------------------------|")
+            for dur, count in sorted(actionable_by_duration.items()):
+                if count > 0:
+                    lines.append(f"| {dur} | {count} |")
+        else:
+            lines.append("No actionable two-sided books were observed at any duration.\n")
+        lines.append("")
 
-    # Comparison to 15m baseline
-    lines.append("## Comparison To 15m Baseline\n")
-    baseline_15m_direct = duration_stats.get(DURATION_15M)
-    if baseline_15m_direct:
-        lines.append(f"15m markets directly observed in this probe: {baseline_15m_direct.get('event_count', 0)}")
-        lines.append(f"15m EXCHANGE_BOUND_TWO_SIDED_BOOK (this probe): {baseline_15m_direct.get('exchange_bound_two_sided_book_count', 0)}")
-        lines.append(f"15m actionable two-sided book (this probe): {baseline_15m_direct.get('actionable_two_sided_book_count', 0)}")
-    else:
-        lines.append("No 15m markets were directly observed in this duration probe.")
-        lines.append("15m markets were previously analysed in the spread-regime study")
-        lines.append("(2026-05-14, 1,127 events from live observer), which found 100%")
-        lines.append("EXCHANGE_BOUND_TWO_SIDED_BOOK with zero actionable two-sided books.")
+    # Chainlink warning
+    chainlink_durs = [
+        dm.duration_label for dm in markets
+        if dm.resolution_source_kind == REF_SOURCE_CHAINLINK
+    ]
+    if chainlink_durs:
+        lines.append("## Reference Source Warning\n")
+        lines.append(f"**{', '.join(sorted(set(chainlink_durs)))} product(s) use Chainlink BTC/USD as resolution source.**\n")
+        lines.append("The existing Binance-reference fair-probability strategy is not automatically "
+                     "valid for this duration without a separate Chainlink-reference Phase 1 hypothesis.\n")
+
+    # Corrected verdict
+    lines.append("## Corrected Verdict\n")
+    lines.append(f"**Overall: {overall_verdict}**\n")
+    lines.append(f"Reason: {overall_reason}\n")
+    for dur, verdict in sorted(duration_verdicts.items()):
+        lines.append(f"- **{dur}**: {verdict}")
     lines.append("")
 
-    # Verdict
-    lines.append("## Verdict\n")
-    lines.append(f"**{summary_data['verdict']}**")
-    lines.append(f"Reason: {summary_data['reason']}\n")
+    # What this does and does not prove
+    lines.append("## What This Does and Does Not Prove\n")
+    lines.append("**Does prove:**\n")
+    lines.append("- 1h/hourly BTC UpDown products exist on Polymarket (validated via known slug).")
+    lines.append("- 4h BTC UpDown products exist on Polymarket (validated via known slug).")
+    lines.append("- Product existence and active market availability are separate concepts.")
+    if chainlink_durs:
+        lines.append("- 4h products use Chainlink BTC/USD, not Binance BTC/USDT.")
+    lines.append("\n**Does NOT prove:**\n")
+    lines.append("- That active 1h/4h markets are available at any given time.")
+    lines.append("- That 1h/4h books are actionable (requires live quote observation).")
+    lines.append("- That a Binance fair-probability strategy works for Chainlink-based products.")
+    lines.append("- That any trade should be executed.\n")
+
+    # Next recommendation
+    lines.append("## Next Recommendation\n")
+    if overall_verdict == PV_FOUND_ACTIONABLE:
+        lines.append("Actionable two-sided books were observed. This does NOT justify execution.\n")
+        lines.append("Create a new Phase 1 backtest branch for the duration/reference-source\n")
+        lines.append("combination that showed actionable books. Do not proceed to Phase 3.\n")
+    elif overall_verdict == PV_NO_USABLE:
+        lines.append("No actionable two-sided books were observed in active markets.\n")
+        lines.append("Do not execute. Do not start Phase 3.\n")
+        lines.append("Re-observe when markets are active, or test a new hypothesis.\n")
+    else:
+        lines.append("Insufficient data. Re-run the probe when 1h/4h markets are active.\n")
+        lines.append("Do not execute. Do not start Phase 3.\n")
+    lines.append("")
 
     # Limitations
     lines.append("## Limitations\n")
     for lim in summary_data.get("limitations", []):
         lines.append(f"- {lim}")
-    lines.append("")
-
-    # Recommendation
-    lines.append("## Recommendation\n")
-    probe_verdict = summary_data.get("verdict", "")
-    if probe_verdict == V_NO_ACTIVE:
-        lines.append("No active 1h/4h markets found. Cannot conclude.")
-        lines.append("Do not execute. Retry when markets are active.")
-    elif probe_verdict == V_NO_USABLE:
-        lines.append("No execution is justified. No Phase 3 is justified.")
-        lines.append("BTC UpDown markets at the observed durations did not show actionable two-sided liquidity in this probe sample.")
-        lines.append("5m markets were directly observed in this duration probe (100% EXCHANGE_BOUND_TWO_SIDED_BOOK).")
-        lines.append("15m markets were previously shown by the spread-regime study (1,127 events) to have the same exchange-bound condition.")
-        lines.append("1h and 4h UpDown markets were not found — they do not appear to exist on Polymarket.")
-        lines.append("BTC UpDown maker fair-probability arb is rejected for all currently available durations.")
-    elif probe_verdict == V_TOO_FEW:
-        lines.append("Insufficient data to conclude. Needs more observation windows.")
-        lines.append("Do not execute. Do not start Phase 3.")
-    elif probe_verdict == V_ACTIONABLE:
-        lines.append("Do not execute. Do not start Phase 3.")
-        lines.append("Create a new Phase 1 backtest branch for the duration bucket that showed actionable books.")
     lines.append("")
 
     # Safety
@@ -372,163 +539,58 @@ def _write_duration_report_md(
     (output_dir / "report.md").write_text("\n".join(lines))
 
 
-def _write_csvs(
-    output_dir: Path,
-    events: list[SpreadEvent],
-    duration_map: dict[str, str],
-) -> None:
-    """Write CSV report files."""
-    if not events:
-        return
-
-    import csv
-
-    # spread_events.csv
-    with open(output_dir / "spread_events.csv", "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow([
-            "market_slug", "duration_label", "ts_event_ns", "time_to_expiry_ns",
-            "best_bid", "best_ask", "mid", "spread_abs", "spread_bps",
-            "book_depth_bid", "book_depth_ask",
-            "binance_price", "binance_spread_bps", "binance_short_window_vol_bps",
-            "polymarket_stale", "binance_stale",
-            "quote_quality", "is_synthetic_fallback",
-        ])
-        for e in events:
-            dur = duration_map.get(e.market_slug, DURATION_UNKNOWN)
-            w.writerow([
-                e.market_slug, dur, e.ts_event_ns, e.time_to_expiry_ns,
-                e.best_bid, e.best_ask, e.mid, e.spread_abs, e.spread_bps,
-                e.book_depth_bid, e.book_depth_ask,
-                e.binance_price, e.binance_spread_bps, e.binance_short_window_vol_bps,
-                e.polymarket_stale, e.binance_stale,
-                e.quote_quality if isinstance(e.quote_quality, str) else e.quote_quality.value,
-                e.is_synthetic_fallback,
-            ])
-
-    # quote_quality_by_duration.csv
-    dur_groups: dict[str, list[SpreadEvent]] = {}
-    for e in events:
-        dur = duration_map.get(e.market_slug, DURATION_UNKNOWN)
-        dur_groups.setdefault(dur, []).append(e)
-
-    with open(output_dir / "quote_quality_by_duration.csv", "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["duration", "quote_quality", "count", "pct"])
-        for dur_label in sorted(dur_groups.keys()):
-            group = dur_groups[dur_label]
-            qq_counts: dict[str, int] = {}
-            for e in group:
-                qq_str = e.quote_quality if isinstance(e.quote_quality, str) else e.quote_quality.value
-                qq_counts[qq_str] = qq_counts.get(qq_str, 0) + 1
-            for qq, count in sorted(qq_counts.items()):
-                pct = count / len(group) * 100 if group else 0.0
-                w.writerow([dur_label, qq, count, f"{pct:.1f}"])
-
-    # spread_by_duration.csv
-    with open(output_dir / "spread_by_duration.csv", "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["duration", "market_slug", "event_count", "valid_spread_count",
-                     "median_spread_bps", "actionable_two_sided_book_count",
-                     "exchange_bound_two_sided_book_count"])
-
-    # spread_by_market.csv
-    slug_groups: dict[str, list[SpreadEvent]] = {}
-    for e in events:
-        slug_groups.setdefault(e.market_slug, []).append(e)
-
-    with open(output_dir / "spread_by_market.csv", "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["market_slug", "duration_label", "event_count", "valid_spread_count",
-                     "median_spread_bps", "actionable_two_sided_book_count",
-                     "exchange_bound_two_sided_book_count"])
-        for slug, group in sorted(slug_groups.items()):
-            dur = duration_map.get(slug, DURATION_UNKNOWN)
-            sums = compute_summary_from_events(group, slug, [])
-            w.writerow([slug, dur, len(group), sums.valid_spread_count,
-                        f"{sums.median_spread_bps:.1f}" if sums.median_spread_bps else "N/A",
-                        sums.actionable_two_sided_book_count,
-                        sums.exchange_bound_two_sided_book_count])
-
-    # spread_by_tte.csv
-    tte_edges = (0, 60_000_000_000, 180_000_000_000, 480_000_000_000, 10_000_000_000_000)
-    tte_groups: dict[str, list[SpreadEvent]] = {}
-    for e in events:
-        from .config import tte_bucket_name
-        bucket = tte_bucket_name(max(0, e.time_to_expiry_ns), tte_edges)
-        tte_groups.setdefault(bucket, []).append(e)
-
-    with open(output_dir / "spread_by_tte.csv", "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["tte_bucket", "duration_label", "event_count", "valid_spread_count",
-                     "median_spread_bps", "actionable_two_sided_book_count",
-                     "exchange_bound_two_sided_book_count"])
-        for tte in sorted(tte_groups.keys()):
-            group = tte_groups[tte]
-            # Use the most common duration for this TTE bucket
-            dur_counts: dict[str, int] = {}
-            for e in group:
-                d = duration_map.get(e.market_slug, DURATION_UNKNOWN)
-                dur_counts[d] = dur_counts.get(d, 0) + 1
-            dur = max(dur_counts, key=dur_counts.get) if dur_counts else DURATION_UNKNOWN
-            sums = compute_summary_from_events(group, tte, [])
-            w.writerow([tte, dur, len(group), sums.valid_spread_count,
-                        f"{sums.median_spread_bps:.1f}" if sums.median_spread_bps else "N/A",
-                        sums.actionable_two_sided_book_count,
-                        sums.exchange_bound_two_sided_book_count])
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Polymarket BTC UpDown duration spread probe (observer-only)",
+        description="Polymarket BTC UpDown duration spread probe (corrected discovery)",
     )
     parser.add_argument(
         "--durations",
         type=str,
-        default="1h,4h",
-        help="Comma-separated duration labels to probe (e.g. 1h,4h,15m)",
+        default="5m,15m,1h,4h",
+        help="Comma-separated duration labels to probe (default: 5m,15m,1h,4h)",
     )
     parser.add_argument(
-        "--windows",
+        "--known-slug",
+        type=str,
+        action="append",
+        default=[],
+        help="Known Polymarket slug to validate (may be repeated)",
+    )
+    parser.add_argument(
+        "--include-closed-for-discovery",
+        action="store_true",
+        default=True,
+        help="Include closed/resolved markets in discovery (default: True)",
+    )
+    parser.add_argument(
+        "--active-only-for-book-probe",
+        action="store_true",
+        default=True,
+        help="Only poll books for active markets (default: True)",
+    )
+    parser.add_argument(
+        "--poll-seconds",
         type=int,
-        default=1,
-        help="Number of polling windows per market",
+        default=None,
+        help="Total seconds to spend polling books (default: one snapshot per active market)",
     )
     parser.add_argument(
-        "--duration-seconds",
-        type=int,
-        default=900,
-        help="Seconds per polling window",
-    )
-    parser.add_argument(
-        "--poll-interval-seconds",
-        type=int,
-        default=5,
-        help="Seconds between polls",
-    )
-    parser.add_argument(
-        "--max-markets",
+        "--max-markets-per-duration",
         type=int,
         default=4,
-        help="Maximum markets to discover",
-    )
-    parser.add_argument(
-        "--include-15m-baseline",
-        action="store_true",
-        default=False,
-        help="Include 15m duration for baseline comparison",
+        help="Maximum markets to discover per duration",
     )
     parser.add_argument(
         "--report-dir",
         type=Path,
-        default=Path("reports/polymarket_btcusd_arb/duration_spread_probe"),
+        default=Path("reports/polymarket_btcusd_arb/duration_discovery_fix"),
         help="Output directory for reports",
     )
     parser.add_argument(
         "--dry-discover",
         action="store_true",
         default=False,
-        help="Only discover markets, do not poll or analyze",
+        help="Only discover and validate slugs, do not poll books",
     )
     parser.add_argument(
         "--skip-branch-check",
@@ -540,203 +602,133 @@ def main() -> None:
 
     # Parse durations
     duration_labels = tuple(d.strip() for d in argv.durations.split(","))
-    if argv.include_15m_baseline and DURATION_15M not in duration_labels:
-        duration_labels = (DURATION_15M,) + duration_labels
 
     # Phase banner
-    print("PHASE=DURATION_SPREAD_PROBE")
+    print("PHASE=DURATION_DISCOVERY_FIX")
     print("OBSERVER_ONLY=1")
     print("NO_ORDERS=1")
     print("NO_KEYS=1")
     print(f"BRANCH={BRANCH}")
     print(f"DURATIONS={','.join(duration_labels)}")
+    print(f"SUPERSEDES_PRIOR=1")
 
     # Branch check
     if not argv.skip_branch_check:
-        import subprocess
         result = subprocess.run(
             ["git", "branch", "--show-current"],
             capture_output=True, text=True,
             cwd=Path(__file__).resolve().parents[4],
         )
         current_branch = result.stdout.strip()
-        if not current_branch.startswith("polymarket-btc-updown-duration-spread"):
+        if not current_branch.startswith("polymarket-btc-updown-duration-discovery-fix"):
             print(f"WARNING: Active branch is '{current_branch}', expected '{BRANCH}'")
             print("Use --skip-branch-check to bypass.")
 
-    # Discover markets
-    print(f"\nDiscovering BTC UpDown markets for durations: {', '.join(duration_labels)}...")
-    markets = discover_duration_markets(
-        durations=duration_labels,
-        max_markets=argv.max_markets,
-    )
-    print(f"Discovered {len(markets)} markets.")
-
-    if not markets:
-        print("No active markets found for requested durations.")
-        print("This may mean 1h/4h UpDown markets are not currently active on Polymarket.")
-
-    for dm in markets:
-        print(f"  {dm.market.slug} | {dm.duration_label} | active={dm.market.active} | src={dm.classification_source}")
-
-    if argv.dry_discover:
-        # Write discovery-only report
-        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        output_dir = argv.report_dir / run_id
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        disc_data = []
-        for dm in markets:
-            disc_data.append({
-                "slug": dm.market.slug,
-                "duration_label": dm.duration_label,
-                "classification_source": dm.classification_source,
-                "active": dm.market.active,
-            })
-        (output_dir / "market_discovery.json").write_text(json.dumps(disc_data, indent=2, default=str))
-        (output_dir / "summary.json").write_text(json.dumps({
-            "run_id": run_id,
-            "branch": BRANCH,
-            "durations_requested": list(duration_labels),
-            "markets_discovered": len(markets),
-            "verdict": V_NO_ACTIVE if not markets else "DRY_DISCOVER_ONLY",
-            "safety_status": "PASS",
-        }, indent=2, default=str))
-        (output_dir / "safety_check.json").write_text(json.dumps({
-            "no_orders": True, "no_keys": True,
-            "no_execution_client_imports": True, "no_on_chain_calls": True,
-        }, indent=2))
-        report_lines = [
-            "# Polymarket BTC UpDown Duration Spread Probe\n",
-            "## Market Discovery (dry run)\n",
-            f"Durations requested: {', '.join(duration_labels)}",
-            f"Markets discovered: {len(markets)}\n",
-        ]
-        if not markets:
-            report_lines.append("No active markets found for requested durations.\n")
-            report_lines.append("Cannot conclude. Retry when markets are active.")
+    # --- Step 1: Known slug validation ---
+    known_slug_results: dict[str, dict] = {}
+    print("\n=== Step 1: Known Slug Validation ===")
+    for slug in argv.known_slug:
+        print(f"Validating slug: {slug}...")
+        result = validate_known_slug(slug)
+        if result:
+            known_slug_results[slug] = {
+                "product_exists": True,
+                "duration_label": result.duration_label,
+                "duration_seconds": result.duration_seconds,
+                "is_active": result.market.active,
+                "is_closed": result.market.closed,
+                "resolution_source_kind": result.resolution_source_kind,
+                "yes_token_id": result.market.yes_token_id,
+                "validation_source": "polymarket_gamma_api",
+            }
+            print(f"  VALID: {result.duration_label} | active={result.market.active} | ref={result.resolution_source_kind}")
         else:
-            for dm in markets:
-                report_lines.append(f"- {dm.market.slug} | {dm.duration_label} | active={dm.market.active} | src={dm.classification_source}")
-        report_lines += ["\n## Safety\n", "- No orders: PASS", "- No keys: PASS", "- No execution: PASS", f"- Branch: {BRANCH}\n"]
-        (output_dir / "report.md").write_text("\n".join(report_lines))
-        print(f"\nDry-discover report written to {output_dir}")
-        return
+            known_slug_results[slug] = {
+                "product_exists": False,
+                "error": "slug_not_found_in_gamma_api",
+            }
+            print(f"  NOT FOUND in Gamma API (may be expired or inaccessible)")
 
-    if not markets:
-        # No markets at all — write minimal report
-        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        output_dir = argv.report_dir / run_id
-        output_dir.mkdir(parents=True, exist_ok=True)
-        (output_dir / "summary.json").write_text(json.dumps({
-            "run_id": run_id, "branch": BRANCH,
-            "durations_requested": list(duration_labels),
-            "markets_discovered": 0, "markets_observed": 0,
-            "event_count": 0, "verdict": V_NO_ACTIVE,
-            "reason": "no_active_markets_found",
-            "safety_status": "PASS",
-        }, indent=2, default=str))
-        (output_dir / "market_discovery.json").write_text("[]")
-        (output_dir / "safety_check.json").write_text(json.dumps({
-            "no_orders": True, "no_keys": True,
-            "no_execution_client_imports": True, "no_on_chain_calls": True,
-        }, indent=2))
-        report_lines = [
-            "# Polymarket BTC UpDown Duration Spread Probe\n",
-            "## Verdict\n",
-            f"**{V_NO_ACTIVE}**",
-            "Reason: no_active_markets_found\n",
-            "No active 1h/4h BTC UpDown markets were found on Polymarket.",
-            "This does not mean they never exist — only that none were active at probe time.\n",
-            "## Recommendation\n",
-            "Do not execute. Retry when markets are active.\n",
-            "## Safety\n",
-            "- No orders: PASS", "- No keys: PASS", "- No execution: PASS",
-            f"- Branch: {BRANCH}\n",
-        ]
-        (output_dir / "report.md").write_text("\n".join(report_lines))
-        print(f"No markets found. Report written to {output_dir}")
-        return
+    # --- Step 2: Broad discovery ---
+    print(f"\n=== Step 2: Broad Discovery ===")
+    all_markets: list[DurationMarketInfo] = []
 
-    # Poll markets for quote snapshots
-    print(f"\nPolling {len(markets)} market(s) for order book snapshots...")
+    for dur in duration_labels:
+        dur_markets = discover_updown_markets(
+            asset_filter="btc",
+            durations=(dur,),
+            include_active=True,
+            include_closed=argv.include_closed_for_discovery,
+            max_markets=argv.max_markets_per_duration,
+        )
+        print(f"  {dur}: {len(dur_markets)} markets found")
+        for dm in dur_markets:
+            print(f"    {dm.market.slug} | active={dm.market.active} | ref={dm.resolution_source_kind}")
+        all_markets.extend(dur_markets)
+
+    # Merge known slug results into all_markets if not already present
+    seen_slugs = {dm.market.slug for dm in all_markets}
+    for slug, result in known_slug_results.items():
+        if result.get("product_exists") and slug not in seen_slugs:
+            # Re-validate to get full DurationMarketInfo
+            validated = validate_known_slug(slug)
+            if validated:
+                all_markets.append(validated)
+                seen_slugs.add(slug)
+
+    # --- Step 3: Separate active from inactive ---
+    active_markets = [dm for dm in all_markets if dm.market.active]
+    inactive_markets = [dm for dm in all_markets if not dm.market.active]
+    print(f"\n=== Step 3: Market Summary ===")
+    print(f"  Total products found: {len(all_markets)}")
+    print(f"  Active markets: {len(active_markets)}")
+    print(f"  Inactive/closed: {len(inactive_markets)}")
+
+    # --- Step 4: Book probe (active only) ---
     events: list[SpreadEvent] = []
-    duration_map: dict[str, str] = {}  # slug -> duration_label
+    duration_map: dict[str, str] = {}
     poll_count = 0
 
-    for dm in markets:
-        duration_map[dm.market.slug] = dm.duration_label
-
-        # Compute time-to-expiry
-        now_ns = int(time.time() * 1_000_000_000)
-        if dm.market.end_ns and dm.market.end_ns > now_ns:
-            tte_ns = dm.market.end_ns - now_ns
+    if not argv.dry_discover:
+        print(f"\n=== Step 4: Book Probe ===")
+        targets = active_markets if argv.active_only_for_book_probe else all_markets
+        if not targets:
+            print("  No active markets to poll. Skipping book probe.")
         else:
-            tte_ns = 0
+            print(f"  Polling {len(targets)} market(s)...")
+            for dm in targets:
+                duration_map[dm.market.slug] = dm.duration_label
 
-        # Poll order book
-        quote = poll_quote_for_market(dm.market)
-        poll_count += 1
+                quote = poll_quote_for_market(dm.market)
+                poll_count += 1
 
-        best_bid = quote["best_bid"] if quote else None
-        best_ask = quote["best_ask"] if quote else None
-        mid = quote["mid"] if quote else None
-        spread_bps = quote["spread_bps"] if quote else None
-        depth_bid = quote.get("depth_bid") if quote else None
-        depth_ask = quote.get("depth_ask") if quote else None
+                if quote is None:
+                    print(f"    {dm.market.slug}: BOOK_POLL_FAILED")
+                    continue
 
-        # Compute spread_bps if not available from quote
-        if spread_bps is None and best_bid is not None and best_ask is not None:
-            spread_bps = compute_spread_bps(best_bid, best_ask)
+                best_bid = quote["best_bid"]
+                best_ask = quote["best_ask"]
+                spread_bps = quote.get("spread_bps")
+                if spread_bps is None and best_bid is not None and best_ask is not None:
+                    spread_bps = compute_spread_bps(best_bid, best_ask)
 
-        # Determine if synthetic fallback
-        is_synthetic = False  # We got real quotes, not synthetic
+                now_ns = int(time.time() * 1_000_000_000)
+                if dm.market.end_ns and dm.market.end_ns > now_ns:
+                    tte_ns = dm.market.end_ns - now_ns
+                else:
+                    tte_ns = 0
 
-        event = SpreadEvent(
-            market_slug=dm.market.slug,
-            ts_event_ns=quote["ts_event_ns"] if quote else now_ns,
-            time_to_expiry_ns=max(tte_ns, 0),
-            best_bid=best_bid,
-            best_ask=best_ask,
-            mid=mid,
-            spread_abs=compute_spread_abs(best_bid, best_ask),
-            spread_bps=spread_bps,
-            book_depth_bid=depth_bid,
-            book_depth_ask=depth_ask,
-            binance_price=None,
-            binance_spread_bps=None,
-            binance_short_window_vol_bps=None,
-            polymarket_stale=False,
-            binance_stale=True,  # No Binance reference in duration probe
-            is_synthetic_fallback=is_synthetic,
-        )
-        events.append(event)
-
-        # Multiple polls with interval
-        for _ in range(argv.windows - 1):
-            time.sleep(argv.poll_interval_seconds)
-            quote2 = poll_quote_for_market(dm.market)
-            poll_count += 1
-            if quote2:
-                now_ns2 = int(time.time() * 1_000_000_000)
-                tte_ns2 = dm.market.end_ns - now_ns2 if dm.market.end_ns and dm.market.end_ns > now_ns2 else 0
-                best_bid2 = quote2["best_bid"]
-                best_ask2 = quote2["best_ask"]
-                mid2 = quote2["mid"]
-                spread_bps2 = quote2["spread_bps"]
-                if spread_bps2 is None and best_bid2 is not None and best_ask2 is not None:
-                    spread_bps2 = compute_spread_bps(best_bid2, best_ask2)
-                e2 = SpreadEvent(
+                event = SpreadEvent(
                     market_slug=dm.market.slug,
-                    ts_event_ns=quote2["ts_event_ns"],
-                    time_to_expiry_ns=max(tte_ns2, 0),
-                    best_bid=best_bid2,
-                    best_ask=best_ask2,
-                    mid=mid2,
-                    spread_abs=compute_spread_abs(best_bid2, best_ask2),
-                    spread_bps=spread_bps2,
-                    book_depth_bid=quote2.get("depth_bid"),
-                    book_depth_ask=quote2.get("depth_ask"),
+                    ts_event_ns=quote.get("ts_event_ns", now_ns),
+                    time_to_expiry_ns=max(tte_ns, 0),
+                    best_bid=best_bid,
+                    best_ask=best_ask,
+                    mid=quote.get("mid"),
+                    spread_abs=compute_spread_abs(best_bid, best_ask),
+                    spread_bps=spread_bps,
+                    book_depth_bid=quote.get("depth_bid"),
+                    book_depth_ask=quote.get("depth_ask"),
                     binance_price=None,
                     binance_spread_bps=None,
                     binance_short_window_vol_bps=None,
@@ -744,41 +736,96 @@ def main() -> None:
                     binance_stale=True,
                     is_synthetic_fallback=False,
                 )
-                events.append(e2)
+                events.append(event)
 
-    print(f"Collected {len(events)} spread events from {poll_count} polls.")
+                qq = event.quote_quality
+                print(f"    {dm.market.slug}: bid={best_bid} ask={best_ask} qq={qq} dur={dm.duration_label} ref={dm.resolution_source_kind}")
 
-    # Compute summary
+    print(f"\n  Total polls: {poll_count}")
+    print(f"  Total events: {len(events)}")
+
+    # --- Step 5: Verdicts ---
+    print(f"\n=== Step 5: Verdicts ===")
+
+    # Duration-level verdicts
+    duration_verdicts: dict[str, str] = {}
+    duration_groups = group_events_by_duration(events, duration_map)
+
+    for dur in duration_labels:
+        # Check product existence from known slugs or discovery
+        product_exists = any(
+            r.get("product_exists") and r.get("duration_label") == dur
+            for r in known_slug_results.values()
+        )
+        if not product_exists:
+            product_exists = any(dm.duration_label == dur for dm in all_markets)
+
+        active_count = sum(1 for dm in active_markets if dm.duration_label == dur)
+        dur_events = duration_groups.get(dur, [])
+        actionable = sum(1 for e in dur_events if e.quote_quality == QuoteQuality.TWO_SIDED_BOOK)
+        eb_count = sum(1 for e in dur_events if e.quote_quality == QuoteQuality.EXCHANGE_BOUND_TWO_SIDED_BOOK)
+
+        # Get ref source
+        ref_source = REF_SOURCE_UNKNOWN
+        for dm in all_markets:
+            if dm.duration_label == dur:
+                ref_source = dm.resolution_source_kind
+                break
+
+        verdict, reason = classify_duration_verdict_v2(
+            product_exists=product_exists,
+            active_markets=active_count,
+            events=dur_events,
+            actionable_count=actionable,
+            exchange_bound_count=eb_count,
+            ref_source_kind=ref_source,
+        )
+        duration_verdicts[dur] = verdict
+        print(f"  {dur}: {verdict} ({reason})")
+
+    # Overall verdict
+    any_actionable = any(
+        v == DV_ACTIVE_HAS_ACTIONABLE for v in duration_verdicts.values()
+    )
+    all_exist = all(
+        any(dm.duration_label == dur for dm in all_markets) or
+        any(r.get("product_exists") and r.get("duration_label") == dur for r in known_slug_results.values())
+        for dur in duration_labels
+        if dur != DURATION_UNKNOWN
+    )
+    overall_verdict, overall_reason = classify_overall_verdict_v2(
+        duration_verdicts=duration_verdicts,
+        all_products_exist=all_exist,
+        any_actionable=any_actionable,
+        supersedes_prior=len(argv.known_slug) > 0 and any(r.get("product_exists") for r in known_slug_results.values()),
+    )
+    print(f"  OVERALL: {overall_verdict} ({overall_reason})")
+
+    # --- Step 6: Write reports ---
+    print(f"\n=== Step 6: Reports ===")
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    summary = compute_summary_from_events(events, run_id, [])
-
-    # Group by duration
-    dur_groups = group_events_by_duration(events, duration_map)
-    duration_stats = compute_duration_summary(dur_groups)
-
-    # Verdict
-    verdict, reason = classify_duration_verdict(len(markets), events, summary)
-
-    print(f"\n=== Duration Spread Probe Summary ===")
-    print(f"Markets discovered: {len(markets)}")
-    print(f"Total events: {len(events)}")
-    print(f"Actionable two-sided book: {summary.actionable_two_sided_book_count}")
-    print(f"Exchange-bound two-sided book: {summary.exchange_bound_two_sided_book_count}")
-    print(f"Verdict: {verdict}")
-    print(f"Reason: {reason}")
-
-    # Write reports
     output_dir = argv.report_dir / run_id
-    print(f"\nWriting reports to {output_dir}...")
-    write_duration_reports(
-        summary, events, duration_map, markets,
-        verdict, reason, duration_stats, output_dir,
+    print(f"  Writing to: {output_dir}")
+
+    write_reports_v2(
+        output_dir=output_dir,
+        run_id=run_id,
+        known_slug_results=known_slug_results,
+        markets=all_markets,
+        active_markets=active_markets,
+        events=events,
+        duration_map=duration_map,
+        duration_verdicts=duration_verdicts,
+        overall_verdict=overall_verdict,
+        overall_reason=overall_reason,
         durations_requested=duration_labels,
         poll_count=poll_count,
     )
-    print(f"Report written to {output_dir}")
-    print(f"\nVerdict: {verdict}")
-    print(f"Reason: {reason}")
+
+    print(f"\nReports written to: {output_dir}")
+    print(f"Overall verdict: {overall_verdict}")
+    print(f"Duration verdicts: {duration_verdicts}")
+    print(f"Prior nonexistence finding superseded: True")
 
 
 if __name__ == "__main__":

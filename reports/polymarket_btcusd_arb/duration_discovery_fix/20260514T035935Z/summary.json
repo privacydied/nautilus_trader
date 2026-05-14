@@ -1,0 +1,69 @@
+{
+  "run_id": "20260514T035935Z",
+  "branch": "polymarket-btc-updown-duration-discovery-fix-v2",
+  "commit": "",
+  "known_slug_validation": {
+    "bitcoin-up-or-down-may-13-2026-11pm-et": {
+      "product_exists": true,
+      "duration_label": "1h",
+      "duration_seconds": 3600,
+      "is_active": true,
+      "is_closed": false,
+      "resolution_source_kind": "BINANCE_BTCUSDT",
+      "yes_token_id": "33136433046764603922550063220515240217374494161230542422592733692657708940226",
+      "validation_source": "polymarket_gamma_api"
+    },
+    "btc-updown-4h-1778716800": {
+      "product_exists": true,
+      "duration_label": "4h",
+      "duration_seconds": 14400,
+      "is_active": true,
+      "is_closed": false,
+      "resolution_source_kind": "CHAINLINK_BTCUSD",
+      "yes_token_id": "16883442263138053228872948683019067684103343082407085748541972262033267547579",
+      "validation_source": "polymarket_gamma_api"
+    }
+  },
+  "durations_requested": [
+    "5m",
+    "15m",
+    "1h",
+    "4h"
+  ],
+  "products_found_by_duration": {
+    "5m": 4,
+    "15m": 4,
+    "1h": 2,
+    "4h": 1
+  },
+  "active_markets_found_by_duration": {
+    "5m": 4,
+    "15m": 4,
+    "1h": 2,
+    "4h": 1
+  },
+  "quote_events_by_duration": {},
+  "quote_quality_counts_by_duration": {},
+  "actionable_book_count_by_duration": {},
+  "reference_source_counts_by_duration": {
+    "UNKNOWN": 8,
+    "BINANCE_BTCUSDT": 2,
+    "CHAINLINK_BTCUSD": 1
+  },
+  "overall_verdict": "DURATION_PROBE_SUPERSEDES_PRIOR_NONEXISTENCE_FINDING",
+  "duration_verdicts": {
+    "5m": "DURATION_NO_ACTIVE_MARKET_NOW",
+    "15m": "DURATION_NO_ACTIVE_MARKET_NOW",
+    "1h": "DURATION_NO_ACTIVE_MARKET_NOW",
+    "4h": "DURATION_NO_ACTIVE_MARKET_NOW"
+  },
+  "supersedes_prior_report": true,
+  "limitations": [
+    "Observer-only. No orders. No keys.",
+    "Public API data only.",
+    "Product existence confirmed via known slugs; active market availability is separate.",
+    "4h markets may use Chainlink BTC/USD, not Binance BTC/USDT.",
+    "Single-point-in-time snapshots, not continuous book."
+  ],
+  "safety_status": "PASS"
+}

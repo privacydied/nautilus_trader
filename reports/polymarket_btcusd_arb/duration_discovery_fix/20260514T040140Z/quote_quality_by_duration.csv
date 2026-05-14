@@ -1,0 +1,6 @@
+duration,quote_quality,count
+15m,exchange_bound_two_sided_book,2
+1h,exchange_bound_two_sided_book,1
+1h,one_sided_book,1
+4h,one_sided_book,1
+5m,exchange_bound_two_sided_book,2

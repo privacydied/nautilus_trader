@@ -1,0 +1,8 @@
+{
+  "no_orders": true,
+  "no_keys": true,
+  "no_execution_client_imports": true,
+  "no_on_chain_calls": true,
+  "branch": "polymarket-btc-updown-duration-discovery-fix-v2",
+  "prior_nonexistence_finding_superseded": true
+}

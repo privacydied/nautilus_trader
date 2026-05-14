@@ -1,0 +1,115 @@
+{
+  "run_id": "20260514T040140Z",
+  "branch": "polymarket-btc-updown-duration-discovery-fix-v2",
+  "commit": "",
+  "known_slug_validation": {
+    "bitcoin-up-or-down-may-13-2026-11pm-et": {
+      "product_exists": true,
+      "duration_label": "1h",
+      "duration_seconds": 3600,
+      "is_active": true,
+      "is_closed": false,
+      "resolution_source_kind": "BINANCE_BTCUSDT",
+      "yes_token_id": "33136433046764603922550063220515240217374494161230542422592733692657708940226",
+      "validation_source": "polymarket_gamma_api"
+    },
+    "btc-updown-4h-1778716800": {
+      "product_exists": true,
+      "duration_label": "4h",
+      "duration_seconds": 14400,
+      "is_active": true,
+      "is_closed": false,
+      "resolution_source_kind": "CHAINLINK_BTCUSD",
+      "yes_token_id": "16883442263138053228872948683019067684103343082407085748541972262033267547579",
+      "validation_source": "polymarket_gamma_api"
+    }
+  },
+  "durations_requested": [
+    "5m",
+    "15m",
+    "1h",
+    "4h"
+  ],
+  "products_found_by_duration": {
+    "5m": 2,
+    "15m": 2,
+    "1h": 2,
+    "4h": 1
+  },
+  "active_markets_found_by_duration": {
+    "5m": 2,
+    "15m": 2,
+    "1h": 2,
+    "4h": 1
+  },
+  "quote_events_by_duration": {
+    "15m": 2,
+    "1h": 2,
+    "4h": 1,
+    "5m": 2
+  },
+  "quote_quality_counts_by_duration": {
+    "15m": {
+      "two_sided_book": 0,
+      "exchange_bound_two_sided_book": 2,
+      "one_sided_book": 0,
+      "empty_book": 0,
+      "fallback_min_max": 0,
+      "missing_book": 0,
+      "invalid_book": 0
+    },
+    "1h": {
+      "two_sided_book": 0,
+      "exchange_bound_two_sided_book": 1,
+      "one_sided_book": 1,
+      "empty_book": 0,
+      "fallback_min_max": 0,
+      "missing_book": 0,
+      "invalid_book": 0
+    },
+    "4h": {
+      "two_sided_book": 0,
+      "exchange_bound_two_sided_book": 0,
+      "one_sided_book": 1,
+      "empty_book": 0,
+      "fallback_min_max": 0,
+      "missing_book": 0,
+      "invalid_book": 0
+    },
+    "5m": {
+      "two_sided_book": 0,
+      "exchange_bound_two_sided_book": 2,
+      "one_sided_book": 0,
+      "empty_book": 0,
+      "fallback_min_max": 0,
+      "missing_book": 0,
+      "invalid_book": 0
+    }
+  },
+  "actionable_book_count_by_duration": {
+    "15m": 0,
+    "1h": 0,
+    "4h": 0,
+    "5m": 0
+  },
+  "reference_source_counts_by_duration": {
+    "BINANCE_BTCUSDT": 6,
+    "CHAINLINK_BTCUSD": 1
+  },
+  "overall_verdict": "DURATION_PROBE_NO_USABLE_BOOKS_IN_OBSERVED_ACTIVE_MARKETS",
+  "duration_verdicts": {
+    "5m": "DURATION_ACTIVE_MARKET_NO_USABLE_BOOK",
+    "15m": "DURATION_ACTIVE_MARKET_NO_USABLE_BOOK",
+    "1h": "DURATION_MARKET_EXISTS_NEEDS_QUOTE_OBSERVATION",
+    "4h": "DURATION_MARKET_EXISTS_NEEDS_QUOTE_OBSERVATION"
+  },
+  "supersedes_prior_report": true,
+  "limitations": [
+    "Observer-only. No orders. No keys.",
+    "Public API data only.",
+    "Product existence confirmed via known slugs; active market availability is separate.",
+    "4h markets may use Chainlink BTC/USD, not Binance BTC/USDT.",
+    "Single-point-in-time snapshots, not continuous book."
+  ],
+  "safety_status": "PASS"
+}

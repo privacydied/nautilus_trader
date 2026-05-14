@@ -629,3 +629,60 @@ Do not start Phase 3.
 Do not continue BTC UpDown under this hypothesis.
 Future Polymarket BTC research must be a separate hypothesis outside BTC UpDown,
 or require a product/liquidity regime change on Polymarket's side.
+
+## Duration Probe Correction — Superseded Nonexistence Finding
+
+### Correction Date
+2026-05-14
+
+### Superseded Branch
+- Branch: polymarket-btc-updown-duration-spread-v1
+- Superseded by: polymarket-btc-updown-duration-discovery-fix-v2
+
+### What Was Wrong
+The previous duration probe incorrectly concluded that 1h and 4h BTC UpDown
+markets do not exist on Polymarket. User-supplied Polymarket URLs show that
+both product families exist. The bug was in discovery/classification, not in
+Polymarket product availability.
+
+### Root Cause
+1. **Slug regex too narrow**: Only matched `btc-updown-{dur}-{timestamp}` pattern,
+   missed `bitcoin-up-or-down-*` hourly family.
+2. **Title classifier gap**: "Hourly" was not recognized as a 1h duration indicator.
+3. **No known-slug validation**: No mechanism to validate user-supplied slugs directly.
+4. **Closed-market query bug**: API fallback for closed markets didn't set `closed=true`.
+5. **No reference-source classification**: Binance vs Chainlink not distinguished.
+6. **Conflated product existence with active availability**: "No active market now"
+   was reported as "does not exist."
+
+### Corrected Conclusion
+The old conclusion `BTC_UPDOWN_REJECTED_ALL_CURRENT_DURATIONS` is **superseded**.
+The corrected conclusion must distinguish product existence from active market
+availability and quote quality.
+
+### Known Validated Products
+- **1h (Hourly)**: Product family exists (`bitcoin-up-or-down-*` slugs).
+  Resolution: Binance BTC/USDT 1H candle.
+- **4h**: Product family exists (`btc-updown-4h-*` slugs).
+  Resolution: Chainlink BTC/USD (NOT Binance BTC/USDT).
+
+### Reference Source Discovery
+- **Binance BTC/USDT**: Used by 5m, 15m, and 1h products.
+- **Chainlink BTC/USD**: Used by 4h products.
+  The existing Binance-reference fair-probability strategy is NOT automatically
+  valid for Chainlink-based products without a separate reference model.
+
+### Corrected Verdict
+`DURATION_PROBE_SUPERSEDES_PRIOR_NONEXISTENCE_FINDING`
+
+Product existence is confirmed for 1h and 4h BTC UpDown families.
+Active market availability and quote quality remain to be observed.
+5m/15m exchange-bound findings remain valid.
+
+### Reports
+- Duration discovery fix reports: reports/polymarket_btcusd_arb/duration_discovery_fix/<run_id>/
+
+### Tests
+- Duration discovery fix tests added to test_duration_spread_probe.py
+- All existing safety tests must still pass
+- No execution code added
