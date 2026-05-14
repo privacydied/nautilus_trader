@@ -748,26 +748,32 @@ PYTHONUNBUFFERED=1 .venv/bin/python -u -m examples.strategies.polymarket_btcusd_
   --min-contiguous-actionable-seconds-for-phase1 300
 ```
 
+### Run ID
+`20260514T073238Z`
+
+### Report Directory
+`reports/polymarket_btcusd_arb/one_hour_quote_lifecycle/20260514T073238Z/`
+
 ### Known Slug Validation
 PASSED: `bitcoin-up-or-down-may-13-2026-11pm-et` validated as 1h, active, BINANCE_BTCUSDT reference.
 
 ### Active 1h Markets Found
 2 active 1h markets:
-- `bitcoin-up-or-down-may-16-2026-1am-et` (active, BINANCE_BTCUSDT)
+- `bitcoin-up-or-down-may-16-2026-2am-et` (active, BINANCE_BTCUSDT)
 - `bitcoin-up-or-down-may-13-2026-11pm-et` (active, BINANCE_BTCUSDT)
 
 ### Selected Market Slug
-`bitcoin-up-or-down-may-16-2026-1am-et`
+`bitcoin-up-or-down-may-16-2026-2am-et`
 
 ### Observation Results
-- Snapshot count: 775
-- Book poll successes: 775
+- Snapshot count: 774
+- Book poll successes: 774
 - Book poll failures: 0
-- Quote quality: 100% EXCHANGE_BOUND_TWO_SIDED_BOOK (775/775)
+- Quote quality: 100% EXCHANGE_BOUND_TWO_SIDED_BOOK (774/774)
 - Actionable two-sided book count: 0
 - Actionable two-sided book rate: 0.0000
 - Max contiguous actionable seconds: 0.0s
-- Lifecycle bucket: pre_start for all 775 snapshots
+- Lifecycle bucket: pre_start for all 774 snapshots
 - Every snapshot: bid=0.01, ask=0.99
 
 ### Thresholds
