@@ -208,28 +208,35 @@ def main():
             duration_seconds=args.duration_seconds,threshold_grid=threshold_grid,
             lookback_grid=args.lookback_grid,market_slug=market.slug,max_markets=args.max_markets,
         )
-        # Parse result
+# Parse result
         win_data={"window_idx":i,"market_slug":market.slug,"completed":result["returncode"]==0}
         if result["returncode"]==0:
-            # Try to find the latest run in capture_dir
             stdout=result["stdout"]
             win_data["completed"]=True
-            # Extract stats from summary
-            # The observer prints stats to stdout; parse them
+            # Extract stats from observer stdout
+            capture_dir_from_stdout=None
+            report_dir_from_stdout=None
             for line in stdout.split("\n"):
+                line=line.strip()
                 if line.startswith("Evaluated events:"):
-                    win_data["evaluated_event_count"]=int(line.split(":")[1].strip())
+                    try: win_data["evaluated_event_count"]=int(line.split(":")[1].strip())
+                    except (ValueError,IndexError): pass
                 elif line.startswith("Candidate count:"):
-                    win_data["candidate_count"]=int(line.split(":")[1].strip())
+                    try: win_data["candidate_count"]=int(line.split(":")[1].strip())
+                    except (ValueError,IndexError): pass
                 elif line.startswith("Replay deterministic:"):
-                    win_data["replay_deterministic"]=line.split(":")[1].strip()=="True"
-            # Also look for the latest observer_summary.json
-            import glob
-            summaries=sorted(glob.glob(str(capture_base/"*"/"observer_summary.json")))
-            if summaries:
-                latest_summary_path=summaries[-1]
+                    win_data["replay_deterministic"]=(line.split(":")[1].strip()=="True")
+                elif line.startswith("CAPTURE_DIR="):
+                    capture_dir_from_stdout=Path(line.split("=",1)[1].strip())
+                elif line.startswith("REPORT_DIR="):
+                    report_dir_from_stdout=Path(line.split("=",1)[1].strip())
+            # Read observer_summary.json from the path printed by the observer
+            summary_path=None
+            if capture_dir_from_stdout:
+                summary_path=capture_dir_from_stdout/"observer_summary.json"
+            if summary_path and summary_path.exists():
                 try:
-                    s=json.loads(Path(latest_summary_path).read_text())
+                    s=json.loads(summary_path.read_text())
                     win_data["candidate_count"]=s.get("candidate_count",win_data.get("candidate_count",0))
                     win_data["grid_rejection_count"]=s.get("grid_rejection_count",0)
                     win_data["grid_rejection_counts"]=s.get("grid_rejection_counts",{})
@@ -238,11 +245,13 @@ def main():
                     win_data["accounting_contract"]=s.get("accounting_contract","")
                 except Exception:
                     pass
-            # Try to find latest replay_check.json
-            replay_checks=sorted(glob.glob(str(Path(args.report_dir).parent/"live_observer"/"*"/"replay_check.json")))
-            if replay_checks:
+            # Read replay_check.json from the report path printed by the observer
+            replay_path=None
+            if report_dir_from_stdout:
+                replay_path=report_dir_from_stdout/"replay_check.json"
+            if replay_path and replay_path.exists():
                 try:
-                    r=json.loads(Path(replay_checks[-1]).read_text())
+                    r=json.loads(replay_path.read_text())
                     win_data["replay_candidate_match"]=r.get("candidate_count_match",False)
                     win_data["replay_grid_rejection_match"]=r.get("grid_rejection_count_match",False)
                     if r.get("grid_rejection_count_match") is None:

@@ -5,7 +5,7 @@ Phase 1: observer-only backtest and hypothesis validation. No live trading.
 Phase 2: observer-only live data validation. No live trading. No execution. No orders. No keys. No on-chain.
 
 ## Git Branch
-Current Nautilus branch: polymarket-btcusd-arb-phase2-observer
+Current Nautilus branch: polymarket-btcusd-arb-phase2b-observer-campaign
 Base branch/commit: polymarket-btcusd-arb-phase1 (forked from master)
 Remote tracking branch: fork/polymarket-btcusd-arb-phase2-observer
 Was implementation done on polymarket-btcusd-arb-phase2-observer: Yes
@@ -214,20 +214,32 @@ Safety: no orders, no keys, no execution imports, no on-chain calls. AST-checked
 Campaign ID: 20260513T230446Z
 Result: 0/2 windows completed. Both observer subprocesses failed due to branch check rejecting `polymarket-btcusd-arb-phase2b-observer-campaign` (hardcoded to Phase 2 branch name only).
 Fix: branch check broadened to accept any `polymarket-btcusd-arb-phase2*` branch.
-Subsequent dry-discover attempt: 0 active BTC 15m UpDown markets found. Market btc-updown-15m-1778798700 has expired.
+
+Campaign ID: 20260513T232240Z (broken parsing — campaign runner used glob instead of observer-provided paths)
+Result: 1/1 window completed but summary showed incorrect data (0 grid rejections, 1 evaluated event) due to campaign runner reading wrong observer_summary.json.
+Fix: replaced glob-based summary lookup with CAPTURE_DIR/REPORT_DIR stdout path extraction from observer subprocess.
+
+Campaign ID: 20260513T234841Z (fixed parsing — first valid campaign run)
+Market: btc-updown-15m-1778801400 (Bitcoin Up or Down — May 14, 7:30PM-7:45PM ET)
+Result: 1/1 window completed, 157 evaluated events, 3140 grid rejections, 0 candidates
+Rejection breakdown: spread_too_wide=2640 (84.1%), stale_or_missing_binance=500 (15.9%)
+Replay checks passed: True (candidate_count_match=True, grid_rejection_count_match=True)
+All grid cell verdicts: NEEDS_MORE_DATA (no_events_met_threshold)
+Verdict: NEEDS_MORE_DATA — 1_of_1_windows_zero_candidates_insufficient_sample
 
 Dry-discover re-check (2026-05-14): 0 active BTC 15m UpDown markets.
-No new live observation data from Phase 2B campaign.
-Phase 2B did NOT produce new live evidence — only infrastructure readiness was validated.
+No new live observation data from Phase 2B campaign after the fixed run.
+Total live observation data: 3 completed 900s windows (2 Phase 2 + 1 Phase 2B), all zero candidates, all dominated by spread_too_wide and stale_or_missing_binance.
 
 ## Phase 2B Replay Checks
-Not yet performed — no completed windows from campaign. Previous Phase 2 post-fix capture (20260513T225119Z) demonstrated full replay determinism (candidate count match, grid rejection count match, rejection by reason match).
+Campaign 20260513T234841Z: replay checks passed. candidate_count_match=True, grid_rejection_count_match=True, all grid cell verdicts NEEDS_MORE_DATA (no_events_met_threshold).
+Previous Phase 2 post-fix capture (20260513T225119Z): full replay determinism confirmed (candidate count match, grid rejection count match, rejection by reason match).
 
 ## Phase 2B Safety Checks
-56 tests passing (45 Phase 1/2 + 11 Phase 2B campaign). AST safety scan clean. No orders, no keys, no execution client imports. Campaign runner uses subprocess of existing observer — inherits all Phase 2 safety invariants.
+57 tests passing (45 Phase 1/2 + 11 Phase 2B campaign + 1 campaign stdout parsing). AST safety scan clean. No orders, no keys, no execution client imports. Campaign runner uses subprocess of existing observer — inherits all Phase 2 safety invariants.
 
 ## Phase 2B Verdict
-NEEDS_MORE_DATA — no active BTC 15m UpDown market available for campaign. Phase 2B infrastructure (campaign runner, tests, reports) is ready but did not produce new live evidence. Previous Phase 2 900s windows (2 total, both zero candidates, dominant blocker: spread_too_wide) remain the only live observation data. This is insufficient for a global reject/continue decision.
+NEEDS_MORE_DATA — 3 completed 900s live observation windows (2 Phase 2 + 1 Phase 2B), all zero candidates, all dominated by spread_too_wide (84-93%) and stale_or_missing_binance (7-16%). Sample is too small for a global reject/continue decision. Phase 2B campaign data is now valid (fixed parsing bug that previously caused 0 grid rejections to be reported).
 
 ## Phase 2B Limitations
 - Observer-only. No execution.
@@ -241,3 +253,9 @@ NEEDS_MORE_DATA — no active BTC 15m UpDown market available for campaign. Phas
 Do not recommend Phase 3 or execution.
 Continue observer-only campaigns across more markets and volatility regimes.
 Only upgrade to CANDIDATE_FOR_LONGER_OBSERVATION if multiple windows produce candidates with replay determinism.
+
+Phase 2B minimum evidence targets not yet met:
+- Target A (8 windows / 4 distinct markets): 3 windows / 1 market
+- Target B (4 windows with candidates): 0 windows with candidates
+- Target C (6 windows 0 candidates, >85% spread): 3 windows, spread rate 84-93%, insufficient sample
+- Target D (5 failed discoveries): 1-2 discoveries with no market

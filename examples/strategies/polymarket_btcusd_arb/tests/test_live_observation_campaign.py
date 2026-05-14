@@ -215,3 +215,49 @@ def test_rejected_for_current_live_conditions_verdict():
         safety={"ok": True, "violations": []}
     )
     assert summary["verdict"] == "REJECTED_FOR_CURRENT_LIVE_CONDITIONS"
+
+
+def test_campaign_reads_observer_summary_from_stdout_paths():
+    """Campaign runner reads observer_summary.json from the CAPTURE_DIR path printed by observer."""
+    from examples.strategies.polymarket_btcusd_arb.live_observation_campaign import main
+    with tempfile.TemporaryDirectory() as td:
+        capture_dir = Path(td) / "data" / "observer"
+        capture_dir.mkdir(parents=True)
+        report_dir = Path(td) / "reports" / "observer"
+        report_dir.mkdir(parents=True)
+        # Create a realistic observer_summary.json
+        summary_data = {
+            "candidate_count": 0, "grid_rejection_count": 3000,
+            "grid_rejection_counts": {"spread_too_wide": 2800, "stale_or_missing_binance": 200},
+            "rejection_counts": {"spread_too_wide": 2800, "stale_or_missing_binance": 200},
+            "evaluated_event_count": 150, "accounting_contract": "grid_level: event × lookback × threshold",
+        }
+        (capture_dir / "observer_summary.json").write_text(json.dumps(summary_data))
+        # Create a realistic replay_check.json
+        replay_data = {"candidate_count_match": True, "grid_rejection_count_match": True, "deterministic": True}
+        (report_dir / "replay_check.json").write_text(json.dumps(replay_data))
+        # Simulate observer stdout
+        observer_stdout = (
+            "PHASE=2_OBSERVER_ONLY_LIVE_DATA_VALIDATION\n"
+            "NO_ORDERS=1\n"
+            f"CAPTURE_DIR={capture_dir}\n"
+            f"REPORT_DIR={report_dir}\n"
+            "Evaluated events: 150\n"
+            "Candidate count: 0\n"
+            "Replay deterministic: True\n"
+        )
+        mock_result = MagicMock(returncode=0, stdout=observer_stdout, stderr="")
+        with patch("examples.strategies.polymarket_btcusd_arb.live_observation_campaign.discover_markets") as mock_disc, \
+             patch("examples.strategies.polymarket_btcusd_arb.live_observation_campaign.run_single_window") as mock_run, \
+             patch("examples.strategies.polymarket_btcusd_arb.safety_checks.check_path") as mock_safety:
+            from examples.strategies.polymarket_btcusd_arb.live_market_discovery import UpDownMarketInfo
+            mock_disc.return_value = [UpDownMarketInfo(
+                slug="btc-updown-15m-test", question="Test?", active=True, closed=False,
+                condition_id="cond1", yes_token_id="tok1", no_token_id="tok2",
+                start_ns=1000, end_ns=2000, series_slug="btc", resolution_source="gamma",
+                price_to_beat=100000.0, price_to_beat_source="slug_epoch")]
+            mock_run.return_value = mock_result
+            mock_safety.return_value = {"ok": True, "violations": []}
+            with patch("sys.argv", ["prog", "--windows", "1", "--duration-seconds", "10"]):
+                rc = main()
+        assert rc == 0
