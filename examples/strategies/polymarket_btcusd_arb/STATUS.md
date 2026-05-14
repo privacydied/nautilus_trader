@@ -873,3 +873,69 @@ Added `classify_snapshot_timing_state()` and `classify_market_timing_state()`:
 - No keys: PASS
 - No execution client imports: PASS
 - No on-chain calls: PASS
+
+## DQO-2B Live Lifecycle-Valid Run
+
+### Command
+```
+PYTHONUNBUFFERED=1 .venv/bin/python -u -m examples.strategies.polymarket_btcusd_arb.run_1h_quote_lifecycle_observer \
+  --duration-seconds 3900 --poll-seconds 5 --duration 1h \
+  --known-slug bitcoin-up-or-down-may-13-2026-11pm-et \
+  --min-actionable-rate-for-phase1 0.05 \
+  --min-contiguous-actionable-seconds-for-phase1 300 \
+  --max-wait-for-start-seconds 0
+```
+
+### Run ID
+`20260514T113211Z`
+
+### Report Directory
+`reports/polymarket_btcusd_arb/one_hour_quote_lifecycle/20260514T113211Z/`
+
+### Known Slug Validation
+PASSED: `bitcoin-up-or-down-may-13-2026-11pm-et` validated as 1h, active (but closed/resolved), BINANCE_BTCUSDT reference.
+
+### Active 1h Markets Found
+0 active 1h markets. The known slug is a closed/resolved market. No currently active 1h markets were available during this run.
+
+### Selected Market Slug
+None (no active 1h market available)
+
+### Market Start/End
+N/A
+
+### Selected Market Timing State
+N/A
+
+### Snapshot Count
+0
+
+### Pre-start Snapshot Count
+0
+
+### In-lifecycle Snapshot Count
+0
+
+### Expired Snapshot Count
+0
+
+### Quote Quality Counts
+(empty)
+
+### Actionable Two-sided Book Count/Rate
+0 / 0.0
+
+### Max Contiguous Actionable Seconds
+0.0s
+
+### Overall Verdict
+`NEEDS_MORE_DATA_NO_ACTIVE_1H_MARKET`
+
+### Whether the Run Supports a Lifecycle Quote-quality Conclusion
+No. No active 1h market was available during this run.
+
+### Scientific Interpretation
+This run produced no 1h lifecycle evidence. The Polymarket 1h BTC UpDown product exists (validated via known slug), but no market was in its active trading lifecycle at observation time. This is NOT evidence for or against 1h actionable book quality. It simply means the observer must be re-run when an active 1h market enters its event window.
+
+### Next Recommendation
+Re-run the observer when an active 1h BTC UpDown market enters its lifecycle window (start_ns <= now < end_ns). No backtest is justified from this run. No execution. No Phase 3.
