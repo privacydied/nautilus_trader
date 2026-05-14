@@ -43,6 +43,25 @@ You can use either or both. The native null test is recommended for quick falsif
 - `candidate_survives_null` boolean verdict
 - `NULL_REJECTED_DIAGNOSTIC` or `NO_MCPT_WORTHY_GROUPS` status when appropriate
 
+## GPU forward-return evaluation (optional, explicit)
+
+The forward-return kernel in `forward_returns_gpu.py` accelerates the inner events × horizons evaluation loop using CUDA batching.
+
+- **CPU is the default.** `--forward-engine cpu` preserves all existing behavior exactly.
+- `--forward-engine gpu` uses `batch_evaluate_signals_gpu` via PyTorch CUDA `searchsorted`.
+- **No hidden CPU fallback.** If `--forward-engine gpu` is requested and CUDA is unavailable, the run exits with `GPU_UNAVAILABLE_DIAGNOSTIC` and a non-zero exit code.
+- GPU forward returns do **not** change signal generation, costs, thresholds, verdict rules, or candidate selection. They are a speed improvement only.
+- GPU forward returns do **not** update `REJECTED_RESEARCH.md` and do **not** permit live trading.
+- Determinism is trivially guaranteed — there is no randomness in the forward-return kernel.
+
+CLI args added to `run_derivatives_spot_lead_lag.py`:
+
+| Arg | Default | Description |
+|---|---|---|
+| `--forward-engine` | `cpu` | `cpu` or `gpu` |
+| `--forward-device` | `cuda:0` | CUDA device for `--forward-engine gpu` |
+| `--forward-batch-size` | `16384` | Events per GPU chunk |
+
 ## GPU acceleration (optional, explicit)
 
 The native null test supports an explicit GPU engine via `--engine gpu`.

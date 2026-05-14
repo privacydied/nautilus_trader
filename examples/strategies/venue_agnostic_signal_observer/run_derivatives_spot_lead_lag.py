@@ -27,6 +27,10 @@ from .tick_store import load_trades_jsonl
 from .symbol_aliases import resolve_symbol, quote_mismatch as sym_quote_mismatch
 from .trade_flow_impulse import TradeFlowImpulseConfig, TradeFlowImpulseSignalGenerator
 from .event_study import evaluate_tick_signal, generate_random_baseline, evaluate_candidate_group
+from .forward_returns_gpu import (
+    check_cuda_available as _frgpu_check_cuda,
+    batch_evaluate_signals_gpu as _frgpu_batch,
+)
 from .artifact_metadata import build_metadata
 
 _MS_TO_NS = 1_000_000
@@ -66,6 +70,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--capture-mode", type=str, default="",
                    choices=["FULL_ACTIVE", "FAST_DIAGNOSTIC", ""],
                    help="Capture mode from volatility gate. FAST_DIAGNOSTIC prevents final REJECTED verdict.")
+    p.add_argument("--forward-engine", type=str, default="cpu", choices=["cpu", "gpu"],
+                   help="Forward-return engine: 'cpu' (default) or 'gpu'. GPU requires PyTorch + CUDA.")
+    p.add_argument("--forward-device", type=str, default="cuda:0",
+                   help="CUDA device for --forward-engine gpu. Default: cuda:0.")
+    p.add_argument("--forward-batch-size", type=int, default=16384,
+                   help="Events per GPU chunk for --forward-engine gpu. Default: 16384.")
     return p
 
 
@@ -331,6 +341,25 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
         run_start=time.time(),
     )
 
+    # GPU availability check — fail fast, no silent fallback
+    forward_engine = getattr(args, "forward_engine", "cpu")
+    forward_device = getattr(args, "forward_device", "cuda:0")
+    forward_batch_size = getattr(args, "forward_batch_size", 16384)
+    if forward_engine == "gpu":
+        import sys as _sys
+        cuda_ok, cuda_reason = _frgpu_check_cuda(forward_device)
+        if not cuda_ok:
+            print(
+                f"ERROR: --forward-engine gpu requested but CUDA unavailable: {cuda_reason}",
+                file=_sys.stderr,
+            )
+            print(
+                '{"verdict": "GPU_UNAVAILABLE_DIAGNOSTIC", "reason": "'
+                + cuda_reason + '"}',
+                file=_sys.stderr,
+            )
+            _sys.exit(1)
+
     capture_dir = Path(args.capture_dir)
     if not capture_dir.exists():
         summary.verdict = "NEEDS_MORE_DATA"
@@ -516,17 +545,31 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
 
                         ALL_SIGNALS.extend(events)
 
-                        for evt in events:
-                            frs = evaluate_tick_signal(
-                                signal=evt,
+                        if forward_engine == "gpu" and events:
+                            gpu_frs = _frgpu_batch(
+                                signals=events,
                                 target_ticks=tgt_clipped,
                                 horizons_ms=horizons_ms,
                                 fee_bps=args.fee_bps,
                                 slippage_bps=adj_slippage,
                                 quote_mismatch=has_qm,
                                 quote_mismatch_buffer_bps=args.quote_mismatch_buffer_bps if has_qm else 0.0,
+                                chunk_size=forward_batch_size,
+                                device=forward_device,
                             )
-                            ALL_FWD.extend(frs)
+                            ALL_FWD.extend(gpu_frs)
+                        else:
+                            for evt in events:
+                                frs = evaluate_tick_signal(
+                                    signal=evt,
+                                    target_ticks=tgt_clipped,
+                                    horizons_ms=horizons_ms,
+                                    fee_bps=args.fee_bps,
+                                    slippage_bps=adj_slippage,
+                                    quote_mismatch=has_qm,
+                                    quote_mismatch_buffer_bps=args.quote_mismatch_buffer_bps if has_qm else 0.0,
+                                )
+                                ALL_FWD.extend(frs)
 
                         print(f"    {sig_type}/{lb_ms}ms: {len(events)} signals, {sum(len(frs) for frs in [[]])} fwd")
 

@@ -44,6 +44,29 @@ python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spo
 
 Output: `summary.json`, `signals.jsonl`, `forward_returns.jsonl`, plus per-group report files.
 
+### Optional: GPU-accelerated evaluation
+
+CPU is the default. For large signal sets and many horizons, an explicit GPU engine is available. Requires PyTorch + CUDA.
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_lead_lag \
+    --capture-dir data/derivatives_spot_capture_v2 \
+    --source-venues binance_perp \
+    --target-venues kraken,coinbase \
+    --symbols BTC/USD,ETH/USD,SOL/USD \
+    --forward-engine gpu \
+    --forward-device cuda:0 \
+    --forward-batch-size 16384 \
+    ... (same remaining args as CPU run)
+```
+
+Important rules:
+- `--forward-engine cpu` is the default and produces identical output.
+- `--forward-engine gpu` is explicit. If CUDA is unavailable the run exits with `GPU_UNAVAILABLE_DIAGNOSTIC` — it does **not** silently fall back to CPU.
+- GPU forward returns accelerate the events × horizons inner loop only. All signal generation, OI bucketing, baseline evaluation, grouping, verdict rules, and report writing are unchanged.
+- GPU forward returns do **not** update `REJECTED_RESEARCH.md`.
+- GPU forward returns do **not** permit live trading or execution.
+
 ## Step 3: MCPT Export
 
 Export candidate groups for Monte Carlo Permutation Testing.
