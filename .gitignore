@@ -114,6 +114,12 @@ CODEX.md
 GEMINI.md
 
 # Nautilus specific
+
+# Research captures and reports (computed artifacts, not versioned)
+data/derivatives_spot_capture_*/
+reports/derivatives_spot_lead_lag_*/
+reports/derivatives_lead_lag_v1/
+
 .ipynb_checkpoints/
 /docs/getting_started/*.ipynb
 /docs/tutorials/*.ipynb
