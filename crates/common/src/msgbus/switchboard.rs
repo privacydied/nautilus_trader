@@ -30,9 +30,8 @@ static DATA_QUEUE_COMMAND_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 static DATA_EXECUTE_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 static DATA_PROCESS_ANY_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 static DATA_PROCESS_DATA_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
-#[cfg(feature = "defi")]
-static DATA_PROCESS_DEFI_DATA_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 static DATA_RESPONSE_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
+static DATA_RESPONSE_TOPIC: OnceLock<MStr<Topic>> = OnceLock::new();
 static EXEC_QUEUE_COMMAND_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 static EXEC_EXECUTE_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 static EXEC_PROCESS_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
@@ -42,7 +41,11 @@ static RISK_QUEUE_EXECUTE_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 static RISK_PROCESS_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 static ORDER_EMULATOR_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 static PORTFOLIO_ACCOUNT_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
+static PORTFOLIO_ORDER_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 static SHUTDOWN_SYSTEM_TOPIC: OnceLock<MStr<Topic>> = OnceLock::new();
+
+#[cfg(feature = "defi")]
+static DATA_PROCESS_DEFI_DATA_ENDPOINT: OnceLock<MStr<Endpoint>> = OnceLock::new();
 
 macro_rules! define_switchboard {
     ($(
@@ -136,6 +139,12 @@ macro_rules! define_switchboard {
 
             #[inline]
             #[must_use]
+            pub fn data_response_topic() -> MStr<Topic> {
+                *DATA_RESPONSE_TOPIC.get_or_init(|| "data.response".into())
+            }
+
+            #[inline]
+            #[must_use]
             pub fn exec_engine_execute() -> MStr<Endpoint> {
                 *EXEC_EXECUTE_ENDPOINT.get_or_init(|| "ExecEngine.execute".into())
             }
@@ -189,6 +198,12 @@ macro_rules! define_switchboard {
             #[must_use]
             pub fn portfolio_update_account() -> MStr<Endpoint> {
                 *PORTFOLIO_ACCOUNT_ENDPOINT.get_or_init(|| "Portfolio.update_account".into())
+            }
+
+            #[inline]
+            #[must_use]
+            pub fn portfolio_update_order() -> MStr<Endpoint> {
+                *PORTFOLIO_ORDER_ENDPOINT.get_or_init(|| "Portfolio.update_order".into())
             }
 
             /// Pub/sub topic carrying `ShutdownSystem` commands published by
@@ -630,6 +645,13 @@ mod tests {
     #[fixture]
     fn instrument_id() -> InstrumentId {
         InstrumentId::from("ESZ24.XCME")
+    }
+
+    #[rstest]
+    fn test_data_response_topic() {
+        let expected_topic = "data.response".into();
+        let result = MessagingSwitchboard::data_response_topic();
+        assert_eq!(result, expected_topic);
     }
 
     #[rstest]

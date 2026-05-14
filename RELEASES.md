@@ -22,10 +22,14 @@ Released on TBD (UTC).
 - Added Betfair Rust adapter `stream_gap_recovery_lookback_mins` config for the reconciliation lookback window
 - Added Bybit hedge-mode venue position IDs for order, position, and fill events
 - Added Bybit BBO order support for linear and inverse limit-style orders
+- Added Bybit `flatten` binary that cancels working orders and flattens Linear/Inverse positions
 - Added Coinbase liquidation/ADL warning on forced-close order events
 - Added Coinbase CFM liquidation buffer warning when buffer drops below 20%
 - Added Deribit `auto_load_missing_instruments` config flag to lazy-load uncached instruments on subscribe
 - Added dYdX historical funding rate requests via the `request_funding_rates` HTTP method and PyO3 binding
+- Added Hyperliquid HIP-4 outcome instruments: `+E`/`#E` encoding, USDH settlement, and per-side BinaryOption modeling
+- Added Hyperliquid HIP-4 outcome reconciliation via spot balances; `outcomeMeta` settlement dispatch on the Rust client
+- Added Hyperliquid HIP-4 outcome order scaffolding; live placement awaits `splitOutcome` action wiring
 - Added Kraken Spot margin trading support (#3965), thanks @mcgrj
 - Added Kraken Spot WebSocket v2 order submission (#4007), thanks @mcgrj
 - Added OKX event contracts support
@@ -65,12 +69,14 @@ Released on TBD (UTC).
 ### Security
 - Added Sigstore SBOM attestation for Docker container images at the published digest
 - Added CI smoke tests verifying wheel, sdist, and Docker image signatures after publish
-- Documented Sigstore signature and SBOM verification commands in `SECURITY.md`
+- Removed long-lived `PACKAGES_TOKEN` PAT in favor of per-job GHCR `GITHUB_TOKEN`
 - Hardened CI release signing chain: pinned cosign tooling, `harden-runner` on merge jobs
 - Hardened nightly-merge auth by storing token in git extraheader rather than remote URL
 - Hardened PyPI publishing with OIDC trusted publishing, eliminating long-lived API tokens
+- Hardened Python dependency installation by listing every third-party package in `[tool.uv].no-build-package` (kept in sync with `uv.lock` by a pre-commit hook) so unexpected loss of wheel publishing fails `uv lock` instead of silently building from an sdist
+- Upgraded `urllib3` to v2.7.0 (addresses GHSA-mf9v-mfxr-j63j decompression-bomb bypass and GHSA-qccp-gfcp-xxvc sensitive header leak on cross-host proxy redirect)
 - Fixed `DatabaseConfig` repr to fully redact passwords (#4028), thanks @faysou
-- Removed long-lived `PACKAGES_TOKEN` PAT in favor of per-job GHCR `GITHUB_TOKEN`
+- Documented Sigstore signature and SBOM verification commands in `SECURITY.md`
 
 ### Fixes
 - Fixed `RefCell` reentrancy panic in `ExecutionEngine::handle_order_fill` for OTO parent fills (#3981), thanks for reporting @GreatLandmark
@@ -78,6 +84,7 @@ Released on TBD (UTC).
 - Fixed `RefCell` double-borrow panic in `Portfolio::update_position` when `calculate_account_state` is true
 - Fixed identifier deserialization inside `#[serde(tag = "type")]` enums and `serde_json::Value`; all identifiers now accept owned strings via `Cow<'de, str>`
 - Fixed `AccountsManager::update_balances` discarding recalculated balances by mutating a dropped clone
+- Fixed margin account balance not applying realized price PnL on close and reversal fills (#4056), thanks @faysou
 - Fixed Rust portfolio account event clone overhead (#4004), thanks for reporting @magnified103
 - Fixed margin `AccountState` events emitting empty balances when balances were populated
 - Fixed `allow_cash_borrowing` not applied to cached cash accounts during simulated venue initialization
@@ -90,6 +97,8 @@ Released on TBD (UTC).
 - Fixed `OrderMatchingEngine` to propagate tick-size to `MatchingCore` (#3942), thanks for reporting @graceyangfan
 - Fixed `OrderMatchingEngine.reset` leaking `OrderBook.ts_last` across resets (Python) (#3992), thanks @YeeTsai
 - Fixed sandbox tick-size precision race that could panic on stale ticks (#3994), thanks @graceyangfan
+- Fixed matching engine and sandbox handling of stale-precision quote and trade ticks (#4044), thanks @graceyangfan
+- Fixed bracket SL/TP rejected by matching engine on submit (Rust) (#4040), thanks for reporting @maximsamsonov
 - Fixed `ExecutionEngine` reconciliation skipping `OrderUpdated` when both report and order were already `ACCEPTED`
 - Fixed reconciliation drift when a venue snapshot carries both a fill mismatch and a quantity/price amendment (Rust)
 - Fixed reconciliation premature `OrderUpdated` emission for pending venue states before venue confirmation (Rust)
@@ -115,6 +124,7 @@ Released on TBD (UTC).
 - Fixed `DataActor` composite book delta subscriptions not receiving per-underlying publishes (Rust)
 - Fixed Binance Futures reduce-only orders not reconciling venue-side quantity reductions (Python and Rust) (#3983), thanks for reporting @KaizynX
 - Fixed Binance WebSocket pong unhandled `RuntimeError` blocking reconnect after server close (#4020), thanks for reporting @M-at-ti-a
+- Fixed Bybit BBO orders not reconciling the venue-resolved price (Python emitted `OrderUpdated` without a preceding `OrderAccepted`; Rust emitted `OrderAccepted` but never reconciled the cached price)
 - Fixed Betfair Rust adapter dropped fills on reconnect by resyncing the fill tracker from cache
 - Fixed Betfair Rust adapter panic on blank `customerOrderRef`/`rfo` by normalizing empty strings to `None`
 - Fixed Betfair Rust adapter spurious `OrderRejected` after OCM already reported a terminal state
@@ -144,6 +154,7 @@ Released on TBD (UTC).
 - Fixed Interactive Brokers reconnect before server version handshake (#4027), thanks @faysou
 - Fixed Kraken Spot margin wallet balances for multi-asset collateral (#3997), thanks @mcgrj
 - Fixed Kraken symbol normalization for WS v2 compatibility (#3961), thanks @mcgrj
+- Fixed Kraken Spot WebSocket dispatch dropping delta-only execution frames that omit `symbol` (#4052), thanks @mcgrj
 - Fixed OKX missing `post_only` instrument status (#3966), thanks @jhavie
 - Fixed OKX missing `rebase` instrument status (#3998), thanks @jhavie
 - Fixed OKX future instrument status parsing (#4005), thanks @cryptoSUN2049
@@ -203,7 +214,7 @@ Released on TBD (UTC).
 - Optimized live node biased select to dispatch exec commands ahead of market data (Rust)
 - Optimized live node loop by collapsing six maintenance timers into one shared maintenance dispatcher (Rust)
 - Upgraded `alloy` crate to v2.0.4
-- Upgraded `databento` crate to v0.50.0
+- Upgraded `databento` crate to v0.51.0
 - Upgraded `redis` crate to v1.2.1
 - Upgraded `tokio` crate to v1.52.3 (fixes a performance regression)
 

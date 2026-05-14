@@ -41,7 +41,7 @@ use indexmap::IndexMap;
 use nautilus_common::{
     clock::Clock,
     enums::Environment,
-    msgbus::{self, BusTap, Endpoint, MStr},
+    msgbus::{self, BusTap, Endpoint, MStr, MessagingSwitchboard},
 };
 #[cfg(feature = "live")]
 use nautilus_core::time::get_atomic_clock_realtime;
@@ -903,6 +903,12 @@ impl BusTap for EventStoreBusTap {
         let topic = Topic::from(*endpoint);
         self.capture(topic, message, ts_init);
     }
+
+    fn on_response(&self, _correlation_id: &UUID4, message: &dyn Any) {
+        let ts_init = self.clock.get_time_ns();
+        let topic = MessagingSwitchboard::data_response_topic();
+        self.capture(topic, message, ts_init);
+    }
 }
 
 impl EventStoreBusTap {
@@ -937,7 +943,13 @@ fn install_bus_tap(adapter: Arc<BusCaptureAdapter>, clock: &'static AtomicTime) 
 mod tests {
     use nautilus_common::{
         clock::TestClock,
-        messages::execution::{SubmitOrder, TradingCommand},
+        messages::{
+            data::{
+                DataCommand, DataResponse, QuotesResponse, RequestCommand, RequestQuotes,
+                SubscribeCommand, SubscribeQuotes,
+            },
+            execution::{SubmitOrder, TradingCommand},
+        },
     };
     use nautilus_core::time::get_atomic_clock_static;
     use nautilus_event_store::IndexKind;
@@ -945,7 +957,7 @@ mod tests {
         enums::{LiquiditySide, OrderSide, OrderType, TimeInForce},
         events::{OrderEventAny, OrderFilled, OrderInitialized},
         identifiers::{
-            AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, TradeId, TraderId,
+            AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, TradeId, TraderId, Venue,
             VenueOrderId,
         },
         types::{Currency, Money, Price, Quantity},
@@ -1972,5 +1984,210 @@ mod tests {
         let decoded: OrderFilled =
             rmp_serde::from_slice(&captured.payload).expect("decode captured OrderFilled");
         assert_eq!(decoded, filled);
+    }
+
+    /// `send_data_command` reaches the bus tap with the [`DataCommand`] wrapper. The
+    /// envelope dispatcher must unwrap to the request/subscription category, stamp that
+    /// category as the `payload_type`, and write bytes that decode as the inner command
+    /// enum.
+    #[rstest]
+    fn bus_tap_captures_data_command_envelopes_with_category_payload_types() {
+        let tmp = TempDir::new().expect("tempdir");
+        let clock_rc: Rc<RefCell<dyn Clock>> = Rc::new(RefCell::new(TestClock::new()));
+        let instance_id = UUID4::new();
+
+        let mut store = KernelEventStore::boot(
+            Some(make_config(tmp.path().to_path_buf())),
+            instance_id,
+            clock_rc,
+        )
+        .expect("boot store");
+        store
+            .open(
+                instance_id,
+                &RegisteredComponents::default(),
+                Environment::Backtest,
+            )
+            .expect("open run");
+        let run_id = store.run_id().expect("run open").to_string();
+
+        let request = RequestCommand::Quotes(RequestQuotes::new(
+            InstrumentId::from("ETHUSDT-PERP.BINANCE"),
+            None,
+            None,
+            None,
+            Some(ClientId::from("BINANCE")),
+            UUID4::new(),
+            UnixNanos::from(20),
+            None,
+        ));
+        let subscribe = SubscribeCommand::Quotes(SubscribeQuotes::new(
+            InstrumentId::from("ETHUSDT-PERP.BINANCE"),
+            Some(ClientId::from("BINANCE")),
+            Some(Venue::from("BINANCE")),
+            UUID4::new(),
+            UnixNanos::from(21),
+            Some(UUID4::new()),
+            None,
+        ));
+
+        let request_endpoint = MStr::<Endpoint>::from("test.data.engine.request");
+        msgbus::send_data_command(request_endpoint, DataCommand::Request(request.clone()));
+
+        let subscribe_endpoint = MStr::<Endpoint>::from("test.data.engine.subscribe");
+        msgbus::send_data_command(
+            subscribe_endpoint,
+            DataCommand::Subscribe(subscribe.clone()),
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+
+        loop {
+            let hwm = store
+                .session
+                .as_ref()
+                .map_or(0, EventStoreSession::high_watermark);
+
+            if hwm >= 3 {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "captured DataCommand entries did not commit within deadline (hwm={hwm})",
+            );
+            thread::sleep(Duration::from_millis(2));
+        }
+
+        drop(store);
+
+        let sealed = RedbBackend::open_sealed(tmp.path(), &instance_id.to_string(), &run_id)
+            .expect("open sealed");
+        let captured_request = sealed
+            .scan_seq(2)
+            .expect("scan request")
+            .expect("captured request present");
+        assert_eq!(captured_request.payload_type.as_str(), "RequestCommand");
+        assert_eq!(captured_request.topic.as_ref(), request_endpoint.as_str());
+
+        let decoded_request: RequestCommand =
+            rmp_serde::from_slice(&captured_request.payload).expect("decode RequestCommand");
+        match (decoded_request, request) {
+            (RequestCommand::Quotes(decoded), RequestCommand::Quotes(expected)) => {
+                assert_eq!(decoded.request_id, expected.request_id);
+                assert_eq!(decoded.instrument_id, expected.instrument_id);
+                assert_eq!(decoded.client_id, expected.client_id);
+                assert_eq!(decoded.ts_init, expected.ts_init);
+            }
+            other => panic!("expected RequestCommand::Quotes round trip, was {other:?}"),
+        }
+
+        let captured_subscribe = sealed
+            .scan_seq(3)
+            .expect("scan subscribe")
+            .expect("captured subscribe present");
+        assert_eq!(captured_subscribe.payload_type.as_str(), "SubscribeCommand");
+        assert_eq!(
+            captured_subscribe.topic.as_ref(),
+            subscribe_endpoint.as_str()
+        );
+
+        let decoded_subscribe: SubscribeCommand =
+            rmp_serde::from_slice(&captured_subscribe.payload).expect("decode SubscribeCommand");
+        match (decoded_subscribe, subscribe) {
+            (SubscribeCommand::Quotes(decoded), SubscribeCommand::Quotes(expected)) => {
+                assert_eq!(decoded.command_id, expected.command_id);
+                assert_eq!(decoded.instrument_id, expected.instrument_id);
+                assert_eq!(decoded.client_id, expected.client_id);
+                assert_eq!(decoded.venue, expected.venue);
+                assert_eq!(decoded.ts_init, expected.ts_init);
+                assert_eq!(decoded.correlation_id, expected.correlation_id);
+            }
+            other => panic!("expected SubscribeCommand::Quotes round trip, was {other:?}"),
+        }
+    }
+
+    // `send_response` dispatches through a correlation handler rather than an endpoint
+    // or pub/sub topic. The bus tap must still capture the `DataResponse` envelope and
+    // stamp the inner response category as the payload type.
+    #[rstest]
+    fn bus_tap_captures_data_response_sent_through_correlation_handler() {
+        let tmp = TempDir::new().expect("tempdir");
+        let clock_rc: Rc<RefCell<dyn Clock>> = Rc::new(RefCell::new(TestClock::new()));
+        let instance_id = UUID4::new();
+
+        let mut store = KernelEventStore::boot(
+            Some(make_config(tmp.path().to_path_buf())),
+            instance_id,
+            clock_rc,
+        )
+        .expect("boot store");
+        store
+            .open(
+                instance_id,
+                &RegisteredComponents::default(),
+                Environment::Backtest,
+            )
+            .expect("open run");
+        let run_id = store.run_id().expect("run open").to_string();
+
+        let correlation_id = UUID4::new();
+        let handler_called = Rc::new(RefCell::new(false));
+        let handler_called_clone = handler_called.clone();
+        msgbus::register_response_handler(
+            &correlation_id,
+            msgbus::ShareableMessageHandler::from_typed(move |_resp: &QuotesResponse| {
+                *handler_called_clone.borrow_mut() = true;
+            }),
+        );
+
+        let response = QuotesResponse::new(
+            correlation_id,
+            ClientId::from("BINANCE"),
+            InstrumentId::from("ETHUSDT-PERP.BINANCE"),
+            vec![],
+            None,
+            None,
+            UnixNanos::from(30),
+            None,
+        );
+        msgbus::send_response(&correlation_id, &DataResponse::Quotes(response.clone()));
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+
+        loop {
+            let hwm = store
+                .session
+                .as_ref()
+                .map_or(0, EventStoreSession::high_watermark);
+
+            if hwm >= 2 {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "captured DataResponse did not commit within deadline (hwm={hwm})",
+            );
+            thread::sleep(Duration::from_millis(2));
+        }
+
+        assert!(*handler_called.borrow());
+        drop(store);
+
+        let sealed = RedbBackend::open_sealed(tmp.path(), &instance_id.to_string(), &run_id)
+            .expect("open sealed");
+        let captured = sealed
+            .scan_seq(2)
+            .expect("scan")
+            .expect("captured response present");
+        assert_eq!(captured.payload_type.as_str(), "QuotesResponse");
+        assert_eq!(captured.topic, MessagingSwitchboard::data_response_topic());
+
+        let decoded: QuotesResponse =
+            rmp_serde::from_slice(&captured.payload).expect("decode QuotesResponse");
+        assert_eq!(decoded.correlation_id, response.correlation_id);
+        assert_eq!(decoded.client_id, response.client_id);
+        assert_eq!(decoded.instrument_id, response.instrument_id);
+        assert_eq!(decoded.ts_init, response.ts_init);
+        assert!(decoded.data.is_empty());
     }
 }
