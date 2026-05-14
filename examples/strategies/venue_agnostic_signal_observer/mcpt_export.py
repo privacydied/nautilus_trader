@@ -18,6 +18,7 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from .artifact_metadata import build_metadata, get_metadata, get_metadata_field
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +359,30 @@ def export_mcpt_summary(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Load source summary to propagate capture_mode and metadata
+    source_meta: dict[str, Any] = {}
+    source_summary: dict[str, Any] = {}
+    source_summary_path = report_dir / "summary.json"
+    if source_summary_path.exists():
+        try:
+            with open(source_summary_path) as f:
+                source_summary = json.load(f)
+            source_meta = get_metadata(source_summary)
+        except Exception:
+            pass  # Backward compat: old summaries without metadata are fine
+
+    capture_mode = get_metadata_field(source_summary, "capture_mode", "")
+    if not capture_mode:
+        # Fallback: read capture_mode from top-level summary dict (pre-metadata format)
+        capture_mode = source_summary.get("capture_mode", "")
+
+    meta = build_metadata(
+        capture_mode=capture_mode,
+        run_args=None,
+    )
+
     summary_data: dict[str, Any] = {
+        "_metadata": meta,
         "report_dir": str(report_dir),
         "mcpt_skipped": skipped_reason is not None,
         "skip_reason": skipped_reason,

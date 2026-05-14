@@ -27,6 +27,7 @@ from .tick_store import load_trades_jsonl
 from .symbol_aliases import resolve_symbol, quote_mismatch as sym_quote_mismatch
 from .trade_flow_impulse import TradeFlowImpulseConfig, TradeFlowImpulseSignalGenerator
 from .event_study import evaluate_tick_signal, generate_random_baseline, evaluate_candidate_group
+from .artifact_metadata import build_metadata
 
 _MS_TO_NS = 1_000_000
 
@@ -737,8 +738,15 @@ def write_reports(
 ) -> None:
     out.mkdir(parents=True, exist_ok=True)
 
+    # Build provenance metadata
+    meta = build_metadata(
+        capture_mode=summary.capture_mode,
+        run_args=None,  # args not available here; capture_mode is sufficient
+    )
+
     # summary.json
     sd = {
+        "_metadata": meta,
         "capture_dir": summary.capture_dir,
         "total_signals": summary.total_signals,
         "valid_evaluations": summary.valid_evaluations,

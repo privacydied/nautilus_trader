@@ -25,6 +25,7 @@ from pathlib import Path
 
 from .tick_models import TradeTickLite
 from .symbol_aliases import resolve_symbol
+from .artifact_metadata import inject_metadata_into_manifest
 
 _MS_TO_NS = 1_000_000
 
@@ -981,6 +982,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--duration-seconds", type=int, default=600)
     p.add_argument("--capture-open-interest", action="store_true", default=False)
     p.add_argument("--open-interest-interval-seconds", type=int, default=5)
+    p.add_argument("--capture-mode", type=str, default="",
+                   choices=["FULL_ACTIVE", "FAST_DIAGNOSTIC", ""],
+                   help="Capture mode passed from volatility gate. Stored in manifest metadata.")
     p.add_argument("--out", type=str, default="data/derivatives_spot_capture_v2")
     return p
 
@@ -1148,6 +1152,13 @@ def main() -> None:
         ],
         "task_exceptions": task_exceptions,
     }
+
+    # Inject provenance metadata (schema version, git info, capture mode, etc.)
+    inject_metadata_into_manifest(
+        manifest,
+        capture_mode=getattr(args, "capture_mode", ""),
+        run_args=args,
+    )
 
     # Write manifest
     manifest_path = out_dir / "capture_manifest.json"

@@ -115,7 +115,12 @@ def main() -> None:
         return
 
     verdict = summary.get("verdict", "")
-    capture_mode = summary.get("capture_mode", "")
+    # capture_mode: prefer _metadata block (v1.0.0+), fallback to top-level (pre-metadata)
+    meta = summary.get("_metadata", {})
+    if isinstance(meta, dict):
+        capture_mode = meta.get("capture_mode", summary.get("capture_mode", ""))
+    else:
+        capture_mode = summary.get("capture_mode", "")
 
     # Select candidate groups
     selected = select_mcpt_candidate_groups(
