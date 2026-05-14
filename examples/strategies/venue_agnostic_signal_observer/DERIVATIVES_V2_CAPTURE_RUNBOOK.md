@@ -81,6 +81,32 @@ Two shift modes:
 
 Output: per-group null test JSON + markdown summary.
 
+### Optional: GPU-accelerated null test
+
+CPU is the default. For large iteration counts, an explicit GPU engine is available. Requires PyTorch + CUDA.
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_permutation_null \
+  --capture-dir data/derivatives_spot_capture_v2_ACTIVE_YYYYMMDD_HHMMSS \
+  --report-dir reports/derivatives_spot_lead_lag_v2_ACTIVE_YYYYMMDD_HHMMSS \
+  --out reports/derivatives_spot_lead_lag_v2_ACTIVE_YYYYMMDD_HHMMSS/permutation_null_gpu \
+  --iterations 10000 \
+  --seed 42 \
+  --shift-mode circular_time_shift \
+  --engine gpu \
+  --device cuda:0 \
+  --batch-size 512 \
+  --min-events 50 \
+  --cost-floor-bps 50
+```
+
+Important GPU rules:
+- `--engine cpu` is the default and preserves existing behavior.
+- `--engine gpu` is explicit. If CUDA is unavailable, the run exits with a `GPU_UNAVAILABLE_DIAGNOSTIC` JSON verdict — it does **not** silently fall back to CPU.
+- GPU is a faster microscope, not a new verdict system. Same candidate selection, same survival criteria, same output schema.
+- GPU null testing does **not** update `REJECTED_RESEARCH.md`.
+- GPU null testing does **not** permit live trading or execution.
+
 ## Step 5: Interpret Null Results
 
 | Null result | Meaning |

@@ -43,6 +43,42 @@ You can use either or both. The native null test is recommended for quick falsif
 - `candidate_survives_null` boolean verdict
 - `NULL_REJECTED_DIAGNOSTIC` or `NO_MCPT_WORTHY_GROUPS` status when appropriate
 
+## GPU acceleration (optional, explicit)
+
+The native null test supports an explicit GPU engine via `--engine gpu`.
+
+- **CPU is the default**. `--engine cpu` preserves existing behavior exactly.
+- `--engine gpu` uses `permutation_null_gpu.py` with PyTorch CUDA chunked batching.
+- There is **no transparent CPU fallback**. If `--engine gpu` is requested and CUDA is unavailable, the run exits cleanly with a `GPU_UNAVAILABLE_DIAGNOSTIC` verdict JSON.
+- GPU is faster for large iteration counts; it is **not** a new verdict system and does not change what constitutes a null pass or fail.
+- GPU null testing does **not** update `REJECTED_RESEARCH.md`.
+- GPU null testing does **not** permit live trading.
+
+CLI args added to `run_permutation_null.py`:
+
+| Arg | Default | Description |
+|---|---|---|
+| `--engine` | `cpu` | `cpu` or `gpu` |
+| `--device` | `cuda:0` | CUDA device for `--engine gpu` |
+| `--batch-size` | `512` | Permutation chunk size for GPU batching |
+
+Example (GPU):
+
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_permutation_null \
+  --capture-dir data/derivatives_spot_capture_v2_ACTIVE_YYYYMMDD_HHMMSS \
+  --report-dir reports/derivatives_spot_lead_lag_v2_ACTIVE_YYYYMMDD_HHMMSS \
+  --out reports/derivatives_spot_lead_lag_v2_ACTIVE_YYYYMMDD_HHMMSS/permutation_null_gpu \
+  --iterations 10000 \
+  --seed 42 \
+  --shift-mode circular_time_shift \
+  --engine gpu \
+  --device cuda:0 \
+  --batch-size 512 \
+  --min-events 50 \
+  --cost-floor-bps 50
+```
+
 ## Important constraints
 
 - MCPT and null tests are **falsification tools only**. They test whether observed results could arise by chance.

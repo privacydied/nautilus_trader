@@ -29,6 +29,11 @@ from .permutation_null import (
     DEFAULT_COST_FLOOR_BPS,
     DEFAULT_MIN_EVENTS,
 )
+from .permutation_null_gpu import (
+    check_cuda_available,
+    compute_null_distribution_gpu,
+    gpu_unavailable_diagnostic,
+)
 from .mcpt_export import _load_jsonl, _load_summary_json, _slugify
 from .artifact_metadata import build_metadata, get_metadata, get_metadata_field
 from .run_derivatives_spot_lead_lag import load_capture_data
@@ -104,6 +109,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=10,
         help="Block size for block_time_shift mode. Default: 10.",
     )
+    p.add_argument(
+        "--engine",
+        type=str,
+        default="cpu",
+        choices=["cpu", "gpu"],
+        help="Null test engine: 'cpu' (default) or 'gpu'. GPU requires PyTorch + CUDA.",
+    )
+    p.add_argument(
+        "--device",
+        type=str,
+        default="cuda:0",
+        help="CUDA device for --engine gpu. E.g. 'cuda:0' or 'cuda:1'. Default: cuda:0.",
+    )
+    p.add_argument(
+        "--batch-size",
+        type=int,
+        default=512,
+        help="Permutation chunk size for --engine gpu. Default: 512.",
+    )
     return p
 
 
@@ -171,6 +195,18 @@ def main() -> None:
 
     report_dir = Path(args.report_dir)
     capture_dir = Path(args.capture_dir)
+
+    # ---- 0. GPU availability check (fail-fast, no silent fallback) --------
+    if args.engine == "gpu":
+        cuda_ok, cuda_reason = check_cuda_available(args.device)
+        if not cuda_ok:
+            diag = gpu_unavailable_diagnostic(args.device, cuda_reason)
+            print(json.dumps(diag, indent=2))
+            out_dir = Path(args.out) if args.out else report_dir / "null_test"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            with open(out_dir / "null_test_summary.json", "w") as jf:
+                json.dump(diag, jf, indent=2)
+            sys.exit(1)
 
     if not report_dir.exists():
         print(f"ERROR: report directory not found: {report_dir}", file=sys.stderr)
@@ -438,22 +474,40 @@ def main() -> None:
             real_win_rate = float("nan")
 
         # 7f. Run null distribution
-        print(f"    Running {args.iterations} iterations (shift_mode={args.shift_mode})...")
-        null_dist = compute_null_distribution(
-            source_event_timestamps=source_event_timestamps,
-            target_timestamps=target_timestamps,
-            target_prices=target_prices,
-            direction=direction,
-            horizons_ms=[horizon_ms],
-            fee_bps=fee_bps,
-            slippage_bps=slippage_bps,
-            quote_mismatch_buffer_bps=quote_mismatch_buffer_bps,
-            quote_mismatch=has_qm,
-            iterations=args.iterations,
-            seed=args.seed,
-            shift_mode=args.shift_mode,
-            block_size=args.block_size,
-        )
+        print(f"    Running {args.iterations} iterations (shift_mode={args.shift_mode}, engine={args.engine})...")
+        if args.engine == "gpu":
+            null_dist = compute_null_distribution_gpu(
+                source_event_timestamps=source_event_timestamps,
+                target_timestamps=target_timestamps,
+                target_prices=target_prices,
+                direction=direction,
+                horizons_ms=[horizon_ms],
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                quote_mismatch_buffer_bps=quote_mismatch_buffer_bps,
+                quote_mismatch=has_qm,
+                iterations=args.iterations,
+                seed=args.seed,
+                shift_mode=args.shift_mode,
+                chunk_size=args.batch_size,
+                device=args.device,
+            )
+        else:
+            null_dist = compute_null_distribution(
+                source_event_timestamps=source_event_timestamps,
+                target_timestamps=target_timestamps,
+                target_prices=target_prices,
+                direction=direction,
+                horizons_ms=[horizon_ms],
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                quote_mismatch_buffer_bps=quote_mismatch_buffer_bps,
+                quote_mismatch=has_qm,
+                iterations=args.iterations,
+                seed=args.seed,
+                shift_mode=args.shift_mode,
+                block_size=args.block_size,
+            )
 
         # ---- Compute survival check ----
         null_means = null_dist.get("null_mean_net_bps", [])
@@ -556,6 +610,9 @@ def main() -> None:
             "min_events": args.min_events,
             "source_timestamp_count": len(source_event_timestamps),
             "target_tick_count": len(target_ticks),
+            "engine": args.engine,
+            "device": args.device if args.engine == "gpu" else None,
+            "batch_size": args.batch_size if args.engine == "gpu" else None,
         }
 
         group_results.append(result_entry)
@@ -594,6 +651,9 @@ def main() -> None:
         "block_size": args.block_size,
         "cost_floor_bps": args.cost_floor_bps,
         "min_events": args.min_events,
+        "engine": args.engine,
+        "device": args.device if args.engine == "gpu" else None,
+        "batch_size": args.batch_size if args.engine == "gpu" else None,
         "results": group_results,
     }
 

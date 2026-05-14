@@ -730,6 +730,7 @@ examples/strategies/venue_agnostic_signal_observer/__init__.py
 examples/strategies/venue_agnostic_signal_observer/lead_lag.py
 examples/strategies/venue_agnostic_signal_observer/__main__.py
 examples/strategies/venue_agnostic_signal_observer/permutation_null.py
+examples/strategies/venue_agnostic_signal_observer/permutation_null_gpu.py
 mcpt_export.py
 examples/strategies/venue_agnostic_signal_observer/models.py
 examples/strategies/venue_agnostic_signal_observer/observer.py
@@ -764,6 +765,7 @@ examples/strategies/venue_agnostic_signal_observer/tests/test_lead_lag_pipeline.
 examples/strategies/venue_agnostic_signal_observer/tests/test_latency_diagnostics.py
 examples/strategies/venue_agnostic_signal_observer/tests/test_mcpt_export.py
 examples/strategies/venue_agnostic_signal_observer/tests/test_permutation_null.py
+examples/strategies/venue_agnostic_signal_observer/tests/test_permutation_null_gpu.py
 examples/strategies/venue_agnostic_signal_observer/tests/test_report_corpus.py
 examples/strategies/venue_agnostic_signal_observer/tests/test_research_report_miner.py
 examples/strategies/venue_agnostic_signal_observer/tests/test_symbol_aliases.py
@@ -4393,13 +4395,32 @@ Security/ops:
 Recommendations:
 |- Keep shift modes simple; avoid over-engineering.
 
-45. run_permutation_null.py
+45. permutation_null_gpu.py
+Purpose:
+|- GPU-accelerated permutation null engine using PyTorch CUDA.
+Key functions:
+|- check_cuda_available — verifies CUDA device availability
+|- compute_null_distribution_gpu — batched null distribution kernel
+|- gpu_unavailable_diagnostic — emits diagnostic verdict JSON on CUDA failure
+Notes:
+|- Explicit --engine gpu selection; fail-fast if CUDA unavailable (no silent fallback).
+|- Chunked batching with per-chunk seeding ensures determinism.
+Persistence:
+|- In-memory compute only; no direct I/O.
+Tests:
+|- test_permutation_null_gpu.py — determinism, chunk-size invariance, CUDA-unavailable path.
+Security/ops:
+|- Same observer-only constraints as CPU path; no network; no orders.
+Recommendations:
+|- Keep batch-size configurable; lazy torch import to avoid hard dependency for CPU runs.
+
+46. run_permutation_null.py
 Purpose:
 |- CLI entry point for permutation null testing.
 Entry points:
 |- build_parser, main.
 Configs:
-|- --capture-dir, --report-dir, --out, --max-groups (default 3), --iterations (default 1000), --seed (default 42), --min-events (default 30), --cost-floor-bps (default 50), --shift-mode (circular_time_shift|block_time_shift), --block-size (default 10).
+|- --capture-dir, --report-dir, --out, --max-groups (default 3), --iterations (default 1000), --seed (default 42), --min-events (default 30), --cost-floor-bps (default 50), --shift-mode (circular_time_shift|block_time_shift), --block-size (default 10), --engine (cpu|gpu, default cpu), --device (cuda:0), --batch-size (default 512).
 Data flow:
 |- Loads evaluation report → selects null-worthy groups → loads capture data → runs null distribution per group → writes JSON + markdown report.
 Persistence:
@@ -4411,7 +4432,7 @@ Security/ops:
 Recommendations:
 |- Keep deterministic seeds across runs.
 
-46. latency_diagnostics.py
+47. latency_diagnostics.py
 Purpose:
 |- Cross-venue tick-stream latency and clock-skew diagnostics.
 Dataclasses:
@@ -4434,7 +4455,7 @@ Security/ops:
 Recommendations:
 |- Keep bucket sizes configurable if new venues differ.
 
-47. run_report_corpus.py
+48. run_report_corpus.py
 Purpose:
 |- Corpus aggregation CLI — aggregate evaluation reports across multiple captures.
 Entry points:
@@ -4456,7 +4477,7 @@ Recommendations:
 
 Tests under venue_agnostic_signal_observer/tests
 
-48. test_all.py
+49. test_all.py
 Purpose:
 - Broad legacy/unit coverage for configs, fee model, quote mismatch, SignalEvent/ForwardReturnResult, CSV parser, CrossMarketSignalGenerator, forward returns, summary aggregation, reports, synthetic observer, no-orders.
 Notes:
@@ -4464,7 +4485,7 @@ Notes:
 Recommendation:
 - Split by module if test runtime/maintenance becomes problematic.
 
-49. test_audit_regression.py
+50. test_audit_regression.py
 Purpose:
 - Regression tests for previously found bugs:
   - lead-lag window reference
@@ -4478,7 +4499,7 @@ Purpose:
 Recommendation:
 - Preserve as high-value audit suite; add issue IDs/comments if available.
 
-50. test_bug_audit_pass2.py
+51. test_bug_audit_pass2.py
 Purpose:
 - Second pass regression suite:
   - reject zero/non-finite entry prices
@@ -4493,13 +4514,13 @@ Purpose:
 Recommendation:
 - High-value data-quality correctness tests; keep mandatory.
 
-51. test_capture_ws_urls.py
+52. test_capture_ws_urls.py
 Purpose:
 - Tests Binance perp URL construction, Kraken URL constants, StreamStats diagnostics.
 Recommendation:
 - Add Coinbase/Binance spot URL tests if capture code changes.
 
-52. test_cross_asset_impulse.py
+53. test_cross_asset_impulse.py
 Purpose:
 - Extensive cross-asset logic tests:
   - same-symbol skip
@@ -4514,37 +4535,37 @@ Purpose:
 Recommendation:
 - Strong suite; keep safety and diagnostic tests.
 
-53. test_cross_venue_lead_lag.py
+54. test_cross_venue_lead_lag.py
 Purpose:
 - Cross-venue pair and synthetic real-like lead-lag tests using tick files.
 Recommendation:
 - Add multi-symbol ambiguous file discovery cases.
 
-54. test_derivatives_lead_lag.py
+55. test_derivatives_lead_lag.py
 Purpose:
 - Derivatives models, impulse generator, no-lookahead, conservative verdict, malformed data tolerance, forbidden imports, instrument metadata, spot-spot guard, synthetic perp-to-spot.
 Recommendation:
 - Keep UK-regulatory constraint reflected in test names/metadata.
 
-55. test_derivatives_spot_lead_lag.py
+56. test_derivatives_spot_lead_lag.py
 Purpose:
 - Symbol normalization, Binance side inference, overlap windows, price range, OI bucket classification, capture data loading, safety scan, verdict logic.
 Recommendation:
 - Add malformed OI JSONL and missing manifest cases.
 
-56. test_dex_cex_dislocation.py
+57. test_dex_cex_dislocation.py
 Purpose:
 - DEX models, DEX Screener parsing, detector, forward net bps, no-lookahead, outputs, candidate gate, malformed payload, report guardrails.
 Recommendation:
 - Add source timestamp stale/latency tests.
 
-57. test_lead_lag_pipeline.py
+58. test_lead_lag_pipeline.py
 Purpose:
 - Bar-level lead-lag signal generation, random baseline, end-to-end report writing.
 Recommendation:
 - Include timezone/duplicate timestamp CSV cases.
 
-58. test_latency_diagnostics.py
+59. test_latency_diagnostics.py
 Purpose:
 |- Latency and clock-skew diagnostics across venues.
 Key tests:
@@ -4559,7 +4580,7 @@ Security/ops:
 Recommendations:
 |- Keep bucket sizes configurable if new venues differ.
 
-59. test_permutation_null.py
+60. test_permutation_null.py
 Purpose:
 |- Unit and integration tests for permutation_null core logic.
 Coverage:
@@ -4572,7 +4593,20 @@ Coverage:
 Security/ops:
 |- Fast, deterministic, pure functions.
 
-60. test_report_corpus.py
+61. test_permutation_null_gpu.py
+Purpose:
+|- Verifies GPU engine correctness and fail-fast behavior.
+Coverage:
+|- Determinism with fixed seeds across chunk sizes
+|- Chunk-size invariance of distribution statistics
+|- CUDA-unavailable path returns GPU_UNAVAILABLE_DIAGNOSTIC
+|- Engine selection routing (gpu vs cpu)
+Security/ops:
+|- Pure unit tests; no external I/O; mocks torch as needed.
+Recommendations:
+|- Mock torch.cuda.is_available in CI; test both engines.
+
+62. test_report_corpus.py
 Purpose:
 |- Corpus aggregation tests.
 Coverage:
@@ -4584,13 +4618,13 @@ Coverage:
 Security/ops:
 |- Local file I/O only.
 
-61. test_mcpt_export.py
+63. test_mcpt_export.py
 Purpose:
 - MCPT skip/candidate selection, near-breakeven baseline, min events, NaN/Inf safety, CSV export, max groups, duplicate variant suppression, slugify.
 Recommendation:
 - Add no-overwrite behavior if implemented.
 
-62. test_research_report_miner.py
+64. test_research_report_miner.py
 Purpose:
 - Tests report miner parsing/verdict/status formatting and full mine output.
 Issue:
@@ -4598,25 +4632,25 @@ Issue:
 Recommendation:
 - Verify test imports pass under intended PYTHONPATH; consolidate duplicate miner modules.
 
-63. test_symbol_aliases.py
+65. test_symbol_aliases.py
 Purpose:
 - Canonical symbol resolution, unknown symbols, asset/quote comparison.
 Recommendation:
 - Add venue-specific aliases as real captures demand.
 
-64. test_synthetic_fixtures.py
+66. test_synthetic_fixtures.py
 Purpose:
 - Synthetic positive/noise observer runs.
 Recommendation:
 - Keep deterministic seeds/fixtures.
 
-65. test_tick_lead_lag_pipeline.py
+67. test_tick_lead_lag_pipeline.py
 Purpose:
 - Tick models/store, signal generation, forward returns, random baseline, candidate gate, synthetic end-to-end, report output, no-order guard.
 Recommendation:
 - Add large JSONL streaming/performance test if capture files grow.
 
-66. test_trade_flow_impulse.py
+68. test_trade_flow_impulse.py
 Purpose:
 - TradeFlowImpulseConfig, tick-rule side inference, count/notional/large trade/signed imbalance, no-lookahead, no-order guard, metadata.
 Recommendation:
