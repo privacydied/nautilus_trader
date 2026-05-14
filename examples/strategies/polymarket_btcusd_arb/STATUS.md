@@ -5,13 +5,13 @@ Phase 1: observer-only backtest and hypothesis validation. No live trading.
 Phase 2: observer-only live data validation. No live trading. No execution. No orders. No keys. No on-chain.
 
 ## Git Branch
-Current Nautilus branch: polymarket-btcusd-arb-phase2b-observer-campaign
-Base branch/commit: polymarket-btcusd-arb-phase1 (forked from master)
-Remote tracking branch: fork/polymarket-btcusd-arb-phase2-observer
-Was implementation done on polymarket-btcusd-arb-phase2-observer: Yes
-Nautilus working tree status before implementation: clean
-Nautilus working tree status after implementation: clean (generated data untracked)
-arb-bot working tree status: pre-existing dirty config/strategy_btc_15m.toml (no Phase 2 changes)
+Current Nautilus branch: polymarket-btcusd-arb-phase2c-observer-analysis
+Base branch/commit: polymarket-btcusd-arb-phase2b-observer-campaign
+Remote tracking branch: fork/polymarket-btcusd-arb-phase2c-observer-analysis
+Was implementation done on polymarket-btcusd-arb-phase2c-observer-analysis: Yes
+Nautilus working tree status before implementation: clean (generated data untracked)
+Nautilus working tree status after implementation: pending commit
+arb-bot working tree status: pre-existing dirty config/strategy_btc_15m.toml (no Phase 2C changes)
 
 ## Explicitly Out of Scope
 - Phase 3 (execution)
@@ -279,8 +279,7 @@ NEEDS_MORE_DATA transitioning toward REJECTED_FOR_CURRENT_LIVE_CONDITIONS — 6 
 
 ## Phase 2B Recommendation
 Do not recommend Phase 3 or execution.
-Continue observer-only campaigns across more markets and volatility regimes.
-Only upgrade to CANDIDATE_FOR_LONGER_OBSERVATION if multiple windows produce candidates with replay determinism.
+Phase 2C gate decision: REJECTED_FOR_CURRENT_LIVE_CONDITIONS.
 
 Phase 2B minimum evidence targets:
 - Target A (8 windows / 4 distinct markets): 6 windows / 4 distinct 15-min periods — NOT MET (need 2 more windows)
@@ -289,3 +288,98 @@ Phase 2B minimum evidence targets:
 - Target D (5 failed discoveries): 0-2 — NOT MET (markets were available)
 
 Action: Proceed to Phase 2C (observer evidence analysis) since evidence target C is met.
+
+## Phase 2C Observer Evidence Review
+File: observer_evidence_review.py
+Review ID: 20260514T010425Z
+Gate decision: REJECTED_FOR_CURRENT_LIVE_CONDITIONS
+Reason: 10 valid live windows (6 Phase 2 observer + 4 Phase 2B campaign) across 4 distinct markets produced 0 live candidates. Spread/staleness blockers dominate (>99% of rejections). Replay checks passed. Total artifact rows including failed/incomplete/test: 36. The fair-probability signal does not survive live Polymarket BTC 15m UpDown maker economics at any tested threshold (5, 10, 20, 40 bps).
+
+Evidence summary:
+- Phase 1 backtest: 12 artifact rows (65 candidates on resolved market — subject to look-ahead)
+- Phase 2 live observer: 10 artifact rows (6 valid windows with grid_rejection_count > 0)
+- Phase 2B campaign: 14 artifact rows (4 valid campaign summaries with grid_rejection_count > 0)
+- Total artifact rows discovered: 36 (including failed/incomplete/test)
+- Valid live windows (after dedup): 10 (6 observer + 4 campaign, 4 distinct markets)
+- Total live candidates: 0
+- Total live grid rejections: 31,640
+- Spread/staleness blocker rate: 100%
+- All replay checks passed
+
+Phase 2C gate confidence: HIGH — 6+ completed 900s live windows across 4 distinct BTC 15m UpDown market periods, zero candidates, zero live signal. Dominant blocker is spread_too_wide (Polymarket BTC 15m UpDown quoted spreads exceed fair-probability edge at all tested thresholds).
+
+This is NOT a global mathematical rejection of the fair-probability hypothesis. It is a rejection under CURRENT LIVE CONDITIONS for BTC 15m UpDown markets.
+
+## Phase 2C Tests
+10 tests passing.
+- test_archives_zero_candidate_spread_dominated_sample: PASSED
+- test_continues_on_inconclusive_sample: PASSED
+- test_allows_phase3_only_with_replayed_live_candidates: PASSED
+- test_phase3_blocked_with_zero_candidates: PASSED
+- test_rejected_does_not_recommend_execution: PASSED
+- test_continue_observer_does_not_recommend_execution: PASSED
+- test_gate_values_are_valid (3 parameterized): PASSED
+- test_all_required_files_written: PASSED
+- test_empty_windows_excluded_from_gate: PASSED
+- test_aggregate_deduplicates: PASSED
+
+(Also 2 new valid-live-window filtering and deduplication tests.)
+
+## Phase 2C Evidence Consistency Fix (2026-05-14)
+Fixed evidence review to distinguish valid live windows from total artifact rows.
+Old behavior: "21 windows analyzed" included failed/incomplete/test/empty runs.
+New behavior: valid_live_windows_analyzed counts only windows with grid_rejection_count > 0.
+Total artifact rows (36) include Phase 1 backtest runs, dry-discover attempts, and runs with 0 events.
+Valid live windows after deduplication: 10 (6 observer + 4 campaign, with overlapping market assignments resolved).
+Distinct known markets: 4 (from campaign data).
+
+## Final Archive Decision
+ARCHIVED_REJECTED_FOR_CURRENT_LIVE_CONDITIONS
+
+This research track is archived. The BTC 15m UpDown fair-probability hypothesis is rejected under observed live conditions. No Phase 3 work is justified. No execution is justified.
+
+## Final Valid Evidence Counts
+- Valid live observation windows: 10 (6 Phase 2 + 4 Phase 2B campaign)
+- Distinct known BTC 15m UpDown market periods: 4
+- Total artifact rows (including failed/incomplete/test): 36
+- Total live candidates: 0
+- Total live grid rejections: ~31,640
+- Dominant blocker: spread_too_wide (72–93% per window)
+- Secondary blocker: stale_or_missing_binance (7–28% per window)
+- All replay checks passed
+
+## Final Gate Decision
+REJECTED_FOR_CURRENT_LIVE_CONDITIONS
+
+10 valid live observation windows across 4 distinct BTC 15m UpDown market periods produced 0 candidates.
+Spread/staleness blockers dominate >99.9% of all grid rejections.
+The fair-probability signal does not survive live Polymarket BTC 15m UpDown maker economics at any tested threshold (5, 10, 20, 40 bps).
+
+## Why Phase 3 Is Blocked
+Phase 3 (Rust hotpath) requires gate decision ALLOW_PHASE_3_RUST_HOTPATH.
+The actual gate decision is REJECTED_FOR_CURRENT_LIVE_CONDITIONS.
+Zero candidates across 10 valid live windows and 4 distinct markets.
+The fair-probability signal does not survive live spread/staleness conditions.
+
+## Why Execution Is Blocked
+Execution requires a signal that survives live conditions.
+No such signal exists in the tested configuration.
+The dominant failure mode is spread_too_wide: Polymarket quoted spreads exceed the fair-probability edge at all tested thresholds.
+
+## What Would Need To Change To Resume
+Any of the following would constitute a new hypothesis:
+1. Wider threshold observer (80, 100, 200 bps)
+2. Different market duration (1h, 4h)
+3. Different volatility regime
+4. Better reference source (Chainlink, full order book)
+5. Full order book reference instead of trade-derived proxy
+None justifies Phase 3 or execution under the current hypothesis.
+
+## Tests (Final)
+69 tests passing (29 Phase 1 + 16 Phase 2 + 12 Phase 2B/2C + 12 Phase 2C evidence review).
+
+## Final Evidence Review Path
+reports/polymarket_btcusd_arb/evidence_review/20260514T012205Z/
+
+## Final Archive File
+examples/strategies/polymarket_btcusd_arb/FINAL_RESEARCH_STATUS.md
