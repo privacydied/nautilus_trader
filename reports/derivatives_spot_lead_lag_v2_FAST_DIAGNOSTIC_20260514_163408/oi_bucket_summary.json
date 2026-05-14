@@ -1,0 +1,37 @@
+{
+  "price_up_oi_up": {
+    "event_count": 15722,
+    "valid_count": 14719,
+    "mean_net_bps": -54.8988,
+    "median_net_bps": -55.0,
+    "win_rate": 0.0
+  },
+  "price_down_oi_up": {
+    "event_count": 12292,
+    "valid_count": 11281,
+    "mean_net_bps": -55.2631,
+    "median_net_bps": -55.0,
+    "win_rate": 0.0
+  },
+  "flat_or_unknown": {
+    "event_count": 441,
+    "valid_count": 441,
+    "mean_net_bps": -55.1498,
+    "median_net_bps": -55.0,
+    "win_rate": 0.0
+  },
+  "price_down_oi_down": {
+    "event_count": 175,
+    "valid_count": 175,
+    "mean_net_bps": -53.8753,
+    "median_net_bps": -53.9276,
+    "win_rate": 0.0
+  },
+  "price_up_oi_down": {
+    "event_count": 196,
+    "valid_count": 196,
+    "mean_net_bps": -55.9218,
+    "median_net_bps": -55.0,
+    "win_rate": 0.0
+  }
+}

@@ -1,0 +1,228 @@
+{
+  "run_id": "1778771608",
+  "requested_duration_seconds": 60,
+  "actual_start_time": "2026-05-14T15:13:28.256Z",
+  "actual_end_time": "2026-05-14T15:14:30.258Z",
+  "streams": {
+    "binance_perp_BTC/USDT": {
+      "start_time": "2026-05-14T15:13:28.256Z",
+      "end_time": null,
+      "tick_count": 1087,
+      "first_tick_ts": "2026-05-14T15:13:29.105Z",
+      "first_tick_ts_ns": 1778771609105000000,
+      "last_tick_ts": "2026-05-14T15:14:27.961Z",
+      "last_tick_ts_ns": 1778771667961000000,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null,
+      "diagnostics": [
+        "ws_received_first_message"
+      ]
+    },
+    "binance_perp_ETH/USDT": {
+      "start_time": "2026-05-14T15:13:28.256Z",
+      "end_time": null,
+      "tick_count": 985,
+      "first_tick_ts": "2026-05-14T15:13:29.136Z",
+      "first_tick_ts_ns": 1778771609136000000,
+      "last_tick_ts": "2026-05-14T15:14:27.894Z",
+      "last_tick_ts_ns": 1778771667894000000,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null,
+      "diagnostics": [
+        "ws_received_first_message"
+      ]
+    },
+    "binance_perp_SOL/USDT": {
+      "start_time": "2026-05-14T15:13:28.257Z",
+      "end_time": null,
+      "tick_count": 444,
+      "first_tick_ts": "2026-05-14T15:13:29.191Z",
+      "first_tick_ts_ns": 1778771609191000000,
+      "last_tick_ts": "2026-05-14T15:14:27.841Z",
+      "last_tick_ts_ns": 1778771667841000000,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null,
+      "diagnostics": [
+        "ws_received_first_message"
+      ]
+    },
+    "kraken_BTC/USD": {
+      "start_time": "2026-05-14T15:13:28.306Z",
+      "end_time": "2026-05-14T15:14:28.334Z",
+      "tick_count": 44,
+      "first_tick_ts": "2026-05-14T15:13:37.684Z",
+      "first_tick_ts_ns": 1778771617684276224,
+      "last_tick_ts": "2026-05-14T15:14:20.625Z",
+      "last_tick_ts_ns": 1778771660625992960,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null,
+      "diagnostics": [
+        "subscribe_ack: BTC/USD success=True",
+        "ticks_received_no_ws_diag_marker"
+      ]
+    },
+    "kraken_ETH/USD": {
+      "start_time": "2026-05-14T15:13:28.308Z",
+      "end_time": "2026-05-14T15:14:28.334Z",
+      "tick_count": 16,
+      "first_tick_ts": "2026-05-14T15:13:38.371Z",
+      "first_tick_ts_ns": 1778771618371789824,
+      "last_tick_ts": "2026-05-14T15:14:22.140Z",
+      "last_tick_ts_ns": 1778771662140717056,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null,
+      "diagnostics": [
+        "subscribe_ack: ETH/USD success=True",
+        "ticks_received_no_ws_diag_marker"
+      ]
+    },
+    "kraken_SOL/USD": {
+      "start_time": "2026-05-14T15:13:28.308Z",
+      "end_time": "2026-05-14T15:14:28.334Z",
+      "tick_count": 11,
+      "first_tick_ts": "2026-05-14T15:13:29.717Z",
+      "first_tick_ts_ns": 1778771609717255168,
+      "last_tick_ts": "2026-05-14T15:14:25.840Z",
+      "last_tick_ts_ns": 1778771665840866048,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null,
+      "diagnostics": [
+        "subscribe_ack: SOL/USD success=True",
+        "ticks_received_no_ws_diag_marker"
+      ]
+    },
+    "coinbase_BTC/USD": {
+      "start_time": "2026-05-14T15:13:28.309Z",
+      "end_time": "2026-05-14T15:14:28.369Z",
+      "tick_count": 531,
+      "first_tick_ts": "2026-05-14T15:13:29.007Z",
+      "first_tick_ts_ns": 1778771609007950080,
+      "last_tick_ts": "2026-05-14T15:14:28.024Z",
+      "last_tick_ts_ns": 1778771668024188928,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null,
+      "diagnostics": [
+        "ticks_received_no_ws_diag_marker"
+      ]
+    },
+    "coinbase_ETH/USD": {
+      "start_time": "2026-05-14T15:13:28.309Z",
+      "end_time": "2026-05-14T15:14:28.369Z",
+      "tick_count": 314,
+      "first_tick_ts": "2026-05-14T15:13:29.539Z",
+      "first_tick_ts_ns": 1778771609539074048,
+      "last_tick_ts": "2026-05-14T15:14:28.234Z",
+      "last_tick_ts_ns": 1778771668234253824,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null,
+      "diagnostics": [
+        "ticks_received_no_ws_diag_marker"
+      ]
+    },
+    "coinbase_SOL/USD": {
+      "start_time": "2026-05-14T15:13:28.310Z",
+      "end_time": "2026-05-14T15:14:28.369Z",
+      "tick_count": 79,
+      "first_tick_ts": "2026-05-14T15:13:31.348Z",
+      "first_tick_ts_ns": 1778771611348276992,
+      "last_tick_ts": "2026-05-14T15:14:28.055Z",
+      "last_tick_ts_ns": 1778771668055769088,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null,
+      "diagnostics": [
+        "ticks_received_no_ws_diag_marker"
+      ]
+    }
+  },
+  "oi_snapshots": {
+    "BTCUSDT": {
+      "count": 6
+    },
+    "ETHUSDT": {
+      "count": 6
+    },
+    "SOLUSDT": {
+      "count": 6
+    }
+  },
+  "overlap": {
+    "global_overlap_start": "2026-05-14T15:13:29.717Z",
+    "global_overlap_start_ns": 1778771609717255168,
+    "global_overlap_end": "2026-05-14T15:14:27.841Z",
+    "global_overlap_end_ns": 1778771667841000000,
+    "global_overlap_duration_seconds": 58.12,
+    "per_pair": {
+      "BTC": {
+        "source_start": "2026-05-14T15:13:29.105Z",
+        "source_end": "2026-05-14T15:14:27.961Z",
+        "source_start_ns": 1778771609105000000,
+        "source_end_ns": 1778771667961000000,
+        "source_tick_count": 1087,
+        "target_start": "2026-05-14T15:13:29.007Z",
+        "target_end": "2026-05-14T15:14:28.024Z",
+        "target_start_ns": 1778771609007950080,
+        "target_end_ns": 1778771668024188928,
+        "target_tick_count": 575,
+        "overlap_start": "2026-05-14T15:13:29.105Z",
+        "overlap_end": "2026-05-14T15:14:27.961Z",
+        "overlap_start_ns": 1778771609105000000,
+        "overlap_end_ns": 1778771667961000000,
+        "overlap_duration_seconds": 58.86
+      },
+      "ETH": {
+        "source_start": "2026-05-14T15:13:29.136Z",
+        "source_end": "2026-05-14T15:14:27.894Z",
+        "source_start_ns": 1778771609136000000,
+        "source_end_ns": 1778771667894000000,
+        "source_tick_count": 985,
+        "target_start": "2026-05-14T15:13:29.539Z",
+        "target_end": "2026-05-14T15:14:28.234Z",
+        "target_start_ns": 1778771609539074048,
+        "target_end_ns": 1778771668234253824,
+        "target_tick_count": 330,
+        "overlap_start": "2026-05-14T15:13:29.539Z",
+        "overlap_end": "2026-05-14T15:14:27.894Z",
+        "overlap_start_ns": 1778771609539074048,
+        "overlap_end_ns": 1778771667894000000,
+        "overlap_duration_seconds": 58.35
+      },
+      "SOL": {
+        "source_start": "2026-05-14T15:13:29.191Z",
+        "source_end": "2026-05-14T15:14:27.841Z",
+        "source_start_ns": 1778771609191000000,
+        "source_end_ns": 1778771667841000000,
+        "source_tick_count": 444,
+        "target_start": "2026-05-14T15:13:29.717Z",
+        "target_end": "2026-05-14T15:14:28.055Z",
+        "target_start_ns": 1778771609717255168,
+        "target_end_ns": 1778771668055769088,
+        "target_tick_count": 90,
+        "overlap_start": "2026-05-14T15:13:29.717Z",
+        "overlap_end": "2026-05-14T15:14:27.841Z",
+        "overlap_start_ns": 1778771609717255168,
+        "overlap_end_ns": 1778771667841000000,
+        "overlap_duration_seconds": 58.12
+      }
+    }
+  },
+  "missing_streams": [],
+  "failed_streams": [],
+  "total_reconnect_count": 0,
+  "error_summaries": [],
+  "task_exceptions": [
+    {
+      "task": "binance_perp",
+      "exception_type": "CancelledError",
+      "message": ""
+    }
+  ]
+}

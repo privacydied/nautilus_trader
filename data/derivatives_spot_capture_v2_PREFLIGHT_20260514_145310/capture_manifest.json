@@ -1,0 +1,156 @@
+{
+  "run_id": "1778770431",
+  "requested_duration_seconds": 30,
+  "actual_start_time": "2026-05-14T14:53:51.090Z",
+  "actual_end_time": "2026-05-14T14:54:23.092Z",
+  "streams": {
+    "binance_perp_BTC/USDT": {
+      "start_time": "2026-05-14T14:53:51.090Z",
+      "end_time": null,
+      "tick_count": 0,
+      "first_tick_ts": null,
+      "first_tick_ts_ns": null,
+      "last_tick_ts": null,
+      "last_tick_ts_ns": null,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null
+    },
+    "binance_perp_ETH/USDT": {
+      "start_time": "2026-05-14T14:53:51.091Z",
+      "end_time": null,
+      "tick_count": 0,
+      "first_tick_ts": null,
+      "first_tick_ts_ns": null,
+      "last_tick_ts": null,
+      "last_tick_ts_ns": null,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null
+    },
+    "binance_perp_SOL/USDT": {
+      "start_time": "2026-05-14T14:53:51.091Z",
+      "end_time": null,
+      "tick_count": 0,
+      "first_tick_ts": null,
+      "first_tick_ts_ns": null,
+      "last_tick_ts": null,
+      "last_tick_ts_ns": null,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null
+    },
+    "kraken_BTC/USD": {
+      "start_time": "2026-05-14T14:53:53.197Z",
+      "end_time": "2026-05-14T14:54:23.070Z",
+      "tick_count": 0,
+      "first_tick_ts": null,
+      "first_tick_ts_ns": null,
+      "last_tick_ts": null,
+      "last_tick_ts_ns": null,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null
+    },
+    "kraken_ETH/USD": {
+      "start_time": "2026-05-14T14:53:53.204Z",
+      "end_time": "2026-05-14T14:54:23.070Z",
+      "tick_count": 0,
+      "first_tick_ts": null,
+      "first_tick_ts_ns": null,
+      "last_tick_ts": null,
+      "last_tick_ts_ns": null,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null
+    },
+    "kraken_SOL/USD": {
+      "start_time": "2026-05-14T14:53:54.204Z",
+      "end_time": "2026-05-14T14:54:23.070Z",
+      "tick_count": 0,
+      "first_tick_ts": null,
+      "first_tick_ts_ns": null,
+      "last_tick_ts": null,
+      "last_tick_ts_ns": null,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null
+    },
+    "coinbase_BTC/USD": {
+      "start_time": "2026-05-14T14:53:54.207Z",
+      "end_time": "2026-05-14T14:54:21.264Z",
+      "tick_count": 339,
+      "first_tick_ts": "2026-05-14T14:54:00.108Z",
+      "first_tick_ts_ns": 1778770440108357888,
+      "last_tick_ts": "2026-05-14T14:54:22.760Z",
+      "last_tick_ts_ns": 1778770462760310016,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null
+    },
+    "coinbase_ETH/USD": {
+      "start_time": "2026-05-14T14:53:54.207Z",
+      "end_time": "2026-05-14T14:54:21.264Z",
+      "tick_count": 341,
+      "first_tick_ts": "2026-05-14T14:54:00.066Z",
+      "first_tick_ts_ns": 1778770440066904064,
+      "last_tick_ts": "2026-05-14T14:54:22.656Z",
+      "last_tick_ts_ns": 1778770462656707072,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null
+    },
+    "coinbase_SOL/USD": {
+      "start_time": "2026-05-14T14:53:54.208Z",
+      "end_time": "2026-05-14T14:54:21.264Z",
+      "tick_count": 29,
+      "first_tick_ts": "2026-05-14T14:54:00.688Z",
+      "first_tick_ts_ns": 1778770440688568064,
+      "last_tick_ts": "2026-05-14T14:54:21.877Z",
+      "last_tick_ts_ns": 1778770461877805056,
+      "status": "ok",
+      "reconnect_count": 0,
+      "error_summary": null
+    }
+  },
+  "oi_snapshots": {
+    "BTCUSDT": {
+      "count": 4
+    },
+    "ETHUSDT": {
+      "count": 4
+    },
+    "SOLUSDT": {
+      "count": 4
+    }
+  },
+  "overlap": {
+    "global_overlap_start": null,
+    "global_overlap_start_ns": null,
+    "global_overlap_end": null,
+    "global_overlap_end_ns": null,
+    "global_overlap_duration_seconds": 0,
+    "per_pair": {
+      "BTC": {
+        "error": "no_source_data"
+      },
+      "ETH": {
+        "error": "no_source_data"
+      },
+      "SOL": {
+        "error": "no_source_data"
+      }
+    }
+  },
+  "missing_streams": [],
+  "failed_streams": [],
+  "total_reconnect_count": 0,
+  "error_summaries": [],
+  "task_exceptions": [
+    {
+      "task": "binance_perp",
+      "exception_type": "CancelledError",
+      "message": ""
+    }
+  ]
+}

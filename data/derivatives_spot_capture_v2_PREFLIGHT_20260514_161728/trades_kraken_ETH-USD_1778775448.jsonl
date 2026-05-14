@@ -1,0 +1,13 @@
+{"ts_event": 1778775452912730880, "venue": "kraken", "symbol": "ETH/USD", "price": 2304.56, "size": 0.00342365, "side": "buy", "trade_id": "62889459", "raw": null}
+{"ts_event": 1778775452912730880, "venue": "kraken", "symbol": "ETH/USD", "price": 2304.66, "size": 0.08704214, "side": "buy", "trade_id": "62889460", "raw": null}
+{"ts_event": 1778775454633862144, "venue": "kraken", "symbol": "ETH/USD", "price": 2304.33, "size": 0.00609697, "side": "sell", "trade_id": "62889461", "raw": null}
+{"ts_event": 1778775467785762048, "venue": "kraken", "symbol": "ETH/USD", "price": 2304.7, "size": 0.0216948, "side": "sell", "trade_id": "62889462", "raw": null}
+{"ts_event": 1778775467839023104, "venue": "kraken", "symbol": "ETH/USD", "price": 2304.56, "size": 0.0039053, "side": "sell", "trade_id": "62889463", "raw": null}
+{"ts_event": 1778775475473634048, "venue": "kraken", "symbol": "ETH/USD", "price": 2304.8, "size": 0.02497596, "side": "buy", "trade_id": "62889464", "raw": null}
+{"ts_event": 1778775476886842112, "venue": "kraken", "symbol": "ETH/USD", "price": 2304.79, "size": 0.00433879, "side": "buy", "trade_id": "62889465", "raw": null}
+{"ts_event": 1778775485904083968, "venue": "kraken", "symbol": "ETH/USD", "price": 2304.83, "size": 0.0024541, "side": "buy", "trade_id": "62889466", "raw": null}
+{"ts_event": 1778775491027578112, "venue": "kraken", "symbol": "ETH/USD", "price": 2304.99, "size": 0.51228016, "side": "sell", "trade_id": "62889467", "raw": null}
+{"ts_event": 1778775496822330112, "venue": "kraken", "symbol": "ETH/USD", "price": 2305.09, "size": 0.00044657, "side": "sell", "trade_id": "62889468", "raw": null}
+{"ts_event": 1778775507610759936, "venue": "kraken", "symbol": "ETH/USD", "price": 2305.29, "size": 0.00195247, "side": "sell", "trade_id": "62889469", "raw": null}
+{"ts_event": 1778775507824912128, "venue": "kraken", "symbol": "ETH/USD", "price": 2305.29, "size": 0.04142603, "side": "sell", "trade_id": "62889470", "raw": null}
+{"ts_event": 1778775507824912128, "venue": "kraken", "symbol": "ETH/USD", "price": 2305.29, "size": 0.05547887, "side": "sell", "trade_id": "62889471", "raw": null}

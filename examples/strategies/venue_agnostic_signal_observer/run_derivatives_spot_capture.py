@@ -830,12 +830,10 @@ async def poll_binance_oi(
     if not files:
         return
 
-    deadline = time.time() + (interval_seconds * len(files) * 2)  # Run at least 2 rounds
-
     timeout = aiohttp.ClientTimeout(total=5)
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            while time.time() < deadline and not stop_event.is_set():
+            while not stop_event.is_set():
                 for api_symbol in list(files.keys()):
                     if stop_event.is_set():
                         break
@@ -861,7 +859,7 @@ async def poll_binance_oi(
 
                 # Wait for interval, but stop sooner if requested
                 for _ in range(interval_seconds * 10):
-                    if stop_event.is_set() or time.time() >= deadline:
+                    if stop_event.is_set():
                         break
                     await asyncio.sleep(0.1)
     except Exception as e:

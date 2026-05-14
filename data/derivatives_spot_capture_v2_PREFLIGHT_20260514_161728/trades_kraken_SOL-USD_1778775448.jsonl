@@ -1,0 +1,16 @@
+{"ts_event": 1778775454630970112, "venue": "kraken", "symbol": "SOL/USD", "price": 93.22, "size": 0.15061083, "side": "sell", "trade_id": "30508714", "raw": null}
+{"ts_event": 1778775457676218880, "venue": "kraken", "symbol": "SOL/USD", "price": 93.23, "size": 0.0376958, "side": "sell", "trade_id": "30508715", "raw": null}
+{"ts_event": 1778775460341057024, "venue": "kraken", "symbol": "SOL/USD", "price": 93.25, "size": 0.486641, "side": "buy", "trade_id": "30508716", "raw": null}
+{"ts_event": 1778775468117958144, "venue": "kraken", "symbol": "SOL/USD", "price": 93.22, "size": 0.05041998, "side": "buy", "trade_id": "30508717", "raw": null}
+{"ts_event": 1778775470885342976, "venue": "kraken", "symbol": "SOL/USD", "price": 93.24, "size": 1.08026358, "side": "sell", "trade_id": "30508718", "raw": null}
+{"ts_event": 1778775473183561984, "venue": "kraken", "symbol": "SOL/USD", "price": 93.23, "size": 1.05394, "side": "sell", "trade_id": "30508719", "raw": null}
+{"ts_event": 1778775475938738944, "venue": "kraken", "symbol": "SOL/USD", "price": 93.23, "size": 0.08304855, "side": "sell", "trade_id": "30508720", "raw": null}
+{"ts_event": 1778775483503115776, "venue": "kraken", "symbol": "SOL/USD", "price": 93.25, "size": 6.75571046, "side": "buy", "trade_id": "30508721", "raw": null}
+{"ts_event": 1778775484518904064, "venue": "kraken", "symbol": "SOL/USD", "price": 93.25, "size": 2.75764854, "side": "buy", "trade_id": "30508722", "raw": null}
+{"ts_event": 1778775485904814080, "venue": "kraken", "symbol": "SOL/USD", "price": 93.31, "size": 0.06065844, "side": "buy", "trade_id": "30508723", "raw": null}
+{"ts_event": 1778775488049036032, "venue": "kraken", "symbol": "SOL/USD", "price": 93.31, "size": 0.05036642, "side": "buy", "trade_id": "30508724", "raw": null}
+{"ts_event": 1778775498368503040, "venue": "kraken", "symbol": "SOL/USD", "price": 93.25, "size": 0.06190065, "side": "sell", "trade_id": "30508725", "raw": null}
+{"ts_event": 1778775500233722880, "venue": "kraken", "symbol": "SOL/USD", "price": 93.27, "size": 0.12956569, "side": "buy", "trade_id": "30508726", "raw": null}
+{"ts_event": 1778775500233722880, "venue": "kraken", "symbol": "SOL/USD", "price": 93.27, "size": 0.01132899, "side": "buy", "trade_id": "30508727", "raw": null}
+{"ts_event": 1778775503048697856, "venue": "kraken", "symbol": "SOL/USD", "price": 93.27, "size": 0.1862919, "side": "buy", "trade_id": "30508728", "raw": null}
+{"ts_event": 1778775507612365056, "venue": "kraken", "symbol": "SOL/USD", "price": 93.25, "size": 0.04820689, "side": "sell", "trade_id": "30508729", "raw": null}

@@ -1,0 +1,6 @@
+bucket,event_count,valid_count,mean_net_bps,median_net_bps,win_rate
+price_up_oi_up,15722,14719,-54.8988,-55.0,0.0
+price_down_oi_up,12292,11281,-55.2631,-55.0,0.0
+flat_or_unknown,441,441,-55.1498,-55.0,0.0
+price_down_oi_down,175,175,-53.8753,-53.9276,0.0
+price_up_oi_down,196,196,-55.9218,-55.0,0.0

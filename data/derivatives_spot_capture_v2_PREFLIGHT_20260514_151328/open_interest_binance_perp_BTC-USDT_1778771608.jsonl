@@ -1,0 +1,6 @@
+{"receive_timestamp_ns": 1778771608777589248, "receive_time": "2026-05-14T15:13:28.777Z", "venue": "binance_perp", "api_symbol": "BTCUSDT", "open_interest": 106561.193, "open_interest_value": null}
+{"receive_timestamp_ns": 1778771614483505664, "receive_time": "2026-05-14T15:13:34.483Z", "venue": "binance_perp", "api_symbol": "BTCUSDT", "open_interest": 106566.951, "open_interest_value": null}
+{"receive_timestamp_ns": 1778771620170550272, "receive_time": "2026-05-14T15:13:40.170Z", "venue": "binance_perp", "api_symbol": "BTCUSDT", "open_interest": 106566.951, "open_interest_value": null}
+{"receive_timestamp_ns": 1778771625875836416, "receive_time": "2026-05-14T15:13:45.875Z", "venue": "binance_perp", "api_symbol": "BTCUSDT", "open_interest": 106574.369, "open_interest_value": null}
+{"receive_timestamp_ns": 1778771631562821376, "receive_time": "2026-05-14T15:13:51.562Z", "venue": "binance_perp", "api_symbol": "BTCUSDT", "open_interest": 106575.787, "open_interest_value": null}
+{"receive_timestamp_ns": 1778771637295269888, "receive_time": "2026-05-14T15:13:57.295Z", "venue": "binance_perp", "api_symbol": "BTCUSDT", "open_interest": 106575.502, "open_interest_value": null}

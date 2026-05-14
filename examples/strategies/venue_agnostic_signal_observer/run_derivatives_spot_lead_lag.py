@@ -62,6 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-events", type=int, default=50)
     p.add_argument("--out", type=str, default="reports/derivatives_spot_lead_lag_v2")
     p.add_argument("--baseline-seed", type=int, default=42)
+    p.add_argument("--capture-mode", type=str, default="",
+                   choices=["FULL_ACTIVE", "FAST_DIAGNOSTIC", ""],
+                   help="Capture mode from volatility gate. FAST_DIAGNOSTIC prevents final REJECTED verdict.")
     return p
 
 
@@ -281,6 +284,7 @@ def load_capture_data(
 @dataclass
 class EvalSummary:
     capture_dir: str = ""
+    capture_mode: str = ""  # "FULL_ACTIVE", "FAST_DIAGNOSTIC", or ""
     total_signals: int = 0
     valid_evaluations: int = 0
     rejected_evaluations: int = 0
@@ -318,6 +322,7 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
 
     summary = EvalSummary(
         capture_dir=args.capture_dir,
+        capture_mode=getattr(args, "capture_mode", ""),
         fee_bps=args.fee_bps,
         slippage_bps=args.slippage_bps,
         quote_mismatch_buffer_bps=args.quote_mismatch_buffer_bps,
@@ -702,6 +707,12 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
         else:
             summary.verdict = "NEEDS_MORE_DATA"
 
+    # FAST_DIAGNOSTIC capture mode must never produce REJECTED.
+    # Remap to MARKET_MODERATE_DIAGNOSTIC (sufficient overlap, no signal
+    # passed gates, but single short window is not structurally conclusive).
+    if summary.capture_mode == "FAST_DIAGNOSTIC" and summary.verdict == "REJECTED":
+        summary.verdict = "MARKET_MODERATE_DIAGNOSTIC"
+
     summary.run_end = time.time()
     return summary, ALL_SIGNALS, ALL_FWD
 
@@ -737,6 +748,7 @@ def write_reports(
         "quote_mismatch_buffer_bps": summary.quote_mismatch_buffer_bps,
         "all_in_cost_bps": summary.all_in_cost_bps,
         "verdict": summary.verdict,
+        "capture_mode": summary.capture_mode,
         "run_duration_s": round(summary.run_end - summary.run_start, 2),
         "capture_context": summary.capture_context,
         "overlap_info": summary.overlap_info,
@@ -813,6 +825,7 @@ def _write_md(summary: EvalSummary, out: Path) -> None:
         "## Capture Context",
         "",
         f"- Capture method: combined async single-event-loop runner",
+        f"- Capture mode: {summary.capture_mode or 'unspecified'}",
         f"- All-in cost: {summary.all_in_cost_bps} bps ({summary.fee_bps} fee + {summary.slippage_bps} slippage + {summary.quote_mismatch_buffer_bps} quote mismatch)",
         "",
     ]
@@ -855,12 +868,19 @@ def _write_md(summary: EvalSummary, out: Path) -> None:
     lines.append("## Verdict\n")
     lines.append(f"**{summary.verdict}**\n")
 
+    if summary.capture_mode:
+        lines.append(f"Capture mode: {summary.capture_mode}\n")
+
     if summary.verdict == "NEEDS_MORE_DATA":
         lines.append("Insufficient data, overlap, or price movement for a fair assessment. Not a rejection.\n")
     elif summary.verdict == "REJECTED":
         lines.append("Sufficient overlap and movement observed; no signal group passed candidate gates.\n")
     elif summary.verdict == "CANDIDATE_FOR_LONGER_OBSERVATION":
         lines.append("One or more groups passed all candidate gates. Further observation needed.\n")
+    elif summary.verdict == "MARKET_MODERATE_DIAGNOSTIC":
+        lines.append("FAST_DIAGNOSTIC capture: sufficient overlap and movement, no signal passed gates, "
+                      "but a single short window is not structurally conclusive for REJECTED.\n"
+                      "This verdict maps to NEEDS_MORE_DATA for any downstream decision-making.\n")
 
     with open(out / "report.md", "w") as f:
         f.write("\n".join(lines) + "\n")

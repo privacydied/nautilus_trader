@@ -1,0 +1,6 @@
+{"receive_timestamp_ns": 1778775520409447680, "receive_time": "2026-05-14T16:18:40.409Z", "venue": "binance_perp", "api_symbol": "SOLUSDT", "open_interest": 10166379.51, "open_interest_value": null}
+{"receive_timestamp_ns": 1778775526102140416, "receive_time": "2026-05-14T16:18:46.102Z", "venue": "binance_perp", "api_symbol": "SOLUSDT", "open_interest": 10166416.15, "open_interest_value": null}
+{"receive_timestamp_ns": 1778775531802607360, "receive_time": "2026-05-14T16:18:51.802Z", "venue": "binance_perp", "api_symbol": "SOLUSDT", "open_interest": 10166362.11, "open_interest_value": null}
+{"receive_timestamp_ns": 1778775537603282432, "receive_time": "2026-05-14T16:18:57.603Z", "venue": "binance_perp", "api_symbol": "SOLUSDT", "open_interest": 10166257.6, "open_interest_value": null}
+{"receive_timestamp_ns": 1778775543301575424, "receive_time": "2026-05-14T16:19:03.301Z", "venue": "binance_perp", "api_symbol": "SOLUSDT", "open_interest": 10166131.05, "open_interest_value": null}
+{"receive_timestamp_ns": 1778775548988283136, "receive_time": "2026-05-14T16:19:08.988Z", "venue": "binance_perp", "api_symbol": "SOLUSDT", "open_interest": 10164409.91, "open_interest_value": null}

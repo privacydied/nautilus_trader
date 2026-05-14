@@ -1,0 +1,6 @@
+{"receive_timestamp_ns": 1778775449130191104, "receive_time": "2026-05-14T16:17:29.130Z", "venue": "binance_perp", "api_symbol": "ETHUSDT", "open_interest": 2170327.745, "open_interest_value": null}
+{"receive_timestamp_ns": 1778775455309102080, "receive_time": "2026-05-14T16:17:35.309Z", "venue": "binance_perp", "api_symbol": "ETHUSDT", "open_interest": 2169609.517, "open_interest_value": null}
+{"receive_timestamp_ns": 1778775461096006656, "receive_time": "2026-05-14T16:17:41.096Z", "venue": "binance_perp", "api_symbol": "ETHUSDT", "open_interest": 2169532.515, "open_interest_value": null}
+{"receive_timestamp_ns": 1778775466780085504, "receive_time": "2026-05-14T16:17:46.780Z", "venue": "binance_perp", "api_symbol": "ETHUSDT", "open_interest": 2169491.596, "open_interest_value": null}
+{"receive_timestamp_ns": 1778775472480629504, "receive_time": "2026-05-14T16:17:52.480Z", "venue": "binance_perp", "api_symbol": "ETHUSDT", "open_interest": 2169993.646, "open_interest_value": null}
+{"receive_timestamp_ns": 1778775478180597248, "receive_time": "2026-05-14T16:17:58.180Z", "venue": "binance_perp", "api_symbol": "ETHUSDT", "open_interest": 2169981.38, "open_interest_value": null}
