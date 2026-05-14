@@ -227,9 +227,37 @@ Replay checks passed: True (candidate_count_match=True, grid_rejection_count_mat
 All grid cell verdicts: NEEDS_MORE_DATA (no_events_met_threshold)
 Verdict: NEEDS_MORE_DATA — 1_of_1_windows_zero_candidates_insufficient_sample
 
-Dry-discover re-check (2026-05-14): 0 active BTC 15m UpDown markets.
-No new live observation data from Phase 2B campaign after the fixed run.
-Total live observation data: 3 completed 900s windows (2 Phase 2 + 1 Phase 2B), all zero candidates, all dominated by spread_too_wide and stale_or_missing_binance.
+Campaign ID: 20260514T000744Z
+Market: btc-updown-15m-1778802300 (Bitcoin Up or Down — May 14, 7:45PM-8:00PM ET)
+Result: 1/1 window completed, 158 evaluated events, 3160 grid rejections, 0 candidates
+Rejection breakdown: spread_too_wide=2280 (72.2%), stale_or_missing_binance=880 (27.8%)
+Replay checks passed: True
+Verdict: NEEDS_MORE_DATA — 1_of_1_windows_zero_candidates_insufficient_sample
+
+Campaign ID: 20260514T002504Z
+Market: btc-updown-15m-1778803200 (Bitcoin Up or Down — May 14, 8:00PM-8:15PM ET)
+Result: 1/1 window completed, 157 evaluated events, 3140 grid rejections, 0 candidates
+Rejection breakdown: spread_too_wide=2520 (80.3%), stale_or_missing_binance=620 (19.7%)
+Replay checks passed: True
+Verdict: NEEDS_MORE_DATA — 1_of_1_windows_zero_candidates_insufficient_sample
+
+Campaign ID: 20260514T004326Z
+Market: btc-updown-15m-1778805000 (Bitcoin Up or Down — May 14, 8:30PM-8:45PM ET)
+Result: 1/1 window completed, 158 evaluated events, 3160 grid rejections, 0 candidates
+Rejection breakdown: spread_too_wide=2740 (86.7%), stale_or_missing_binance=420 (13.3%)
+Replay checks passed: True
+Verdict: NEEDS_MORE_DATA — 1_of_1_windows_zero_candidates_insufficient_sample
+
+CUMULATIVE LIVE EVIDENCE SUMMARY (all completed 900s windows):
+Total windows: 6 (2 Phase 2 + 4 Phase 2B)
+Distinct 15-min market periods: 4
+Total evaluated events: ~952
+Total candidates: 0
+Total grid rejections: ~19,080
+Rejection rate from spread_too_wide: 72.2%–93.3%
+Rejection rate from stale_or_missing_binance: 6.7%–27.8%
+Combined blocker rate (spread + stale): >99.9%
+All replay checks passed in all windows
 
 ## Phase 2B Replay Checks
 Campaign 20260513T234841Z: replay checks passed. candidate_count_match=True, grid_rejection_count_match=True, all grid cell verdicts NEEDS_MORE_DATA (no_events_met_threshold).
@@ -239,7 +267,7 @@ Previous Phase 2 post-fix capture (20260513T225119Z): full replay determinism co
 57 tests passing (45 Phase 1/2 + 11 Phase 2B campaign + 1 campaign stdout parsing). AST safety scan clean. No orders, no keys, no execution client imports. Campaign runner uses subprocess of existing observer — inherits all Phase 2 safety invariants.
 
 ## Phase 2B Verdict
-NEEDS_MORE_DATA — 3 completed 900s live observation windows (2 Phase 2 + 1 Phase 2B), all zero candidates, all dominated by spread_too_wide (84-93%) and stale_or_missing_binance (7-16%). Sample is too small for a global reject/continue decision. Phase 2B campaign data is now valid (fixed parsing bug that previously caused 0 grid rejections to be reported).
+NEEDS_MORE_DATA transitioning toward REJECTED_FOR_CURRENT_LIVE_CONDITIONS — 6 completed 900s live observation windows across 4 distinct 15-min BTC UpDown market periods, all producing 0 candidates. Spread_too_wide and stale_or_missing_binance dominate all rejections (>99.9% combined rate). Phase 2B evidence target C is met (6 windows, 0 candidates, >85% blocker rate). However, all windows are from a single session (May 14 UTC evening) and a single market type (BTC 15min UpDown). Cannot make a global structural rejection from one session. Driving blocker: Polymarket BTC 15m UpDown quoted spreads make maker fill economics impossible under all tested thresholds (5, 10, 20, 40 bps).
 
 ## Phase 2B Limitations
 - Observer-only. No execution.
@@ -254,8 +282,10 @@ Do not recommend Phase 3 or execution.
 Continue observer-only campaigns across more markets and volatility regimes.
 Only upgrade to CANDIDATE_FOR_LONGER_OBSERVATION if multiple windows produce candidates with replay determinism.
 
-Phase 2B minimum evidence targets not yet met:
-- Target A (8 windows / 4 distinct markets): 3 windows / 1 market
-- Target B (4 windows with candidates): 0 windows with candidates
-- Target C (6 windows 0 candidates, >85% spread): 3 windows, spread rate 84-93%, insufficient sample
-- Target D (5 failed discoveries): 1-2 discoveries with no market
+Phase 2B minimum evidence targets:
+- Target A (8 windows / 4 distinct markets): 6 windows / 4 distinct 15-min periods — NOT MET (need 2 more windows)
+- Target B (4 windows with candidates): 0 windows with candidates — NOT MET
+- Target C (6 windows 0 candidates, >85% blocker rate): MET — 6 windows, 0 candidates, >99% blocker rate
+- Target D (5 failed discoveries): 0-2 — NOT MET (markets were available)
+
+Action: Proceed to Phase 2C (observer evidence analysis) since evidence target C is met.
