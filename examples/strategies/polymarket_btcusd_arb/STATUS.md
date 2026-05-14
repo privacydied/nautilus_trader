@@ -384,3 +384,8 @@ reports/polymarket_btcusd_arb/evidence_review/20260514T012205Z/
 
 ## Final Archive File
 examples/strategies/polymarket_btcusd_arb/FINAL_RESEARCH_STATUS.md
+
+## Post-Archive Note
+This research track is archived as REJECTED_FOR_CURRENT_LIVE_CONDITIONS.
+Future studies (spread regime, wider thresholds, different durations) are separate hypothesis branches and must not modify this archive verdict.
+Squash-merged into develop. Tag: polymarket-btc-15m-updown-rejected-live-2026-05-14.
