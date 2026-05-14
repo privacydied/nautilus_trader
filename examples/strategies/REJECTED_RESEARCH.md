@@ -8,10 +8,21 @@
 ## Mined Status
 
 The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 45 study groups:
-|- **35 REJECTED**
+- **35 REJECTED**
 - **9 NEEDS_MORE_DATA** (insufficient events / zero signals)
 - **1 MARKET_MODERATE_DIAGNOSTIC** (quiet/moderate capture, below volatility gate)
 - **1 UNKNOWN**
+
+## Null Testing Discipline
+
+Null permutation testing is now available via `permutation_null.py` / `run_permutation_null.py`. It is a **falsification step only**, applied after evaluation.
+
+- A group that fails null testing is recorded as `NULL_REJECTED_DIAGNOSTIC` in the group-level verdict reason. This is **diagnostic evidence**; it does NOT become a general `REJECTED` verdict for the entire signal family.
+- A group that passes null testing (`candidate_survives_null: true`) is marked as *warranting longer observation* — not as proven tradeable.
+- Null test results **must never** be used to optimize signal parameters (p-hacking guard).
+- If all candidate groups are `NULL_REJECTED_DIAGNOSTIC` or `NO_MCPT_WORTHY_GROUPS`, update this registry with a brief note that the signal family underwent null falsification and record the aggregate outcome. Do NOT promote the signal family to `REJECTED` solely on null results.
+
+Rationale: Null testing checks whether randomly shifted source timing could produce the observed edge. It guards against false discovery from look-elsewhere / data-mining bias, but it is one diagnostic layer, not a final execution verdict.
 
 ## Status Table
 
