@@ -9,6 +9,7 @@ can be reused for forward-return evaluation.
 from __future__ import annotations
 
 import bisect
+import math
 import statistics
 import uuid
 
@@ -80,7 +81,7 @@ class DerivativesImpulseGenerator:
         events: list[DerivativeImpulseEvent] = []
         cooldown_ns = self.cooldown_ms * _MS_TO_NS
         ts_list = [t.ts_event for t in trades]
-        notionals = [t.notional for t in trades]
+        notionals = [t.notional if math.isfinite(t.notional) and t.price > 0 and t.size > 0 else 0.0 for t in trades]
 
         for lb_ms in self.lookbacks_ms:
             param_key = f"notional_burst_{lb_ms}"
@@ -93,20 +94,22 @@ class DerivativesImpulseGenerator:
                     continue
 
                 lo = bisect.bisect_left(ts_list, ts - lb_ns, 0, idx + 1)
-                window = notionals[lo:idx + 1]
+                window = [n for n in notionals[lo:idx + 1] if math.isfinite(n) and n > 0]
                 if len(window) < self.min_trades_in_window:
                     continue
 
                 baseline_start = max(0, lo - len(window))
-                baseline = notionals[baseline_start:lo]
+                baseline = [n for n in notionals[baseline_start:lo] if math.isfinite(n) and n > 0]
                 if len(baseline) < 2:
                     continue
 
                 median_base = statistics.median(baseline)
-                if median_base <= 0:
+                if median_base <= 0 or not math.isfinite(median_base):
                     continue
 
                 burst_ratio = sum(window) / median_base
+                if not math.isfinite(burst_ratio):
+                    continue
                 if burst_ratio >= self.price_shock_multiplier:
                     direction = self._resolve_direction(trades, idx, lb_ms)
                     evt = DerivativeImpulseEvent(
@@ -156,6 +159,8 @@ class DerivativesImpulseGenerator:
 
                 ref_price = trades[lo].price
                 curr_price = trades[idx].price
+                if ref_price <= 0 or not math.isfinite(ref_price) or not math.isfinite(curr_price):
+                    continue
                 bps_move = abs(curr_price - ref_price) / ref_price * 10000
 
                 baseline_start = max(0, lo - (idx - lo))
@@ -169,14 +174,18 @@ class DerivativesImpulseGenerator:
                     e = min(s + window_len, lo)
                     if e > s + 1:
                         ref = trades[s].price
-                        bp = abs(trades[e].price - ref) / ref * 10000
-                        baseline_abs_moves.append(bp)
+                        end_price = trades[e].price
+                        if ref <= 0 or not math.isfinite(ref) or not math.isfinite(end_price):
+                            continue
+                        bp = abs(end_price - ref) / ref * 10000
+                        if math.isfinite(bp):
+                            baseline_abs_moves.append(bp)
 
                 if not baseline_abs_moves:
                     continue
 
                 median_base_move = statistics.median(baseline_abs_moves)
-                if median_base_move <= 0:
+                if median_base_move <= 0 or not math.isfinite(median_base_move):
                     continue
 
                 if bps_move >= median_base_move * self.price_shock_multiplier:
@@ -226,10 +235,10 @@ class DerivativesImpulseGenerator:
                 if len(window) < self.min_trades_in_window:
                     continue
 
-                buy_n = sum(t.notional for t in window if t.side == "buy")
-                sell_n = sum(t.notional for t in window if t.side == "sell")
+                buy_n = sum(t.notional for t in window if t.side == "buy" and math.isfinite(t.notional) and t.notional > 0)
+                sell_n = sum(t.notional for t in window if t.side == "sell" and math.isfinite(t.notional) and t.notional > 0)
                 total = buy_n + sell_n
-                if total <= 0:
+                if total <= 0 or not math.isfinite(total):
                     continue
 
                 imbalance = (buy_n - sell_n) / total

@@ -206,13 +206,14 @@ def fetch_kraken_ohlc(
 
 def write_ohlc_csv(rows: List[dict], path: str):
     """Write OHLC data to a CSV file."""
-    if not rows:
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        Path(path).touch()
-        return
-
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     fieldnames = ["timestamp", "open", "high", "low", "close", "volume"]
+    if not rows:
+        with open(path, "w", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=fieldnames)
+            writer.writeheader()
+        return
+
 
     # Sort by timestamp
     rows.sort(key=lambda r: r["timestamp"])

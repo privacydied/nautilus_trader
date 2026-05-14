@@ -25,6 +25,7 @@ for comparison.
 from __future__ import annotations
 
 import argparse
+import math
 import json
 import statistics
 import sys
@@ -305,7 +306,7 @@ def run_sweep(args: argparse.Namespace):
                                 all_fwd.extend(fwd)
 
                             valid = [r for r in all_fwd if r.valid]
-                            nets = [r.net_return_bps for r in valid if r.net_return_bps is not None]
+                            nets = [r.net_return_bps for r in valid if r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
                             stats = _safe_stats(nets)
 
                             entry = {
@@ -356,7 +357,7 @@ def run_sweep(args: argparse.Namespace):
                                 baseline_fwd.extend(fwd)
 
                             b_valid = [r for r in baseline_fwd if r.valid]
-                            b_nets = [r.net_return_bps for r in b_valid if r.net_return_bps is not None]
+                            b_nets = [r.net_return_bps for r in b_valid if r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
                             b_stats = _safe_stats(b_nets)
                             baseline_results = {
                                 "signal_count": len(baseline_signals),

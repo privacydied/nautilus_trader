@@ -105,10 +105,10 @@ def align_venues(
         all of equal length, sorted by timestamp.
     """
 
-    def _forward_fill(query_ts: list[float], ts: list[float], prices: list[float], default: float) -> list[float]:
+    def _forward_fill(query_ts: list[float], ts: list[float], prices: list[float]) -> list[float | None]:
         """Forward-fill prices at query timestamps."""
-        result: list[float] = []
-        carry = default
+        result: list[float | None] = []
+        carry: float | None = None
         for qt in query_ts:
             idx = bisect.bisect_right(ts, qt) - 1
             if idx >= 0:
@@ -126,16 +126,14 @@ def align_venues(
         while t <= grid_end:
             common_ts.append(t)
             t += grid_seconds
-        default_src = source_prices[0] if source_prices else 0.0
-        default_tgt = target_prices[0] if target_prices else 0.0
+        pass
     else:
         all_ts = sorted(set(source_ts) | set(target_ts))
         common_ts = all_ts
-        default_src = source_prices[0] if source_prices else 0.0
-        default_tgt = target_prices[0] if target_prices else 0.0
+        pass
 
-    src_aligned = _forward_fill(common_ts, source_ts, source_prices, default_src)
-    tgt_aligned = _forward_fill(common_ts, target_ts, target_prices, default_tgt)
+    src_aligned = _forward_fill(common_ts, source_ts, source_prices)
+    tgt_aligned = _forward_fill(common_ts, target_ts, target_prices)
     return common_ts, src_aligned, tgt_aligned
 
 
@@ -264,7 +262,7 @@ def _fetch_kraken(
         for k in ohlc_data:
             ts = float(k[0])
             if end_ts and ts > end_ts / 1000.0:
-                continue
+                break
             results.append({
                 "timestamp": ts,
                 "open": float(k[1]),

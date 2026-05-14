@@ -64,15 +64,15 @@ class DexCexDislocationDetector:
         for snap in snapshots:
             pool_key = snap.pair_address
             # Apply hard filters first
-            if snap.price_usd is None:
+            if snap.price_usd is None or not math.isfinite(snap.price_usd):
                 warnings_list.append(f"Reject {pool_key}: price_usd is None")
                 continue
-            if snap.liquidity_usd is None:
+            if snap.liquidity_usd is None or not math.isfinite(snap.liquidity_usd):
                 warnings_list.append(f"Reject {pool_key}: liquidity_usd is None")
                 continue
             if snap.liquidity_usd < self.min_liquidity_usd:
                 continue  # silently skip low-liquidity pools
-            if snap.volume_1h_usd is None or snap.volume_1h_usd < self.min_volume_1h_usd:
+            if snap.volume_1h_usd is None or not math.isfinite(snap.volume_1h_usd) or snap.volume_1h_usd < self.min_volume_1h_usd:
                 continue
             # Price shock check
             evt = self._check_price_shock(snap)
@@ -88,7 +88,7 @@ class DexCexDislocationDetector:
                 events.append(evt)
             # Update state
             self._prev_snapshots[pool_key] = snap
-            if snap.volume_5m_usd is not None and snap.volume_5m_usd > 0:
+            if snap.volume_5m_usd is not None and math.isfinite(snap.volume_5m_usd) and snap.volume_5m_usd > 0:
                 hist = self._volume_history.setdefault(pool_key, [])
                 hist.append(snap.volume_5m_usd)
                 # Keep only recent history
@@ -108,7 +108,7 @@ class DexCexDislocationDetector:
             return None
         prev_price = prev.price_usd
         curr_price = snap.price_usd
-        if prev_price is None or curr_price is None or prev_price <= 0:
+        if prev_price is None or curr_price is None or prev_price <= 0 or not math.isfinite(prev_price) or not math.isfinite(curr_price):
             return None
 
         change_pct = ((curr_price - prev_price) / prev_price) * 100.0
@@ -146,15 +146,18 @@ class DexCexDislocationDetector:
     def _check_volume_burst(self, snap: DexPoolSnapshot) -> DexDislocationEvent | None:
         """Fire event if 5m DEX volume spikes above rolling median."""
         pkey = snap.pair_address
-        if snap.volume_5m_usd is None or snap.volume_5m_usd <= 0:
+        if snap.volume_5m_usd is None or snap.volume_5m_usd <= 0 or not math.isfinite(snap.volume_5m_usd):
             return None
 
         hist = self._volume_history.get(pkey, [])
         if len(hist) < 5:
             return None
 
-        median_vol = statistics.median(hist[-self.volume_median_window:])
-        if median_vol <= 0:
+        hist_window = [v for v in hist[-self.volume_median_window:] if math.isfinite(v) and v > 0]
+        if len(hist_window) < 2:
+            return None
+        median_vol = statistics.median(hist_window)
+        if median_vol <= 0 or not math.isfinite(median_vol):
             return None
 
         ratio = snap.volume_5m_usd / median_vol
@@ -178,8 +181,9 @@ class DexCexDislocationDetector:
 
         # Z-score
         if len(hist) >= 2:
-            mean_vol = statistics.mean(hist)
-            std_vol = statistics.stdev(hist)
+            finite_hist = [v for v in hist if math.isfinite(v)]
+            mean_vol = statistics.mean(finite_hist)
+            std_vol = statistics.stdev(finite_hist) if len(finite_hist) >= 2 else 0.0
             if std_vol > 0:
                 zscore = (snap.volume_5m_usd - mean_vol) / std_vol
             else:
@@ -222,11 +226,12 @@ class DexCexDislocationDetector:
             return None
         prev_liq = prev.liquidity_usd
         curr_liq = snap.liquidity_usd
-        if prev_liq is None or curr_liq is None or prev_liq <= 0:
+        if prev_liq is None or curr_liq is None or prev_liq <= 0 or not math.isfinite(prev_liq) or not math.isfinite(curr_liq):
             return None
 
-        change_pct = ((curr_liq - prev_liq) / prev_liq) * 100.0
-        change_bps = abs(change_pct) * 100.0
+        change_ratio = (curr_liq - prev_liq) / prev_liq
+        change_bps = abs(change_ratio) * 10_000.0
+        change_pct = change_ratio * 100.0
 
         if change_bps < self.liquidity_shock_threshold_bps:
             return None
@@ -234,7 +239,7 @@ class DexCexDislocationDetector:
         # Direction unknown by default — try price confirmation
         prev_price = prev.price_usd
         curr_price = snap.price_usd
-        if prev_price is not None and curr_price is not None and prev_price > 0:
+        if prev_price is not None and curr_price is not None and prev_price > 0 and math.isfinite(prev_price) and math.isfinite(curr_price):
             price_pct = ((curr_price - prev_price) / prev_price) * 100.0
             direction = "long" if price_pct >= 0 else "short"
             price_change_bps = round(abs(price_pct) * 100.0, 2)

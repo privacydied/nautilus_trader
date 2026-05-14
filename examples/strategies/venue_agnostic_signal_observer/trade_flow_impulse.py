@@ -16,12 +16,23 @@ Signal types
 
 from __future__ import annotations
 
+import math
 import statistics
 import uuid
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 
 from .tick_models import TickSignalEvent, TradeTickLite
+
+
+def _finite_positive(value: float) -> bool:
+    return math.isfinite(value) and value > 0
+
+
+def _finite_notional(price: float, size: float) -> float:
+    if not math.isfinite(price) or not math.isfinite(size) or price <= 0 or size <= 0:
+        return 0.0
+    return price * size
 
 _MS_TO_NS = 1_000_000
 _VALID_SIGNAL_TYPES = {"count_burst", "notional_burst", "large_trade", "signed_imbalance"}
@@ -84,6 +95,8 @@ def _infer_tick_rule_side(
     used.
     """
     if idx <= 0:
+        return "unknown"
+    if not math.isfinite(ticks[idx].price) or not math.isfinite(ticks[idx - 1].price):
         return "unknown"
     if ticks[idx].price >= ticks[idx - 1].price:
         return "buy"
@@ -284,7 +297,7 @@ class TradeFlowImpulseSignalGenerator:
             last_ts = self._last_signal_ts.get(param_key, -1)
             lookback_ns = lookback_ms * _MS_TO_NS
             timestamps = [t.ts_event for t in trades]
-            notionals = [t.price * t.size for t in trades]
+            notionals = [_finite_notional(t.price, t.size) for t in trades]
 
             for idx in range(1, len(trades)):
                 ts = trades[idx].ts_event
@@ -300,12 +313,15 @@ class TradeFlowImpulseSignalGenerator:
                 bl_lo = bisect_left(timestamps, ts - bl_ns, 0, idx)
                 bl_vals = [sum(notionals[s:min(s + max(1, idx - lb_lo), idx + 1)])
                            for s in range(bl_lo, idx, max(1, (idx - bl_lo) // 10))]
+                bl_vals = [v for v in bl_vals if math.isfinite(v) and v > 0]
                 median_notional = statistics.median(bl_vals) if len(bl_vals) >= 1 else 0.0
 
-                if median_notional <= 0:
+                if median_notional <= 0 or not math.isfinite(window_notional):
                     continue
 
-                burst_ratio = window_notional / median_notional if median_notional > 0 else 0.0
+                burst_ratio = window_notional / median_notional
+                if not math.isfinite(burst_ratio):
+                    continue
                 if burst_ratio >= self.config.notional_burst_multiplier:
                     direction = self._resolve_direction(
                         trades, idx, lookback_ms, "notional_burst"
@@ -350,7 +366,7 @@ class TradeFlowImpulseSignalGenerator:
         param_key = "large_trade"
         last_ts = self._last_signal_ts.get(param_key, -1)
 
-        notionals = [t.price * t.size for t in trades]
+        notionals = [_finite_notional(t.price, t.size) for t in trades]
 
         # Rolling median for multiplier check
         from bisect import insort
@@ -361,6 +377,8 @@ class TradeFlowImpulseSignalGenerator:
         for idx, trade in enumerate(trades):
             ts = trade.ts_event
             notional = notionals[idx]
+            if notional <= 0 or not math.isfinite(notional):
+                continue
 
             # Maintain rolling window
             while window_ts and ts - window_ts[0] > bl_ns:
@@ -380,7 +398,10 @@ class TradeFlowImpulseSignalGenerator:
 
             # Check multiplier against rolling median
             if len(window_notionals) >= 5:
-                median_n = statistics.median(window_notionals)
+                finite_window = [n for n in window_notionals if math.isfinite(n) and n > 0]
+                if len(finite_window) < 5:
+                    continue
+                median_n = statistics.median(finite_window)
                 if median_n > 0 and notional < median_n * self.config.large_trade_multiplier:
                     continue
 
@@ -446,7 +467,9 @@ class TradeFlowImpulseSignalGenerator:
                 buy_n = 0.0
                 sell_n = 0.0
                 for i, t_trade in enumerate(window):
-                    n = t_trade.price * t_trade.size
+                    n = _finite_notional(t_trade.price, t_trade.size)
+                    if n <= 0:
+                        continue
                     side = t_trade.side
                     if side == "buy":
                         buy_n += n
@@ -465,7 +488,7 @@ class TradeFlowImpulseSignalGenerator:
                         continue  # unknown side, skip
 
                 total_n = buy_n + sell_n
-                if total_n <= 0:
+                if total_n <= 0 or not math.isfinite(total_n):
                     continue
 
                 imbalance = (buy_n - sell_n) / total_n

@@ -1,5 +1,6 @@
 """Signal observer — ties together signals, forward returns, and reporting."""
 import json
+import math
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -57,7 +58,7 @@ class SignalObserver:
 
         # --- Load target price data ---
         if target_timestamps is not None and target_prices is not None:
-            ts, prices = target_timestamps, target_prices
+            ts, prices = list(target_timestamps), list(target_prices)
         elif bars_csv:
             ts, prices = load_bars_from_csv(bars_csv)
             print(f"Loaded {len(ts)} bars from {bars_csv}")
@@ -72,10 +73,7 @@ class SignalObserver:
 
         # --- Evaluate signals ---
         all_results: List[ForwardReturnResult] = []
-        all_signal_dicts = []
-
         for sig in all_signals:
-            all_signal_dicts.append(sig.to_dict())
             results = evaluate_signal(
                 sig, ts, prices,
                 self.cfg.horizons,
@@ -93,6 +91,24 @@ class SignalObserver:
 
         return all_signals, all_results, summary
 
+
+
+def _finite_values(values: List[Optional[float]]) -> List[float]:
+    return [v for v in values if v is not None and math.isfinite(v)]
+
+
+def _percentile(sorted_values: List[float], pct: float) -> float:
+    if not sorted_values:
+        raise ValueError("percentile requires at least one value")
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    rank = (pct / 100.0) * (len(sorted_values) - 1)
+    lo = math.floor(rank)
+    hi = math.ceil(rank)
+    if lo == hi:
+        return sorted_values[lo]
+    weight = rank - lo
+    return sorted_values[lo] * (1.0 - weight) + sorted_values[hi] * weight
 
 def _build_summary(
     signals: List[SignalEvent],
@@ -127,8 +143,8 @@ def _build_summary(
     horizon_stats = []
     for h in cfg.horizons:
         h_results = [r for r in valid if r.horizon == h.name]
-        net_returns = [r.net_return_bps for r in h_results if r.net_return_bps is not None]
-        raw_returns = [r.raw_return_bps for r in h_results if r.raw_return_bps is not None]
+        net_returns = _finite_values([r.net_return_bps for r in h_results])
+        raw_returns = _finite_values([r.raw_return_bps for r in h_results])
         if net_returns:
             net_returns.sort()
             win_rate = sum(1 for x in net_returns if x > 0) / len(net_returns)
@@ -142,10 +158,10 @@ def _build_summary(
                 mean_net_return_bps=round(statistics.mean(net_returns), 4),
                 median_net_return_bps=round(statistics.median(net_returns), 4),
                 win_rate_after_fees=round(win_rate, 4),
-                p25=round(net_returns[len(net_returns) // 4], 4),
-                p50=round(net_returns[len(net_returns) // 2], 4),
-                p75=round(net_returns[3 * len(net_returns) // 4], 4),
-                p90=round(net_returns[9 * len(net_returns) // 10], 4),
+                p25=round(_percentile(net_returns, 25), 4),
+                p50=round(_percentile(net_returns, 50), 4),
+                p75=round(_percentile(net_returns, 75), 4),
+                p90=round(_percentile(net_returns, 90), 4),
                 best_return=round(max(net_returns), 4),
                 worst_return=round(min(net_returns), 4),
             )
@@ -165,7 +181,7 @@ def _build_summary(
     for r in valid:
         by_type.setdefault(r.signal_type, []).append(r)
     for stype, type_results in by_type.items():
-        nets = [r.net_return_bps for r in type_results if r.net_return_bps is not None]
+        nets = _finite_values([r.net_return_bps for r in type_results])
         if nets:
             win_rate = sum(1 for x in nets if x > 0) / len(nets)
             summary.results_by_signal_type.append({
@@ -189,7 +205,7 @@ def _build_summary(
         summary.worst_signal_group = min(groups, key=groups.get)
 
     # Final recommendation
-    overall_nets = [r.net_return_bps for r in valid if r.net_return_bps is not None]
+    overall_nets = _finite_values([r.net_return_bps for r in valid])
     if overall_nets:
         mean_net = statistics.mean(overall_nets)
         if mean_net > 0:

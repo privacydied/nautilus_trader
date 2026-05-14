@@ -8,6 +8,7 @@ timestamps for the same data window — a signal is only interesting if it
 beats random at the same frequency.
 """
 
+import math
 import random
 from dataclasses import dataclass, field
 
@@ -59,6 +60,8 @@ def generate_lead_lag_signals(
     for i in range(1, len(source_prices)):
         ts = source_timestamps[i]
         price = source_prices[i]
+        if not math.isfinite(price):
+            continue
 
         # Find the oldest data point still within the lookback window
         window_start = ts - lookback_seconds
@@ -69,7 +72,7 @@ def generate_lead_lag_signals(
         j = j + 1 if j + 1 < len(source_prices) else 0
 
         ref_price = source_prices[j]
-        if ref_price <= 0:
+        if ref_price <= 0 or not math.isfinite(ref_price):
             continue
 
         move_bps = (price - ref_price) / ref_price * 10000.0

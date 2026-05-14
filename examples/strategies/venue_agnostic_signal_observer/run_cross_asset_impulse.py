@@ -64,6 +64,7 @@ from .cross_asset_impulse import (
     compute_verdict,
     generate_source_impulses,
     StreamHealth,
+    _format_optional_bps,
     _remap_signal_for_target,
 )
 from .tick_store import load_trades_jsonl, tick_file_discovery
@@ -764,12 +765,12 @@ def _run(args: argparse.Namespace) -> None:
     if verdict_obj.candidate_pairs:
         print(f"  Candidates: {verdict_obj.candidate_pairs}")
     if verdict_obj.best_pair:
-        print(f"  Best pair: {verdict_obj.best_pair} ({verdict_obj.best_pair_mean_net:.2f} bps)")
+        print(f"  Best pair: {verdict_obj.best_pair} ({_format_optional_bps(verdict_obj.best_pair_mean_net)} bps)")
     if verdict_obj.worst_pair:
-        print(f"  Worst pair: {verdict_obj.worst_pair} ({verdict_obj.worst_pair_mean_net:.2f} bps)")
+        print(f"  Worst pair: {verdict_obj.worst_pair} ({_format_optional_bps(verdict_obj.worst_pair_mean_net)} bps)")
     if verdict_obj.best_long_executable_group:
         print(f"  Best long-executable: {verdict_obj.best_long_executable_group} "
-              f"({verdict_obj.best_long_executable_mean_net:.2f} bps)")
+              f"({_format_optional_bps(verdict_obj.best_long_executable_mean_net)} bps)")
     if verdict_obj.stream_warnings:
         print(f"  ⚠️ Stream warnings: {len(verdict_obj.stream_warnings)}")
         for w in verdict_obj.stream_warnings[:5]:

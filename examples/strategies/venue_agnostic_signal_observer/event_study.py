@@ -17,6 +17,7 @@ generate_synthetic_*       – deterministic fixtures for unit tests
 from __future__ import annotations
 
 import bisect
+import math
 import random
 import statistics
 import uuid
@@ -126,7 +127,7 @@ class TickLeadLagGenerator:
             ref = trades[window_start]
             ref_price = ref.price
 
-            if ref_price <= 0:
+            if ref_price <= 0 or not math.isfinite(ref_price) or not math.isfinite(price):
                 continue
 
             move_bps = (price - ref_price) / ref_price * 10000.0
@@ -284,6 +285,24 @@ def evaluate_tick_signal(
             continue
 
         forward_price = prices[forward_idx]
+        if not math.isfinite(forward_price):
+            results.append(
+                TickForwardReturn(
+                    signal_id=signal.signal_id,
+                    signal_ts=signal.ts_event,
+                    target_venue=signal.target_venue,
+                    target_symbol=signal.target_symbol,
+                    horizon_ms=horizon_ms,
+                    entry_reference_price=entry_price,
+                    forward_price=forward_price,
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                    quote_mismatch_buffer_bps=quote_mismatch_buffer_bps if quote_mismatch else None,
+                    valid=False,
+                    rejection_reason="non_finite_forward_price",
+                )
+            )
+            continue
 
         raw_return_bps = (forward_price - entry_price) / entry_price * 10000.0
 
@@ -411,9 +430,9 @@ def evaluate_candidate_group(
     rejection_reasons: list[str] = []
 
     # Filter to valid forward returns
-    valid = [r for r in forward_returns if r.valid and r.net_return_bps is not None]
+    valid = [r for r in forward_returns if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
     baseline_valid = [
-        r for r in baseline_forward_returns if r.valid and r.net_return_bps is not None
+        r for r in baseline_forward_returns if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)
     ]
 
     event_count = len(valid)
@@ -570,8 +589,6 @@ def generate_synthetic_positive_lead_lag_ticks(
     target_ticks: list[TradeTickLite] = []
 
     source_price = base_price
-    # Track cumulative jumps so the target can gradually catch up
-    pending_move = 0.0
 
     for i in range(num_ticks):
         ts = start_ts_ns + i * dt_ns
@@ -591,35 +608,7 @@ def generate_synthetic_positive_lead_lag_ticks(
             )
         )
 
-        # Target: delayed, partial catch-up
-        target_ts = ts + target_delay_ns
-
-        # Apply accumulated pending moves (catch up a fraction each step)
-        if pending_move != 0.0:
-            catch_up = pending_move * catch_up_fraction
-            pending_move -= catch_up
-        else:
-            catch_up = 0.0
-
-        # Also apply any new source move immediately if we're synced
-        target_price = (source_price - jump_bps / 10000.0 * jump_bps / 10000.0) + catch_up
-        # Simpler model: target price = source_price delayed by the pending buffer
-        # Start with base and track independently
-        # Reset to a cleaner approach:
-
-        target_ticks.append(
-            TradeTickLite(
-                ts_event=target_ts,
-                venue="TARGET",
-                symbol="BTC/USD",
-                price=0.0,  # placeholder – fixed below
-                size=1.0,
-                side="buy",
-            )
-        )
-
-    # --- cleaner target price computation (two-pass) ---
-    target_ticks.clear()
+    # --- target price computation (delayed partial catch-up) ---
     pending = 0.0
     target_base = base_price
     last_source_price = base_price

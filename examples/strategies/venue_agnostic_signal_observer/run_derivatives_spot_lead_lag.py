@@ -11,6 +11,7 @@ Public-data observer only. No auth, no orders, no private keys, no execution.
 from __future__ import annotations
 
 import argparse
+import math
 import csv
 import json
 import statistics
@@ -546,7 +547,7 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
             valid = [r for r in frs if r.valid and r.net_return_bps is not None]
             if not valid:
                 continue
-            nets = [r.net_return_bps for r in valid if r.net_return_bps is not None]
+            nets = [r.net_return_bps for r in valid if r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
             if not nets:
                 continue
             summary.oi_bucket_summary[bucket] = {

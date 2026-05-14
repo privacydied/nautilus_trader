@@ -1,6 +1,7 @@
 """Forward-return measurement for signal events."""
 from typing import List, Optional, Tuple
 from bisect import bisect_right
+import math
 
 from .models import SignalEvent, ForwardReturnResult
 from .config import Horizon, FeeModel
@@ -56,6 +57,8 @@ def compute_forward_return(
     direction: str,
 ) -> float:
     """Return in bps, direction-adjusted."""
+    if entry_price <= 0 or not math.isfinite(entry_price) or not math.isfinite(forward_price):
+        raise ValueError("non-finite or non-positive price for forward return")
     raw_bps = (forward_price - entry_price) / entry_price * 10000.0
     if direction == "short":
         raw_bps = -raw_bps
@@ -74,6 +77,9 @@ def compute_excursions(
 
     Returns (max_favorable_bps, max_adverse_bps), direction-adjusted.
     """
+    if entry_price <= 0 or not math.isfinite(entry_price):
+        return None, None
+
     start_idx = bisect_right(timestamps, entry_ts) - 1
     if start_idx < 0:
         start_idx = 0
@@ -86,6 +92,8 @@ def compute_excursions(
 
     for i in range(start_idx + 1, end_idx):
         p = prices[i]
+        if not math.isfinite(p):
+            continue
         raw_bps = (p - entry_price) / entry_price * 10000.0
         if direction == "short":
             raw_bps = -raw_bps
@@ -132,6 +140,26 @@ def evaluate_signal(
         return results
 
     entry_ts, entry_price = entry_info
+    if entry_price <= 0 or not math.isfinite(entry_price):
+        reason = "zero_entry_price" if entry_price == 0 else "non_finite_entry_price"
+        for h in horizons:
+            results.append(ForwardReturnResult(
+                signal_id=signal.signal_id,
+                signal_timestamp=signal.timestamp,
+                source_venue=signal.source_venue,
+                source_instrument=signal.source_instrument,
+                target_venue=signal.target_venue,
+                target_instrument=signal.target_instrument,
+                signal_type=signal.signal_type,
+                direction=signal.direction,
+                strength=signal.strength,
+                horizon=h.name,
+                entry_reference_price=entry_price,
+                valid=False,
+                rejection_reason=reason,
+            ))
+        return results
+
     total_cost = fee_model.total_cost_bps(quote_mismatch)
 
     for h in horizons:
@@ -166,6 +194,25 @@ def evaluate_signal(
             continue
 
         forward_ts, forward_price = forward_info
+        if not math.isfinite(forward_price):
+            results.append(ForwardReturnResult(
+                signal_id=signal.signal_id,
+                signal_timestamp=signal.timestamp,
+                source_venue=signal.source_venue,
+                source_instrument=signal.source_instrument,
+                target_venue=signal.target_venue,
+                target_instrument=signal.target_instrument,
+                signal_type=signal.signal_type,
+                direction=signal.direction,
+                strength=signal.strength,
+                horizon=h.name,
+                entry_reference_price=entry_price,
+                forward_price=forward_price,
+                valid=False,
+                rejection_reason="non_finite_forward_price",
+            ))
+            continue
+
         dir_adj_bps = compute_forward_return(entry_price, forward_price, signal.direction)
         # raw_bps is the unsigned price move (not direction-adjusted)
         raw_bps = (forward_price - entry_price) / entry_price * 10000.0

@@ -1,6 +1,7 @@
 """Signal generators for the venue-agnostic signal observer."""
 from typing import List, Optional, Dict, Any
 import csv
+import math
 import time
 
 from .models import SignalEvent
@@ -45,6 +46,14 @@ def load_signals_from_csv(path: str, mapping: Optional[Dict[str, str]] = None) -
             except (ValueError, TypeError):
                 continue
 
+            try:
+                strength = float(row.get(defaults["strength"], 0) or 0.0)
+            except (ValueError, TypeError):
+                strength = 0.0
+            if not math.isfinite(strength):
+                strength = 0.0
+            metadata = {"raw": row} if defaults["metadata"] in row else None
+
             events.append(SignalEvent(
                 signal_id=f"csv_{counter:06d}",
                 timestamp=ts,
@@ -54,8 +63,8 @@ def load_signals_from_csv(path: str, mapping: Optional[Dict[str, str]] = None) -
                 target_instrument=row.get(defaults["target_instrument"], ""),
                 signal_type=row.get(defaults["signal_type"], "manual_csv"),
                 direction=row.get(defaults["direction"], "long"),
-                strength=float(row.get(defaults["strength"], 0)),
-                metadata={"raw": row} if "metadata" in row.get(defaults["metadata"], "") else None,
+                strength=strength,
+                metadata=metadata,
                 reason="manual_csv_signal",
             ))
 
@@ -102,7 +111,8 @@ class CrossMarketSignalGenerator:
         for i in range(1, len(source_prices)):
             ts = source_timestamps[i]
             price = source_prices[i]
-            ref_price = price
+            if not math.isfinite(price):
+                continue
 
             # Find the oldest price within the lookback window
             window_start = ts - self.lookback_seconds
@@ -112,7 +122,7 @@ class CrossMarketSignalGenerator:
                 j -= 1
             window_price = source_prices[j]
 
-            if window_price <= 0:
+            if window_price <= 0 or not math.isfinite(window_price):
                 continue
 
             move_bps = (price - window_price) / window_price * 10000.0

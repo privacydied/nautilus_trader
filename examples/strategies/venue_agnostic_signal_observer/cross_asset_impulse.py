@@ -23,6 +23,7 @@ spot signal.
 from __future__ import annotations
 
 import json
+import math
 import random
 import statistics
 import uuid
@@ -62,7 +63,7 @@ class StreamHealth:
 
     @property
     def range_bps(self) -> float:
-        if self.price_min and self.price_max and self.price_min > 0:
+        if self.price_min is not None and self.price_max is not None and self.price_min > 0:
             return (self.price_max - self.price_min) / self.price_min * 10000
         return 0.0
 
@@ -427,7 +428,7 @@ def compute_verdict(
         if not p.valid_returns:
             continue
 
-        nets = [r.net_return_bps for r in p.valid_returns if r.valid and r.net_return_bps is not None]
+        nets = [r.net_return_bps for r in p.valid_returns if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
         if not nets:
             continue
 
@@ -441,7 +442,7 @@ def compute_verdict(
 
         # long-executable subset
         long_nets = [r.net_return_bps for r in p.valid_long_executable_returns
-                     if r.valid and r.net_return_bps is not None]
+                     if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
         if long_nets:
             long_mean = statistics.mean(long_nets)
             if best_long_mean is None or long_mean > best_long_mean:
@@ -450,7 +451,7 @@ def compute_verdict(
 
         # diagnostic subset
         diag_nets = [r.net_return_bps for r in p.valid_diagnostic_returns
-                     if r.valid and r.net_return_bps is not None]
+                     if r.valid and r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
         if diag_nets:
             diag_mean = statistics.mean(diag_nets)
             if best_diag_mean is None or diag_mean > best_diag_mean:
@@ -520,6 +521,17 @@ def _stream_health_dict(sh: StreamHealth) -> dict:
         "subscription_ok": sh.subscription_ok,
         "zero_tick_warning": sh.zero_tick_warning,
     }
+
+
+def _safe_gate_float(gate: dict[str, Any] | None, key: str, default: float = -999.0) -> float:
+    if not gate:
+        return default
+    value = gate.get(key)
+    try:
+        result = float(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+    return result if math.isfinite(result) else default
 
 
 def _determine_verdict(
@@ -632,7 +644,7 @@ def _determine_verdict(
         # Check if the signal fails after costs
         any_positive = any(
             p.candidate_gate is not None
-            and float(str(p.candidate_gate.get("mean_net_return_bps", -999))) > 0
+            and _safe_gate_float(p.candidate_gate, "mean_net_return_bps") > 0
             for p in pair_results
         )
         if not any_positive:
@@ -648,6 +660,10 @@ def _determine_verdict(
 
 
 # ── Report generation ───────────────────────────────────────────────────────
+
+
+def _format_optional_bps(value: float | None) -> str:
+    return f"{value:.2f}" if value is not None and math.isfinite(value) else "N/A"
 
 
 def generate_markdown_report(
@@ -773,28 +789,28 @@ def generate_markdown_report(
 
     lines.append("## Best Source-Target Pair")
     if v.best_pair:
-        lines.append(f"- `{v.best_pair}`: mean net return = {v.best_pair_mean_net:.2f} bps")
+        lines.append(f"- `{v.best_pair}`: mean net return = {_format_optional_bps(v.best_pair_mean_net)} bps")
     else:
         lines.append("- None.")
     lines.append("")
 
     lines.append("## Worst Source-Target Pair")
     if v.worst_pair:
-        lines.append(f"- `{v.worst_pair}`: mean net return = {v.worst_pair_mean_net:.2f} bps")
+        lines.append(f"- `{v.worst_pair}`: mean net return = {_format_optional_bps(v.worst_pair_mean_net)} bps")
     else:
         lines.append("- None.")
     lines.append("")
 
     lines.append("## Best Long-Executable Group")
     if v.best_long_executable_group:
-        lines.append(f"- `{v.best_long_executable_group}`: mean net return = {v.best_long_executable_mean_net:.2f} bps")
+        lines.append(f"- `{v.best_long_executable_group}`: mean net return = {_format_optional_bps(v.best_long_executable_mean_net)} bps")
     else:
         lines.append("- None.")
     lines.append("")
 
     lines.append("## Best Downside Diagnostic Group")
     if v.best_diagnostic_group:
-        lines.append(f"- `{v.best_diagnostic_group}`: mean net return = {v.best_diagnostic_mean_net:.2f} bps")
+        lines.append(f"- `{v.best_diagnostic_group}`: mean net return = {_format_optional_bps(v.best_diagnostic_mean_net)} bps")
     else:
         lines.append("- None.")
     lines.append("")

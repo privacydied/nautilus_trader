@@ -8,6 +8,7 @@ Usage (real CSV data):
     python run_signal_observer.py --bars-csv data.csv --signals-csv signals.csv --out reports/signal_observer
 """
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -83,7 +84,7 @@ def main():
     write_outputs(signals_dicts, results, summary, out_dir)
 
     # Print summary
-    net_values = [r.net_return_bps for r in results if r.net_return_bps is not None]
+    net_values = [r.net_return_bps for r in results if r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
     mean_net = sum(net_values) / len(net_values) if net_values else 0
     print(f"\nObserver Summary:")
     print(f"  Signals: {summary.total_signals}")
