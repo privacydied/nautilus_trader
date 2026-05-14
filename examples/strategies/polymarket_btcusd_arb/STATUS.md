@@ -499,3 +499,13 @@ Full suite: 153 passed.
 - No keys
 - No execution client imports
 - No on-chain calls
+## Final Archive
+
+Branch: polymarket-btc-updown-spread-regime-v1
+Squash-merged into: develop (commit 03c9b9aa7a)
+Tag: polymarket-btc-updown-no-usable-book-2026-05-14
+Verdict: SPREAD_REGIME_STRUCTURALLY_TOO_WIDE
+Reason: no_usable_two_sided_book
+Diagnosis: EXCHANGE_BOUND_TWO_SIDED_BOOK dominated the sample. Real CLOB boundary orders at 0.01/0.99 with genuine size, but no usable two-sided market.
+Actionable two-sided book: 0 out of 1,127 observations.
+No execution. No Phase 3. This hypothesis is dead.
