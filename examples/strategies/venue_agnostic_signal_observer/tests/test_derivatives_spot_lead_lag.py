@@ -21,6 +21,7 @@ from ..run_derivatives_spot_lead_lag import (
     classify_oi_bucket,
     _nearest_oi_at_or_before,
     load_capture_data,
+    _parse_and_validate_devices,
 )
 
 
@@ -365,3 +366,109 @@ class TestVerdictLogic:
         overlap_price_range = 300.0
         assert overlap_price_range > all_in_cost * 0.5
         # Combined with passing candidate gates -> CANDIDATE_FOR_LONGER_OBSERVATION
+
+
+# ---------------------------------------------------------------------------
+# Multi-GPU device parsing tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseAndValidateDevices:
+    def test_cpu_engine_returns_empty(self):
+        """CPU engine returns empty device list."""
+        assert _parse_and_validate_devices("cuda:0,cuda:1", "cpu") == []
+
+    def test_empty_string_returns_empty(self):
+        """Empty forward-devices string returns empty list."""
+        assert _parse_and_validate_devices("", "gpu") == []
+
+    def test_single_device_parsing(self, monkeypatch):
+        """Single device string parses correctly."""
+        monkeypatch.setattr(
+            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
+            lambda d: (True, "cuda_available"),
+        )
+        result = _parse_and_validate_devices("cuda:0", "gpu")
+        assert result == ["cuda:0"]
+
+    def test_multi_device_parsing(self, monkeypatch):
+        """Multiple devices parse correctly."""
+        monkeypatch.setattr(
+            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
+            lambda d: (True, "cuda_available"),
+        )
+        result = _parse_and_validate_devices("cuda:0,cuda:1", "gpu")
+        assert result == ["cuda:0", "cuda:1"]
+
+    def test_duplicate_device_rejected(self, monkeypatch):
+        """Duplicate devices should fail."""
+        monkeypatch.setattr(
+            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
+            lambda d: (True, "cuda_available"),
+        )
+        with pytest.raises(SystemExit):
+            _parse_and_validate_devices("cuda:0,cuda:0", "gpu")
+
+    def test_invalid_device_string_rejected(self, monkeypatch):
+        """Invalid device strings should fail."""
+        monkeypatch.setattr(
+            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
+            lambda d: (True, "cuda_available"),
+        )
+        with pytest.raises(SystemExit):
+            _parse_and_validate_devices("cpu", "gpu")
+
+    def test_unavailable_device_rejected(self, monkeypatch):
+        """Unavailable CUDA device should fail."""
+        monkeypatch.setattr(
+            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
+            lambda d: (False, "cuda_device_not_found:cuda:99"),
+        )
+        with pytest.raises(SystemExit):
+            _parse_and_validate_devices("cuda:99", "gpu")
+
+    def test_whitespace_handling(self, monkeypatch):
+        """Devices with spaces around commas parse correctly."""
+        monkeypatch.setattr(
+            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
+            lambda d: (True, "cuda_available"),
+        )
+        result = _parse_and_validate_devices(" cuda:0 , cuda:1 ", "gpu")
+        assert result == ["cuda:0", "cuda:1"]
+
+
+# ---------------------------------------------------------------------------
+# forward_devices CLI arg tests
+# ---------------------------------------------------------------------------
+
+
+class TestForwardDevicesCliArg:
+    def test_forward_devices_appears_in_help(self):
+        from ..run_derivatives_spot_lead_lag import build_parser
+        parser = build_parser()
+        help_text = parser.format_help()
+        assert "--forward-devices" in help_text
+        assert "Multi-GPU" in help_text
+
+    def test_forward_devices_default_empty(self):
+        from ..run_derivatives_spot_lead_lag import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--capture-dir", "/tmp", "--out", "/tmp"])
+        assert args.forward_devices == ""
+
+    def test_forward_devices_parsed(self):
+        from ..run_derivatives_spot_lead_lag import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--capture-dir", "/tmp", "--out", "/tmp",
+                                  "--forward-engine", "gpu",
+                                  "--forward-devices", "cuda:0,cuda:1"])
+        assert args.forward_devices == "cuda:0,cuda:1"
+
+    def test_single_forward_device_still_works(self):
+        from ..run_derivatives_spot_lead_lag import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["--capture-dir", "/tmp", "--out", "/tmp",
+                                  "--forward-engine", "gpu",
+                                  "--forward-device", "cuda:0"])
+        assert args.forward_device == "cuda:0"
+        assert args.forward_devices == ""

@@ -20,7 +20,7 @@ import json
 import sys
 from pathlib import Path
 
-from venue_agnostic_signal_observer.cost_sensitivity import (
+from .cost_sensitivity import (
     SAFETY_MODE,
     compute_cost_sensitivity,
     load_report_groups,

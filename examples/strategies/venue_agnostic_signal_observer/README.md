@@ -50,6 +50,34 @@ python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spo
     --out reports/derivatives_spot_lead_lag_v2
 ```
 
+**Multi-GPU evaluation** — shard pairs across multiple GPUs (round-robin):
+```bash
+python -m examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_lead_lag \
+    --capture-dir data/derivatives_spot_capture_v2 \
+    --source-venues binance_perp \
+    --target-venues kraken,coinbase \
+    --symbols BTC/USD,ETH/USD,SOL/USD \
+    --signal-types notional_burst,large_trade,signed_imbalance \
+    --lookbacks-ms 1000,5000,10000,30000 \
+    --baseline-window-ms 60000 \
+    --horizons-ms 1000,2000,5000,10000,30000,60000,300000 \
+    --cooldown-ms 10000 \
+    --fee-bps 40 \
+    --slippage-bps 5 \
+    --quote-mismatch-buffer-bps 5 \
+    --min-events 50 \
+    --forward-engine gpu \
+    --forward-devices cuda:0,cuda:1 \
+    --out reports/derivatives_spot_lead_lag_v2
+```
+
+Multi-GPU details:
+- Pairs are assigned round-robin across listed devices.
+- Each pair is processed entirely on its assigned device.
+- Results are deterministically merged — same output as single GPU within float tolerance.
+- CPU remains default. No hidden fallback: if any listed device is unavailable, the tool fails fast.
+- Sequential assignment only (no multiprocessing). The main runtime bottleneck is CPU signal generation, not GPU forward returns; see Phase 4 for GPU signal kernel acceleration.
+
 ### Key design rules
 
 - Evaluator clips to overlap windows computed from actual stream timestamps
@@ -168,3 +196,73 @@ The derivatives-source -> spot-target observer now has the following diagnostic-
 - Candidate falsification summary
 
 These components are public-data research diagnostics only. They do not add execution, orders, private-key handling, live trading paths, threshold changes, verdict-rule changes, or registry updates by themselves.
+
+## Running the Stage 2 gate watcher as a user systemd service
+
+The gate watcher polls the volatility gate every 30 seconds and automatically
+starts the derivatives v2 pipeline when capture is permitted.
+
+### Prerequisites
+
+Install `libnotify` for desktop notifications:
+
+```bash
+sudo pacman -S libnotify
+```
+
+If `notify-send` is not available, the watcher logs a warning and continues
+without notifications — notification failure does not block captures.
+
+### Install the service
+
+```bash
+mkdir -p ~/.config/systemd/user
+
+cp examples/strategies/venue_agnostic_signal_observer/systemd/nautilus-stage2-gate-watcher.service \
+  ~/.config/systemd/user/nautilus-stage2-gate-watcher.service
+
+systemctl --user daemon-reload
+```
+
+### Export Wayland environment
+
+```bash
+systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
+
+dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS
+```
+
+### Start the service
+
+```bash
+systemctl --user start nautilus-stage2-gate-watcher.service
+```
+
+### Check status
+
+```bash
+systemctl --user status nautilus-stage2-gate-watcher.service
+```
+
+### View logs
+
+```bash
+journalctl --user -u nautilus-stage2-gate-watcher.service -f
+```
+
+### Stop the service
+
+```bash
+systemctl --user stop nautilus-stage2-gate-watcher.service
+```
+
+### Service details
+
+The systemd template uses:
+
+- **WorkingDirectory**: `/mnt/nasirjones/py/nautilus_trader`
+- **Python**: `.venv/bin/python` (not bare `python`, no `source activate`)
+- **Restart**: `no` — avoids accidental repeated captures
+- **Notifications**: enabled via `--notify` (requires `notify-send`)
+- **Logs and summaries**: written to `reports/stage2_gate_watcher_logs/`
+

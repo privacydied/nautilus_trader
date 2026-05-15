@@ -11,6 +11,7 @@ Public-data observer only. No auth, no orders, no private keys, no execution.
 from __future__ import annotations
 
 import argparse
+import itertools
 import math
 import csv
 import json
@@ -48,6 +49,35 @@ def _split_strings(s: str) -> list[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
 
+def _parse_and_validate_devices(devices_str: str, engine: str) -> list[str]:
+    """Parse comma-separated CUDA devices. Fail fast if GPU unavailable.
+
+    Returns list of validated device strings. Empty list for CPU engine.
+    Duplicate detection, availability check, fast exit on failure.
+    """
+    import sys as _sys
+    if engine != "gpu":
+        return []
+    parts = [d.strip() for d in devices_str.split(",") if d.strip()]
+    if not parts:
+        return []
+    seen: set[str] = set()
+    for d in parts:
+        if not d.startswith("cuda:"):
+            print(f"ERROR: invalid device string: {d}", file=_sys.stderr)
+            _sys.exit(1)
+        if d in seen:
+            print(f"ERROR: duplicate device: {d}", file=_sys.stderr)
+            _sys.exit(1)
+        seen.add(d)
+        from .forward_returns_gpu import check_cuda_available as _check_dev
+        avail, reason = _check_dev(d)
+        if not avail:
+            print(f"ERROR: device {d} unavailable: {reason}", file=_sys.stderr)
+            _sys.exit(1)
+    return parts
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Derivatives-source -> spot-target lead-lag evaluator."
@@ -74,6 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Forward-return engine: 'cpu' (default) or 'gpu'. GPU requires PyTorch + CUDA.")
     p.add_argument("--forward-device", type=str, default="cuda:0",
                    help="CUDA device for --forward-engine gpu. Default: cuda:0.")
+    p.add_argument("--forward-devices", type=str, default="",
+                   help="Multi-GPU: comma-separated CUDA devices, e.g. cuda:0,cuda:1. "
+                        "Takes precedence over --forward-device. Pairs sharded round-robin.")
     p.add_argument("--forward-batch-size", type=int, default=16384,
                    help="Events per GPU chunk for --forward-engine gpu. Default: 16384.")
     return p
@@ -345,20 +378,37 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
     forward_engine = getattr(args, "forward_engine", "cpu")
     forward_device = getattr(args, "forward_device", "cuda:0")
     forward_batch_size = getattr(args, "forward_batch_size", 16384)
-    if forward_engine == "gpu":
-        import sys as _sys
-        cuda_ok, cuda_reason = _frgpu_check_cuda(forward_device)
-        if not cuda_ok:
-            print(
-                f"ERROR: --forward-engine gpu requested but CUDA unavailable: {cuda_reason}",
-                file=_sys.stderr,
-            )
-            print(
-                '{"verdict": "GPU_UNAVAILABLE_DIAGNOSTIC", "reason": "'
-                + cuda_reason + '"}',
-                file=_sys.stderr,
-            )
-            _sys.exit(1)
+
+    # Multi-GPU device parsing
+    forward_devices_arg = getattr(args, "forward_devices", "")
+    devices: list[str] = _parse_and_validate_devices(forward_devices_arg, forward_engine)
+    if not devices:
+        # Single device (or CPU)
+        if forward_engine == "gpu":
+            import sys as _sys
+            cuda_ok, cuda_reason = _frgpu_check_cuda(forward_device)
+            if not cuda_ok:
+                print(
+                    f"ERROR: --forward-engine gpu requested but CUDA unavailable: {cuda_reason}",
+                    file=_sys.stderr,
+                )
+                print(
+                    '{"verdict": "GPU_UNAVAILABLE_DIAGNOSTIC", "reason": "'
+                    + cuda_reason + '"}',
+                    file=_sys.stderr,
+                )
+                _sys.exit(1)
+            devices = [forward_device]
+    else:
+        # Multi-GPU: override single device info
+        forward_device = devices[0]
+        print(f"  [GPU] Multi-GPU enabled: {devices}")
+
+    # Device round-robin iterator for pair-level sharding
+    if devices:
+        _device_cycle = itertools.cycle(devices) if len(devices) > 1 else itertools.repeat(devices[0])
+    else:
+        _device_cycle = itertools.repeat("cpu")
 
     capture_dir = Path(args.capture_dir)
     if not capture_dir.exists():
@@ -425,6 +475,11 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
 
                 pair_label = f"{source_venue}->{target_venue}@{asset}"
                 print(f"\n  [PAIR] {pair_label}")
+                if forward_engine == "gpu" and len(devices) > 1:
+                    _pair_device = next(_device_cycle)
+                    print(f"    device={_pair_device}")
+                else:
+                    _pair_device = forward_device
                 print(f"    source_all={len(src_all)} target_all={len(tgt_all)}")
 
                 src_range = price_range_bps(src_all) if src_all else 0.0
@@ -555,7 +610,7 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
                                 quote_mismatch=has_qm,
                                 quote_mismatch_buffer_bps=args.quote_mismatch_buffer_bps if has_qm else 0.0,
                                 chunk_size=forward_batch_size,
-                                device=forward_device,
+                                device=_pair_device,
                             )
                             ALL_FWD.extend(gpu_frs)
                         else:
@@ -579,6 +634,8 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
 
     summary.capture_context = {
         "all_in_cost_bps": summary.all_in_cost_bps,
+        "forward_engine": forward_engine,
+        "forward_devices": devices,
         "oi_snapshot_counts": {k: len(v) for k, v in oi_by_asset.items()},
         "max_overlap_price_range_bps": round(max_overlap_price_range, 2),
     }
