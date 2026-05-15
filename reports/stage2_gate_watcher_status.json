@@ -1,0 +1,15 @@
+{
+  "updated_utc": "2026-05-15T18:31:17.415Z",
+  "git_sha": "8a5ab0309d3e-dirty",
+  "signal_family": "cross_asset_beta_lag_v1",
+  "gateway_replaced_by_systemd": true,
+  "safety": "public data observer only",
+  "readiness_status": "PASSED",
+  "gate_status": "NOT_PASSED",
+  "current_btc_1h_move_bps": 50.45,
+  "acceleration_status": "NOT_ACCELERATING",
+  "last_capture_status": "SKIPPED_LOW_STRESS",
+  "stress_condition": "INSUFFICIENT",
+  "validated_full_active_capture_count": 1,
+  "captures_remaining_before_stage2_eval": 9
+}

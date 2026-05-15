@@ -1,9 +1,9 @@
 # Stage 2 Readiness Report
 
 - **Ready for collection:** YES
-- **Checked at:** 2026-05-15T13:15:53.806Z
+- **Checked at:** 2026-05-15T18:20:44.184Z
 - **Workdir:** /mnt/nasirjones/py/nautilus_trader
-- **Git SHA:** 77f1f71d1e42
+- **Git SHA:** 8a5ab0309d3e
 
 ## Blockers
 
@@ -32,8 +32,8 @@
 | minimum_valid_events_pinned | ✅ | min_valid_events = 50 |
 | collection_lock_exists | ✅ | Lock does not exist yet — will be created before first FULL_ACTIVE capture attempt |
 | python_path | ✅ | Python: /mnt/nasirjones/py/nautilus_trader/.venv/bin/python |
-| git_status | ✅ | SHA: 77f1f71d1e42, dirty: False |
+| git_status | ✅ | SHA: 8a5ab0309d3e, dirty: False |
 | hermes_gateway | ✅ | Gateway is running |
-| hermes_scheduled_job | ✅ | Job 'derivatives-source-spot-target Stage 2 readiness-check-and-collect' (id=85a4d56145fe) enabled=True, state=scheduled |
+| hermes_scheduled_job | ✅ | No relevant Hermes scheduled job found for this workflow |
 | quarantine_convention | ✅ | Quarantine dir exists: /mnt/nasirjones/py/nautilus_trader/reports |
 | burn_convention | ✅ | Burn dir exists: /mnt/nasirjones/py/nautilus_trader/reports |
