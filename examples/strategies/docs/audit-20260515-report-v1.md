@@ -580,3 +580,101 @@ No `.github/workflows/` directory found in the strategies directory. There is no
 8. **Document reverse proxy/port forwarding requirements** if any runners need live exchange access from behind NAT/NAS.
 9. **Add `__init__.py` in `examples/strategies/docs/`** if the `docs/` directory should be a proper package (currently contains only audit reports).
 10. **Rename `mcpt-main/`** — the `-main` suffix is redundant since it's already in the strategies directory.
+
+---
+
+## 20. Post-Audit Addition: Event-Window Differential V1 Precommitment
+
+### Date: 2026-05-15
+### Commit: `90faf95b4c`
+
+A new sibling Stage 2 precommitment was added for the
+`cross_asset_event_window_differential_v1` signal family — a comparative
+hypothesis testing whether scheduled macro event windows produce materially
+different cross-asset impulse propagation compared to offset baseline windows.
+
+### Files Added
+
+| File | Purpose |
+|------|---------|
+| `EVENT_WINDOW_DIFFERENTIAL_PRECOMMITMENT.md` | Human-readable precommitment |
+| `event_window_differential_precommitment.json` | Machine-readable sidecar |
+| `EVENT_WINDOW_THRESHOLDS_RATIONALE.md` | Threshold rationale document |
+| `test_event_window_precommitment.py` | 42 tests (8 test classes) |
+
+### Key Design Parameters
+
+| Parameter | Value |
+|-----------|-------|
+| Signal family | `cross_asset_event_window_differential_v1` |
+| Source assets | BTC, ETH |
+| Target assets | SOL, LINK, DOGE, AVAX |
+| Primary signal type | `signed_imbalance` |
+| Lookback | 30,000 ms (30 s) |
+| Horizons | 10s, 30s, 60s, 5 min (4 values) |
+| Event window | `[-5 min, +15 min]` relative to scheduled event |
+| Baseline window | `[+90 min, +110 min]` (offset, same duration) |
+| Min capture duration | 1,200 s per window |
+| Min global overlap | 30 s |
+| Baseline rule | Explicitly parameterised, NOT the old 60s default |
+| Cost model | 50 bps all-in (40 fee + 5 slippage + 5 mismatch) |
+| FDR | BH q=0.10 primary, BY q=0.10 sensitivity |
+| Holdout | Temporal 70/30, min 10 validated paired captures |
+
+### Test family dimensions
+
+The event-window precommitment adds `window_type` (values: `event`, `baseline`)
+as a 6th test family dimension — the structural distinction from
+`cross_asset_beta_lag_v1` (which has 5 dimensions).  This allows FDR-corrected
+comparison of event vs baseline propagation for the same config.
+
+### Separation from Beta Lag
+
+| Check | Passed |
+|-------|--------|
+| Different signal_family | Yes |
+| Beta-lag files not modified | Yes (5 gating assertions) |
+| Beta-lag stress gate (150 bps) unchanged | Yes |
+| Beta-lag single-horizon config unchanged | Yes |
+| Beta-lag lock and watcher untouched | Yes |
+| No event-window capture started | Yes |
+| No event-window systemd service added | Yes |
+
+### Existing Beta Lag Status
+
+- **Canonical and untouched.**  The cross-asset beta lag watcher, lock, corpus,
+  burn/quarantine files, and precommitment artifacts are unchanged.
+- **Git SHA:** `90faf95b4c` (same commit).
+- **No collection started for event-window either.**
+
+### Stage 2 Utility Multi-Hypothesis Support
+
+All Stage 2 utilities already support multiple precommitment files via explicit
+path arguments:
+
+| Module | Path Parameter | Works with |
+|--------|---------------|------------|
+| `load_precommitment(path)` | Optional `Path` | Event-window JSON via explicit path |
+| `CollectionLock(lock_path, precommit_path, md_path, rationale_path)` | All optional | Separate lock file per hypothesis |
+| `build_split(precommit_path=...)` | Optional | Event-window JSON via explicit path |
+| `run_fdr(precommit_path=...)` | Optional | Event-window JSON via explicit path |
+| `run_discovery_check(precommit=...)` | Takes dict directly | Any loaded precommitment dict |
+
+**No code changes were required.**  The optional path parameters on
+`CollectionLock.__init__` and all CLI runner `--precommit-path` arguments
+provide the extension point.  Multi-hypothesis is architecturally supported
+without modifying any Stage 2 utility.
+
+### Test Results
+
+- **Event-window tests:** 42 passed, 0 failed
+- **Existing Stage 2 tests:** 52 passed, 0 failed (unchanged)
+- **Full observer test suite:** 791 passed, 0 failed
+- **All tests run from repo root using `.venv/bin/python -m pytest`**
+
+### Safety Statement
+
+Public data observer only.  No auth.  No orders.  No execution.  No trading.
+No API keys.  No private endpoints.  No broker adapters.  No position
+management.  No capital deployment.  No scheduler or systemd collector was
+created or modified.
