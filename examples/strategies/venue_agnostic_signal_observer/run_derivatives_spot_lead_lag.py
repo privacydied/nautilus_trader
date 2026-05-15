@@ -109,6 +109,11 @@ def build_parser() -> argparse.ArgumentParser:
                         "Takes precedence over --forward-device. Pairs sharded round-robin.")
     p.add_argument("--forward-batch-size", type=int, default=16384,
                    help="Events per GPU chunk for --forward-engine gpu. Default: 16384.")
+    p.add_argument("--signal-engine", type=str, default="cpu", choices=["cpu", "gpu"],
+                   help="Signal generation engine: 'cpu' (default) or 'gpu'. GPU requires PyTorch + CUDA.")
+    p.add_argument("--signal-devices", type=str, default="cuda:0",
+                   help="CUDA device(s) for --signal-engine gpu. Default: cuda:0. "
+                        "For multi-GPU: cuda:0,cuda:1 (pairs sharded round-robin).")
     return p
 
 
@@ -410,6 +415,24 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
     else:
         _device_cycle = itertools.repeat("cpu")
 
+    # Signal engine setup
+    signal_engine = getattr(args, "signal_engine", "cpu")
+    signal_device = getattr(args, "signal_devices", "cuda:0")
+    if signal_engine == "gpu":
+        from .trade_flow_impulse_gpu import generate_signals_gpu as _gpu_signal_check
+        if callable(_gpu_signal_check):
+            import sys as _sys
+            from .trade_flow_impulse_gpu import check_cuda_available as _sig_check
+            for _d in _split_strings(signal_device):
+                _sig_ok, _sig_reason = _sig_check(_d)
+                if not _sig_ok:
+                    print(
+                        f"ERROR: --signal-engine gpu requested but device {_d} unavailable: {_sig_reason}",
+                        file=_sys.stderr,
+                    )
+                    _sys.exit(1)
+        print(f"  [SIGNAL] GPU signal engine enabled, devices={_split_strings(signal_device)}")
+
     capture_dir = Path(args.capture_dir)
     if not capture_dir.exists():
         summary.verdict = "NEEDS_MORE_DATA"
@@ -585,8 +608,17 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
                             signal_types=[sig_type],
                             cooldown_ms=args.cooldown_ms,
                         )
-                        gen = TradeFlowImpulseSignalGenerator(cfg)
-                        events = gen.generate(src_clipped)
+
+                        if signal_engine == "gpu" and sig_type == "signed_imbalance":
+                            # GPU signal generation (signed_imbalance only — confirmed vectorized)
+                            from .trade_flow_impulse_gpu import signed_imbalance_gpu as _gpu_signal_fn
+                            events = _gpu_signal_fn(
+                                src_clipped, cfg,
+                                device=_pair_device if len(devices) > 1 else signal_device,
+                            )
+                        else:
+                            gen = TradeFlowImpulseSignalGenerator(cfg)
+                            events = gen.generate(src_clipped)
 
                         # Label OI bucket
                         lb_ns = lb_ms * _MS_TO_NS
@@ -636,6 +668,8 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
         "all_in_cost_bps": summary.all_in_cost_bps,
         "forward_engine": forward_engine,
         "forward_devices": devices,
+        "signal_engine": signal_engine,
+        "signal_devices": _split_strings(signal_device) if signal_engine == "gpu" else [],
         "oi_snapshot_counts": {k: len(v) for k, v in oi_by_asset.items()},
         "max_overlap_price_range_bps": round(max_overlap_price_range, 2),
     }
