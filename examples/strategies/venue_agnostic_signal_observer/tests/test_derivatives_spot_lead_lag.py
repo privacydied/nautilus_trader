@@ -384,55 +384,68 @@ class TestParseAndValidateDevices:
 
     def test_single_device_parsing(self, monkeypatch):
         """Single device string parses correctly."""
-        monkeypatch.setattr(
-            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
-            lambda d: (True, "cuda_available"),
-        )
+        # Under pytest discovery the production module can live in sys.modules
+        # under two names (``examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu``
+        # and ``venue_agnostic_signal_observer.forward_returns_gpu``).  Patch
+        # the attribute directly on the same module object the production
+        # code's relative import resolves to.
+        from .. import forward_returns_gpu as _frg
+        monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (True, "cuda_available"))
         result = _parse_and_validate_devices("cuda:0", "gpu")
         assert result == ["cuda:0"]
 
     def test_multi_device_parsing(self, monkeypatch):
         """Multiple devices parse correctly."""
-        monkeypatch.setattr(
-            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
-            lambda d: (True, "cuda_available"),
-        )
+        # Under pytest discovery the production module can live in sys.modules
+        # under two names (``examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu``
+        # and ``venue_agnostic_signal_observer.forward_returns_gpu``).  Patch
+        # the attribute directly on the same module object the production
+        # code's relative import resolves to.
+        from .. import forward_returns_gpu as _frg
+        monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (True, "cuda_available"))
         result = _parse_and_validate_devices("cuda:0,cuda:1", "gpu")
         assert result == ["cuda:0", "cuda:1"]
 
     def test_duplicate_device_rejected(self, monkeypatch):
         """Duplicate devices should fail."""
-        monkeypatch.setattr(
-            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
-            lambda d: (True, "cuda_available"),
-        )
+        # Under pytest discovery the production module can live in sys.modules
+        # under two names (``examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu``
+        # and ``venue_agnostic_signal_observer.forward_returns_gpu``).  Patch
+        # the attribute directly on the same module object the production
+        # code's relative import resolves to.
+        from .. import forward_returns_gpu as _frg
+        monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (True, "cuda_available"))
         with pytest.raises(SystemExit):
             _parse_and_validate_devices("cuda:0,cuda:0", "gpu")
 
     def test_invalid_device_string_rejected(self, monkeypatch):
         """Invalid device strings should fail."""
-        monkeypatch.setattr(
-            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
-            lambda d: (True, "cuda_available"),
-        )
+        # Under pytest discovery the production module can live in sys.modules
+        # under two names (``examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu``
+        # and ``venue_agnostic_signal_observer.forward_returns_gpu``).  Patch
+        # the attribute directly on the same module object the production
+        # code's relative import resolves to.
+        from .. import forward_returns_gpu as _frg
+        monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (True, "cuda_available"))
         with pytest.raises(SystemExit):
             _parse_and_validate_devices("cpu", "gpu")
 
     def test_unavailable_device_rejected(self, monkeypatch):
         """Unavailable CUDA device should fail."""
-        monkeypatch.setattr(
-            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
-            lambda d: (False, "cuda_device_not_found:cuda:99"),
-        )
+        from .. import forward_returns_gpu as _frg
+        monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (False, "cuda_device_not_found:cuda:99"))
         with pytest.raises(SystemExit):
             _parse_and_validate_devices("cuda:99", "gpu")
 
     def test_whitespace_handling(self, monkeypatch):
         """Devices with spaces around commas parse correctly."""
-        monkeypatch.setattr(
-            "examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu.check_cuda_available",
-            lambda d: (True, "cuda_available"),
-        )
+        # Under pytest discovery the production module can live in sys.modules
+        # under two names (``examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu``
+        # and ``venue_agnostic_signal_observer.forward_returns_gpu``).  Patch
+        # the attribute directly on the same module object the production
+        # code's relative import resolves to.
+        from .. import forward_returns_gpu as _frg
+        monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (True, "cuda_available"))
         result = _parse_and_validate_devices(" cuda:0 , cuda:1 ", "gpu")
         assert result == ["cuda:0", "cuda:1"]
 

@@ -113,6 +113,7 @@ def imbalance_trades():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(not _HAS_CUDA, reason="CUDA not available")
 def test_cuda_available():
     """CUDA is available on this system."""
     ok, reason = check_cuda_available("cuda:0")
@@ -310,6 +311,7 @@ class TestEdgeCases:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(not _HAS_CUDA, reason="CUDA not available")
 def test_check_cuda_availability():
     """check_cuda_available returns (True, reason) for valid device."""
     ok, reason = check_cuda_available("cuda:0")
@@ -317,6 +319,7 @@ def test_check_cuda_availability():
     assert "cuda_available" in reason
 
 
+@pytest.mark.skipif(not _HAS_CUDA, reason="CUDA not available")
 def test_invalid_device_string():
     """Invalid device string returns (False, reason)."""
     ok, reason = check_cuda_available("cuda:garbage")
@@ -324,6 +327,7 @@ def test_invalid_device_string():
     assert "invalid_device_string" in reason
 
 
+@pytest.mark.skipif(not _HAS_CUDA, reason="CUDA not available")
 def test_nonexistent_device():
     """Non-existent CUDA device returns (False, reason)."""
     ok, reason = check_cuda_available("cuda:99")

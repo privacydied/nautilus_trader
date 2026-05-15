@@ -87,6 +87,43 @@ _ALIAS_REGISTRY: dict[str, CanonicalSymbol] = {
     "doge/usd": CanonicalSymbol("DOGE", "USD"),
     "dogeusd": CanonicalSymbol("DOGE", "USD"),
 
+    # Bitfinex (UST = USDt on Bitfinex; LINK/DOGE/AVAX use colon form)
+    "btcusd": CanonicalSymbol("BTC", "USD"),
+    "btcust": CanonicalSymbol("BTC", "UST"),
+    "ethusd": CanonicalSymbol("ETH", "USD"),
+    "ethust": CanonicalSymbol("ETH", "UST"),
+    "solusd": CanonicalSymbol("SOL", "USD"),
+    "solust": CanonicalSymbol("SOL", "UST"),
+    "link:usd": CanonicalSymbol("LINK", "USD"),
+    "link:ust": CanonicalSymbol("LINK", "UST"),
+    "doge:usd": CanonicalSymbol("DOGE", "USD"),
+    "doge:ust": CanonicalSymbol("DOGE", "UST"),
+    "avax:usd": CanonicalSymbol("AVAX", "USD"),
+    "avax:ust": CanonicalSymbol("AVAX", "UST"),
+    # Also accept plain concatenated forms for 4-letter assets (just in case)
+    "linkust": CanonicalSymbol("LINK", "UST"),
+    "dogeust": CanonicalSymbol("DOGE", "UST"),
+    "avaxust": CanonicalSymbol("AVAX", "UST"),
+
+    # OKX (instId form uses hyphenated quote, e.g. BTC-USDT, BTC-USD)
+    "btc-usdt": CanonicalSymbol("BTC", "USDT"),
+    "eth-usdt": CanonicalSymbol("ETH", "USDT"),
+    "sol-usdt": CanonicalSymbol("SOL", "USDT"),
+    "link-usdt": CanonicalSymbol("LINK", "USDT"),
+    "doge-usdt": CanonicalSymbol("DOGE", "USDT"),
+    "avax-usdt": CanonicalSymbol("AVAX", "USDT"),
+    "btc-usdc": CanonicalSymbol("BTC", "USDC"),
+    "eth-usdc": CanonicalSymbol("ETH", "USDC"),
+    "sol-usdc": CanonicalSymbol("SOL", "USDC"),
+
+    # Bybit (concatenated form, spot)
+    "linkusdt": CanonicalSymbol("LINK", "USDT"),
+    "dogeusdt": CanonicalSymbol("DOGE", "USDT"),
+    "avaxusdt": CanonicalSymbol("AVAX", "USDT"),
+    "btcusdc": CanonicalSymbol("BTC", "USDC"),
+    "ethusdc": CanonicalSymbol("ETH", "USDC"),
+    "solusdc": CanonicalSymbol("SOL", "USDC"),
+
     # Coinbase altcoins
     "link-usd": CanonicalSymbol("LINK", "USD"),
     "link/usd": CanonicalSymbol("LINK", "USD"),

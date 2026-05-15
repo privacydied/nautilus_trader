@@ -2,7 +2,7 @@
 """Public WebSocket tick-data capture — read-only, no auth, no orders.
 
 This script connects to **public, unauthenticated** WebSocket trade feeds from
-supported cryptocurrency venues (Kraken, Coinbase, Binance) and writes normalised
+supported cryptocurrency venues (Kraken, Coinbase, Binance, OKX, Bybit, Bitfinex) and writes normalised
 trade ticks to incremental JSONL files for downstream analysis.
 
 **This is a public data-collection utility only.**
@@ -622,6 +622,496 @@ async def run_coinbase_feed(
 
 
 # ---------------------------------------------------------------------------
+# OKX feed (public spot trades, no auth)
+# ---------------------------------------------------------------------------
+
+
+def okx_symbol(symbol: str) -> str:
+    """Normalise to OKX instId form, e.g. ``BTC/USDT`` -> ``BTC-USDT``."""
+    s = symbol.replace("/", "-").replace("_", "-").upper()
+    return s
+
+
+def parse_okx_trade(td: dict, norm_sym: str) -> TradeTickLite:
+    """Parse a single OKX trade payload dict into a TradeTickLite.
+
+    Expected fields: ``instId``, ``tradeId``, ``px``, ``sz``, ``side``, ``ts`` (ms epoch as str).
+    Raises ``KeyError`` / ``ValueError`` on malformed inputs.
+    """
+    price = float(td["px"])
+    size = float(td["sz"])
+    ts_ns = int(td["ts"]) * 1_000_000
+    return TradeTickLite(
+        ts_event=ts_ns,
+        venue="okx",
+        symbol=norm_sym,
+        price=price,
+        size=size,
+        side=td.get("side", "unknown"),
+        trade_id=str(td.get("tradeId", "")),
+        raw=td,
+    )
+
+
+async def run_okx_feed(
+    symbols: list[str],
+    writers: dict[str, IncrementalJSONLWriter],
+    counts: dict[str, int],
+    stats: _CaptureStats | None = None,
+    deadline: asyncio.Event | None = None,
+    deadline_seconds: float = 300,
+    max_retries: int = 3,
+) -> None:
+    """Capture trades from OKX public WebSocket feed (no auth)."""
+    retry = 0
+    inst_ids = [okx_symbol(s) for s in symbols]
+    while retry <= max_retries:
+        try:
+            url = "wss://ws.okx.com:8443/ws/v5/public"
+            logger.info("[okx] connecting to %s", url)
+            async with websockets.connect(url) as ws:
+                logger.info("[okx] connected")
+                retry = 0
+                sub_msg = {
+                    "op": "subscribe",
+                    "args": [
+                        {"channel": "trades", "instId": iid} for iid in inst_ids
+                    ],
+                }
+                await ws.send(json.dumps(sub_msg))
+                logger.info("[okx] subscribed to %s", inst_ids)
+
+                async for msg in ws:
+                    _check_deadline(deadline, deadline_seconds)
+                    try:
+                        data = json.loads(msg)
+                    except json.JSONDecodeError:
+                        logger.error("[okx] JSON decode error: %s", msg[:200])
+                        continue
+                    # Subscription confirm / errors
+                    if "event" in data:
+                        if data.get("event") == "error":
+                            logger.error("[okx] sub error: %s", data)
+                        continue
+                    if data.get("arg", {}).get("channel") != "trades":
+                        continue
+                    for td in data.get("data", []):
+                        inst = td.get("instId", "")
+                        user_symbol = _map_okx_symbol(inst, symbols)
+                        raw_for_norm = user_symbol if user_symbol else inst
+                        norm_sym = _normalize_symbol(
+                            raw_for_norm, "okx",
+                            stats.errors if stats else [],
+                            stats.warnings if stats else [],
+                        )
+                        try:
+                            price = float(td["px"])
+                            size = float(td["sz"])
+                            ts_ns = int(td["ts"]) * 1_000_000
+                        except (KeyError, ValueError, TypeError) as exc:
+                            logger.error("[okx] parse error: %s — %s", exc, td)
+                            continue
+                        side = td.get("side", "unknown")
+                        trade_id = str(td.get("tradeId", ""))
+                        tick = TradeTickLite(
+                            ts_event=ts_ns,
+                            venue="okx",
+                            symbol=norm_sym,
+                            price=price,
+                            size=size,
+                            side=side,
+                            trade_id=trade_id,
+                            raw=td,
+                        )
+                        if norm_sym not in writers:
+                            writers[norm_sym] = _make_writer("okx", norm_sym)
+                            counts[norm_sym] = 0
+                        writers[norm_sym].write(tick)
+                        counts[norm_sym] += 1
+                        if stats is not None:
+                            stats.record(f"okx|{norm_sym}", ts_ns, price)
+        except (websockets.ConnectionClosed, asyncio.TimeoutError) as exc:
+            retry += 1
+            if stats is not None:
+                stats.record_reconnect("okx")
+                stats.record_error("okx", exc)
+            if retry > max_retries:
+                logger.error("[okx] giving up after %d retries: %s", max_retries, exc)
+                return
+            logger.warning("[okx] reconnect %d/%d: %s", retry, max_retries, exc)
+            if not deadline or not deadline.is_set():
+                await asyncio.sleep(5)
+        except Exception as exc:  # noqa: BLE001
+            retry += 1
+            if stats is not None:
+                stats.record_reconnect("okx")
+                stats.record_error("okx", exc)
+            logger.error("[okx] unexpected (retry %d/%d): %s", retry, max_retries, exc)
+            if retry > max_retries:
+                return
+            if not deadline or not deadline.is_set():
+                await asyncio.sleep(5)
+    logger.info("[okx] feed finished (max retries exhausted)")
+
+
+# ---------------------------------------------------------------------------
+# Bybit feed (public spot trades, no auth)
+# ---------------------------------------------------------------------------
+
+
+def bybit_symbol(symbol: str) -> str:
+    """Normalise to Bybit symbol form, e.g. ``BTC/USDT`` -> ``BTCUSDT``."""
+    return symbol.replace("/", "").replace("-", "").replace("_", "").upper()
+
+
+def parse_bybit_trade(td: dict, norm_sym: str) -> TradeTickLite:
+    """Parse a single Bybit publicTrade entry into a TradeTickLite.
+
+    Expected fields: ``T`` (ms epoch), ``s``, ``S`` (Buy/Sell), ``v``, ``p``, ``i``.
+    Raises ``KeyError`` / ``ValueError`` on malformed inputs.
+    """
+    price = float(td["p"])
+    size = float(td["v"])
+    ts_ns = int(td["T"]) * 1_000_000
+    raw_side = td.get("S", "")
+    if raw_side.lower().startswith("b"):
+        side = "buy"
+    elif raw_side.lower().startswith("s"):
+        side = "sell"
+    else:
+        side = "unknown"
+    return TradeTickLite(
+        ts_event=ts_ns,
+        venue="bybit",
+        symbol=norm_sym,
+        price=price,
+        size=size,
+        side=side,
+        trade_id=str(td.get("i", "")),
+        raw=td,
+    )
+
+
+async def run_bybit_feed(
+    symbols: list[str],
+    writers: dict[str, IncrementalJSONLWriter],
+    counts: dict[str, int],
+    stats: _CaptureStats | None = None,
+    deadline: asyncio.Event | None = None,
+    deadline_seconds: float = 300,
+    max_retries: int = 3,
+) -> None:
+    """Capture trades from Bybit public WebSocket feed (no auth)."""
+    retry = 0
+    bsyms = [bybit_symbol(s) for s in symbols]
+    topics = [f"publicTrade.{s}" for s in bsyms]
+    while retry <= max_retries:
+        try:
+            url = "wss://stream.bybit.com/v5/public/spot"
+            logger.info("[bybit] connecting to %s", url)
+            async with websockets.connect(url) as ws:
+                logger.info("[bybit] connected")
+                retry = 0
+                sub_msg = {"op": "subscribe", "args": topics}
+                await ws.send(json.dumps(sub_msg))
+                logger.info("[bybit] subscribed to %s", topics)
+
+                async for msg in ws:
+                    _check_deadline(deadline, deadline_seconds)
+                    try:
+                        data = json.loads(msg)
+                    except json.JSONDecodeError:
+                        logger.error("[bybit] JSON decode error: %s", msg[:200])
+                        continue
+                    if data.get("op") == "subscribe":
+                        if not data.get("success", True):
+                            logger.error("[bybit] sub failure: %s", data)
+                        continue
+                    topic = data.get("topic", "")
+                    if not topic.startswith("publicTrade."):
+                        continue
+                    raw_sym = topic.split(".", 1)[1]
+                    user_symbol = _map_bybit_symbol(raw_sym, symbols)
+                    raw_for_norm = user_symbol if user_symbol else raw_sym
+                    norm_sym = _normalize_symbol(
+                        raw_for_norm, "bybit",
+                        stats.errors if stats else [],
+                        stats.warnings if stats else [],
+                    )
+                    for td in data.get("data", []):
+                        try:
+                            price = float(td["p"])
+                            size = float(td["v"])
+                            ts_ns = int(td["T"]) * 1_000_000
+                        except (KeyError, ValueError, TypeError) as exc:
+                            logger.error("[bybit] parse error: %s — %s", exc, td)
+                            continue
+                        raw_side = td.get("S", "")
+                        side = "buy" if raw_side.lower().startswith("b") else "sell" if raw_side.lower().startswith("s") else "unknown"
+                        trade_id = str(td.get("i", ""))
+                        tick = TradeTickLite(
+                            ts_event=ts_ns,
+                            venue="bybit",
+                            symbol=norm_sym,
+                            price=price,
+                            size=size,
+                            side=side,
+                            trade_id=trade_id,
+                            raw=td,
+                        )
+                        if norm_sym not in writers:
+                            writers[norm_sym] = _make_writer("bybit", norm_sym)
+                            counts[norm_sym] = 0
+                        writers[norm_sym].write(tick)
+                        counts[norm_sym] += 1
+                        if stats is not None:
+                            stats.record(f"bybit|{norm_sym}", ts_ns, price)
+        except (websockets.ConnectionClosed, asyncio.TimeoutError) as exc:
+            retry += 1
+            if stats is not None:
+                stats.record_reconnect("bybit")
+                stats.record_error("bybit", exc)
+            if retry > max_retries:
+                logger.error("[bybit] giving up after %d retries: %s", max_retries, exc)
+                return
+            logger.warning("[bybit] reconnect %d/%d: %s", retry, max_retries, exc)
+            if not deadline or not deadline.is_set():
+                await asyncio.sleep(5)
+        except Exception as exc:  # noqa: BLE001
+            retry += 1
+            if stats is not None:
+                stats.record_reconnect("bybit")
+                stats.record_error("bybit", exc)
+            logger.error("[bybit] unexpected (retry %d/%d): %s", retry, max_retries, exc)
+            if retry > max_retries:
+                return
+            if not deadline or not deadline.is_set():
+                await asyncio.sleep(5)
+    logger.info("[bybit] feed finished (max retries exhausted)")
+
+
+def _map_okx_symbol(inst: str, symbols: list[str]) -> str | None:
+    if inst in symbols:
+        return inst
+    for s in symbols:
+        if okx_symbol(s) == inst:
+            return s
+    return None
+
+
+def _map_bybit_symbol(raw: str, symbols: list[str]) -> str | None:
+    if raw in symbols:
+        return raw
+    for s in symbols:
+        if bybit_symbol(s) == raw:
+            return s
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Bitfinex feed (public spot trades, no auth)
+# ---------------------------------------------------------------------------
+
+
+def bitfinex_symbol(symbol: str) -> str:
+    """Map a user symbol to a Bitfinex public-trades ws symbol.
+
+    Examples:
+        ``BTC/USD`` -> ``tBTCUSD``
+        ``BTC/UST`` -> ``tBTCUST``
+        ``LINK/USD`` -> ``tLINK:USD``
+        ``LINK:UST`` -> ``tLINK:UST``
+        ``tBTCUSD`` (already prefixed) -> identity.
+    """
+    s = symbol.strip()
+    if s.startswith("t") and (len(s) > 1) and s[1].isupper():
+        # Already a Bitfinex ws symbol
+        return s
+    # Normalise separators: prefer to preserve colon if present, else strip "/"
+    if "/" in s:
+        base, quote = s.split("/", 1)
+    elif ":" in s:
+        base, quote = s.split(":", 1)
+    else:
+        # Heuristic: trailing 3-char quote (USD, UST, EUR, BTC, ETH)
+        for q in ("USDT", "USDC", "USD", "UST", "EUR", "BTC", "ETH"):
+            if s.upper().endswith(q):
+                base = s[: -len(q)]
+                quote = q
+                break
+        else:
+            base, quote = s, ""
+    base = base.upper()
+    quote = quote.upper()
+    if len(base) > 3:
+        return f"t{base}:{quote}"
+    return f"t{base}{quote}"
+
+
+def _map_bitfinex_symbol(raw: str, symbols: list[str]) -> str | None:
+    """Map a Bitfinex ws symbol (e.g. ``tBTCUSD``) back to a user-supplied symbol."""
+    if raw in symbols:
+        return raw
+    for s in symbols:
+        if bitfinex_symbol(s) == raw:
+            return s
+    # Strip leading 't' and try matching plain forms
+    bare = raw[1:] if raw.startswith("t") else raw
+    for s in symbols:
+        if s.replace("/", "").replace(":", "").upper() == bare.replace(":", "").upper():
+            return s
+    return None
+
+
+def parse_bitfinex_trade(td: list, norm_sym: str) -> TradeTickLite:
+    """Parse a Bitfinex trade payload (``[ID, MTS, AMOUNT, PRICE]``) into a TradeTickLite.
+
+    Side is inferred from the sign of AMOUNT (positive=buy, negative=sell).
+    Raises ``ValueError``/``IndexError``/``TypeError`` on malformed inputs.
+    """
+    if not isinstance(td, list) or len(td) < 4:
+        raise ValueError(f"bitfinex trade payload too short: {td!r}")
+    trade_id = td[0]
+    mts = int(td[1])
+    amount = float(td[2])
+    price = float(td[3])
+    side = "buy" if amount > 0 else "sell" if amount < 0 else "unknown"
+    return TradeTickLite(
+        ts_event=mts * 1_000_000,
+        venue="bitfinex",
+        symbol=norm_sym,
+        price=price,
+        size=abs(amount),
+        side=side,
+        trade_id=str(trade_id),
+        raw={"id": trade_id, "mts": mts, "amount": amount, "price": price},
+    )
+
+
+async def run_bitfinex_feed(
+    symbols: list[str],
+    writers: dict[str, IncrementalJSONLWriter],
+    counts: dict[str, int],
+    stats: _CaptureStats | None = None,
+    deadline: asyncio.Event | None = None,
+    deadline_seconds: float = 300,
+    max_retries: int = 3,
+) -> None:
+    """Capture trades from Bitfinex public WebSocket feed (no auth).
+
+    Bitfinex requires one subscribe message per symbol on a shared connection,
+    and assigns a per-subscription ``chanId`` that must be tracked to demux trade
+    messages back to symbols.
+    """
+    retry = 0
+    bfx_syms = [bitfinex_symbol(s) for s in symbols]
+    while retry <= max_retries:
+        chan_to_sym: dict[int, str] = {}
+        try:
+            url = "wss://api-pub.bitfinex.com/ws/2"
+            logger.info("[bitfinex] connecting to %s", url)
+            async with websockets.connect(url) as ws:
+                logger.info("[bitfinex] connected")
+                retry = 0
+                for bfx in bfx_syms:
+                    sub_msg = {
+                        "event": "subscribe",
+                        "channel": "trades",
+                        "symbol": bfx,
+                    }
+                    await ws.send(json.dumps(sub_msg))
+                logger.info("[bitfinex] subscribed to %s", bfx_syms)
+
+                async for msg in ws:
+                    _check_deadline(deadline, deadline_seconds)
+                    try:
+                        data = json.loads(msg)
+                    except json.JSONDecodeError:
+                        logger.error("[bitfinex] JSON decode error: %s", msg[:200])
+                        continue
+                    if isinstance(data, dict):
+                        evt = data.get("event", "")
+                        if evt == "subscribed":
+                            chan_id = data.get("chanId")
+                            sym = data.get("symbol", "")
+                            if isinstance(chan_id, int) and sym:
+                                chan_to_sym[chan_id] = sym
+                                logger.info(
+                                    "[bitfinex] chan %d -> %s", chan_id, sym
+                                )
+                        elif evt == "error":
+                            logger.error("[bitfinex] sub error: %s", data)
+                        continue
+                    if not isinstance(data, list) or len(data) < 2:
+                        continue
+                    chan_id = data[0]
+                    payload = data[1]
+                    # Heartbeat
+                    if payload == "hb":
+                        continue
+                    raw_sym = chan_to_sym.get(chan_id, "")
+                    if not raw_sym:
+                        continue
+                    user_symbol = _map_bitfinex_symbol(raw_sym, symbols)
+                    raw_for_norm = user_symbol if user_symbol else raw_sym
+                    # Normalise: strip leading 't' for alias resolution
+                    if raw_for_norm.startswith("t") and len(raw_for_norm) > 1 and raw_for_norm[1].isupper():
+                        raw_for_norm = raw_for_norm[1:]
+                    norm_sym = _normalize_symbol(
+                        raw_for_norm, "bitfinex",
+                        stats.errors if stats else [],
+                        stats.warnings if stats else [],
+                    )
+                    # Snapshot: [chan, [[id,mts,amt,price], ...]]
+                    # Update: [chan, "te"|"tu", [id,mts,amt,price]]
+                    trades: list = []
+                    if isinstance(payload, list) and payload and isinstance(payload[0], list):
+                        trades = payload  # snapshot
+                    elif payload in ("te", "tu") and len(data) >= 3 and isinstance(data[2], list):
+                        if payload == "tu":
+                            # Skip duplicate "trade update" — "te" is the executed event
+                            continue
+                        trades = [data[2]]
+                    else:
+                        continue
+                    for td in trades:
+                        try:
+                            tick = parse_bitfinex_trade(td, norm_sym)
+                        except (ValueError, IndexError, TypeError) as exc:
+                            logger.error("[bitfinex] parse error: %s — %s", exc, td)
+                            continue
+                        if norm_sym not in writers:
+                            writers[norm_sym] = _make_writer("bitfinex", norm_sym)
+                            counts[norm_sym] = 0
+                        writers[norm_sym].write(tick)
+                        counts[norm_sym] += 1
+                        if stats is not None:
+                            stats.record(f"bitfinex|{norm_sym}", tick.ts_event, tick.price)
+        except (websockets.ConnectionClosed, asyncio.TimeoutError) as exc:
+            retry += 1
+            if stats is not None:
+                stats.record_reconnect("bitfinex")
+                stats.record_error("bitfinex", exc)
+            if retry > max_retries:
+                logger.error("[bitfinex] giving up after %d retries: %s", max_retries, exc)
+                return
+            logger.warning("[bitfinex] reconnect %d/%d: %s", retry, max_retries, exc)
+            if not deadline or not deadline.is_set():
+                await asyncio.sleep(5)
+        except Exception as exc:  # noqa: BLE001
+            retry += 1
+            if stats is not None:
+                stats.record_reconnect("bitfinex")
+                stats.record_error("bitfinex", exc)
+            logger.error("[bitfinex] unexpected (retry %d/%d): %s", retry, max_retries, exc)
+            if retry > max_retries:
+                return
+            if not deadline or not deadline.is_set():
+                await asyncio.sleep(5)
+    logger.info("[bitfinex] feed finished (max retries exhausted)")
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -629,6 +1119,9 @@ _FEED_TASKS: dict[str, Any] = {
     "binance": run_binance_feed,
     "kraken": run_kraken_feed,
     "coinbase": run_coinbase_feed,
+    "okx": run_okx_feed,
+    "bybit": run_bybit_feed,
+    "bitfinex": run_bitfinex_feed,
 }
 
 
@@ -724,6 +1217,15 @@ class _CaptureStats:
     price_max: dict[str, float]
     errors: list[str]
     warnings: list[str]
+    reconnect_count: dict[str, int] = field(default_factory=dict)  # key: venue
+    error_summary: dict[str, int] = field(default_factory=dict)  # key: "venue:exc_type"
+
+    def record_reconnect(self, venue: str) -> None:
+        self.reconnect_count[venue] = self.reconnect_count.get(venue, 0) + 1
+
+    def record_error(self, venue: str, exc: BaseException) -> None:
+        key = f"{venue}:{type(exc).__name__}"
+        self.error_summary[key] = self.error_summary.get(key, 0) + 1
 
     def record(self, key: str, ts_ns: int, price: float) -> None:
         """Update stats for a single tick."""
@@ -757,6 +1259,95 @@ def _write_manifest(
         else:
             move_bps[key] = 0.0
 
+    # ------------------------------------------------------------------
+    # Per-stream status
+    # ------------------------------------------------------------------
+    # NOTE on overlap semantics (2026-05-16):
+    # With 5-6 venues active, a global "all streams co-alive" window collapses
+    # to the slowest-to-start / earliest-to-die stream and is diagnostic only.
+    # The analytically-relevant overlap for cross-asset / cross-venue signals
+    # is *pairwise*: source-stream <-> target-stream. We emit per-stream
+    # uptime, pairwise overlap, and per-canonical-asset cross-venue overlap.
+    # The global overlap window is retained as a coarse diagnostic.
+
+    run_duration_ns = int(duration_seconds * 1_000_000_000)
+    streams: dict[str, dict[str, Any]] = {}
+    for key, count in stats.tick_counts.items():
+        first = stats.first_tick_ts.get(key, 0)
+        last = stats.last_tick_ts.get(key, 0)
+        status = "ok" if count > 0 else "zero_ticks"
+        if first > 0 and last >= first and run_duration_ns > 0:
+            uptime_fraction = min(1.0, (last - first) / run_duration_ns)
+        else:
+            uptime_fraction = 0.0
+        streams[key] = {
+            "status": status,
+            "tick_count": count,
+            "first_ts_ns": first,
+            "last_ts_ns": last,
+            "uptime_ns": max(0, last - first) if first > 0 and last >= first else 0,
+            "uptime_fraction": round(uptime_fraction, 4),
+        }
+
+    # ------------------------------------------------------------------
+    # Pairwise overlap (the analytically-relevant metric)
+    # ------------------------------------------------------------------
+    live_keys = [k for k, v in streams.items() if v["status"] == "ok"]
+    pairwise: dict[str, dict[str, int]] = {}
+    for i, a in enumerate(live_keys):
+        for b in live_keys[i + 1:]:
+            fa, la = streams[a]["first_ts_ns"], streams[a]["last_ts_ns"]
+            fb, lb = streams[b]["first_ts_ns"], streams[b]["last_ts_ns"]
+            ov_start = max(fa, fb)
+            ov_end = min(la, lb)
+            dur = max(0, ov_end - ov_start)
+            pair_key = f"{a}||{b}"
+            pairwise[pair_key] = {
+                "start_ns": ov_start if dur > 0 else 0,
+                "end_ns": ov_end if dur > 0 else 0,
+                "duration_ns": dur,
+            }
+
+    # ------------------------------------------------------------------
+    # Per-canonical-asset cross-venue overlap
+    # For each canonical asset, intersect the windows of all live streams
+    # carrying that asset. This is "how long were N venues co-alive for X".
+    # ------------------------------------------------------------------
+    by_asset: dict[str, list[str]] = {}
+    for k in live_keys:
+        # key form: "venue|ASSET/QUOTE" or "venue|UNRESOLVED:..."
+        sym_part = k.split("|", 1)[1] if "|" in k else ""
+        asset = sym_part.split("/", 1)[0] if "/" in sym_part else sym_part
+        if not asset or asset.startswith("UNRESOLVED:"):
+            continue
+        by_asset.setdefault(asset, []).append(k)
+
+    per_asset_overlap: dict[str, dict[str, Any]] = {}
+    for asset, keys in by_asset.items():
+        firsts = [streams[k]["first_ts_ns"] for k in keys]
+        lasts = [streams[k]["last_ts_ns"] for k in keys]
+        ov_start = max(firsts)
+        ov_end = min(lasts)
+        dur = max(0, ov_end - ov_start)
+        per_asset_overlap[asset] = {
+            "venues_alive": len(keys),
+            "stream_keys": sorted(keys),
+            "start_ns": ov_start if dur > 0 else 0,
+            "end_ns": ov_end if dur > 0 else 0,
+            "duration_ns": dur,
+        }
+
+    # ------------------------------------------------------------------
+    # Global overlap — retained as a coarse diagnostic only
+    # ------------------------------------------------------------------
+    all_firsts = [v for v in stats.first_tick_ts.values() if v > 0]
+    all_lasts = [v for v in stats.last_tick_ts.values() if v > 0]
+    g_start = max(all_firsts) if all_firsts else 0
+    g_end = min(all_lasts) if all_lasts else 0
+    g_dur = max(0, g_end - g_start) if all_firsts and all_lasts else 0
+
+    zero_tick_streams = [k for k, v in streams.items() if v["status"] == "zero_ticks"]
+
     manifest = {
         "run_start_utc": run_start_utc,
         "run_end_utc": run_end_utc,
@@ -772,6 +1363,20 @@ def _write_manifest(
         "price_move_bps": move_bps,
         "errors": stats.errors,
         "warnings": stats.warnings,
+        "streams": streams,
+        "reconnect_count": stats.reconnect_count,
+        "error_summary": stats.error_summary,
+        "zero_tick_streams": zero_tick_streams,
+        # Analytically-relevant overlap metrics for cross-asset/cross-venue signals.
+        "pairwise_overlap_ns": pairwise,
+        "per_asset_overlap_ns": per_asset_overlap,
+        # Diagnostic only — collapses under many streams; do not gate on this.
+        "overlap_window_ns": {
+            "start": g_start,
+            "end": g_end,
+            "duration_ns": g_dur,
+            "note": "diagnostic only; use pairwise_overlap_ns / per_asset_overlap_ns for signal evaluation",
+        },
     }
 
     manifest_path = Path(out_dir) / "capture_manifest.json"

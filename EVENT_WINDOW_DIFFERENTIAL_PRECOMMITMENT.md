@@ -413,3 +413,39 @@ If a scheduled event is cancelled or rescheduled, the capture is discarded
 *This file was created before any event-window corpus-admissible capture was
 attempted.  The parameters are pre-data operational thresholds chosen to make
 the test auditable, not theoretically optimal values fitted to data.*
+
+## Venue Scope Addendum (2026-05-16)
+
+This precommitment shares the public-WebSocket capture infrastructure
+(`run_tick_capture.py`) with `cross_asset_beta_lag_v1`.  Because that
+infrastructure was expanded earlier today to include OKX, Bybit, and Bitfinex
+alongside Binance, Kraken, and Coinbase, this hypothesis **inherits the
+expanded observer venue set**:
+
+- binance, coinbase, kraken, okx, bybit, bitfinex — public, unauthenticated
+  WebSocket trade feeds only.
+
+The expansion is observer-only: no auth, no private endpoints, no orders, no
+execution clients, no API key environment variables.
+
+Recorded here for unambiguity — neither the markdown body above nor
+`event_window_differential_precommitment.json` previously enumerated a venue
+set, so future readers might otherwise infer scope from infrastructure state
+at the time of capture rather than from the precommitment itself.
+
+This expansion happened before any corpus-admissible event-window capture was
+recorded.  The following remain **unchanged** by this scope note:
+
+- Signal family (`cross_asset_event_window_differential_v1`), distinct from
+  `cross_asset_beta_lag_v1`.
+- Event-list freeze, paired-contrast structure, capture geometry.
+- `window_type` as an FDR dimension.
+- Allowed horizons, primary horizon, stress/event-gate semantics.
+- Baseline offset rule (NOT the old 60s default).
+- `pvalue_source` and the FDR test-family-dimensions set.
+
+Note on overlap math (operational, not a hypothesis change): with up to six
+venues per asset, the *global* manifest overlap window (all streams co-alive)
+will frequently be the dominating bottleneck.  Per-pair / per-venue-pair
+overlap remains the analytically relevant metric for event-window contrasts;
+the global field in the capture manifest should be treated as diagnostic.
