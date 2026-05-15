@@ -197,9 +197,9 @@ def _fetch_binance(
     """Fetch Binance klines with pagination (1000 per request)."""
     results: list[dict] = []
     params: dict[str, str | int] = {"symbol": symbol.upper(), "interval": interval, "limit": 1000}
-    if start_ts:
+    if start_ts is not None:
         params["startTime"] = start_ts
-    if end_ts:
+    if end_ts is not None:
         params["endTime"] = end_ts
 
     while True:
@@ -239,11 +239,11 @@ def _fetch_kraken(
     interval_str = _INTERVAL_MAP.get(interval, interval)
     pair = "XBT/USD" if symbol.upper() in ("XBT/USD", "BTC/USD") else symbol
 
-    since: int | None = start_ts if start_ts else None
+    since: int | None = start_ts if start_ts is not None else None
 
     while True:
         params = {"pair": pair, "interval": interval_str}
-        if since:
+        if since is not None:
             params["since"] = since
         resp = client.get("https://api.kraken.com/0/public/OHLC", params=params)
         resp.raise_for_status()

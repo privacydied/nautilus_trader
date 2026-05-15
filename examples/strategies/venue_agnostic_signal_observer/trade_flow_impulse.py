@@ -382,7 +382,6 @@ class TradeFlowImpulseSignalGenerator:
 
             # Maintain rolling window
             while window_ts and ts - window_ts[0] > bl_ns:
-                old_n = notionals[0]  # approx
                 window_notionals.pop(0)
                 window_ts.pop(0)
             window_notionals.append(notional)

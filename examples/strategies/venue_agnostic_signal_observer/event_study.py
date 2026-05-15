@@ -513,9 +513,9 @@ def evaluate_candidate_group(
             "single_event_driven: only 1 valid event, trivially driven by one"
         )
 
-    # gates 4/5 when baseline is absent — already in rejection_reasons
+    # gate 4/5 when baseline is absent — already in rejection_reasons
     # gate 4 (win rate) also needs checking when baseline is absent
-    if baseline_valid is not None and len(baseline_valid) == 0:
+    if not baseline_valid:
         if win_rate <= 0.5:
             rejection_reasons.append(
                 f"win_rate_fails: {win_rate:.4f} (no baseline to compare)"

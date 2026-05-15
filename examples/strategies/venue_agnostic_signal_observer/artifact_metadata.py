@@ -41,6 +41,10 @@ from typing import Any
 CURRENT_SCHEMA_VERSION = "1.0.0"
 SAFETY_MODE = "public_data_observer_only"
 
+# Schema version compatibility — bump SUPPORTED_SCHEMA_VERSIONS when
+# the reader explicitly supports reading older artifacts.
+SUPPORTED_SCHEMA_VERSIONS = frozenset({"1.0.0", "v0"})
+
 
 def _get_git_sha() -> str:
     """Return abbreviated HEAD SHA, or '' if not in a git repo."""
@@ -56,6 +60,28 @@ def _get_git_sha() -> str:
     except Exception:
         pass
     return ""
+
+
+def _get_git_sha_dirty() -> str:
+    """Return git SHA with ``-dirty`` suffix when the working tree has uncommitted changes.
+
+    Returns ``""`` if not in a git repo.
+    """
+    sha = _get_git_sha()
+    if not sha:
+        return ""
+    try:
+        dirty_result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if dirty_result.returncode == 0 and dirty_result.stdout.strip():
+            return f"{sha}-dirty"
+    except Exception:
+        pass
+    return sha
 
 
 def _get_git_branch() -> str:
@@ -177,3 +203,57 @@ def get_metadata_field(obj: dict[str, Any], field: str, default: Any = None) -> 
     """
     meta = get_metadata(obj)
     return meta.get(field, default)
+
+
+# ---------------------------------------------------------------------------
+# Schema version validation
+# ---------------------------------------------------------------------------
+
+
+def check_schema_version(
+    obj: dict[str, Any],
+    *,
+    supported: frozenset[str] | None = None,
+    allow_missing: bool = False,
+) -> tuple[bool, str]:
+    """Check an artifact's schema version for compatibility.
+
+    Parameters
+    ----------
+    obj : dict
+        The loaded JSON artifact (manifest, summary, etc.).
+    supported : frozenset, optional
+        Set of supported schema versions.  Defaults to
+        ``SUPPORTED_SCHEMA_VERSIONS``.
+    allow_missing : bool
+        If True, a missing ``schema_version`` is treated as v0
+        and allowed.  If False, missing schema causes a skip.
+
+    Returns
+    -------
+    (ok, reason)
+        ``ok`` is True if acceptable, False if the artifact should
+        be skipped.  ``reason`` explains the result.
+    """
+    if supported is None:
+        supported = SUPPORTED_SCHEMA_VERSIONS
+
+    sv = get_metadata_field(obj, "schema_version")
+    if sv is None or sv == "":
+        if allow_missing:
+            return True, "schema_missing_treated_as_v0"
+        return False, "schema_missing_not_allowed"
+
+    if sv in supported:
+        return True, f"schema_version_{sv}_supported"
+
+    # Compare numerically if possible
+    try:
+        sv_parts = [int(x) for x in sv.split(".")]
+        current_parts = [int(x) for x in CURRENT_SCHEMA_VERSION.split(".")]
+        if sv_parts > current_parts:
+            return False, f"schema_version_{sv}_higher_than_reader_{CURRENT_SCHEMA_VERSION}"
+    except (ValueError, AttributeError):
+        pass
+
+    return False, f"schema_version_{sv}_not_in_supported_set"

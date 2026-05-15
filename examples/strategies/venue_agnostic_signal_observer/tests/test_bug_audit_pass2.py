@@ -178,7 +178,7 @@ def test_cross_asset_report_formats_none_values(tmp_path):
         best_diagnostic_mean_net=None,
     )
 
-    path = generate_markdown_report(v, 1.0, 0.0, 0.0, 0.0, ["x"], [1000], [1000], 0, 1000, str(tmp_path), 1)
+    path = generate_markdown_report(v, 1.0, 0.0, 0.0, 0.0, ["x"], [1000], [1000], 0, 1000, 1.0, 1.0, str(tmp_path), 1)
 
     content = (tmp_path / "cross_asset_report.md").read_text()
     assert "N/A bps" in content

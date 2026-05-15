@@ -677,6 +677,8 @@ def generate_markdown_report(
     horizons_ms: list[int],
     cooldown_ms: int,
     baseline_window_ms: int,
+    min_source_range_bps: float,
+    min_target_range_bps: float,
     out_dir: str,
     num_pairs_evaluated: int,
 ) -> str:
@@ -762,8 +764,8 @@ def generate_markdown_report(
     lines.append("")
 
     lines.append("## Source & Target Range (bps)")
-    lines.append(f"- **Source range threshold:** min={v.source_venues}")
-    lines.append(f"- **Target range threshold:** min={v.target_venues}")
+    lines.append(f"- **Source range threshold:** min={min_source_range_bps} bps")
+    lines.append(f"- **Target range threshold:** min={min_target_range_bps} bps")
     lines.append("")
 
     lines.append("## Signal Parameters")

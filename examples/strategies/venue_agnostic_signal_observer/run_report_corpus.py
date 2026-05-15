@@ -21,10 +21,12 @@ import json
 import math
 import sys
 from dataclasses import dataclass, field
+from glob import glob
 from pathlib import Path
 from typing import Any
 
-from .artifact_metadata import build_metadata
+from .artifact_metadata import build_metadata, check_schema_version, get_metadata_field
+from .quarantine import get_quarantined_run_ids, read_quarantine
 
 
 def _sanitize_for_json(obj: Any) -> Any:
@@ -382,8 +384,178 @@ def format_corpus_report(aggregations: list[CorpusAggregation]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# CLI
+# discover_report_dirs
 # ---------------------------------------------------------------------------
+
+
+def discover_report_dirs(
+    reports_root: Path,
+    glob_pattern: str,
+) -> list[Path]:
+    """Discover report directories via glob, sorted deterministically.
+
+    Sorting priority (higher wins):
+    1. ``run_id`` from ``_metadata`` in summary.json (if available)
+    2. Directory stem (path name)
+    3. Modification time (mtime)
+
+    Parameters
+    ----------
+    reports_root : Path
+        Base directory for glob discovery.
+    glob_pattern : str
+        Glob pattern, e.g. ``derivatives_spot_lead_lag_v2_*``.
+
+    Returns
+    -------
+    list[Path]
+        Sorted list of matching directories.
+    """
+    reports_root = reports_root.resolve()
+    matched: list[Path] = [Path(p) for p in glob(str(reports_root / glob_pattern))]
+    matched = [p for p in matched if p.is_dir()]
+
+    def _sort_key(p: Path) -> tuple:
+        summary_path = p / "summary.json"
+        if summary_path.exists():
+            try:
+                with open(summary_path) as f:
+                    summary = json.load(f)
+                run_id = get_metadata_field(summary, "run_id")
+                if run_id:
+                    return (0, str(run_id), p.stem, p.stat().st_mtime)
+            except Exception:
+                pass
+        return (1, "", p.stem, p.stat().st_mtime)
+
+    matched.sort(key=_sort_key)
+    return matched
+
+
+# ---------------------------------------------------------------------------
+# filter_report_dir
+# ---------------------------------------------------------------------------
+
+
+def filter_report_dir(
+    report_dir: Path,
+    *,
+    min_global_overlap_seconds: float = 600.0,
+    allowed_schema_versions: set[str] | None = None,
+    stream_strictness: str = "lenient",
+    quarantine_run_ids: set[str] | None = None,
+    include_quarantined: bool = False,
+    allow_missing_git_sha: bool = False,
+) -> tuple[bool, str | None]:
+    """Check a report directory for quality before inclusion.
+
+    Skip conditions (checked in order):
+
+    1. Missing ``summary.json``.
+    2. Missing ``_metadata.git_sha`` (unless ``allow_missing_git_sha``).
+    3. ``capture_mode == "FAST_DIAGNOSTIC"``.
+    4. ``global_overlap_duration_seconds`` below ``min_global_overlap_seconds``.
+    5. ``schema_version`` not in ``allowed_schema_versions`` (if set).
+    6. ``schema_version`` higher than reader supports.
+    7. Failed streams for symbols being aggregated (depends on ``stream_strictness``).
+    8. Quarantined ``run_id`` (unless ``include_quarantined``).
+
+    Parameters
+    ----------
+    report_dir : Path
+        Directory to check (must contain ``summary.json``).
+    min_global_overlap_seconds : float
+        Minimum acceptable overlap duration.  Default 600.
+    allowed_schema_versions : set[str] | None
+        If set, only these schema versions are accepted (exact match).
+        ``None`` accepts all supported versions.
+    stream_strictness : str
+        ``"strict"`` — reject if ANY failed stream is detected.
+        ``"lenient"`` — warn-only (return ok, but record reason).
+        ``"off"`` — skip failed-stream check entirely.
+    quarantine_run_ids : set[str] | None
+        Set of run IDs to skip if ``include_quarantined`` is False.
+    include_quarantined : bool
+        If True, quarantined runs are not skipped.
+    allow_missing_git_sha : bool
+        If True, reports without ``_metadata.git_sha`` are accepted.
+
+    Returns
+    -------
+    (ok, reason)
+        ``ok`` is True if the report passes all filters.
+        ``reason`` is a short string explaining why it was skipped,
+        or ``None`` if accepted.
+    """
+    summary_path = report_dir / "summary.json"
+
+    # 1. Missing summary.json
+    if not summary_path.exists():
+        return False, "missing_summary_json"
+
+    try:
+        with open(summary_path) as f:
+            summary = json.load(f)
+    except Exception as e:
+        return False, f"failed_to_load_summary_json_{e!s}"
+
+    # 2. Missing _metadata.git_sha
+    if not allow_missing_git_sha:
+        git_sha = get_metadata_field(summary, "git_sha")
+        if not git_sha:
+            return False, "missing_git_sha"
+
+    # 3. FAST_DIAGNOSTIC capture mode
+    capture_mode = get_metadata_field(summary, "capture_mode", "")
+    if capture_mode == "FAST_DIAGNOSTIC":
+        return False, "fast_diagnostic_mode"
+
+    # 4. Global overlap below minimum
+    overlap_info = summary.get("overlap_info", {}) or {}
+    global_duration = overlap_info.get("global_overlap_duration_seconds", None)
+    if global_duration is None:
+        # Fallback: check top-level or _metadata block
+        global_duration = get_metadata_field(summary, "global_overlap_duration_seconds", None)
+    if global_duration is None:
+        global_duration = 0.0
+    try:
+        global_duration = float(global_duration)
+    except (TypeError, ValueError):
+        global_duration = 0.0
+    if global_duration < min_global_overlap_seconds:
+        return False, f"overlap_{global_duration}s_below_min_{min_global_overlap_seconds}s"
+
+    # 5. Schema version not in allowed set
+    if allowed_schema_versions is not None:
+        sv = get_metadata_field(summary, "schema_version", "")
+        if sv not in allowed_schema_versions:
+            return False, f"schema_version_{sv}_not_allowed"
+
+    # 6. Schema version higher than reader supports
+    sv_ok, sv_reason = check_schema_version(summary, allow_missing=True)
+    if not sv_ok:
+        return False, sv_reason
+
+    # 7. Failed streams check
+    if stream_strictness != "off":
+        failed_streams = summary.get("failed_streams", [])
+        if not failed_streams:
+            # Also check inside overlap_info or _metadata
+            failed_streams = overlap_info.get("failed_streams", [])
+        if failed_streams:
+            if stream_strictness == "strict":
+                return False, f"failed_streams_{'_'.join(str(s) for s in failed_streams)}"
+            # lenient: warn but accept
+
+    # 8. Quarantined run_id
+    if not include_quarantined and quarantine_run_ids:
+        run_id = get_metadata_field(summary, "run_id", "")
+        if not run_id:
+            run_id = summary.get("run_id", "")
+        if run_id and run_id in quarantine_run_ids:
+            return False, f"quarantined_run_{run_id}"
+
+    return True, None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -393,8 +565,61 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--report-dirs",
         type=str,
-        required=True,
-        help="Comma-separated list of report directories (each containing summary.json).",
+        default=None,
+        help="Comma-separated list of report directories (each containing summary.json). "
+        "Mutually compatible with --reports-root / --glob (both are merged).",
+    )
+    p.add_argument(
+        "--reports-root",
+        type=str,
+        default="reports",
+        help="Base directory for glob-based report discovery. Default: reports.",
+    )
+    p.add_argument(
+        "--glob",
+        type=str,
+        default=None,
+        help="Glob pattern for report discovery, e.g. derivatives_spot_lead_lag_v2_*. "
+        "Used together with --reports-root.",
+    )
+    p.add_argument(
+        "--min-global-overlap-seconds",
+        type=float,
+        default=600.0,
+        help="Skip reports with global overlap below this threshold. Default: 600.",
+    )
+    p.add_argument(
+        "--allowed-schema-versions",
+        type=str,
+        default=None,
+        help="Comma-separated list of allowed schema versions (e.g. 1.0.0,v0). "
+        "If unset, all supported versions are accepted.",
+    )
+    p.add_argument(
+        "--stream-strictness",
+        type=str,
+        choices=["strict", "lenient", "off"],
+        default="lenient",
+        help="How to handle failed streams. strict=reject, lenient=warn, off=skip check. "
+        "Default: lenient.",
+    )
+    p.add_argument(
+        "--quarantine-file",
+        type=str,
+        default="reports/research_run_quarantine.jsonl",
+        help="Path to quarantine JSONL file. Default: reports/research_run_quarantine.jsonl.",
+    )
+    p.add_argument(
+        "--include-quarantined",
+        action="store_true",
+        default=False,
+        help="Override to include quarantined reports.",
+    )
+    p.add_argument(
+        "--allow-missing-git-sha",
+        action="store_true",
+        default=False,
+        help="Allow reports without _metadata.git_sha to be included.",
     )
     p.add_argument(
         "--out",
@@ -409,11 +634,29 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    report_dir_strs = [d.strip() for d in args.report_dirs.split(",") if d.strip()]
-    report_dirs = [Path(d) for d in report_dir_strs]
+    # --- Resolve report directories ---
+    report_dirs: list[Path] = []
+
+    # a) Explicit --report-dirs
+    if args.report_dirs:
+        report_dir_strs = [d.strip() for d in args.report_dirs.split(",") if d.strip()]
+        report_dirs = [Path(d) for d in report_dir_strs]
+
+    # b) Glob-based discovery via --reports-root + --glob
+    if args.glob:
+        discovered = discover_report_dirs(Path(args.reports_root), args.glob)
+        # Merge discovered with explicit, deduplicating by resolved path
+        existing_resolved = {rd.resolve() for rd in report_dirs}
+        for d in discovered:
+            if d.resolve() not in existing_resolved:
+                report_dirs.append(d)
+                existing_resolved.add(d.resolve())
 
     if not report_dirs:
-        print("ERROR: No report directories specified.", file=sys.stderr)
+        print(
+            "ERROR: No report directories specified. Use --report-dirs or --reports-root + --glob.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Validate report directories
@@ -421,6 +664,50 @@ def main() -> None:
         if not rd.exists():
             print(f"ERROR: Report directory not found: {rd}", file=sys.stderr)
             sys.exit(1)
+
+    # --- Parse filter / quarantine configuration ---
+    allowed_schema_versions: set[str] | None = None
+    if args.allowed_schema_versions:
+        allowed_schema_versions = {
+            v.strip() for v in args.allowed_schema_versions.split(",") if v.strip()
+        }
+
+    quarantine_run_ids: set[str] | None = None
+    quarantine_path = Path(args.quarantine_file)
+    if quarantine_path.exists():
+        quarantine_run_ids = get_quarantined_run_ids(quarantine_path)
+        if quarantine_run_ids:
+            print(
+                f"  Loaded {len(quarantine_run_ids)} quarantined run IDs from {quarantine_path}",
+                file=sys.stderr,
+            )
+
+    # --- Filter reports ---
+    filtered_dirs: list[Path] = []
+    skipped_report_count = 0
+    skipped_reasons: dict[str, list[str]] = {}
+
+    for rd in report_dirs:
+        ok, reason = filter_report_dir(
+            rd,
+            min_global_overlap_seconds=args.min_global_overlap_seconds,
+            allowed_schema_versions=allowed_schema_versions,
+            stream_strictness=args.stream_strictness,
+            quarantine_run_ids=quarantine_run_ids,
+            include_quarantined=args.include_quarantined,
+            allow_missing_git_sha=args.allow_missing_git_sha,
+        )
+        if ok:
+            filtered_dirs.append(rd)
+        else:
+            skipped_report_count += 1
+            skipped_reasons.setdefault(reason or "unknown", []).append(str(rd))
+
+    report_dirs = filtered_dirs
+
+    if not report_dirs:
+        print("ERROR: No report directories passed quality filtering.", file=sys.stderr)
+        sys.exit(1)
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -450,6 +737,8 @@ def main() -> None:
         "_metadata": meta,
         "num_report_dirs": len(report_dirs),
         "report_dirs": [str(rd) for rd in report_dirs],
+        "skipped_report_count": skipped_report_count,
+        "skipped_reasons": skipped_reasons,
         "num_unique_configs": len(aggregations),
         "aggregations": [],
     }
@@ -487,11 +776,19 @@ def main() -> None:
     print()
     print("=" * 60)
     print("CORPUS AGGREGATION COMPLETE")
-    print(f"  Report dirs: {len(report_dirs)}")
+    print(f"  Report dirs (included): {len(report_dirs)}")
+    print(f"  Report dirs (skipped):  {skipped_report_count}")
     print(f"  Unique configs: {len(aggregations)}")
     print(f"  Output dir: {out_dir}")
     print(f"  JSON: {json_path}")
     print(f"  Markdown: {md_path}")
+    if skipped_reasons:
+        print()
+        print("  Skipped reports by reason:")
+        for reason, dirs in sorted(skipped_reasons.items()):
+            print(f"    {reason}: {len(dirs)}")
+            for d in dirs:
+                print(f"      - {d}")
     print("=" * 60)
 
 

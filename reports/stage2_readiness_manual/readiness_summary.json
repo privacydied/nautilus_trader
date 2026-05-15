@@ -1,0 +1,127 @@
+{
+  "ready": true,
+  "readiness_checked_at": "2026-05-15T02:08:35.019Z",
+  "git_sha": "450d177b4d32-dirty",
+  "workdir": "/mnt/nasirjones/py/nautilus_trader",
+  "hard_blockers": [],
+  "warnings": [],
+  "checks": [
+    {
+      "check": "module_import:examples.strategies.venue_agnostic_signal_observer.run_artifacts",
+      "ok": true,
+      "reason": "imported examples.strategies.venue_agnostic_signal_observer.run_artifacts (has 25 attrs)"
+    },
+    {
+      "check": "module_import:examples.strategies.venue_agnostic_signal_observer.run_derivatives_capture_campaign",
+      "ok": true,
+      "reason": "imported examples.strategies.venue_agnostic_signal_observer.run_derivatives_capture_campaign (has 44 attrs)"
+    },
+    {
+      "check": "module_import:examples.strategies.venue_agnostic_signal_observer.validate_capture",
+      "ok": true,
+      "reason": "imported examples.strategies.venue_agnostic_signal_observer.validate_capture (has 46 attrs)"
+    },
+    {
+      "check": "module_import:examples.strategies.venue_agnostic_signal_observer.run_report_corpus",
+      "ok": true,
+      "reason": "imported examples.strategies.venue_agnostic_signal_observer.run_report_corpus (has 34 attrs)"
+    },
+    {
+      "check": "module_import:examples.strategies.venue_agnostic_signal_observer.run_index",
+      "ok": true,
+      "reason": "imported examples.strategies.venue_agnostic_signal_observer.run_index (has 25 attrs)"
+    },
+    {
+      "check": "module_import:examples.strategies.venue_agnostic_signal_observer.quarantine",
+      "ok": true,
+      "reason": "imported examples.strategies.venue_agnostic_signal_observer.quarantine (has 19 attrs)"
+    },
+    {
+      "check": "module_import:examples.strategies.venue_agnostic_signal_observer.burn",
+      "ok": true,
+      "reason": "imported examples.strategies.venue_agnostic_signal_observer.burn (has 24 attrs)"
+    },
+    {
+      "check": "precommitment_file:stage2_precommitment.json",
+      "ok": true,
+      "reason": "File exists: /mnt/nasirjones/py/nautilus_trader/stage2_precommitment.json"
+    },
+    {
+      "check": "precommitment_file:STAGE2_PRECOMMITMENT.md",
+      "ok": true,
+      "reason": "File exists: /mnt/nasirjones/py/nautilus_trader/STAGE2_PRECOMMITMENT.md"
+    },
+    {
+      "check": "precommitment_file:STAGE2_THRESHOLDS_RATIONALE.md",
+      "ok": true,
+      "reason": "File exists: /mnt/nasirjones/py/nautilus_trader/STAGE2_THRESHOLDS_RATIONALE.md"
+    },
+    {
+      "check": "markdown_json_match",
+      "ok": true,
+      "reason": "All precommit values match"
+    },
+    {
+      "check": "pvalue_source",
+      "ok": true,
+      "reason": "p-value source: native_permutation"
+    },
+    {
+      "check": "minimum_valid_events_pinned",
+      "ok": true,
+      "reason": "min_valid_events = 50"
+    },
+    {
+      "check": "collection_lock_exists",
+      "ok": true,
+      "reason": "Lock does not exist yet \u2014 will be created before first FULL_ACTIVE capture attempt"
+    },
+    {
+      "check": "python_path",
+      "ok": true,
+      "reason": "Python: /mnt/nasirjones/py/nautilus_trader/.venv/bin/python"
+    },
+    {
+      "check": "git_status",
+      "ok": true,
+      "reason": "SHA: 450d177b4d32-dirty, dirty: True"
+    },
+    {
+      "check": "hermes_gateway",
+      "ok": true,
+      "reason": "Gateway is running"
+    },
+    {
+      "check": "hermes_scheduled_job",
+      "ok": true,
+      "reason": "Job 'derivatives-source-spot-target Stage 2 readiness-check-and-collect' (id=85a4d56145fe) enabled=True, state=scheduled"
+    },
+    {
+      "check": "quarantine_convention",
+      "ok": true,
+      "reason": "Quarantine dir exists: /mnt/nasirjones/py/nautilus_trader/reports"
+    },
+    {
+      "check": "burn_convention",
+      "ok": true,
+      "reason": "Burn dir exists: /mnt/nasirjones/py/nautilus_trader/reports"
+    }
+  ],
+  "hermes_gateway_running": true,
+  "hermes_job_info": {
+    "job_id": "85a4d56145fe",
+    "exists": true,
+    "name": "derivatives-source-spot-target Stage 2 readiness-check-and-collect",
+    "enabled": true,
+    "state": "scheduled",
+    "schedule": {
+      "kind": "once",
+      "run_at": "2026-05-15T13:15:00+00:00",
+      "display": "once at 2026-05-15 13:15"
+    },
+    "workdir": "/mnt/nasirjones/py/nautilus_trader",
+    "next_run_at": "2026-05-15T13:15:00+00:00"
+  },
+  "lock_exists": false,
+  "lock_ok": true
+}

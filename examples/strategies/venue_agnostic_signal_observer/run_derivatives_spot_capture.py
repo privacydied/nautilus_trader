@@ -18,14 +18,22 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+import signal
+import sys
 import time
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .tick_models import TradeTickLite
 from .symbol_aliases import resolve_symbol
 from .artifact_metadata import inject_metadata_into_manifest
+from .run_artifacts import (
+    atomic_write_json,
+    create_run_id,
+    safe_output_dir,
+)
+from .run_index import append_run_index_row, build_run_index_row
 
 _MS_TO_NS = 1_000_000
 
@@ -975,6 +983,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Combined derivatives-source + spot-target capture runner. "
                     "Public data only, no auth, no orders."
     )
+    p.add_argument("--run-id", type=str, default=None,
+                    help="Optional run ID. Auto-generated if not provided.")
     p.add_argument("--source-venue", type=str, default="binance_perp")
     p.add_argument("--source-symbols", type=str, default="BTC/USDT,ETH/USDT,SOL/USDT")
     p.add_argument("--target-venues", type=str, default="kraken,coinbase")
@@ -985,7 +995,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--capture-mode", type=str, default="",
                    choices=["FULL_ACTIVE", "FAST_DIAGNOSTIC", ""],
                    help="Capture mode passed from volatility gate. Stored in manifest metadata.")
-    p.add_argument("--out", type=str, default="data/derivatives_spot_capture_v2")
+    p.add_argument("--out-base", type=str, default="data",
+                    help="Base output directory (relative to cwd). Default: data")
+    p.add_argument("--out", type=str, default=None,
+                    help="Explicit output path. Overrides --out-base + run directory naming.")
+    p.add_argument("--allow-existing-output", action="store_true", default=False,
+                    help="Allow reuse of existing non-empty output directory.")
+    p.add_argument("--disk-soft-cap-mb", type=int, default=1024,
+                    help="Soft disk usage cap in MB. Warn if output exceeds this.")
     return p
 
 
@@ -993,12 +1010,36 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    run_id = str(int(time.time()))
-    out_dir = Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # Determine run ID
+    run_id = args.run_id if args.run_id else create_run_id("cap")
+
+    # Resolve output directory
+    out_base = Path(args.out_base).resolve()
+    if args.out:
+        raw_out = Path(args.out)
+        if not raw_out.is_absolute():
+            out_dir_candidate = Path.cwd() / raw_out
+        else:
+            out_dir_candidate = raw_out
+    else:
+        out_dir_candidate = out_base / f"derivatives_spot_capture_v2_{run_id}"
+
+    out_dir = safe_output_dir(out_dir_candidate, allow_existing=args.allow_existing_output)
 
     source_symbols = [x.strip() for x in args.source_symbols.split(",") if x.strip()]
     target_symbols = [x.strip() for x in args.target_symbols.split(",") if x.strip()]
+
+    # Write run-index row: started
+    run_index_path = Path.cwd() / "reports" / "research_run_index.jsonl"
+    run_index_row = build_run_index_row(
+        run_id=run_id,
+        run_type="capture",
+        status="started",
+        command_args=" ".join(sys.argv),
+        output_dir=str(out_dir),
+        notes=f"derivatives_spot_capture v2, {args.duration_seconds}s, mode={args.capture_mode}",
+    )
+    append_run_index_row(run_index_row, path=run_index_path)
 
     print("=" * 70)
     print("DERIVATIVES-SOURCE + SPOT-TARGET CAPTURE")
@@ -1018,8 +1059,26 @@ def main() -> None:
     stats: dict[str, StreamStats] = {}
     stop_event = asyncio.Event()
     oi_counts: dict[str, int] = {}
+    interrupted = False
 
-    async def run_capture():
+    # Signal handling: set stop_event on SIGINT/SIGTERM
+    shutdown_signals = set()
+
+    def _handle_signal(signum, frame):
+        nonlocal interrupted
+        if interrupted:
+            print(f"\n  [SIGNAL] Forced shutdown (signal {signum})")
+            sys.exit(1)
+        interrupted = True
+        print(f"\n  [SIGNAL] Received signal {signum}, stopping capture...")
+        stop_event.set()
+
+    signal.signal(signal.SIGINT, _handle_signal)
+    # SIGTERM: Unix-like only; Windows may not support it the same way
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _handle_signal)
+
+    async def run_capture() -> tuple[list, list]:
         # Start all captures concurrently
         tasks = []
         tasks_and_names: list[tuple[str, asyncio.Task]] = []
@@ -1081,14 +1140,21 @@ def main() -> None:
     loop = asyncio.new_event_loop()
     try:
         results, tasks_and_names = loop.run_until_complete(run_capture())
+    except (KeyboardInterrupt, SystemExit):
+        interrupted = True
+        results = []
+        tasks_and_names = []
     finally:
         loop.close()
 
     end_time = _ts_now_iso()
 
+    # Determine final capture status
+    capture_status = "interrupted" if interrupted else "completed"
+
     # Handle OI counts from poll task and log any task exceptions
     task_exceptions: list[dict] = []
-    for t, r in zip([t for _, t in tasks_and_names], results):
+    for t, r in zip([t for _, t in tasks_and_names], results if results else []):
         task_name = t.get_name()
         if isinstance(r, dict):
             oi_counts.update(r)
@@ -1099,9 +1165,11 @@ def main() -> None:
                 "message": str(r)[:500],
             })
             print(f"  [WARN] Capture task '{task_name}' failed: {type(r).__name__}: {r}")
+            # Partial failure still recorded
+            if capture_status == "completed":
+                capture_status = "completed_with_errors"
 
     # Compute overlaps
-    # Extract base assets from source symbols
     base_assets = []
     for sym in source_symbols:
         try:
@@ -1136,6 +1204,7 @@ def main() -> None:
         "requested_duration_seconds": args.duration_seconds,
         "actual_start_time": start_time,
         "actual_end_time": end_time,
+        "capture_status": capture_status,
         "streams": {name: s.to_dict() for name, s in stats.items()},
         "oi_snapshots": {k: {"count": v} for k, v in oi_counts.items()},
         "overlap": overlap_info,
@@ -1160,10 +1229,38 @@ def main() -> None:
         run_args=args,
     )
 
-    # Write manifest
+    # Partial manifest: write during active capture only
+    partial_path = out_dir / "capture_manifest.partial.json"
+    if interrupted:
+        with open(partial_path, "w") as f:
+            json.dump(manifest, f, indent=2, default=str)
+
+    # Final canonical manifest: atomic write
     manifest_path = out_dir / "capture_manifest.json"
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2, default=str)
+    atomic_write_json(manifest_path, manifest)
+    manifest_path_resolved = str(manifest_path.resolve())
+
+    # Disk soft cap check
+    total_size = sum(
+        f.stat().st_size for f in out_dir.rglob("*") if f.is_file()
+    )
+    total_mb = total_size / (1024 * 1024)
+    if total_mb > args.disk_soft_cap_mb:
+        print(f"\n  [WARN] Output directory exceeds soft cap: "
+              f"{total_mb:.1f} MB > {args.disk_soft_cap_mb} MB")
+
+    # Write run-index row: final status
+    final_row = build_run_index_row(
+        run_id=run_id,
+        run_type="capture",
+        status=capture_status,
+        command_args=" ".join(sys.argv),
+        output_dir=str(out_dir.resolve()),
+        manifest_path=manifest_path_resolved,
+        notes=f"global_overlap={overlap_info.get('global_overlap_duration_seconds', '?')}s, total_ticks={sum(s.tick_count for s in stats.values())}",
+        errors=None if capture_status == "completed" else f"capture_status={capture_status}",
+    )
+    append_run_index_row(final_row, path=run_index_path)
 
     # Print summary
     print()
@@ -1182,7 +1279,9 @@ def main() -> None:
         if isinstance(pair, dict) and pair.get("overlap_duration_seconds"):
             print(f"    {asset}: {pair['overlap_duration_seconds']}s overlap")
     print()
+    print(f"  Capture status: {capture_status}")
     print(f"  Manifest written to: {manifest_path}")
+    print(f"  Total size: {total_mb:.1f} MB" if total_mb > 0 else "")
 
 
 if __name__ == "__main__":
