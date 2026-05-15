@@ -7,7 +7,7 @@
     "method": "benjamini_hochberg",
     "q": 0.1,
     "applies_to": "discovery",
-    "pvalue_source": "native_permutation",
+    "pvalue_source": "native_paired_permutation",
     "test_family_dimensions": [
       "source_asset",
       "target_asset",
@@ -21,6 +21,13 @@
     "method": "benjamini_yekutieli",
     "q": 0.1,
     "applies_to": "discovery_sensitivity_only"
+  },
+  "paired_contrast": {
+    "contrast_type": "paired_event_minus_baseline",
+    "paired_permutation_required": true,
+    "primary_pvalue_source": "native_paired_permutation",
+    "window_type_separation_insufficient": true,
+    "delta_metric_description": "delta = event_window_mean_net_bps - baseline_window_mean_net_bps per config per paired capture"
   },
   "holdout": {
     "primary_split": "temporal",
@@ -36,11 +43,20 @@
     "exclude_fast_diagnostic": true,
     "require_validation_passed": true,
     "require_full_active_capture": false,
-    "require_event_active_capture": true
+    "require_event_active_capture": true,
+    "baseline_overlap_invalidates_paired_capture": true
+  },
+  "capture_geometry": {
+    "collection_mode": "two_separate_captures_paired_by_event_id",
+    "event_window_duration_seconds": 1200,
+    "baseline_window_duration_seconds": 1200,
+    "paired_admitted_duration_seconds": 2400,
+    "rationale": "Two separate discrete captures (one event, one baseline) paired by event_id. Chosen over a single long continuous capture because the existing capture infrastructure handles discrete timed captures, and 110 minutes of continuous capture would include 70 minutes of uncommitted inter-window data that must be discarded — wasteful and a potential source of data selection bias."
   },
   "event_window": {
     "event_start_offset_minutes": -5,
     "event_duration_minutes": 20,
+    "event_window_duration_seconds": 1200,
     "baseline_window_offset_minutes_from_event": 90,
     "baseline_window_duration_seconds": 1200,
     "minimum_capture_duration_seconds": 1200,

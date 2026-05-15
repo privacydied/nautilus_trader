@@ -38,8 +38,61 @@ distributions of per-impulse net returns will be indistinguishable.
 |               | 60,000 ms (60 s)    |
 |               | 300,000 ms (5 min)  |
 
-Only the above signal type, lookback, and horizont set is committed.  No broader
+Only the above signal type, lookback, and horizon set is committed.  No broader
 grid is admitted under this precommitment.
+
+## Paired Differential Contrast (Primary Null Test)
+
+The acceptance null hypothesis is tested on a **paired differential contrast**,
+not on event and baseline windows independently.
+
+### Definition
+
+For each paired capture instance (one event, one baseline, same event_id):
+
+```
+delta_metric = event_window_mean_net_bps_per_config - baseline_window_mean_net_bps_per_config
+```
+
+The paired delta is computed per config (source_asset, target_asset, signal_type,
+lookback_ms, horizon_ms) within each capture.  Across all discovery captures,
+the aggregate mean of `delta_metric` is evaluated against the acceptance criteria.
+
+### Why Paired
+
+Event-window and baseline-window observations from the same macro event are
+not independent.  The same base market regime, liquidity conditions, and venue
+microstructure affect both windows.  Computing the paired difference removes
+this shared variance and isolates the event-specific component.
+
+### window_type as a Dimension
+
+`window_type` (values: `event`, `baseline`) remains a required test-family
+dimension so that the FDR correction can separate the two window types in the
+p-value table.  However, **window_type separation alone is not sufficient**.
+
+A config that shows +3 bps in event windows and +1 bps in baseline windows
+would pass an independent "event is positive" test (+3 bps) but the paired
+contrast would be only +2 bps.  The paired contrast is the gate.
+
+### Native Paired Permutation
+
+The required p-value source is `native_paired_permutation`: a permutation test
+that shuffles the event/baseline label within each paired capture, preserving
+the pairing structure.  This produces a null distribution of `delta_metric`
+under the hypothesis that event and baseline windows are exchangeable.
+
+Machine-readable fields in `event_window_differential_precommitment.json`:
+
+| JSON Field | Value |
+|------------|-------|
+| `paired_contrast.contrast_type` | `paired_event_minus_baseline` |
+| `paired_contrast.paired_permutation_required` | `true` |
+| `paired_contrast.primary_pvalue_source` | `native_paired_permutation` |
+| `paired_contrast.window_type_separation_insufficient` | `true` |
+
+These fields mirror those set in `primary_fdr.pvalue_source` (see False
+Discovery Rate Control section) and serve as cross-references.
 
 ## Event-Window Family Definition
 
@@ -53,18 +106,48 @@ Each capture produces two time windows per event:
   (well outside the typical 30-minute volatility fade after a major release).
 - The baseline window duration matches the event window duration exactly.
 - Each pair (event window, baseline window from the same event) forms one
-  **paired capture instance**.
+  **paired capture instance**, identified by `event_id`.
+
+## Capture Geometry: Two Separate Captures, Paired by event_id
+
+The canonical collection geometry is **two separate discrete captures**,
+one for the event window and one for the baseline window, paired by `event_id`.
+
+### Why Not One Long Capture
+
+A single continuous capture from T−5 min to T+110 min would produce 110 minutes
+of tick data, of which only 40 minutes (the event and baseline windows) would
+be admitted.  The remaining 70 minutes of inter-window data would have to be
+discarded, which is wasteful and creates a data-selection temptation.  Two
+separate discrete captures are simpler to validate, admit, and audit.
+
+### Duration Fields
+
+| Field | Value |
+|-------|-------|
+| `event_window_duration_seconds` | 1200 (20 min) |
+| `baseline_window_duration_seconds` | 1200 (20 min) |
+| `paired_admitted_duration_seconds` | 2400 (40 min total) |
+
+The `paired_admitted_duration_seconds` is the sum of both windows: the total
+amount of tick data admitted to the corpus for a single paired capture.
+Inter-window data is never admitted.
 
 ## Capture Window Boundaries
 
 - **Scheduled event time:** sourced from an authoritative macro calendar (Forex
-  Factory, Investing.com, or equivalent public source).
+  Factory, Investing.com, or equivalent public source).  See
+  `EVENT_WINDOW_EVENT_LIST_TEMPLATE.md` for the event-list artifact convention.
 - **Event window:** `T−5 min` to `T+15 min` where T = scheduled release time.
 - **Baseline window:** `T+90 min` to `T+110 min`.
-- **Minimum capture duration:** 1,200 seconds (20 min per window, 40 min total
-  per paired instance).
-- **Minimum global overlap:** 30 seconds of simultanous tick data across the
+- **Minimum capture duration:** 1,200 seconds per window (each window must
+  produce at least 1,200 seconds of valid tick data).
+- **Minimum global overlap:** 30 seconds of simultaneous tick data across the
   source-target pair within each window.
+- **Baseline overlap quarantine:** If another high-impact scheduled macro event
+  has its event window overlapping the baseline window of this capture, the
+  paired capture is invalid and must be quarantined.  This prevents baseline
+  contamination by a different macro event.
 
 ## Baseline-Window Rule
 
@@ -85,6 +168,33 @@ No post-hoc event window selection is allowed.  The window boundaries are
 committed before any capture begins.  If a capture starts late (missed the
 T−5 boundary), it may still proceed from the actual start time, but the
 `T+15` end is absolute (not extended).  This ensures fixed-width windows.
+
+## Frozen Event List Convention
+
+An event list artifact must exist before any event-window capture is performed.
+The event list is a **frozen, pre-committed** record: events are included or
+excluded before their capture window opens, based on the scheduled macro calendar.
+
+See `EVENT_WINDOW_EVENT_LIST_TEMPLATE.md` for the human-readable template and
+`event_window_event_list.schema.json` for the machine-readable schema.
+
+Each event in the list includes:
+- `event_id` — unique identifier for this paired capture
+- `event_name` — human-readable label (e.g. "FOMC Rate Decision 2026-06")
+- `scheduled_event_utc` — the scheduled release time
+- `calendar_source` — where the event was sourced from
+- `calendar_source_snapshot_utc` — when the source was last checked
+- `event_window_start_utc` / `event_window_end_utc` — computed from the
+  scheduled time ± the committed offsets
+- `baseline_window_start_utc` / `baseline_window_end_utc` — computed similarly
+- `inclusion_reason` — why this event was selected
+- `exclusion_reason` — populated if the event was later excluded (null if
+  included)
+
+The event list is not an active collection schedule.  It is an audit artifact
+that documents which events were committed to before their window opened,
+preventing post-hoc cherry-picking of events that produced interesting
+results.  No event may be added to the list retroactively.
 
 ## Cost Model
 
@@ -122,14 +232,14 @@ non-burned paired captures.
 |--------------------------------|------------------------------------|
 | Primary FDR method             | Benjamini–Hochberg                 |
 | Primary FDR q-value            | 0.10                               |
-| Primary p-value source         | `native_permutation`               |
+| Primary p-value source         | `native_paired_permutation`        |
 | Sensitivity FDR method         | Benjamini–Yekutieli                |
 | Sensitivity FDR q-value        | 0.10                               |
 | Sensitivity applies to         | Discovery sensitivity only         |
 
 ### Required test-family dimensions
 
-Every p-value in the native permutation output must carry these dimensions so
+Every p-value in the native paired permutation output must carry these dimensions so
 that the FDR script can group and correct correctly:
 
 - `source_asset`
@@ -143,8 +253,13 @@ The `window_type` dimension is the structural addition that distinguishes this
 precommitment from `cross_asset_beta_lag_v1`.  A config with the same
 source_asset, target_asset, signal_type, lookback, and horizon is treated as
 two separate entries in the test family if one is `event` and the other is
-`baseline`.  This allows formal FDR-corrected comparison of the two window
-types.
+`baseline`.  This allows FDR-corrected comparison of the two window types.
+
+**However**, `window_type` separation is not sufficient by itself.  The
+primary null test is the paired contrast `delta = event - baseline`
+(see "Paired Differential Contrast" section).  The paired p-value must
+come from a `native_paired_permutation` test, not from independent
+permutations of event and baseline separately.
 
 ## Holdout Split Rule
 
@@ -162,6 +277,11 @@ types.
 - Exclude `FAST_DIAGNOSTIC` captures
 - Require `FULL_ACTIVE` or `EVENT_ACTIVE` capture mode
 - Require validation passed
+- If another high-impact scheduled macro event overlaps the baseline window,
+  the paired capture is quarantined (baseline overlap quarantine).
+- Quarantine is run-scoped, not window-scoped: if either the event window or
+  the baseline window is invalid, the entire paired capture is quarantined.
+- Re-validation after fixing the data issue is permitted.
 
 ## Burn Rules
 
@@ -187,9 +307,8 @@ types.
 - Quarantined runs are excluded from corpus admission.
 - A run may be quarantined if validation fails, manifest is corrupt, or
   the paired baseline window was truncated below the minimum duration.
-- Quarantine is run-scoped, not window-scoped: if either the event window or
-  the baseline window is invalid, the entire paired capture is quarantined.
-- Re-validation after fixing the data issue is permitted.
+- If another high-impact scheduled macro event overlaps the baseline window,
+  the paired capture is quarantined (baseline overlap quarantine).
 
 ## Discovery Acceptance Criteria
 

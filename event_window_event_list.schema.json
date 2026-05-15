@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/privacydied/nautilus_trader/event_window_event_list.schema.json",
+  "title": "Event-Window Differential V1 — cross_asset_event_window_differential_v1 Frozen Event List",
+  "description": "Frozen, pre-committed event list for cross_asset_event_window_differential_v1 captures. Each entry records a scheduled macro event before its capture window opens, preventing post-hoc cherry-picking.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "event_id",
+      "event_name",
+      "scheduled_event_utc",
+      "calendar_source",
+      "calendar_source_snapshot_utc",
+      "event_window_start_utc",
+      "event_window_end_utc",
+      "baseline_window_start_utc",
+      "baseline_window_end_utc"
+    ],
+    "oneOf": [
+      {
+        "required": ["inclusion_reason"],
+        "not": {"required": ["exclusion_reason"]}
+      },
+      {
+        "required": ["exclusion_reason"],
+        "not": {"required": ["inclusion_reason"]}
+      }
+    ],
+    "properties": {
+      "event_id": {
+        "type": "string",
+        "pattern": "^ew_",
+        "description": "Unique identifier, e.g. ew_FOMC_2026_06_18"
+      },
+      "event_name": {
+        "type": "string",
+        "description": "Human-readable label, e.g. 'FOMC Rate Decision 2026-06-18'"
+      },
+      "scheduled_event_utc": {
+        "type": "string",
+        "format": "date-time",
+        "description": "The scheduled release time per the macro calendar"
+      },
+      "calendar_source": {
+        "type": "string",
+        "enum": ["Forex Factory", "Investing.com", "Economic Calendar API"],
+        "description": "Where the event was sourced from"
+      },
+      "calendar_source_snapshot_utc": {
+        "type": "string",
+        "format": "date-time",
+        "description": "When the source was last checked"
+      },
+      "event_window_start_utc": {
+        "type": "string",
+        "format": "date-time",
+        "description": "scheduled_event_utc - 5 min"
+      },
+      "event_window_end_utc": {
+        "type": "string",
+        "format": "date-time",
+        "description": "scheduled_event_utc + 15 min"
+      },
+      "baseline_window_start_utc": {
+        "type": "string",
+        "format": "date-time",
+        "description": "scheduled_event_utc + 90 min"
+      },
+      "baseline_window_end_utc": {
+        "type": "string",
+        "format": "date-time",
+        "description": "scheduled_event_utc + 110 min"
+      },
+      "inclusion_reason": {
+        "type": "string",
+        "description": "Why this event was selected. Required if exclusion_reason is null."
+      },
+      "exclusion_reason": {
+        "type": ["string", "null"],
+        "description": "Why this event was excluded. Required if inclusion_reason is absent. Set to null if included."
+      }
+    }
+  }
+}

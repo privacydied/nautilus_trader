@@ -1,5 +1,7 @@
 # Stage 2 Thresholds Rationale — Cross-Asset Event-Window Differential V1
 
+**Signal family:** `cross_asset_event_window_differential_v1`
+
 This document explains why each committed value was chosen *before* seeing any
 Stage 2 evaluator data.  These are **pre-data operational thresholds** designed
 to make the test auditable, not theoretically optimal values fitted to a sample.
@@ -31,6 +33,63 @@ concentrate information arrival in a known time window, reducing the search
 space.
 
 They are sibling hypotheses: each can succeed or fail independently.
+
+## Paired Contrast vs Independent Window Comparison
+
+The primary statistical test in this precommitment is a **paired differential
+contrast**: `delta = event_window_mean_net_bps - baseline_window_mean_net_bps`,
+computed per config per paired capture.
+
+### Why a paired test?
+
+Event-window and baseline-window observations from the same scheduled macro
+event share a common market regime, liquidity environment, and venue
+microstructure.  These shared factors introduce correlated variance that an
+independent (unpaired) comparison would treat as noise, reducing statistical
+power.
+
+A paired test removes this shared variance by computing the within-pair
+difference.  The null distribution comes from a `native_paired_permutation`:
+shuffling the event/baseline label within each paired capture while preserving
+the pairing structure.  This is a stronger test than comparing independent
+permutations of event and baseline windows separately.
+
+### Why window_type separation is not enough
+
+The test-family dimension `window_type` (values: `event`, `baseline`) allows
+the FDR correction to distinguish the two window types in the p-value table.
+However, a config could show event=+3 bps and baseline=+1 bps, producing
+an aggregate of +2 bps (passing the economic bar) with window_type separation,
+while the paired contrast is only +2 bps.  The paired contrast is the gate
+because it directly measures the differential the hypothesis cares about.
+
+### Native paired permutation
+
+The required p-value source is `native_paired_permutation`, not
+`native_permutation` (which is used by the cross-asset beta lag
+precommitment).  The paired variant is structurally different: it shuffles the
+event/baseline label within each pair, producing a null distribution of the
+paired delta under the exchangeability null.  This mirrors the standard
+paired t-test design, adapted for permutation inference.
+
+## Capture Geometry Choice
+
+Two separate discrete captures (event and baseline) were chosen over one
+long continuous capture (T−5 min to T+110 min):
+
+| Aspect | Two discrete captures | One long capture |
+|--------|----------------------|------------------|
+| Total data admitted | 40 min (event + baseline) | 40 min (extracted from 110 min) |
+| Inter-window data | None created | 70 min of data discarded |
+| Validation scope | Per-window, independent | Must validate and extract sub-windows |
+| Data-selection risk | None (windows are the capture) | Risk of shifting extraction boundaries |
+| Existing tooling fit | Fits discrete timed captures | Would need sub-window extraction adapter |
+
+The existing capture infrastructure (`run_derivatives_spot_capture.py`,
+`validate_capture.py`) handles discrete timed captures naturally.  Each window
+is its own capture run with its own manifest, validation, and run index entry.
+The pairing is maintained by `event_id` in metadata — no new infrastructure is
+required.
 
 ## Why Scheduled Windows Reduce Post-Hoc Boundary Selection
 
@@ -157,6 +216,26 @@ If `window_type` were omitted, a mean return of +3 bps from event windows and
 the economic bar even though the differential is where the actual signal lives.
 Explicitly separating the two types preserves the differential structure for
 analysis.
+
+## Frozen Event List
+
+A frozen event list ensures that events are committed before their capture
+windows open.  This prevents post-hoc cherry-picking: if the researcher could
+choose which events to include after seeing the price impact, the test would
+be non-falsifiable.
+
+The event list is an **audit artifact**, not an active schedule.  It documents
+the planned capture universe and the rationale for each event's inclusion.
+Events may be excluded before their window opens (recorded as `exclusion_reason`),
+but no event may be added to the list retroactively.
+
+## Baseline Overlap Quarantine
+
+If another high-impact scheduled macro event falls within the baseline window
+of this paired capture, the baseline is contaminated by event-specific
+volatility and cannot serve as a clean counterfactual.  This rule prevents
+schedule collisions from producing invalid baselines without requiring the
+operator to make a subjective judgment about contamination.
 
 ---
 
