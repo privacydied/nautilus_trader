@@ -38,6 +38,18 @@ admitted under this precommitment.
 - Require `FULL_ACTIVE` capture mode
 - Require validation passed
 
+## Capture Spacing
+
+- **Minimum gap between corpus-eligible captures:** 3,600 seconds (1 hour)
+- Gap applies only to successful validated FULL_ACTIVE captures
+- Diagnostic/no-capture polls do not start the gap
+- Failed or quarantined captures do not start the gap
+- The gap prevents one sustained stress event from producing multiple
+  pseudo-independent captures.  It is not intended to prove independence,
+  only to avoid immediate duplicate corpus entries from the same event.
+- The gap is enforced by the systemd gate watcher and persisted across
+  restarts in `reports/cross_asset_beta_lag_watcher_state.json`.
+
 ## Event Gate
 
 - `FULL_ACTIVE` stress is required for corpus-eligible capture.

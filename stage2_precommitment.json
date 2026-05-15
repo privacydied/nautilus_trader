@@ -36,6 +36,12 @@
     "require_validation_passed": true,
     "require_full_active_capture": true
   },
+  "capture_spacing": {
+    "minimum_gap_seconds_between_corpus_eligible_captures": 3600,
+    "gap_applies_to": "successful_validated_full_active_captures",
+    "diagnostic_captures_do_not_start_gap": true,
+    "no_capture_polls_do_not_start_gap": true
+  },
   "event_gate": {
     "full_active_required": true,
     "minimum_btc_1h_move_bps": 150.0,

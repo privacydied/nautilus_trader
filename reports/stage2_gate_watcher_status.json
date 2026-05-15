@@ -1,6 +1,6 @@
 {
-  "updated_utc": "2026-05-15T18:31:17.415Z",
-  "git_sha": "8a5ab0309d3e-dirty",
+  "updated_utc": "2026-05-15T18:57:46.803Z",
+  "git_sha": "7e59607ea954-dirty",
   "signal_family": "cross_asset_beta_lag_v1",
   "gateway_replaced_by_systemd": true,
   "safety": "public data observer only",

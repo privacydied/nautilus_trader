@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "signal_family": "cross_asset_beta_lag_v1",
+  "min_gap_seconds": 3600,
+  "last_corpus_eligible_capture_utc": "2026-05-15T18:58:06.033Z",
+  "last_corpus_eligible_capture_run_id": "restart_test",
+  "last_corpus_eligible_capture_dir": "/tmp/restart_cap",
+  "updated_utc": "2026-05-15T18:58:06.033Z"
+}

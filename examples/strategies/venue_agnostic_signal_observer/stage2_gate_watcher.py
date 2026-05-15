@@ -45,6 +45,7 @@ _LOG_DIR = Path("reports", "stage2_gate_watcher_logs")
 _STATUS_PATH = Path("reports", "stage2_gate_watcher_status.json")
 _CONCURRENCY_LOCK_PATH = Path("reports", "cross_asset_beta_lag_watcher.lock")
 _COLLECTION_LOCK_PATH = Path("reports", "stage2_collection_lock.json")
+_STATE_PATH = Path("reports", "cross_asset_beta_lag_watcher_state.json")
 
 _PYTHON_EXE = Path(
     "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python"
@@ -133,6 +134,78 @@ class CaptureGuard:
             _IN_CAPTURE_FLAG.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Capture spacing cooldown state
+# ---------------------------------------------------------------------------
+
+
+class WatcherState:
+    """Persistent state for the gate watcher, including capture spacing.
+
+    State is stored on disk at _STATE_PATH so cooldown survives restarts.
+    """
+
+    def __init__(self, min_gap_seconds: int = 3600) -> None:
+        self._path = _STATE_PATH.resolve()
+        self._min_gap = min_gap_seconds
+        self._data: dict[str, Any] = self._load()
+
+    def _load(self) -> dict[str, Any]:
+        default: dict[str, Any] = {
+            "schema_version": 1,
+            "signal_family": _SIGNAL_FAMILY,
+            "min_gap_seconds": self._min_gap,
+            "last_corpus_eligible_capture_utc": None,
+            "last_corpus_eligible_capture_run_id": None,
+            "last_corpus_eligible_capture_dir": None,
+            "updated_utc": _ts_now_iso(),
+        }
+        if not self._path.exists():
+            return default
+        try:
+            with open(self._path) as f:
+                data: dict[str, Any] = json.load(f)
+            data.setdefault("min_gap_seconds", self._min_gap)
+            return data
+        except (json.JSONDecodeError, OSError):
+            return default
+
+    def _save(self) -> None:
+        self._data["updated_utc"] = _ts_now_iso()
+        self._data["min_gap_seconds"] = self._min_gap
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(self._path, self._data)
+
+    def record_capture(self, run_id: str, capture_dir: str) -> None:
+        """Record a successful corpus-eligible FULL_ACTIVE capture."""
+        self._data["last_corpus_eligible_capture_utc"] = _ts_now_iso()
+        self._data["last_corpus_eligible_capture_run_id"] = run_id
+        self._data["last_corpus_eligible_capture_dir"] = capture_dir
+        self._save()
+
+    def cooldown_remaining_seconds(self) -> int | None:
+        """Return seconds remaining in cooldown, or None if no cooldown active."""
+        last_utc_str = self._data.get("last_corpus_eligible_capture_utc")
+        if not last_utc_str:
+            return None  # No previous capture — no cooldown
+        try:
+            last_dt = datetime.fromisoformat(
+                last_utc_str.replace("Z", "+00:00")
+            )
+        except (ValueError, TypeError):
+            return None
+        now = datetime.now(timezone.utc)
+        elapsed = (now - last_dt).total_seconds()
+        remaining = self._min_gap - elapsed
+        if remaining <= 0:
+            return None  # Cooldown expired
+        return int(remaining)
+
+    @property
+    def last_capture_utc(self) -> str | None:
+        return self._data.get("last_corpus_eligible_capture_utc")
 
 
 # ---------------------------------------------------------------------------
@@ -324,8 +397,9 @@ def _run_validation(capture_dir: str, log: WatcherLogger) -> dict[str, Any]:
 def _count_validated_full_active() -> int:
     """Count validated FULL_ACTIVE captures for cross_asset_beta_lag_v1.
 
-    Returns the count of validated FULL_ACTIVE captures found in data/
-    directories with capture_manifest.json.
+    Only counts captures whose directory name starts with the
+    cross_asset_beta_lag_v1 prefix.  Pre-lock captures from other
+    signal families (e.g. derivatives v2) are excluded.
     """
     count = 0
     data_root = Path("data")
@@ -340,6 +414,10 @@ def _count_validated_full_active() -> int:
 
     for d in data_root.iterdir():
         if not d.is_dir():
+            continue
+        # Only count captures from this signal family
+        dirname = d.name
+        if not dirname.startswith("cross_asset_beta_lag_v1_"):
             continue
         manifest_path = d / "capture_manifest.json"
         if not manifest_path.exists():
@@ -415,6 +493,9 @@ def main() -> None:
                         help="Alias for --no-capture")
     parser.add_argument("--once", action="store_true", default=False,
                         help="Run one poll cycle then exit")
+    parser.add_argument("--min-gap-seconds", type=int, default=3600,
+                        help="Minimum gap between corpus-eligible FULL_ACTIVE captures "
+                             "in seconds (default: 3600)")
     args = parser.parse_args()
 
     # Combine --dry-run into --no-capture
@@ -425,6 +506,7 @@ def main() -> None:
     os.chdir(str(workdir))
 
     log = WatcherLogger()
+    state = WatcherState(min_gap_seconds=args.min_gap_seconds)
     lock = ConcurrencyLock()
 
     # Acquire watcher concurrency lock
@@ -435,13 +517,14 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        _run_watcher_cycle(log, args)
+        _run_watcher_cycle(log, args, state)
     finally:
         lock.release()
         CaptureGuard.release()
 
 
-def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace) -> None:
+def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
+                       state: WatcherState | None = None) -> None:
     """Main polling cycle."""
 
     log.log("startup", poll_seconds=args.poll_seconds,
@@ -522,6 +605,33 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace) -> None:
         # --- Stress confirmed! ---
         print("  STRESS GATE PASSED — BTC 1h >= 150 bps with acceleration")
         print("  This is a corpus-eligible stress window.")
+
+        # --- Cooldown check ---
+        cooldown_remaining = None
+        if state is not None:
+            cooldown_remaining = state.cooldown_remaining_seconds()
+        if cooldown_remaining is not None and cooldown_remaining > 0:
+            log.log("skipped_cooldown",
+                     remaining_seconds=cooldown_remaining)
+            print(f"  SKIPPED_COOLDOWN — {cooldown_remaining}s remaining until next "
+                  f"corpus-eligible capture is allowed")
+            print("  Lock NOT created. Capture NOT started.")
+            _write_status(
+                readiness_status="PASSED",
+                gate_status="PASSED_BUT_COOLDOWN",
+                current_btc_1h_move_bps=btc_1h,
+                acceleration_status=accel_v,
+                last_capture_status="SKIPPED_COOLDOWN",
+                cooldown_remaining_seconds=cooldown_remaining,
+                stress_condition="FULL_ACTIVE_STRESS",
+                validated_full_active_capture_count=_count_validated_full_active(),
+                captures_remaining_before_stage2_eval=max(
+                    0, 10 - _count_validated_full_active()),
+            )
+            if args.once:
+                break
+            time.sleep(args.poll_seconds)
+            continue
 
         if args.no_capture:
             print("  --no-capture set: skipping capture (test/dry-run mode)")
@@ -610,6 +720,13 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace) -> None:
                     last_validation_status=verdict,
                 )
                 continue
+
+            # --- Record successful capture in cooldown state ---
+            run_id = val_result.get("run_id") or "unknown"
+            if state is not None:
+                state.record_capture(run_id=run_id, capture_dir=capture_dir)
+                log.log("capture_recorded_in_state", run_id=run_id,
+                        capture_dir=capture_dir)
 
             # --- Count corpus ---
             validated_count = _count_validated_full_active()
