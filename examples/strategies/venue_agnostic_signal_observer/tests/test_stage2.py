@@ -136,18 +136,18 @@ class TestLoadPrecommitment:
         data = load_precommitment()
         assert data["schema_version"] == 1
         assert data["stage"] == "stage2"
-        assert data["signal_family"] == "derivatives_source_spot_target_lead_lag_v2"
+        assert data["signal_family"] == "cross_asset_beta_lag_v1"
 
     def test_test_family_dimensions(self):
         dims = get_test_family_dimensions()
         expected = [
-            "source_venue", "target_venue", "symbol",
+            "source_asset", "target_asset",
             "signal_type", "lookback_ms", "horizon_ms",
         ]
         assert dims == expected
 
     def test_signal_family(self):
-        assert get_signal_family() == "derivatives_source_spot_target_lead_lag_v2"
+        assert get_signal_family() == "cross_asset_beta_lag_v1"
 
     def test_missing_file_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):

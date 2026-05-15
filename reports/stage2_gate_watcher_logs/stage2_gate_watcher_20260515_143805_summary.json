@@ -1,0 +1,1809 @@
+{
+  "final_verdict": "INTERRUPTED",
+  "environment": {
+    "pwd": "/mnt/nasirjones/py/nautilus_trader",
+    "start_utc": "2026-05-15T17:03:09Z",
+    "python_exe": "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python",
+    "git_branch": "feat-dex-cex-spot-dislocation-v1",
+    "git_sha": "f6cc8e476067f4467a359aac5733c146c9b6ac24",
+    "git_dirty": true
+  },
+  "log_entries": [
+    {
+      "event": "env",
+      "key": "pwd",
+      "value": "/mnt/nasirjones/py/nautilus_trader"
+    },
+    {
+      "event": "env",
+      "key": "start_utc",
+      "value": "2026-05-15T14:38:05Z"
+    },
+    {
+      "event": "env",
+      "key": "python_exe",
+      "value": "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python"
+    },
+    {
+      "event": "env",
+      "key": "git_branch",
+      "value": "feat-dex-cex-spot-dislocation-v1"
+    },
+    {
+      "event": "env",
+      "key": "git_sha",
+      "value": "77f1f71d1e423ebcdb8537b4dbe9b3ebfb77e6b2"
+    },
+    {
+      "event": "env",
+      "key": "git_dirty",
+      "value": "True"
+    },
+    {
+      "event": "action",
+      "message": "Stage 2 Gate Watcher starting (interval=30s, max_runtime=indefinite, dry_run=False)"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 1,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 2,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 3,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 4,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 5,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 6,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 7,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 8,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 9,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 10,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 11,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 12,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 13,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 14,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 15,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 16,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 17,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 18,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 19,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 20,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 21,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 22,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 23,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 24,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 25,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 26,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 27,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 28,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 29,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 30,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 31,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 32,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 33,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 34,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 35,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 36,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 37,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 38,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 39,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 40,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 41,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 42,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 43,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 44,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 45,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 46,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 47,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 48,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 49,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 50,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 51,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 52,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 53,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 54,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 55,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 56,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 57,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 58,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 59,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 60,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 61,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 62,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 63,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 64,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 65,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 66,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 67,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 68,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 69,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 70,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 71,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 72,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 73,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 74,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 75,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 76,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 77,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 78,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 79,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 80,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 81,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 82,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 83,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 84,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 85,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 86,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 87,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 88,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 89,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 90,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 91,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 92,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 93,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 94,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 95,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 96,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 97,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 98,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 99,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 100,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 101,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 102,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 103,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 104,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 105,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 106,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 107,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 108,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 109,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 110,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 111,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 112,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 113,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 114,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 115,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 116,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 117,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 118,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 119,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 120,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 121,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 122,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 123,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 124,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 125,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 126,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 127,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 128,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 129,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 130,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 131,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 132,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 133,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 134,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 135,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 136,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 137,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 138,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 139,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 140,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 141,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 142,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 143,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 144,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 145,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 146,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 147,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 148,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 149,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 150,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 151,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 152,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 153,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 154,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 155,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 156,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 157,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 158,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 159,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 160,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 161,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 162,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 163,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 164,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 165,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 166,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 167,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 168,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 169,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 170,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 171,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 172,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 173,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 174,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 175,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 176,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 177,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 178,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 179,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 180,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 181,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 182,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 183,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 184,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 185,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 186,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 187,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 188,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 189,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 190,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 191,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 192,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 193,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 194,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 195,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 196,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 197,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 198,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 199,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 200,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 201,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 202,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 203,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 204,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 205,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 206,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 207,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 208,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 209,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 210,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 211,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 212,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 213,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 214,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 215,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 216,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 217,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 218,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 219,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 220,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 221,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 222,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 223,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 224,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 225,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 226,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 227,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 228,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 229,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 230,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 231,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 232,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 233,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 234,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 235,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 236,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 237,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 238,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 239,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 240,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 241,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 242,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 243,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 244,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 245,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 246,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 247,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 248,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 249,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 250,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 251,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 252,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 253,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 254,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 255,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 256,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 257,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 258,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 259,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 260,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 261,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 262,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 263,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 264,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 265,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 266,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 267,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 268,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 269,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 270,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 271,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 272,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 273,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 274,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 275,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 276,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 277,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 278,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 279,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 280,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 281,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 282,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 283,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 284,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 285,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 286,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 287,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "gate_check",
+      "check_num": 288,
+      "permission": "NO_CAPTURE",
+      "reason": "not_fast_capture_eligible"
+    },
+    {
+      "event": "action",
+      "message": "Interrupted by user (SIGINT)"
+    },
+    {
+      "event": "env",
+      "key": "pwd",
+      "value": "/mnt/nasirjones/py/nautilus_trader"
+    },
+    {
+      "event": "env",
+      "key": "start_utc",
+      "value": "2026-05-15T17:03:09Z"
+    },
+    {
+      "event": "env",
+      "key": "python_exe",
+      "value": "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python"
+    },
+    {
+      "event": "env",
+      "key": "git_branch",
+      "value": "feat-dex-cex-spot-dislocation-v1"
+    },
+    {
+      "event": "env",
+      "key": "git_sha",
+      "value": "f6cc8e476067f4467a359aac5733c146c9b6ac24"
+    },
+    {
+      "event": "env",
+      "key": "git_dirty",
+      "value": "True"
+    }
+  ]
+}

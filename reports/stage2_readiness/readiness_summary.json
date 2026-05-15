@@ -1,7 +1,7 @@
 {
   "ready": true,
-  "readiness_checked_at": "2026-05-15T02:02:24.074Z",
-  "git_sha": "4f28342aadb2-dirty",
+  "readiness_checked_at": "2026-05-15T13:15:53.806Z",
+  "git_sha": "77f1f71d1e42",
   "workdir": "/mnt/nasirjones/py/nautilus_trader",
   "hard_blockers": [],
   "warnings": [],
@@ -84,7 +84,7 @@
     {
       "check": "git_status",
       "ok": true,
-      "reason": "SHA: 4f28342aadb2-dirty, dirty: True"
+      "reason": "SHA: 77f1f71d1e42, dirty: False"
     },
     {
       "check": "hermes_gateway",

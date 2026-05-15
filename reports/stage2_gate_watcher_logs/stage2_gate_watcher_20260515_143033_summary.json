@@ -1,0 +1,109 @@
+{
+  "final_verdict": "INTERRUPTED",
+  "environment": {
+    "pwd": "/mnt/nasirjones/py/nautilus_trader",
+    "start_utc": "2026-05-15T14:33:51Z",
+    "python_exe": "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python",
+    "git_branch": "feat-dex-cex-spot-dislocation-v1",
+    "git_sha": "77f1f71d1e423ebcdb8537b4dbe9b3ebfb77e6b2",
+    "git_dirty": true
+  },
+  "log_entries": [
+    {
+      "event": "env",
+      "key": "pwd",
+      "value": "/mnt/nasirjones/py/nautilus_trader"
+    },
+    {
+      "event": "env",
+      "key": "start_utc",
+      "value": "2026-05-15T14:30:33Z"
+    },
+    {
+      "event": "env",
+      "key": "python_exe",
+      "value": "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python"
+    },
+    {
+      "event": "env",
+      "key": "git_branch",
+      "value": "feat-dex-cex-spot-dislocation-v1"
+    },
+    {
+      "event": "env",
+      "key": "git_sha",
+      "value": "77f1f71d1e423ebcdb8537b4dbe9b3ebfb77e6b2"
+    },
+    {
+      "event": "env",
+      "key": "git_dirty",
+      "value": "True"
+    },
+    {
+      "event": "action",
+      "message": "Stage 2 Gate Watcher starting (interval=30s, max_runtime=indefinite, dry_run=False)"
+    },
+    {
+      "event": "warning",
+      "message": "Gate check #1 FAILED: Expecting ',' delimiter: line 72 column 37 (char 2108)"
+    },
+    {
+      "event": "warning",
+      "message": "Gate check #2 FAILED: Expecting ',' delimiter: line 72 column 37 (char 2109)"
+    },
+    {
+      "event": "warning",
+      "message": "Gate check #3 FAILED: Expecting ',' delimiter: line 72 column 37 (char 2109)"
+    },
+    {
+      "event": "warning",
+      "message": "Gate check #4 FAILED: Expecting ',' delimiter: line 72 column 37 (char 2109)"
+    },
+    {
+      "event": "warning",
+      "message": "Gate check #5 FAILED: Expecting ',' delimiter: line 72 column 37 (char 2108)"
+    },
+    {
+      "event": "warning",
+      "message": "Gate check #6 FAILED: Expecting ',' delimiter: line 72 column 37 (char 2106)"
+    },
+    {
+      "event": "warning",
+      "message": "Gate check #7 FAILED: Expecting ',' delimiter: line 72 column 37 (char 2107)"
+    },
+    {
+      "event": "action",
+      "message": "Interrupted by user (SIGINT)"
+    },
+    {
+      "event": "env",
+      "key": "pwd",
+      "value": "/mnt/nasirjones/py/nautilus_trader"
+    },
+    {
+      "event": "env",
+      "key": "start_utc",
+      "value": "2026-05-15T14:33:51Z"
+    },
+    {
+      "event": "env",
+      "key": "python_exe",
+      "value": "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python"
+    },
+    {
+      "event": "env",
+      "key": "git_branch",
+      "value": "feat-dex-cex-spot-dislocation-v1"
+    },
+    {
+      "event": "env",
+      "key": "git_sha",
+      "value": "77f1f71d1e423ebcdb8537b4dbe9b3ebfb77e6b2"
+    },
+    {
+      "event": "env",
+      "key": "git_dirty",
+      "value": "True"
+    }
+  ]
+}
