@@ -160,15 +160,15 @@ def main():
             end=args.end,
         )
 
+        # Get results path
+        backtest_result_path = Path(engine.run_result.workdir) / "backtest_result"
+        
         # Save the backtest result to a pickle file for report generation
         import pickle
         result_file = backtest_result_path / "result.pkl"
         with open(result_file, "wb") as f:
             pickle.dump(engine.run_result, f)
         print(f"Backtest result saved to {result_file}")
-        
-        # Get results path
-        backtest_result_path = Path(engine.run_result.workdir) / "backtest_result"
         print(f"Backtest completed. Results in: {backtest_result_path}")
         
         # Generate reports

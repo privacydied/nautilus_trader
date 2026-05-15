@@ -77,6 +77,8 @@ def csv_to_bars(csv_path: Path) -> List:
 
 def write_to_catalog(csv_path: Path, catalog_path: Path) -> None:
     """Import CSV data to ParquetDataCatalog."""
+    from nautilus_trader.persistence.catalog.parquet import ParquetDataCatalog
+    
     # Read CSV and convert to Bar objects
     bars = csv_to_bars(csv_path)
     
