@@ -334,6 +334,106 @@ class TestPairedDifferentialContrast:
         assert beta_source == "native_permutation"
 
 
+class TestPairedPermutationRowShape:
+    """The paired permutation output row shape is defined once in JSON,
+    markdown, and rationale.  All three must agree."""
+
+    def test_json_has_primary_pvalue_row_shape(self):
+        data = _load_ew_json()
+        pc = data.get("paired_contrast", {})
+        rshape = pc.get("primary_pvalue_row_shape", {})
+        assert rshape, "paired_contrast.primary_pvalue_row_shape must exist"
+
+    def test_json_window_type_value_for_primary(self):
+        data = _load_ew_json()
+        wt = (
+            data.get("paired_contrast", {})
+            .get("primary_pvalue_row_shape", {})
+            .get("window_type_value_for_primary")
+        )
+        assert wt == "paired_delta", f"Expected 'paired_delta', got '{wt}'"
+
+    def test_json_diagnostic_values(self):
+        data = _load_ew_json()
+        diag = (
+            data.get("paired_contrast", {})
+            .get("primary_pvalue_row_shape", {})
+            .get("window_type_values_for_diagnostics", [])
+        )
+        assert set(diag) == {"event", "baseline"}
+        assert len(diag) == 2
+
+    def test_json_dimensions_match_fdr(self):
+        """The row-shape dimensions must match primary_fdr.test_family_dimensions."""
+        data = _load_ew_json()
+        rshape_dims = (
+            data.get("paired_contrast", {})
+            .get("primary_pvalue_row_shape", {})
+            .get("dimensions", [])
+        )
+        fdr_dims = data.get("primary_fdr", {}).get("test_family_dimensions", [])
+        assert list(rshape_dims) == list(fdr_dims), (
+            f"Row shape dims {rshape_dims} don't match FDR dims {fdr_dims}"
+        )
+
+    def test_json_has_is_diagnostic_tag(self):
+        data = _load_ew_json()
+        tag = (
+            data.get("paired_contrast", {})
+            .get("primary_pvalue_row_shape", {})
+            .get("is_diagnostic_tag")
+        )
+        assert tag == "is_diagnostic", f"Expected 'is_diagnostic', got '{tag}'"
+        assert (
+            data.get("paired_contrast", {})
+            .get("primary_pvalue_row_shape", {})
+            .get("diagnostic_rows_not_in_primary_fdr_family")
+        ) is True
+
+    def test_md_mentions_paired_delta(self):
+        md = _load_ew_md()
+        assert "paired_delta" in md, (
+            "Markdown must mention 'paired_delta' as the window_type for primary rows"
+        )
+
+    def test_md_mentions_is_diagnostic(self):
+        md = _load_ew_md()
+        assert "is_diagnostic" in md, (
+            "Markdown must mention 'is_diagnostic' tag for optional diagnostic rows"
+        )
+
+    def test_md_says_diagnostic_not_primary_fdr(self):
+        md = _load_ew_md()
+        assert "**not** the primary FDR family" in md
+
+    def test_rationale_mentions_paired_permutation(self):
+        rationale = ROOT / "EVENT_WINDOW_THRESHOLDS_RATIONALE.md"
+        text = rationale.read_text(encoding="utf-8")
+        assert "native_paired_permutation" in text
+
+    def test_fdr_pvalue_source_matches_paired_contrast(self):
+        """primary_fdr.pvalue_source must match
+        paired_contrast.primary_pvalue_source."""
+        data = _load_ew_json()
+        fdr_source = data.get("primary_fdr", {}).get("pvalue_source")
+        pc_source = data.get("paired_contrast", {}).get("primary_pvalue_source")
+        assert fdr_source == pc_source, (
+            f"FDR source '{fdr_source}' != contrast source '{pc_source}'"
+        )
+
+    def test_window_type_not_event_or_baseline_for_primary(self):
+        """The primary FDR dimension window_type must NOT have value 'event'
+        or 'baseline' — it must be 'paired_delta'."""
+        data = _load_ew_json()
+        wt = (
+            data.get("paired_contrast", {})
+            .get("primary_pvalue_row_shape", {})
+            .get("window_type_value_for_primary")
+        )
+        assert wt == "paired_delta"
+        assert wt not in ("event", "baseline")
+
+
 # ===========================================================================
 # 4. Capture geometry and unambiguous duration fields
 # ===========================================================================
@@ -457,14 +557,147 @@ class TestFrozenEventList:
             assert field in props, f"Schema missing field: {field}"
 
     def test_event_list_schema_requires_inclusion_or_exclusion(self):
-        """Schema must enforce oneOf: inclusion_reason xor exclusion_reason
-        via the oneOf constraint."""
+        """Schema must have oneOf with two branches for included/excluded."""
         path = ROOT / "event_window_event_list.schema.json"
         with open(path, encoding="utf-8") as f:
             schema = json.load(f)
         items = schema.get("items", {})
         one_of = items.get("oneOf", [])
         assert len(one_of) >= 2, "Schema must have oneOf for inclusion/exclusion"
+        # Both inclusion_reason and exclusion_reason must be in required
+        required = items.get("required", [])
+        assert "inclusion_reason" in required
+        assert "exclusion_reason" in required
+
+    def test_schema_validates_included_row(self):
+        """Row with inclusion_reason string + exclusion_reason null passes."""
+        import jsonschema
+        path = ROOT / "event_window_event_list.schema.json"
+        with open(path, encoding="utf-8") as f:
+            schema = json.load(f)
+        row = {
+            "event_id": "ew_TEST_001",
+            "event_name": "Test Event",
+            "scheduled_event_utc": "2026-06-18T18:00:00Z",
+            "calendar_source": "Forex Factory",
+            "calendar_source_snapshot_utc": "2026-06-17T12:00:00Z",
+            "event_window_start_utc": "2026-06-18T17:55:00Z",
+            "event_window_end_utc": "2026-06-18T18:15:00Z",
+            "baseline_window_start_utc": "2026-06-18T19:30:00Z",
+            "baseline_window_end_utc": "2026-06-18T19:50:00Z",
+            "inclusion_reason": "Test: high-impact macro event",
+            "exclusion_reason": None,
+        }
+        jsonschema.validate([row], schema)
+
+    def test_schema_validates_excluded_row(self):
+        """Row with inclusion_reason null + exclusion_reason string passes."""
+        import jsonschema
+        path = ROOT / "event_window_event_list.schema.json"
+        with open(path, encoding="utf-8") as f:
+            schema = json.load(f)
+        row = {
+            "event_id": "ew_TEST_002",
+            "event_name": "Test Excluded Event",
+            "scheduled_event_utc": "2026-07-03T12:30:00Z",
+            "calendar_source": "Investing.com",
+            "calendar_source_snapshot_utc": "2026-07-02T10:00:00Z",
+            "event_window_start_utc": "2026-07-03T12:25:00Z",
+            "event_window_end_utc": "2026-07-03T12:45:00Z",
+            "baseline_window_start_utc": "2026-07-03T14:00:00Z",
+            "baseline_window_end_utc": "2026-07-03T14:20:00Z",
+            "inclusion_reason": None,
+            "exclusion_reason": "Baseline overlap with another event",
+        }
+        jsonschema.validate([row], schema)
+
+    def test_schema_rejects_both_non_null(self):
+        """Row with both inclusion_reason and exclusion_reason non-null fails."""
+        import jsonschema
+        path = ROOT / "event_window_event_list.schema.json"
+        with open(path, encoding="utf-8") as f:
+            schema = json.load(f)
+        row = {
+            "event_id": "ew_TEST_003",
+            "event_name": "Test Bad Event",
+            "scheduled_event_utc": "2026-06-18T18:00:00Z",
+            "calendar_source": "Forex Factory",
+            "calendar_source_snapshot_utc": "2026-06-17T12:00:00Z",
+            "event_window_start_utc": "2026-06-18T17:55:00Z",
+            "event_window_end_utc": "2026-06-18T18:15:00Z",
+            "baseline_window_start_utc": "2026-06-18T19:30:00Z",
+            "baseline_window_end_utc": "2026-06-18T19:50:00Z",
+            "inclusion_reason": "Included",
+            "exclusion_reason": "Also excluded — contradiction",
+        }
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate([row], schema)
+
+    def test_schema_rejects_both_null(self):
+        """Row with both inclusion_reason and exclusion_reason null fails."""
+        import jsonschema
+        path = ROOT / "event_window_event_list.schema.json"
+        with open(path, encoding="utf-8") as f:
+            schema = json.load(f)
+        row = {
+            "event_id": "ew_TEST_004",
+            "event_name": "Test Null Event",
+            "scheduled_event_utc": "2026-06-18T18:00:00Z",
+            "calendar_source": "Forex Factory",
+            "calendar_source_snapshot_utc": "2026-06-17T12:00:00Z",
+            "event_window_start_utc": "2026-06-18T17:55:00Z",
+            "event_window_end_utc": "2026-06-18T18:15:00Z",
+            "baseline_window_start_utc": "2026-06-18T19:30:00Z",
+            "baseline_window_end_utc": "2026-06-18T19:50:00Z",
+            "inclusion_reason": None,
+            "exclusion_reason": None,
+        }
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate([row], schema)
+
+    def test_schema_rejects_empty_inclusion_string(self):
+        """Row with empty inclusion_reason string fails (minLength)."""
+        import jsonschema
+        path = ROOT / "event_window_event_list.schema.json"
+        with open(path, encoding="utf-8") as f:
+            schema = json.load(f)
+        row = {
+            "event_id": "ew_TEST_005",
+            "event_name": "Test Empty Inc",
+            "scheduled_event_utc": "2026-06-18T18:00:00Z",
+            "calendar_source": "Forex Factory",
+            "calendar_source_snapshot_utc": "2026-06-17T12:00:00Z",
+            "event_window_start_utc": "2026-06-18T17:55:00Z",
+            "event_window_end_utc": "2026-06-18T18:15:00Z",
+            "baseline_window_start_utc": "2026-06-18T19:30:00Z",
+            "baseline_window_end_utc": "2026-06-18T19:50:00Z",
+            "inclusion_reason": "",
+            "exclusion_reason": None,
+        }
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate([row], schema)
+
+    def test_schema_rejects_empty_exclusion_string(self):
+        """Row with empty exclusion_reason string fails (minLength)."""
+        import jsonschema
+        path = ROOT / "event_window_event_list.schema.json"
+        with open(path, encoding="utf-8") as f:
+            schema = json.load(f)
+        row = {
+            "event_id": "ew_TEST_006",
+            "event_name": "Test Empty Exc",
+            "scheduled_event_utc": "2026-06-18T18:00:00Z",
+            "calendar_source": "Forex Factory",
+            "calendar_source_snapshot_utc": "2026-06-17T12:00:00Z",
+            "event_window_start_utc": "2026-06-18T17:55:00Z",
+            "event_window_end_utc": "2026-06-18T18:15:00Z",
+            "baseline_window_start_utc": "2026-06-18T19:30:00Z",
+            "baseline_window_end_utc": "2026-06-18T19:50:00Z",
+            "inclusion_reason": None,
+            "exclusion_reason": "",
+        }
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate([row], schema)
 
     def test_event_list_template_mentions_baseline_overlap(self):
         path = ROOT / "EVENT_WINDOW_EVENT_LIST_TEMPLATE.md"

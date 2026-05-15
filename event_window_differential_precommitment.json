@@ -27,7 +27,21 @@
     "paired_permutation_required": true,
     "primary_pvalue_source": "native_paired_permutation",
     "window_type_separation_insufficient": true,
-    "delta_metric_description": "delta = event_window_mean_net_bps - baseline_window_mean_net_bps per config per paired capture"
+    "delta_metric_description": "delta = event_window_mean_net_bps - baseline_window_mean_net_bps per config per paired capture",
+    "primary_pvalue_row_shape": {
+      "dimensions": [
+        "source_asset",
+        "target_asset",
+        "signal_type",
+        "lookback_ms",
+        "horizon_ms",
+        "window_type"
+      ],
+      "window_type_value_for_primary": "paired_delta",
+      "window_type_values_for_diagnostics": ["event", "baseline"],
+      "is_diagnostic_tag": "is_diagnostic",
+      "diagnostic_rows_not_in_primary_fdr_family": true
+    }
   },
   "holdout": {
     "primary_split": "temporal",

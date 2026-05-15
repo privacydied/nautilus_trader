@@ -28,6 +28,22 @@ price action.
 5. **No future population:** This template is not populated with specific
    future events unless explicitly requested.
 
+## Both Fields Always Present, Exactly One Non-Null
+
+Every event-list row **must** contain both `inclusion_reason` and
+`exclusion_reason` fields.  Exactly one of them is a non-empty string; the
+other is `null`.
+
+| Row type | `inclusion_reason` | `exclusion_reason` |
+|----------|-------------------|-------------------|
+| Included | Non-empty string  | `null`            |
+| Excluded | `null`            | Non-empty string  |
+
+This convention ensures every event has an auditable status.  An event cannot
+be in an ambiguous state (both null, both non-null, or absent reasons).
+The machine-readable schema (`event_window_event_list.schema.json`) enforces
+this via `oneOf` validation.
+
 ## Schema Fields
 
 Each event in the list is a JSON object with the following fields:
@@ -43,8 +59,8 @@ Each event in the list is a JSON object with the following fields:
 | `event_window_end_utc` | string (ISO 8601) | yes | Computed as `scheduled_event_utc + 15 min` |
 | `baseline_window_start_utc` | string (ISO 8601) | yes | Computed as `scheduled_event_utc + 90 min` |
 | `baseline_window_end_utc` | string (ISO 8601) | yes | Computed as `scheduled_event_utc + 110 min` |
-| `inclusion_reason` | string | conditional | Why this event was selected (required if `exclusion_reason` is null) |
-| `exclusion_reason` | string or null | conditional | Why this event was excluded (null if included) |
+| `inclusion_reason` | string or null | yes | Non-empty string for included rows; `null` for excluded rows |
+| `exclusion_reason` | string or null | yes | Non-empty string for excluded rows; `null` for included rows |
 
 ## Baseline Overlap Check
 
@@ -58,7 +74,7 @@ If an overlap exists, set `exclusion_reason` to:
 
 The paired capture is then quarantined.
 
-## Example Entry
+## Example Included Entry
 
 ```json
 {

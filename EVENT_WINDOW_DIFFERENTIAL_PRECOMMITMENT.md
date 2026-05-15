@@ -94,6 +94,43 @@ Machine-readable fields in `event_window_differential_precommitment.json`:
 These fields mirror those set in `primary_fdr.pvalue_source` (see False
 Discovery Rate Control section) and serve as cross-references.
 
+### Paired Permutation Output Schema
+
+Each `native_paired_permutation` evaluation produces one primary p-value row
+per **paired delta config**, not separate independent p-values for event and
+baseline windows separately.
+
+#### Required identifying dimensions for the paired delta row
+
+Every primary p-value row emitted by the paired permutation must carry these
+dimensions:
+
+- `source_asset`
+- `target_asset`
+- `signal_type`
+- `lookback_ms`
+- `horizon_ms`
+- `window_type`  → always `"paired_delta"` for the primary row
+
+The `window_type` dimension uses the literal value `"paired_delta"` for the
+primary p-value row, distinguishing it from raw event/baseline diagnostic rows.
+
+#### Diagnostic rows (optional)
+
+Raw event-window and baseline-window p-value rows may be retained for
+diagnostic purposes.  If present, their `window_type` values are `"event"`
+and `"baseline"` respectively.  These diagnostic rows:
+
+- Are **not** the primary FDR family.
+- Must be prefixed or tagged with `is_diagnostic: true` in their metadata.
+- Must not affect the `native_paired_permutation` count tracked by the
+  primary test family dimensions.
+
+If no paired permutation evaluator exists yet for this signal family, the
+required column schema is defined here as a contract for future
+implementation.  The FDR step will fail if the incoming p-value table
+does not match these required dimensions.
+
 ## Event-Window Family Definition
 
 Each capture produces two time windows per event:
@@ -247,13 +284,17 @@ that the FDR script can group and correct correctly:
 - `signal_type`
 - `lookback_ms`
 - `horizon_ms`
-- `window_type` (values: `event` or `baseline`)
+- `window_type` → `"paired_delta"` for the primary row; `"event"`/`"baseline"` for diagnostic rows only
 
 The `window_type` dimension is the structural addition that distinguishes this
-precommitment from `cross_asset_beta_lag_v1`.  A config with the same
-source_asset, target_asset, signal_type, lookback, and horizon is treated as
-two separate entries in the test family if one is `event` and the other is
-`baseline`.  This allows FDR-corrected comparison of the two window types.
+precommitment from `cross_asset_beta_lag_v1`.  For the primary FDR family,
+the value must always be `"paired_delta"`.
+
+A config with the same source_asset, target_asset, signal_type, lookback,
+and horizon is treated as two separate entries in the test family if one is
+`"event"` and the other is `"baseline"` (diagnostic rows only).  This allows
+FDR-corrected comparison of the two window types for diagnostic purposes,
+while the primary FDR family is defined on the `"paired_delta"` rows.
 
 **However**, `window_type` separation is not sufficient by itself.  The
 primary null test is the paired contrast `delta = event - baseline`

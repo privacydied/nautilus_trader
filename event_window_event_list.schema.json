@@ -15,16 +15,28 @@
       "event_window_start_utc",
       "event_window_end_utc",
       "baseline_window_start_utc",
-      "baseline_window_end_utc"
+      "baseline_window_end_utc",
+      "inclusion_reason",
+      "exclusion_reason"
     ],
     "oneOf": [
       {
-        "required": ["inclusion_reason"],
-        "not": {"required": ["exclusion_reason"]}
+        "title": "included",
+        "description": "inclusion_reason is a non-empty string, exclusion_reason is null",
+        "properties": {
+          "inclusion_reason": { "type": "string", "minLength": 1 },
+          "exclusion_reason": { "type": "null" }
+        },
+        "required": ["inclusion_reason", "exclusion_reason"]
       },
       {
-        "required": ["exclusion_reason"],
-        "not": {"required": ["inclusion_reason"]}
+        "title": "excluded",
+        "description": "inclusion_reason is null, exclusion_reason is a non-empty string",
+        "properties": {
+          "inclusion_reason": { "type": "null" },
+          "exclusion_reason": { "type": "string", "minLength": 1 }
+        },
+        "required": ["inclusion_reason", "exclusion_reason"]
       }
     ],
     "properties": {
@@ -73,12 +85,12 @@
         "description": "scheduled_event_utc + 110 min"
       },
       "inclusion_reason": {
-        "type": "string",
-        "description": "Why this event was selected. Required if exclusion_reason is null."
+        "type": ["string", "null"],
+        "description": "Why this event was selected. Non-empty string for included rows; null for excluded rows."
       },
       "exclusion_reason": {
         "type": ["string", "null"],
-        "description": "Why this event was excluded. Required if inclusion_reason is absent. Set to null if included."
+        "description": "Why this event was excluded. Non-empty string for excluded rows; null for included rows."
       }
     }
   }
