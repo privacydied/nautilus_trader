@@ -138,7 +138,9 @@ def _validate_and_collect_captures(
     admission = precommit.get("capture_admission", {})
     require_validation_passed = admission.get("require_validation_passed", True)
     exclude_fast_diag = admission.get("exclude_fast_diagnostic", True)
-    required_mode = admission.get("required_capture_mode", "FULL_ACTIVE")
+    required_mode = admission.get("required_capture_mode", None)
+    if required_mode is None and admission.get("require_full_active_capture", True):
+        required_mode = "FULL_ACTIVE"
 
     captures: list[dict[str, Any]] = []
 

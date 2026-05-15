@@ -147,7 +147,7 @@ def validate_markdown_json_match(
     )
     checks.append(
         ("test family dims present",
-         len(primary_fdr.get("test_family_dimensions", [])) >= 6)
+         len(primary_fdr.get("test_family_dimensions", [])) >= 5)
     )
 
     sensitivity = precommit.get("sensitivity_fdr", {})

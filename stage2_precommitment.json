@@ -1,18 +1,16 @@
 {
   "schema_version": 1,
   "stage": "stage2",
-  "signal_family": "derivatives_source_spot_target_lead_lag_v2",
-  "created_utc": "2026-05-15T01:44:14.889Z",
+  "signal_family": "cross_asset_beta_lag_v1",
+  "created_utc": "2026-05-15T17:44:46.582Z",
   "primary_fdr": {
     "method": "benjamini_hochberg",
-    "q": 0.10,
+    "q": 0.1,
     "applies_to": "discovery",
     "pvalue_source": "native_permutation",
-    "pvalue_required_for_every_config": true,
     "test_family_dimensions": [
-      "source_venue",
-      "target_venue",
-      "symbol",
+      "source_asset",
+      "target_asset",
       "signal_type",
       "lookback_ms",
       "horizon_ms"
@@ -20,15 +18,14 @@
   },
   "sensitivity_fdr": {
     "method": "benjamini_yekutieli",
-    "q": 0.10,
-    "applies_to": "discovery_sensitivity_only",
-    "pvalue_source": "native_permutation"
+    "q": 0.1,
+    "applies_to": "discovery_sensitivity_only"
   },
   "holdout": {
     "primary_split": "temporal",
     "ordering_field": "capture_start_utc",
-    "discovery_fraction": 0.70,
-    "test_fraction": 0.30,
+    "discovery_fraction": 0.7,
+    "test_fraction": 0.3,
     "minimum_validated_captures": 10,
     "test_set_sealed": true
   },
@@ -37,11 +34,41 @@
     "exclude_burned": true,
     "exclude_fast_diagnostic": true,
     "require_validation_passed": true,
-    "required_capture_mode": "FULL_ACTIVE"
+    "require_full_active_capture": true
+  },
+  "event_gate": {
+    "full_active_required": true,
+    "minimum_btc_1h_move_bps": 150.0,
+    "requires_acceleration": true,
+    "quiet_window_is_diagnostic_only": true
+  },
+  "hypothesis_config": {
+    "source_assets": [
+      "BTC",
+      "ETH"
+    ],
+    "target_assets": [
+      "SOL",
+      "LINK",
+      "DOGE",
+      "AVAX"
+    ],
+    "primary_signal_type": "signed_imbalance",
+    "primary_lookback_ms": 30000,
+    "primary_horizon_ms": 300000,
+    "allowed_signal_types": [
+      "signed_imbalance"
+    ],
+    "allowed_lookbacks_ms": [
+      30000
+    ],
+    "allowed_horizons_ms": [
+      300000
+    ]
   },
   "discovery_acceptance": {
     "minimum_aggregate_mean_net_bps_per_event": 2.0,
-    "minimum_same_sign_capture_fraction": 0.70,
+    "minimum_same_sign_capture_fraction": 0.7,
     "same_sign_rounding": "ceil",
     "minimum_valid_events_per_config": 50,
     "worst_capture_mean_net_bps_floor": -5.0,
@@ -56,15 +83,13 @@
     "no_threshold_or_parameter_changes": true
   },
   "burn_rules": {
-    "burn_when_final_discovery_criteria_survivor_set_empty": true,
-    "burn_entire_validated_corpus_for_signal_family": true,
-    "do_not_inspect_test_set_on_discovery_failure": true,
-    "if_discovery_finds_no_survivors_do_not_inspect_test": true,
+    "if_final_discovery_criteria_survivor_set_empty_do_not_inspect_test": true,
     "if_bh_kills_everything_do_not_relax_q_on_same_corpus": true,
     "if_economic_bar_kills_everything_do_not_lower_on_same_corpus": true,
     "if_consistency_bar_kills_everything_do_not_lower_on_same_corpus": true,
+    "if_tail_bar_kills_everything_do_not_relax_tail_floor_on_same_corpus": true,
     "if_corpus_below_minimum_abort_and_collect_more": true,
     "criteria_change_after_discovery_invalidates_holdout": true,
-    "failed_discovery_burns_corpus_for_signal_family": true
+    "failed_discovery_burns_entire_validated_corpus_for_signal_family": true
   }
 }
