@@ -39,7 +39,7 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 | Trade-flow impulse v1 (600s) | 4 signal types, 600s | Coinbase↔Kraken | REJECTED | Best -13.66 bps, win rate 0% | `trade-flow-impulse-v1-rejected` |
 | Trade-flow impulse v1 (300s) | 4 signal types, 300s | Coinbase↔Kraken | REJECTED | Best -11.97 bps, win rate 0% | `trade-flow-impulse-v1-300s-rejected` |
 | Derivatives lead-lag v1 (smoke) | notional burst, price shock, signed imbalance | Coinbase spot -> Kraken spot BTC | REJECTED_SPOT_SPOT_SMOKE | Best -18.74 bps, win rate 0% | `derivatives-lead-lag-v1-spot-smoke-rejected` |
-| Derivatives-source spot lead-lag v2 | notional_burst, large_trade, signed_imbalance | Binance USD-M perp → Kraken/Coinbase spot | OPEN_IMPLEMENTATION | Implementation complete. Needs empirical capture during volatile market window. | — |
+| Derivatives-source spot lead-lag v2 | notional_burst, large_trade, signed_imbalance | Binance USD-M perp → Kraken/Coinbase spot | REJECTED | May 15 FULL_ACTIVE: 63 groups, best raw edge 0.098 bps vs 50 bps all-in cost. 0 viable at any cost level. 0 recurring groups May 14→May 15. COST_WALL_BLOCKED. Diagnostics complete: cost sensitivity, heatmap, permutation null (skipped), cross-capture consistency, candidate falsification. | `derivatives-v2-binance-perp-to-spot-rejected` |
 || DEX-CEX spot dislocation v1 | DEX pool price/volume/liquidity -> CEX forward returns | DEX Screener -> Kraken/Coinbase spot | NEEDS_MORE_DATA | 0 events from 70 snapshots, 2-min window too short, DEX search 5m volumes too stable | `dex-cex-v1-needs-more-data` |
 || Cross-asset spot impulse v1 | BTC/ETH spot impulse -> alt spot forward returns | Coinbase/Kraken/Binance spot | MARKET_MODERATE_DIAGNOSTIC | Best pair -43.98 bps (coinbase:ETH/USDT->coinbase:LINK/USD) in a quiet/moderate capture. BTC/ETH source movement during actual capture was only ~9-17 bps, below the 30 bps source-range gate required to test stress beta-lag. Not a full volatile-window rejection. | 2026-05-13 07:37-07:53 UTC, 906s capture, quiet/moderate market (BTC 12.6 bps, ETH 16.2 bps). 72 pairs, 11,890 signals, 50 pairs with overlap, 0 pairs with sufficient source/target movement. Diagnostic evidence only — open for volatile-window retest. |
 
@@ -50,11 +50,12 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 3. **Naive top-of-book L2 market making** on BTC/ETH at current fee tier. Spread too small, fills too toxic. Rejected.
 4. **Direct cash-and-carry** under Kraken USD spot + Binance/Bybit USDT perp cost model. Net edge below all-in cost. Rejected.
 5. **Same-asset spot/spot lead-lag** tested as a smoke run for the derivatives lead-lag v1 observer. REJECTED_SPOT_SPOT_SMOKE. The observer implementation is correct but the run only re-proved an already locked gate.
+6. **Derivatives flow impulse → spot lead-lag** (Binance USD-M perp → Kraken/Coinbase spot). REJECTED after full-empirical capture (May 15 FULL_ACTIVE). Best raw edge 0.098 bps vs 50 bps all-in cost. 0 viable groups at any cost level. 0 recurring groups across two separate captures. Closed under this execution stack. Do not revisit without materially different execution assumptions: HFT-grade colocated execution, much lower fees, different venue microstructure, or a genuinely different signal family. Do not reopen by merely changing lookbacks, horizons, or adding OI filters.
 
 ## Still Open
 
+- **Cross-asset beta lag under stress** — BTC/ETH shock leads slower repricing in higher-beta assets over 30s to 5m. Distinct from same-asset derivatives-to-spot lead-lag. Only testable during genuine stress windows. See `CROSS_ASSET_BETA_LAG_PRECOMMITMENT.md`.
 - **Cross-asset spot impulse v1** — Quiet/moderate-regime diagnostic only. BTC/ETH source movement during the actual capture was ~9-17 bps, below the 30 bps source-range gate required to test stress beta-lag. The 50 pairs with overlap all failed after the 50bps cost wall (best -43.98 bps), but this is diagnostic evidence from a quiet market, not a structural rejection. Open for a genuine volatile/stress-window retest only.
-- **Derivatives flow impulse → spot lead-lag** (perp/futures venue as source, not spot). OPEN_IMPLEMENTATION. The v2 implementation (`run_derivatives_spot_capture.py` + `run_derivatives_spot_lead_lag.py`) uses Binance USD-M perp as source and Kraken/Coinbase spot as target with a single combined async capture runner, overlap-window enforcement, OI bucket labeling, and volatility sanity gates. Needs empirical capture during a volatile market window.
 - OI + price regime classification (filter, not standalone trade)
 - Funding as crowding/sentiment feature (not carry)
 - L2 adverse selection conditioning on book state
@@ -100,13 +101,4 @@ The first real empirical run (2026-05-13 03:17-03:27 UTC) produced:
 
 ## Open Study Infrastructure Notes
 
-Completed diagnostic infrastructure for derivatives-source spot lead-lag v2:
-
-- GPU permutation/null tests
-- GPU forward returns with CPU/GPU parity
-- Lead/lag heatmap diagnostics
-- Cost sensitivity diagnostics
-- Cross-capture consistency aggregation
-- Candidate falsification summary
-
-This is not a rejection entry and does not change the existing `OPEN_IMPLEMENTATION` status. Registry status should only change after valid empirical capture/evaluation evidence requires it.
+The completed diagnostic infrastructure for derivatives-source spot lead-lag v2 (GPU permutation/null, forward returns, heatmap, cost sensitivity, consistency, falsification) remains available for other observer studies that share a compatible report schema. The v2 evaluator, heatmap, cost sensitivity, permutation null, and falsification tools are generic across observer frameworks that produce lead-lag-group output format, not exclusive to the now-rejected derivatives v2 hypothesis.
