@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import logging
 import statistics
 import sys
@@ -740,6 +741,8 @@ def _run(args: argparse.Namespace) -> None:
         horizons_ms=horizons_ms,
         cooldown_ms=args.cooldown_ms,
         baseline_window_ms=baseline_window_ms,
+        min_source_range_bps=min_source_range_bps,
+        min_target_range_bps=min_target_range_bps,
         out_dir=str(out_dir),
         num_pairs_evaluated=len(pair_results),
     )

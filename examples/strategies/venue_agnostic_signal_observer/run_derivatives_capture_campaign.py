@@ -515,7 +515,7 @@ def main() -> None:
     if campaign_status == CAMPAIGN_RUNNING:
         # Check if we completed all or if some failed
         completed_count = sum(1 for a in attempts if a["status"] == ATTEMPT_COMPLETED)
-        sum(1 for a in attempts if a["status"] == ATTEMPT_FAILED)
+        failed_count = sum(1 for a in attempts if a["status"] == ATTEMPT_FAILED)
         skipped_count = sum(1 for a in attempts if a["status"] == ATTEMPT_SKIPPED_LOW_VOLATILITY)
 
         if completed_count + skipped_count == len(attempts):
@@ -524,7 +524,11 @@ def main() -> None:
             campaign_status = CAMPAIGN_FAILED
 
     if campaign_end_reason is None:
-        campaign_end_reason = f"Campaign finished with {sum(1 for a in attempts if a['status'] == ATTEMPT_COMPLETED)} completed, {sum(1 for a in attempts if a['status'] == ATTEMPT_FAILED)} failed, {sum(1 for a in attempts if a['status'] == ATTEMPT_SKIPPED_LOW_VOLATILITY)} skipped out of {len(attempts)} total attempts."
+        campaign_end_reason = (
+            f"Campaign finished with {completed_count} completed, "
+            f"{failed_count} failed, "
+            f"{skipped_count} skipped out of {len(attempts)} total attempts."
+        )
 
     # -----------------------------------------------------------------------
     # Build campaign manifest

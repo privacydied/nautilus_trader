@@ -109,7 +109,6 @@ def run_discovery_check(
             discovery_run_ids.add(rid)
 
     # Process evaluator summaries
-    survivers: list[dict[str, Any]] = []
     survivors: list[dict[str, Any]] = []
     rejected_by_bh: list[dict[str, Any]] = []
 
@@ -119,11 +118,6 @@ def run_discovery_check(
         errors.extend(fdr_result.get("errors", ["FDR step failed"]))
     elif fdr_status == "NO_DATA":
         errors.append("FDR has no data")
-
-    bh_results = {
-        str(hash(json.dumps(r, sort_keys=True))): r
-        for r in (fdr_result.get("primary_result") or [])
-    }
 
     # Process each evaluator summary — collect ALL capture-group data
     all_capture_data: list[dict[str, Any]] = []
@@ -356,9 +350,7 @@ def run_holdout_check(
         "minimum_aggregate_mean_net_bps_per_event", 2.0
     )
     worst_floor = holdout_accept.get("worst_capture_mean_net_bps_floor", -5.0)
-    requires_same_sign = holdout_accept.get("requires_same_sign_as_discovery", True)
     frozen_only = holdout_accept.get("frozen_config_only", True)
-    no_changes = holdout_accept.get("no_threshold_or_parameter_changes", True)
 
     test_run_ids = {r.get("run_id") for r in test_runs if r.get("run_id")}
 
