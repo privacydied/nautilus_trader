@@ -318,6 +318,69 @@ class TestFdrBhBy:
 
         assert result["rejected_by_count"] <= result["rejected_bh_count"]
 
+    def test_by_exact_expected_flags(self):
+        """BY gives exact expected accept/reject flags on known p-values.
+
+        Using p-values: [0.001, 0.02, 0.03, 0.5, 0.8]
+        m=5, q=0.10
+        BY c(m) = 1 + 1/2 + 1/3 + 1/4 + 1/5 = 2.28333...
+        BY thresholds: i*q/(m*c(m))
+        i=1: 0.10/(5*2.28333) = 0.00876
+        i=2: 0.20/(5*2.28333) = 0.01752
+        i=3: 0.30/(5*2.28333) = 0.02628
+        i=4: 0.40/(5*2.28333) = 0.03504
+        i=5: 0.50/(5*2.28333) = 0.04380
+        Step-up: find largest i where p[i] <= threshold[i]
+        p=0.001 <= 0.00876 (i=1) ✓, p=0.02 > 0.01752 (i=2) x
+        So largest i where p[i] <= threshold[i] is 0 (index 0).
+        Only row 0 (p=0.001) is rejected, rows 1-4 accepted.
+        """
+        pvalues = [
+            {"source_venue": "binance_perp", "target_venue": "kraken",
+             "symbol": "BTC/USD", "signal_type": "notional_burst",
+             "lookback_ms": 1000, "horizon_ms": 1000,
+             "p_value": 0.001, "pvalue_source": "native_permutation"},
+            {"source_venue": "binance_perp", "target_venue": "kraken",
+             "symbol": "BTC/USD", "signal_type": "notional_burst",
+             "lookback_ms": 5000, "horizon_ms": 1000,
+             "p_value": 0.02, "pvalue_source": "native_permutation"},
+            {"source_venue": "binance_perp", "target_venue": "kraken",
+             "symbol": "BTC/USD", "signal_type": "notional_burst",
+             "lookback_ms": 10000, "horizon_ms": 1000,
+             "p_value": 0.03, "pvalue_source": "native_permutation"},
+            {"source_venue": "binance_perp", "target_venue": "kraken",
+             "symbol": "BTC/USD", "signal_type": "notional_burst",
+             "lookback_ms": 30000, "horizon_ms": 1000,
+             "p_value": 0.50, "pvalue_source": "native_permutation"},
+            {"source_venue": "binance_perp", "target_venue": "kraken",
+             "symbol": "BTC/USD", "signal_type": "notional_burst",
+             "lookback_ms": 30000, "horizon_ms": 2000,
+             "p_value": 0.80, "pvalue_source": "native_permutation"},
+        ]
+
+        result = run_fdr(
+            pvalue_data=pvalues,
+            required_dimensions=[
+                "source_venue", "target_venue", "symbol",
+                "signal_type", "lookback_ms", "horizon_ms",
+            ],
+            primary_q=0.10,
+            sensitivity_q=0.10,
+        )
+
+        assert result["status"] == "FDR_COMPLETED"
+        assert result["rejected_by_count"] == 1
+        assert result["accepted_by_count"] == 4
+
+        # Check individual flags for BY
+        by_results = result.get("sensitivity_result", [])
+        sorted_by = sorted(by_results, key=lambda r: r.get("p_value", 1.0))
+        assert sorted_by[0]["rejected"] is True   # p=0.001
+        assert sorted_by[1]["rejected"] is False   # p=0.02
+        assert sorted_by[2]["rejected"] is False   # p=0.03
+        assert sorted_by[3]["rejected"] is False   # p=0.50
+        assert sorted_by[4]["rejected"] is False   # p=0.80
+
     def test_fails_if_pvalue_source_mismatch(self):
         """FDR fails if p-value source is not native_permutation."""
         pvalues = [
@@ -378,6 +441,53 @@ class TestFdrBhBy:
         ], pvalue_source="native_permutation")
         assert result["status"] == "FDR_COMPLETED"
         assert result["pvalue_source"] == "native_permutation"
+
+    def test_fdr_cross_asset_dimensions(self):
+        """FDR works with cross_asset_beta_lag_v1 dimensions (source_asset, target_asset, etc.)."""
+        pvalues = [
+            {"source_asset": "BTC", "target_asset": "SOL",
+             "signal_type": "signed_imbalance",
+             "lookback_ms": 30000, "horizon_ms": 300000,
+             "p_value": 0.001, "pvalue_source": "native_permutation"},
+            {"source_asset": "BTC", "target_asset": "LINK",
+             "signal_type": "signed_imbalance",
+             "lookback_ms": 30000, "horizon_ms": 300000,
+             "p_value": 0.50, "pvalue_source": "native_permutation"},
+            {"source_asset": "ETH", "target_asset": "DOGE",
+             "signal_type": "signed_imbalance",
+             "lookback_ms": 30000, "horizon_ms": 300000,
+             "p_value": 0.80, "pvalue_source": "native_permutation"},
+        ]
+
+        result = run_fdr(
+            pvalue_data=pvalues,
+            required_dimensions=[
+                "source_asset", "target_asset",
+                "signal_type", "lookback_ms", "horizon_ms",
+            ],
+            primary_q=0.10,
+        )
+
+        assert result["status"] == "FDR_COMPLETED"
+        assert result["rejected_bh_count"] == 1  # Only p=0.001 rejected
+        assert result["accepted_bh_count"] == 2
+
+    def test_fdr_cross_asset_fails_if_dimensions_missing(self):
+        """FDR fails when cross-asset dimensions are missing from p-value table."""
+        pvalues = [
+            {"source_asset": "BTC",
+             # Missing: target_asset, signal_type, lookback_ms, horizon_ms
+             "p_value": 0.05, "pvalue_source": "native_permutation"},
+        ]
+        result = run_fdr(
+            pvalue_data=pvalues,
+            required_dimensions=[
+                "source_asset", "target_asset",
+                "signal_type", "lookback_ms", "horizon_ms",
+            ],
+        )
+        assert result["status"] == "FDR_FAILED"
+        assert any("dimension" in e for e in result.get("errors", []))
 
 
 # ===========================================================================
@@ -1087,12 +1197,21 @@ class TestPrecommitmentFileConsistency:
     def test_precommitment_json_has_required_values(self):
         """stage2_precommitment.json has all required fixed values."""
         data = load_precommitment()
+        assert data.get("signal_family") == "cross_asset_beta_lag_v1"
+        created = data.get("created_utc", "")
+        assert created != "<ACTUAL_UTC_CREATION_TIME>"
+        assert "T" in created and created.endswith("Z")
         primary = data.get("primary_fdr", {})
         assert primary.get("method") == "benjamini_hochberg"
         assert primary.get("q") == 0.10
         assert primary.get("pvalue_source") == "native_permutation"
-        assert primary.get("pvalue_required_for_every_config") is True
-        assert len(primary.get("test_family_dimensions", [])) == 6
+        dims = primary.get("test_family_dimensions", [])
+        assert len(dims) == 5
+        assert "source_asset" in dims
+        assert "target_asset" in dims
+        assert "signal_type" in dims
+        assert "lookback_ms" in dims
+        assert "horizon_ms" in dims
 
         sensitivity = data.get("sensitivity_fdr", {})
         assert sensitivity.get("method") == "benjamini_yekutieli"
@@ -1122,4 +1241,25 @@ class TestPrecommitmentFileConsistency:
         assert holdout_acc.get("no_threshold_or_parameter_changes") is True
 
         burn = data.get("burn_rules", {})
-        assert burn.get("failed_discovery_burns_corpus_for_signal_family") is True
+        assert burn.get("failed_discovery_burns_entire_validated_corpus_for_signal_family") is True
+
+        # Cross-asset beta lag specific values
+        hypothesis = data.get("hypothesis_config", {})
+        assert hypothesis.get("source_assets") == ["BTC", "ETH"]
+        assert hypothesis.get("target_assets") == ["SOL", "LINK", "DOGE", "AVAX"]
+        assert hypothesis.get("primary_signal_type") == "signed_imbalance"
+        assert hypothesis.get("primary_lookback_ms") == 30000
+        assert hypothesis.get("primary_horizon_ms") == 300000
+        assert hypothesis.get("allowed_signal_types") == ["signed_imbalance"]
+        assert hypothesis.get("allowed_lookbacks_ms") == [30000]
+        assert hypothesis.get("allowed_horizons_ms") == [300000]
+
+        event_gate = data.get("event_gate", {})
+        assert event_gate.get("full_active_required") is True
+        assert event_gate.get("minimum_btc_1h_move_bps") == 150.0
+        assert event_gate.get("requires_acceleration") is True
+        assert event_gate.get("quiet_window_is_diagnostic_only") is True
+
+        admission = data.get("capture_admission", {})
+        assert admission.get("exclude_fast_diagnostic") is True
+        assert admission.get("require_full_active_capture") is True
