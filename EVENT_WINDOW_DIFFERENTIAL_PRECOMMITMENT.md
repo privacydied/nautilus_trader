@@ -67,13 +67,22 @@ this shared variance and isolates the event-specific component.
 
 ### window_type as a Dimension
 
-`window_type` (values: `event`, `baseline`) remains a required test-family
-dimension so that the FDR correction can separate the two window types in the
-p-value table.  However, **window_type separation alone is not sufficient**.
+`window_type` remains a required test-family dimension.  The value depends
+on the row type:
 
-A config that shows +3 bps in event windows and +1 bps in baseline windows
-would pass an independent "event is positive" test (+3 bps) but the paired
-contrast would be only +2 bps.  The paired contrast is the gate.
+- **Primary FDR rows** (the `native_paired_permutation` output): the value
+  is always `"paired_delta"`.
+- **Optional diagnostic rows**: raw event-window and baseline-window rows
+  may use `"event"` and `"baseline"` respectively.
+
+Diagnostic rows are **not** the primary FDR family.  They must be tagged
+`is_diagnostic: true` and must not affect the primary test family count.
+
+The paired contrast is the gate, not `window_type` separation.
+**window_type separation alone is not sufficient** — a config that shows
++3 bps in event windows and +1 bps in baseline windows would pass an
+independent "event is positive" test (+3 bps) but the paired contrast
+would be only +2 bps.
 
 ### Native Paired Permutation
 

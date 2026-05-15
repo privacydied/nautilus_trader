@@ -205,17 +205,24 @@ the baseline window duration of 1200 seconds is more than sufficient to produce
 
 ## Window Type as a Test Family Dimension
 
-The addition of `window_type` (values: `event`, `baseline`) to the test family
-dimensions is the structural distinction from `cross_asset_beta_lag_v1`.  This
-allows the FDR correction to treat event-window and baseline-window observations
-as distinct entries even when all other dimensions (source, target, signal_type,
-lookback, horizon) are identical.
+The `window_type` dimension is a required test-family dimension in this
+precommitment, distinguishing it from `cross_asset_beta_lag_v1` which has
+no such dimension.  However, the value semantics differ by row type:
 
-If `window_type` were omitted, a mean return of +3 bps from event windows and
-+1 bps from baseline windows would be averaged together (+2 bps) and might pass
-the economic bar even though the differential is where the actual signal lives.
-Explicitly separating the two types preserves the differential structure for
-analysis.
+- **Primary FDR rows** (the `native_paired_permutation` output): `window_type`
+  is always `"paired_delta"`.   Primary FDR correction does NOT separate
+  `event` and `baseline` rows — those are not in the primary family.
+- **Optional diagnostic rows**: `window_type` values `"event"` and `"baseline"`
+  are reserved for diagnostic-only observations that are tagged
+  `is_diagnostic: true` and excluded from the primary FDR family.
+
+The dimension exists to make the row type explicit and to prevent accidental
+mixing of primary and diagnostic p-value rows.  It is NOT present to treat
+event-window and baseline-window observations as separate primary hypotheses.
+
+If `window_type` were omitted entirely, a diagnostic row with mean +3 bps
+could be accidentally included with primary `paired_delta` rows, diluting
+the primary test family.  The explicit dimension prevents that contamination.
 
 ## Frozen Event List
 

@@ -433,6 +433,64 @@ class TestPairedPermutationRowShape:
         assert wt == "paired_delta"
         assert wt not in ("event", "baseline")
 
+    def test_md_window_type_section_does_not_list_event_baseline_first(self):
+        """The 'window_type as a Dimension' section must NOT list
+        '(values: event, baseline)' as the primary description."""
+        md = _load_ew_md()
+        # Find the "### window_type as a Dimension" section
+        idx = md.find("### window_type as a Dimension")
+        assert idx >= 0, "window_type as a Dimension section not found"
+        section = md[idx:idx + 800]  # Read ~800 chars into the section
+        # Must mention paired_delta
+        assert '"paired_delta"' in section
+        # Must NOT list (values: event, baseline) as the primary description
+        assert "(values: `event`, `baseline`)" not in section
+        assert "`event`, `baseline`" not in section.split("Primary FDR rows")[0] if "Primary FDR rows" in section else True
+
+    def test_md_window_type_section_says_diagnostic_not_primary(self):
+        md = _load_ew_md()
+        assert "### window_type as a Dimension" in md
+        # The document must state that diagnostic rows do not enter
+        # the primary FDR family (stated with markdown bold formatting)
+        assert ("**not** the primary FDR family" in md
+                or "primary FDR family is defined on the" in md)
+
+    def test_rationale_window_type_section_mentions_paired_delta(self):
+        """The rationale 'Window Type as a Test Family Dimension' section
+        must mention paired_delta."""
+        rationale = ROOT / "EVENT_WINDOW_THRESHOLDS_RATIONALE.md"
+        text = rationale.read_text(encoding="utf-8")
+        idx = text.find("## Window Type as a Test Family Dimension")
+        assert idx >= 0
+        section = text[idx:idx + 1000]
+        assert '"paired_delta"' in section, \
+            "Rationale Window Type section must mention paired_delta"
+
+    def test_rationale_window_type_does_not_say_primary_separates_event_baseline(self):
+        """The rationale must NOT say the primary FDR separates event and
+        baseline rows — those are diagnostic-only."""
+        rationale = ROOT / "EVENT_WINDOW_THRESHOLDS_RATIONALE.md"
+        text = rationale.read_text(encoding="utf-8")
+        idx = text.find("## Window Type as a Test Family Dimension")
+        assert idx >= 0
+        section = text[idx:idx + 1000]
+        # Must say diagnostic rows are not in the primary family
+        assert ("not in the primary family" in section
+                or "excluded from the primary FDR family" in section)
+        # Must NOT contain the stale phrase that treated event/baseline as primary
+        stale = "allows the FDR correction to treat event-window and baseline-window observations"
+        assert stale not in section
+
+    def test_md_no_stale_event_baseline_as_primary_fdr_prose(self):
+        """The markdown must not contain prose implying event/baseline
+        are separated by the primary FDR correction."""
+        md = _load_ew_md()
+        stale_phrases = [
+            "the FDR correction can separate the two window types",
+        ]
+        for phrase in stale_phrases:
+            assert phrase not in md, f"Stale prose found in markdown: '{phrase}'"
+
 
 # ===========================================================================
 # 4. Capture geometry and unambiguous duration fields
