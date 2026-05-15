@@ -126,11 +126,9 @@ def align_venues(
         while t <= grid_end:
             common_ts.append(t)
             t += grid_seconds
-        pass
     else:
         all_ts = sorted(set(source_ts) | set(target_ts))
         common_ts = all_ts
-        pass
 
     src_aligned = _forward_fill(common_ts, source_ts, source_prices)
     tgt_aligned = _forward_fill(common_ts, target_ts, target_prices)
