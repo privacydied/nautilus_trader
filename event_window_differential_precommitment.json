@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "stage": "stage2",
+  "signal_family": "cross_asset_event_window_differential_v1",
+  "created_utc": "2026-05-15T21:15:00.000Z",
+  "primary_fdr": {
+    "method": "benjamini_hochberg",
+    "q": 0.1,
+    "applies_to": "discovery",
+    "pvalue_source": "native_permutation",
+    "test_family_dimensions": [
+      "source_asset",
+      "target_asset",
+      "signal_type",
+      "lookback_ms",
+      "horizon_ms",
+      "window_type"
+    ]
+  },
+  "sensitivity_fdr": {
+    "method": "benjamini_yekutieli",
+    "q": 0.1,
+    "applies_to": "discovery_sensitivity_only"
+  },
+  "holdout": {
+    "primary_split": "temporal",
+    "ordering_field": "capture_start_utc",
+    "discovery_fraction": 0.7,
+    "test_fraction": 0.3,
+    "minimum_validated_captures": 10,
+    "test_set_sealed": true
+  },
+  "capture_admission": {
+    "exclude_quarantined": true,
+    "exclude_burned": true,
+    "exclude_fast_diagnostic": true,
+    "require_validation_passed": true,
+    "require_full_active_capture": false,
+    "require_event_active_capture": true
+  },
+  "event_window": {
+    "event_start_offset_minutes": -5,
+    "event_duration_minutes": 20,
+    "baseline_window_offset_minutes_from_event": 90,
+    "baseline_window_duration_seconds": 1200,
+    "minimum_capture_duration_seconds": 1200,
+    "minimum_global_overlap_seconds": 30,
+    "paired_window_type": true
+  },
+  "hypothesis_config": {
+    "source_assets": [
+      "BTC",
+      "ETH"
+    ],
+    "target_assets": [
+      "SOL",
+      "LINK",
+      "DOGE",
+      "AVAX"
+    ],
+    "primary_signal_type": "signed_imbalance",
+    "primary_lookback_ms": 30000,
+    "allowed_signal_types": [
+      "signed_imbalance"
+    ],
+    "allowed_lookbacks_ms": [
+      30000
+    ],
+    "allowed_horizons_ms": [
+      10000,
+      30000,
+      60000,
+      300000
+    ],
+    "window_types": [
+      "event",
+      "baseline"
+    ]
+  },
+  "cost_model": {
+    "taker_fee_bps": 40.0,
+    "slippage_bps": 5.0,
+    "quote_mismatch_buffer_bps": 5.0,
+    "all_in_cost_per_event_bps": 50.0
+  },
+  "discovery_acceptance": {
+    "minimum_aggregate_mean_net_bps_per_event": 2.0,
+    "minimum_same_sign_capture_fraction": 0.7,
+    "same_sign_rounding": "ceil",
+    "minimum_valid_events_per_config": 50,
+    "worst_capture_mean_net_bps_floor": -5.0,
+    "requires_primary_bh_survival": true
+  },
+  "holdout_acceptance": {
+    "minimum_aggregate_mean_net_bps_per_event": 2.0,
+    "requires_same_sign_as_discovery": true,
+    "minimum_valid_events_per_config": 50,
+    "worst_capture_mean_net_bps_floor": -5.0,
+    "frozen_config_only": true,
+    "no_threshold_or_parameter_changes": true
+  },
+  "burn_rules": {
+    "if_final_discovery_criteria_survivor_set_empty_do_not_inspect_test": true,
+    "if_bh_kills_everything_do_not_relax_q_on_same_corpus": true,
+    "if_economic_bar_kills_everything_do_not_lower_on_same_corpus": true,
+    "if_consistency_bar_kills_everything_do_not_lower_on_same_corpus": true,
+    "if_tail_bar_kills_everything_do_not_relax_tail_floor_on_same_corpus": true,
+    "if_corpus_below_minimum_abort_and_collect_more": true,
+    "criteria_change_after_discovery_invalidates_holdout": true,
+    "failed_discovery_burns_entire_validated_corpus_for_signal_family": true
+  }
+}
