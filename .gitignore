@@ -150,3 +150,4 @@ tests/test_data/**/backtest/**
 !/nautilus_core/adapters/src/databento/test_data/*
 reports/cross_asset_beta_lag_watcher.lock
 reports/cross_asset_beta_lag_watcher_state.json
+reports/stage2_gate_watcher_status.json
