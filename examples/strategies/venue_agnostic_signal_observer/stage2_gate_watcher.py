@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: C901,D202,D213,D401,FURB162,PLW1510,S603,S607,SIM105,UP017,UP024
 """
 Stage 2 Gate Watcher — cross_asset_beta_lag_v1 stress polling.
 
@@ -15,27 +16,27 @@ Safety: public data observer only. No auth. No orders. No execution.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import subprocess
 import sys
 import time
-import fcntl
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
 # V1/V2 infra modules
 # ---------------------------------------------------------------------------
+from .run_artifacts import atomic_write_json
+from .run_artifacts import create_run_id
+from .stage2_precommitment_utils import CollectionLock
+from .stage2_precommitment_utils import _get_git_sha
 from .stage2_readiness_check import check_readiness
-from .stage2_precommitment_utils import (
-    CollectionLock,
-    load_precommitment,
-    _get_git_sha,
-)
-from .run_artifacts import create_run_id, atomic_write_json
-from .run_index import append_run_index_row, build_run_index_row
+
 
 # ---------------------------------------------------------------------------
 # Runtime path configuration
@@ -121,12 +122,166 @@ def _get_python_exe() -> Path:
         "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python"
     ).resolve()
 
-_SIGNAL_FAMILY = "cross_asset_beta_lag_v1"
+_SIGNAL_FAMILY = os.environ.get(
+    "NAUTILUS_STAGE2_SIGNAL_FAMILY", "cross_asset_beta_lag_v1"
+)
+_STRESS_V2_SIGNAL_FAMILY = "cross_asset_beta_lag_stress_v2"
+_STRESS_V2_TRIGGER_NAME = "source_30bps_30s_and_crypto_native_stress"
+_STRESS_V2_SOURCE_ASSETS = ("BTC", "ETH")
+_STRESS_V2_TARGET_ASSETS = ("SOL", "LINK", "DOGE", "AVAX", "ADA")
+_STRESS_V2_TRIGGER_THRESHOLD_BPS = 30.0
+_STRESS_V2_METADATA_THRESHOLD_BPS = 150.0
+_STRESS_V2_TRIGGER_WINDOW_SECONDS = 30
+_STRESS_V2_DEFAULT_CAPTURE_SECONDS = 900
 
 # Gate verdict constants
 VERDICT_ACCELERATING = "ACCELERATING"
 VERDICT_MARKET_ACTIVE = "MARKET_ACTIVE"
 VERDICT_MARKET_ALT_ACTIVE = "MARKET_ALT_ACTIVE"
+
+
+@dataclass(frozen=True)
+class StressTriggerResult:
+    """Decision record for the stress-v2 trigger.
+
+    This is trigger plumbing only. It does not evaluate profitability, costs,
+    null tests, or candidate/rejected verdicts.
+    """
+
+    triggered: bool
+    trigger_name: str
+    trigger_threshold_bps: float
+    trigger_window_seconds: int
+    source_asset: str | None
+    source_move_bps_30s: float | None
+    stress_confirmation_status: str
+    impulse_condition_met: bool
+    contains_150bps_impulse: bool
+    metadata_threshold_bps: float
+    reason: str
+
+    def as_status_fields(self) -> dict[str, Any]:
+        return {
+            "trigger_name": self.trigger_name,
+            "trigger_threshold_bps": self.trigger_threshold_bps,
+            "trigger_window_seconds": self.trigger_window_seconds,
+            "source_asset": self.source_asset,
+            "source_move_bps_30s": self.source_move_bps_30s,
+            "stress_confirmation_status": self.stress_confirmation_status,
+            "contains_150bps_impulse": self.contains_150bps_impulse,
+            "reason": self.reason,
+        }
+
+
+def _tick_asset(tick: Any) -> str | None:
+    if isinstance(tick, dict):
+        value = tick.get("asset") or tick.get("source_asset") or tick.get("symbol")
+    else:
+        value = getattr(tick, "asset", None) or getattr(tick, "symbol", None)
+    if not value:
+        return None
+    text = str(value).upper()
+    if text.startswith("XBT"):
+        return "BTC"
+    return text.split("/")[0].split("-")[0]
+
+
+def _tick_ts_seconds(tick: Any) -> float | None:
+    if isinstance(tick, dict):
+        for key in ("ts_seconds", "timestamp", "ts", "time"):
+            if key in tick and tick[key] is not None:
+                return float(tick[key])
+        if tick.get("ts_event") is not None:
+            return float(tick["ts_event"]) / 1_000_000_000
+        return None
+    for key in ("ts_seconds", "timestamp", "ts", "time"):
+        value = getattr(tick, key, None)
+        if value is not None:
+            return float(value)
+    value = getattr(tick, "ts_event", None)
+    if value is not None:
+        return float(value) / 1_000_000_000
+    return None
+
+
+def _tick_price(tick: Any) -> float | None:
+    if isinstance(tick, dict):
+        value = tick.get("price") or tick.get("close")
+    else:
+        value = getattr(tick, "price", None) or getattr(tick, "close", None)
+    if value is None:
+        return None
+    price = float(value)
+    if price <= 0:
+        return None
+    return price
+
+
+def evaluate_cross_asset_beta_lag_stress_trigger(
+    *,
+    ticks: list[Any],
+    stress_confirmation_active: bool,
+    threshold_bps: float = _STRESS_V2_TRIGGER_THRESHOLD_BPS,
+    window_seconds: int = _STRESS_V2_TRIGGER_WINDOW_SECONDS,
+) -> StressTriggerResult:
+    """Evaluate the precommitted stress-v2 trigger on BTC/ETH ticks.
+
+    Path decision: this function consumes tick/sub-minute records when supplied
+    by the existing observer/capture infrastructure. The watcher currently uses
+    the volatility gate for regime confirmation and does not invent verdicts.
+    """
+    best_asset: str | None = None
+    best_move: float | None = None
+
+    rows: list[tuple[str, float, float]] = []
+    for tick in ticks:
+        asset = _tick_asset(tick)
+        ts_seconds = _tick_ts_seconds(tick)
+        price = _tick_price(tick)
+        if asset not in _STRESS_V2_SOURCE_ASSETS or ts_seconds is None or price is None:
+            continue
+        rows.append((asset, ts_seconds, price))
+
+    by_asset: dict[str, list[tuple[float, float]]] = {asset: [] for asset in _STRESS_V2_SOURCE_ASSETS}
+    for asset, ts_seconds, price in rows:
+        by_asset[asset].append((ts_seconds, price))
+
+    for asset, series in by_asset.items():
+        series.sort(key=lambda item: item[0])
+        for start_ts, start_price in series:
+            end_limit = start_ts + window_seconds
+            for end_ts, end_price in series:
+                if end_ts < start_ts or end_ts > end_limit:
+                    continue
+                move_bps = abs((end_price - start_price) / start_price * 10_000.0)
+                if best_move is None or move_bps > best_move:
+                    best_asset = asset
+                    best_move = move_bps
+
+    impulse_met = best_move is not None and best_move >= (threshold_bps - 1e-9)
+    stress_status = "ACTIVE" if stress_confirmation_active else "INACTIVE"
+    triggered = bool(impulse_met and stress_confirmation_active)
+    contains_150 = best_move is not None and best_move >= _STRESS_V2_METADATA_THRESHOLD_BPS
+    if triggered:
+        reason = "TRIGGER_PASSED"
+    elif not impulse_met:
+        reason = "IMPULSE_BELOW_THRESHOLD"
+    else:
+        reason = "STRESS_CONFIRMATION_INACTIVE"
+
+    return StressTriggerResult(
+        triggered=triggered,
+        trigger_name=_STRESS_V2_TRIGGER_NAME,
+        trigger_threshold_bps=threshold_bps,
+        trigger_window_seconds=window_seconds,
+        source_asset=best_asset,
+        source_move_bps_30s=None if best_move is None else round(best_move, 6),
+        stress_confirmation_status=stress_status,
+        impulse_condition_met=bool(impulse_met),
+        contains_150bps_impulse=contains_150,
+        metadata_threshold_bps=_STRESS_V2_METADATA_THRESHOLD_BPS,
+        reason=reason,
+    )
 
 # ---------------------------------------------------------------------------
 # Concurrency lock
@@ -318,7 +473,13 @@ def _ts_now_iso() -> str:
 
 
 def _run_gate() -> dict[str, Any]:
-    """Run the volatility gate and return parsed result dict."""
+    """Run the volatility gate and return parsed result dict.
+
+    ``gate_passed`` preserves the legacy v1 BTC-1h >= 150 bps + acceleration
+    admission rule.  Stress-v2 capture admission must not use this field; it
+    uses MARKET_ACTIVE + ACCELERATING only as crypto-native stress
+    confirmation, then ANDs that with the separate 30s BTC/ETH impulse trigger.
+    """
     result: dict[str, Any] = {
         "gate_available": True, "gate_passed": False,
         "btc_1h_bps": None, "market_verdict": None,
@@ -326,9 +487,10 @@ def _run_gate() -> dict[str, Any]:
         "results": None, "freshness": None,
     }
     try:
-        from examples.strategies.volatility_gate import (
-            compute_hourly_gate, PAIRS, fetch_ohlc, hourly_bar_freshness,
-        )
+        from examples.strategies.volatility_gate import PAIRS
+        from examples.strategies.volatility_gate import compute_hourly_gate
+        from examples.strategies.volatility_gate import fetch_ohlc
+        from examples.strategies.volatility_gate import hourly_bar_freshness
     except ImportError as e:
         result["gate_available"] = False
         result["error"] = f"import_failed: {e}"
@@ -368,6 +530,53 @@ def _run_gate() -> dict[str, Any]:
     return result
 
 
+def _fetch_stress_v2_trigger_ticks() -> tuple[list[Any], str | None]:
+    """Return BTC/ETH sub-minute trigger ticks for stress-v2 admission.
+
+    Path B is intentionally fail-safe: no reusable live rolling 30s BTC/ETH
+    trigger feed is exposed in this watcher yet, so the real service must not
+    pretend it can detect the primary impulse.  Tests may patch this function
+    with supplied public tick records to exercise the decision path.
+    """
+    return [], "STRESS_V2_TRIGGER_FEED_NOT_WIRED"
+
+
+def _stress_confirmation_active(gate_result: dict[str, Any]) -> bool:
+    return (
+        gate_result.get("market_verdict") == VERDICT_MARKET_ACTIVE
+        and gate_result.get("accel_verdict") == VERDICT_ACCELERATING
+    )
+
+
+def _evaluate_stress_v2_capture_gate(
+    gate_result: dict[str, Any],
+    trigger_ticks: list[Any],
+    *,
+    trigger_feed_reason: str | None = None,
+) -> StressTriggerResult:
+    """Evaluate stress-v2 capture admission from gate confirmation + ticks."""
+    stress_active = _stress_confirmation_active(gate_result)
+    result = evaluate_cross_asset_beta_lag_stress_trigger(
+        ticks=trigger_ticks,
+        stress_confirmation_active=stress_active,
+    )
+    if not trigger_ticks and trigger_feed_reason:
+        return StressTriggerResult(
+            triggered=False,
+            trigger_name=result.trigger_name,
+            trigger_threshold_bps=result.trigger_threshold_bps,
+            trigger_window_seconds=result.trigger_window_seconds,
+            source_asset=result.source_asset,
+            source_move_bps_30s=result.source_move_bps_30s,
+            stress_confirmation_status=result.stress_confirmation_status,
+            impulse_condition_met=result.impulse_condition_met,
+            contains_150bps_impulse=result.contains_150bps_impulse,
+            metadata_threshold_bps=result.metadata_threshold_bps,
+            reason=trigger_feed_reason,
+        )
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Readiness check wrapper
 # ---------------------------------------------------------------------------
@@ -387,21 +596,28 @@ def _run_capture(log: WatcherLogger) -> str | None:
     """Run a cross-asset capture.  Returns capture_dir on success, None on failure."""
     run_id = create_run_id(prefix="cross_asset_beta_lag_cap")
     ts_suffix = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    capture_dir = f"data/cross_asset_beta_lag_v1_FULL_ACTIVE_{ts_suffix}"
+    capture_seconds = _STRESS_V2_DEFAULT_CAPTURE_SECONDS if _SIGNAL_FAMILY == _STRESS_V2_SIGNAL_FAMILY else 900
+    capture_dir = str(_get_data_root() / f"{_SIGNAL_FAMILY}_FULL_ACTIVE_{ts_suffix}")
 
     log.log("capture_start", run_id=run_id, capture_dir=capture_dir)
 
+    target_symbols = "BTC/USD,ETH/USD,SOL/USD,LINK/USD,DOGE/USD,AVAX/USD"
+    source_symbols = "BTC/USDT,ETH/USDT,SOL/USDT,LINK/USDT,DOGE/USDT,AVAX/USDT"
+    if _SIGNAL_FAMILY == _STRESS_V2_SIGNAL_FAMILY:
+        target_symbols = "BTC/USD,ETH/USD,SOL/USD,LINK/USD,DOGE/USD,AVAX/USD,ADA/USD"
+        source_symbols = "BTC/USDT,ETH/USDT,SOL/USDT,LINK/USDT,DOGE/USDT,AVAX/USDT,ADA/USDT"
+
     # Build subprocess command using the existing capture script.
     # For cross-asset beta lag we need tick data for all involved symbols.
-    # The existing run_derivatives_spot_capture captures perp + spot ticks.
+    # The existing run_derivatives_spot_capture captures public source + spot ticks.
     cmd = [
         str(_get_python_exe()),
         "-m", "examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture",
         "--source-venue", "binance_perp",
-        "--source-symbols", "BTC/USDT,ETH/USDT,SOL/USDT,LINK/USDT,DOGE/USDT,AVAX/USDT",
+        "--source-symbols", source_symbols,
         "--target-venues", "kraken,coinbase",
-        "--target-symbols", "BTC/USD,ETH/USD,SOL/USD,LINK/USD,DOGE/USD,AVAX/USD",
-        "--duration-seconds", "900",
+        "--target-symbols", target_symbols,
+        "--duration-seconds", str(capture_seconds),
         "--capture-mode", "FULL_ACTIVE",
         "--out", capture_dir,
     ]
@@ -480,8 +696,8 @@ def _count_validated_full_active() -> int:
     if not data_root.exists():
         return 0
 
-    from .quarantine import get_quarantined_run_ids
     from .burn import get_burned_run_ids
+    from .quarantine import get_quarantined_run_ids
 
     quarantined = get_quarantined_run_ids()
     burned = get_burned_run_ids()
@@ -491,7 +707,7 @@ def _count_validated_full_active() -> int:
             continue
         # Only count captures from this signal family
         dirname = d.name
-        if not dirname.startswith("cross_asset_beta_lag_v1_"):
+        if not dirname.startswith(f"{_SIGNAL_FAMILY}_"):
             continue
         manifest_path = d / "capture_manifest.json"
         if not manifest_path.exists():
@@ -521,17 +737,56 @@ def _count_validated_full_active() -> int:
 # ---------------------------------------------------------------------------
 
 
+def _get_git_status(repo_root: Path | None = None) -> tuple[str, bool]:
+    """Return (short_sha, dirty) for the runtime repo/worktree."""
+    cwd = repo_root or _REPO_ROOT or Path.cwd()
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            cwd=cwd,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        status = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=cwd,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        return sha, bool(status.strip())
+    except Exception:
+        return _get_git_sha(), False
+
+
 def _write_status(**kw: Any) -> None:
     """Write the watcher status JSON."""
+    repo_root = (_REPO_ROOT or Path.cwd()).resolve()
+    git_sha, git_dirty = _get_git_status(repo_root)
     data: dict[str, Any] = {
         "updated_utc": _ts_now_iso(),
-        "git_sha": _get_git_sha(),
+        "git_sha": git_sha,
+        "git_worktree_root": str(repo_root),
+        "git_dirty": git_dirty,
         "signal_family": _SIGNAL_FAMILY,
         "gateway_replaced_by_systemd": True,
-        "safety": "public data observer only",
-        "runtime_repo_root": str(_REPO_ROOT or Path.cwd().resolve()),
+        "safety": "public data observer only; no orders; no private keys; observer research only",
+        "runtime_repo_root": str(repo_root),
         "reports_root": str(_get_reports_root().resolve()),
         "data_root": str(_get_data_root().resolve()),
+        "capture_status": "IDLE",
+        "last_capture_status": None,
+        "last_capture_dir": None,
+        "last_report_dir": None,
+        "trigger_name": None,
+        "trigger_threshold_bps": None,
+        "trigger_window_seconds": None,
+        "source_asset": None,
+        "source_move_bps_30s": None,
+        "stress_confirmation_status": None,
+        "contains_150bps_impulse": False,
+        "cooldown_status": None,
+        "next_allowed_capture_utc": None,
+        "reason": None,
     }
     data.update(kw)
     status_path = _get_status_path()
@@ -594,6 +849,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-gap-seconds", type=int, default=3600,
                     help="Minimum gap between corpus-eligible FULL_ACTIVE captures "
                          "in seconds (default: 3600)")
+    p.add_argument("--signal-family", type=str,
+                    default=os.environ.get(
+                        "NAUTILUS_STAGE2_SIGNAL_FAMILY", _SIGNAL_FAMILY,
+                    ),
+                    choices=("cross_asset_beta_lag_v1", _STRESS_V2_SIGNAL_FAMILY),
+                    help="Signal family to watch (default: $NAUTILUS_STAGE2_SIGNAL_FAMILY or cross_asset_beta_lag_v1)")
     return p
 
 
@@ -609,8 +870,9 @@ def main() -> None:
     os.chdir(str(workdir))
 
     # Configure module-level path globals
-    global _REPORTS_ROOT, _DATA_ROOT, _REPO_ROOT, _STATUS_PATH_OVERRIDE, _PYTHON_EXE_OVERRIDE
+    global _REPORTS_ROOT, _DATA_ROOT, _REPO_ROOT, _STATUS_PATH_OVERRIDE, _PYTHON_EXE_OVERRIDE, _SIGNAL_FAMILY
     _REPO_ROOT = workdir
+    _SIGNAL_FAMILY = args.signal_family
 
     if args.reports_root:
         _REPORTS_ROOT = Path(args.reports_root).resolve()
@@ -647,7 +909,6 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
             stress_bps=args.stress_bps, once=args.once)
 
     # --- Step 1: Readiness check ---
-    precommit = load_precommitment()
     log.log("readiness_check_start")
 
     readiness = _run_readiness()
@@ -681,11 +942,23 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
 
         # --- Step 2: Run gate ---
         gate_result = _run_gate()
-        gate_passed = gate_result.get("gate_passed", False)
+        legacy_gate_passed = gate_result.get("gate_passed", False)
         btc_1h = gate_result.get("btc_1h_bps", 0)
         market_v = gate_result.get("market_verdict", "?")
         accel_v = gate_result.get("accel_verdict", "?")
         gate_err = gate_result.get("error")
+
+        trigger_status: StressTriggerResult | None = None
+        if _SIGNAL_FAMILY == _STRESS_V2_SIGNAL_FAMILY:
+            trigger_ticks, trigger_feed_reason = _fetch_stress_v2_trigger_ticks()
+            trigger_status = _evaluate_stress_v2_capture_gate(
+                gate_result,
+                trigger_ticks,
+                trigger_feed_reason=trigger_feed_reason,
+            )
+            gate_passed = trigger_status.triggered
+        else:
+            gate_passed = legacy_gate_passed
 
         log.log("gate_result", gate_passed=gate_passed, btc_1h_bps=btc_1h,
                 market_verdict=market_v, accel_verdict=accel_v,
@@ -693,7 +966,19 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
 
         print(f"  BTC 1h move: {btc_1h:.1f} bps  (threshold: {args.stress_bps} bps)")
         print(f"  Market verdict: {market_v}  Accel verdict: {accel_v}")
+        if trigger_status is not None:
+            print(
+                "  Stress-v2 trigger: "
+                f"asset={trigger_status.source_asset} "
+                f"move_30s={trigger_status.source_move_bps_30s} "
+                f"stress={trigger_status.stress_confirmation_status} "
+                f"reason={trigger_status.reason}"
+            )
         print(f"  Gate passed: {gate_passed}")
+
+        status_fields = trigger_status.as_status_fields() if trigger_status is not None else {}
+        if trigger_status is not None and trigger_status.reason == "STRESS_V2_TRIGGER_FEED_NOT_WIRED":
+            status_fields["capture_status"] = "DISABLED"
 
         if not gate_passed:
             # Diagnostic only — do NOT create collection lock
@@ -709,6 +994,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 validated_full_active_capture_count=_count_validated_full_active(),
                 captures_remaining_before_stage2_eval=max(
                     0, 10 - _count_validated_full_active()),
+                **status_fields,
             )
 
             if args.once:
@@ -719,7 +1005,10 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
             continue
 
         # --- Stress confirmed! ---
-        print("  STRESS GATE PASSED — BTC 1h >= 150 bps with acceleration")
+        if _SIGNAL_FAMILY == _STRESS_V2_SIGNAL_FAMILY:
+            print("  STRESS-V2 GATE PASSED — 30 bps/30s source impulse AND crypto-native stress")
+        else:
+            print("  STRESS GATE PASSED — BTC 1h >= 150 bps with acceleration")
         print("  This is a corpus-eligible stress window.")
 
         # --- Cooldown check ---
@@ -743,6 +1032,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 validated_full_active_capture_count=_count_validated_full_active(),
                 captures_remaining_before_stage2_eval=max(
                     0, 10 - _count_validated_full_active()),
+                **status_fields,
             )
             if args.once:
                 break
@@ -761,6 +1051,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 validated_full_active_capture_count=_count_validated_full_active(),
                 captures_remaining_before_stage2_eval=max(
                     0, 10 - _count_validated_full_active()),
+                **status_fields,
             )
             if args.once:
                 break
@@ -817,6 +1108,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                     gate_status="PASSED",
                     last_capture_status="FAILED",
                     error="capture_attempt_failed",
+                    **status_fields,
                 )
                 continue
 
@@ -834,6 +1126,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                     last_capture_status="VALIDATION_FAILED",
                     last_capture_dir=capture_dir,
                     last_validation_status=verdict,
+                    **status_fields,
                 )
                 continue
 
@@ -871,6 +1164,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 validated_full_active_capture_count=validated_count,
                 captures_remaining_before_stage2_eval=remaining,
                 stress_condition="FULL_ACTIVE_STRESS",
+                **status_fields,
             )
 
         finally:

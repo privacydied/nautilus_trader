@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "stage": "stage2",
+  "signal_family": "cross_asset_beta_lag_stress_v2",
+  "created_utc": "2026-05-16T00:00:00.000Z",
+  "human_precommitment_path": "examples/strategies/venue_agnostic_signal_observer/CROSS_ASSET_BETA_LAG_STRESS_V2_PRECOMMITMENT.md",
+  "primary_fdr": {
+    "method": "benjamini_hochberg",
+    "q": 0.1,
+    "applies_to": "discovery",
+    "pvalue_source": "native_permutation",
+    "test_family_dimensions": [
+      "source_asset",
+      "target_asset",
+      "signal_type",
+      "lookback_ms",
+      "horizon_ms"
+    ]
+  },
+  "sensitivity_fdr": {
+    "method": "benjamini_yekutieli",
+    "q": 0.1,
+    "applies_to": "discovery_sensitivity_only"
+  },
+  "holdout": {
+    "primary_split": "temporal",
+    "ordering_field": "capture_start_utc",
+    "discovery_fraction": 0.7,
+    "test_fraction": 0.3,
+    "minimum_validated_captures": 10,
+    "test_set_sealed": true
+  },
+  "capture_admission": {
+    "exclude_quarantined": true,
+    "exclude_burned": true,
+    "exclude_fast_diagnostic": true,
+    "require_validation_passed": true,
+    "require_full_active_capture": true
+  },
+  "capture_spacing": {
+    "minimum_gap_seconds_between_corpus_eligible_captures": 3600,
+    "gap_applies_to": "successful_validated_full_active_captures",
+    "diagnostic_captures_do_not_start_gap": true,
+    "no_capture_polls_do_not_start_gap": true,
+    "deduplication": "one_capture_per_stress_event"
+  },
+  "event_gate": {
+    "full_active_required": true,
+    "source_assets": ["BTC", "ETH"],
+    "minimum_source_move_bps": 30.0,
+    "source_move_window_seconds": 30,
+    "requires_crypto_native_stress_confirmation": true,
+    "stress_confirmation_source": "existing_volatility_gate_market_active_and_accelerating_where_available",
+    "forbidden_stress_sources": ["VIX"],
+    "trigger_logic": "source_impulse_AND_stress_confirmation",
+    "metadata_only_thresholds_bps": [150.0],
+    "quiet_window_is_diagnostic_only": true
+  },
+  "hypothesis_config": {
+    "source_assets": ["BTC", "ETH"],
+    "target_assets": ["SOL", "LINK", "DOGE", "AVAX", "ADA"],
+    "primary_signal_type": "source_spot_impulse",
+    "primary_lookback_ms": 30000,
+    "primary_horizons_ms": [60000, 120000, 300000],
+    "allowed_signal_types": ["source_spot_impulse", "signed_imbalance"],
+    "allowed_lookbacks_ms": [30000],
+    "allowed_horizons_ms": [60000, 120000, 300000],
+    "minimum_capture_duration_seconds": 600,
+    "preferred_capture_duration_seconds": 900
+  },
+  "cost_and_fill": {
+    "cost_model": "existing_pessimistic_50bps_all_in_wall_unless_stricter_named_model_exists",
+    "cost_floor_bps": 50.0,
+    "fill_model": "pessimistic_observer_only_forward_return_proxy",
+    "optimistic_maker_fills_allowed": false,
+    "live_orders_allowed": false
+  },
+  "diagnostics": {
+    "watcher_may_start_capture": true,
+    "watcher_may_decide_candidate_or_rejected_verdict": false,
+    "required_post_capture_diagnostics": [
+      "evaluation",
+      "cost_sensitivity",
+      "permutation_null_test",
+      "lead_lag_heatmap",
+      "candidate_falsification_summary",
+      "cross_capture_consistency"
+    ],
+    "single_capture_max_status": "CANDIDATE_FOR_LONGER_OBSERVATION",
+    "multiple_stress_windows_required_for_stronger_claims": true
+  },
+  "burn_rules": {
+    "no_threshold_or_parameter_changes_after_first_empirical_capture": true,
+    "if_final_discovery_criteria_survivor_set_empty_do_not_inspect_test": true,
+    "if_bh_kills_everything_do_not_relax_q_on_same_corpus": true,
+    "if_economic_bar_kills_everything_do_not_lower_on_same_corpus": true,
+    "if_consistency_bar_kills_everything_do_not_lower_on_same_corpus": true,
+    "if_tail_bar_kills_everything_do_not_relax_tail_floor_on_same_corpus": true,
+    "if_corpus_below_minimum_abort_and_collect_more": true,
+    "criteria_change_after_discovery_invalidates_holdout": true,
+    "failed_discovery_burns_entire_validated_corpus_for_signal_family": true
+  }
+}

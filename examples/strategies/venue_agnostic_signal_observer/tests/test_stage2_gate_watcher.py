@@ -1,3 +1,4 @@
+# ruff: noqa: D202,D403,RUF100,S108,SIM117
 """Tests for Stage 2 Gate Watcher."""
 
 from __future__ import annotations
@@ -6,15 +7,17 @@ import json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
+
 
 # Ensure the module is importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from examples.strategies.venue_agnostic_signal_observer import (
-    run_stage2_gate_watcher as watcher,
+    run_stage2_gate_watcher as watcher,  # noqa: E402
 )
 
 
@@ -182,7 +185,6 @@ def test_no_lock_allows_collection(tmp_workdir, mock_watcher_log):
 @patch.object(watcher, "check_lock", return_value=(False, ""))
 def test_preflight_failure_blocks_capture(mock_lock, tmp_workdir, mock_watcher_log, args):
     """Preflight failure blocks capture/evaluation."""
-    lock_path = Path("reports/stage2_collection.lock")
 
     with patch.object(watcher, "run_volatility_gate") as mock_gate:
         mock_gate.return_value = {
@@ -336,10 +338,6 @@ def test_no_rejected_research_reference():
         content = f.read()
     assert "REJECTED_RESEARCH" not in content
     assert "rejected_research" not in content.lower()
-
-    with open(Path(__file__)) as f:
-        test_content = f.read()
-    assert "REJECTED_RESEARCH" not in content
 
 
 # ---------------------------------------------------------------------------
@@ -647,21 +645,27 @@ class TestServiceTemplate:
         """Service template exists at expected path."""
         assert SERVICE_PATH.exists(), f"Service template not found: {SERVICE_PATH}"
 
-    def test_service_uses_venv_python(self):
-        """Service template uses .venv/bin/python from the runtime worktree."""
+    def test_service_uses_uv_python(self):
+        """Service template uses uv run python from the configured worktree."""
         content = SERVICE_PATH.read_text()
-        assert ".venv/bin/python" in content
-        assert "nautilus_trader_stage2_runtime/.venv/bin/python" in content
+        assert "ExecStart=uv run python -m" in content
+        assert ".venv/bin/python" not in content
 
     def test_service_uses_correct_working_directory(self):
-        """Service template uses WorkingDirectory pointing to the runtime worktree."""
+        """Service template uses WorkingDirectory pointing to the configured worktree."""
         content = SERVICE_PATH.read_text()
-        assert "WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_runtime" in content
+        assert "WorkingDirectory=${NAUTILUS_STAGE2_WORKTREE}" in content
+        assert "NAUTILUS_STAGE2_WORKTREE=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress" in content
 
     def test_service_includes_env_vars(self):
         """Service template includes NAUTILUS_STAGE2_* env vars."""
         content = SERVICE_PATH.read_text()
         assert "NAUTILUS_STAGE2_REPO_ROOT" in content
+
+    def test_service_uses_optional_environment_file(self):
+        """Service template treats local env overrides as optional."""
+        content = SERVICE_PATH.read_text()
+        assert "EnvironmentFile=-%h/.config/nautilus/stage2-gate-watcher.env" in content
 
     def test_service_uses_restart_no(self):
         """Service template uses Restart=no."""
@@ -835,18 +839,20 @@ class TestPathConfiguration:
         assert "nautilus_trader.execution" not in content
 
     def test_service_file_has_worktree_workdir(self):
-        """systemd service file references the runtime worktree."""
+        """systemd service points WorkingDirectory at configured worktree."""
         service_path = Path(
             __file__).resolve().parents[1] / "systemd" / "nautilus-stage2-gate-watcher.service"
         content = service_path.read_text()
-        assert "WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_runtime" in content
+        assert "WorkingDirectory=${NAUTILUS_STAGE2_WORKTREE}" in content
+        assert "NAUTILUS_STAGE2_WORKTREE=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress" in content
 
-    def test_service_file_has_worktree_python(self):
-        """systemd service uses python from the runtime worktree venv."""
+    def test_service_file_uses_uv_not_hardcoded_venv(self):
+        """systemd service uses uv from the worktree instead of a hardcoded venv path."""
         service_path = Path(
             __file__).resolve().parents[1] / "systemd" / "nautilus-stage2-gate-watcher.service"
         content = service_path.read_text()
-        assert "nautilus_trader_stage2_runtime/.venv/bin/python" in content
+        assert "ExecStart=uv run python -m" in content
+        assert ".venv/bin/python" not in content
 
     def test_service_file_has_env_vars(self):
         """systemd service sets NAUTILUS_STAGE2_* environment variables."""
