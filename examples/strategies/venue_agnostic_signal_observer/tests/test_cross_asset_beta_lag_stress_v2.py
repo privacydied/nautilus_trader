@@ -387,7 +387,7 @@ def test_service_env_rendering_points_working_directory_at_stress_worktree() -> 
     content = service_path.read_text()
 
     assert "EnvironmentFile=-%h/.config/nautilus/stage2-gate-watcher.env" in content
-    assert "WorkingDirectory=${NAUTILUS_STAGE2_WORKTREE}" in content
+    assert "WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress" in content
     assert "NAUTILUS_STAGE2_SIGNAL_FAMILY=cross_asset_beta_lag_stress_v2" in content
     assert "NAUTILUS_STAGE2_WORKTREE=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress" in content
 

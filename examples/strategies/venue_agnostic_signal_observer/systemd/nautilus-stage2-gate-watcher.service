@@ -20,7 +20,7 @@ Environment=NAUTILUS_STAGE2_DATA_ROOT=/mnt/nasirjones/py/nautilus_trader/data
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-%h/.config/nautilus/stage2-gate-watcher.env
 
-WorkingDirectory=${NAUTILUS_STAGE2_WORKTREE}
+WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress
 
 ExecStart=uv run python -m examples.strategies.venue_agnostic_signal_observer.stage2_gate_watcher --poll-seconds 60 --stress-bps 30 --require-acceleration --signal-family ${NAUTILUS_STAGE2_SIGNAL_FAMILY}
 
