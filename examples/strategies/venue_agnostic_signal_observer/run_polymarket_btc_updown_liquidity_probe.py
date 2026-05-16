@@ -39,6 +39,7 @@ from .polymarket_btc_updown_liquidity_probe import (
     capture_loop,
     compute_summary,
     discover_btc_updown_markets,
+    fetch_cex_proxy_price,
     write_chainlink_ticks,
     write_discovered_markets,
     write_manifest,
@@ -271,7 +272,149 @@ async def main() -> int:
             logger.info("Chainlink BTC/USD: %d ticks, avg ~$%.2f", len(cl_valid), avg_price)
 
     logger.info("Done. Output directory: %s", out_dir.resolve())
+
+    # Step 5: Post-capture verification (TTE, distance, two-axis grid)
+    if markets and samples:
+        _run_verification(out_dir, markets, samples, args.reference_proxy,
+                          summary, manifest)
+
     return 0
+
+
+def _run_verification(
+    out_dir: Path,
+    markets: list[BTCMarket],
+    samples: list[OrderbookSample],
+    reference_proxy: str | None,
+    summary: ProbeSummary,
+    manifest: CaptureManifest,
+) -> None:
+    """Run post-capture verification: TTE, distance, two-axis grid, duration."""
+    from .polymarket_btc_updown_liquidity_probe import (
+        _compute_tte_buckets,
+        _compute_near_expiry_rollup,
+        _compute_distance_to_strike_buckets,
+        _compute_two_axis_grid,
+        _get_danger_zone_cell,
+        _compute_duration_coverage,
+        _compute_verification_status_v2,
+        write_tte_bucket_summary_json,
+        write_tte_bucket_summary_md,
+        write_distance_bucket_summary_json,
+        write_distance_bucket_summary_md,
+        write_two_axis_grid_json,
+        write_two_axis_grid_md,
+        write_duration_coverage_md,
+        REF_CEX_PROXY,
+        REF_UNAVAILABLE,
+        GREEN_DIAG,
+        _fmt as _fmt_v,
+    )
+
+    # Collect reference prices
+    proxy_prices: list[tuple[float, float]] = []
+    reference_source = REF_UNAVAILABLE
+
+    if reference_proxy:
+        try:
+            import httpx
+            with httpx.Client(timeout=10) as cl:
+                price, source, err = _fetch_proxy_price(cl, reference_proxy)
+                if price and price > 0:
+                    proxy_prices.append((time.time(), price))
+                    reference_source = source
+                    logger.info("Reference proxy price: $%.2f (%s)", price, source)
+                else:
+                    logger.warning("Proxy price failed: %s", err)
+        except Exception as exc:
+            logger.warning("Proxy price fetch failed: %s", exc)
+
+    # TTE buckets
+    logger.info("Computing TTE buckets...")
+    tte_buckets = _compute_tte_buckets(markets, samples)
+    near_expiry = _compute_near_expiry_rollup(tte_buckets)
+
+    tte_json = out_dir / "tte_bucket_summary.json"
+    write_tte_bucket_summary_json(tte_buckets, near_expiry, tte_json)
+    logger.info("Wrote TTE bucket summary to %s", tte_json)
+
+    tte_md = out_dir / "tte_bucket_summary.md"
+    write_tte_bucket_summary_md(tte_buckets, near_expiry, tte_md)
+    logger.info("Wrote TTE bucket MD to %s", tte_md)
+
+    # Distance-to-strike buckets
+    logger.info("Computing distance-to-strike buckets...")
+    distance_buckets = _compute_distance_to_strike_buckets(
+        markets, samples, proxy_prices, reference_source,
+    )
+
+    dist_json = out_dir / "distance_to_strike_bucket_summary.json"
+    write_distance_bucket_summary_json(distance_buckets, reference_source, dist_json)
+    logger.info("Wrote distance bucket summary to %s", dist_json)
+
+    dist_md = out_dir / "distance_to_strike_bucket_summary.md"
+    write_distance_bucket_summary_md(distance_buckets, reference_source, dist_md)
+    logger.info("Wrote distance bucket MD to %s", dist_md)
+
+    # Two-axis grid
+    logger.info("Computing two-axis liquidity grid...")
+    two_axis_grid = _compute_two_axis_grid(tte_buckets, distance_buckets)
+    danger_cell = _get_danger_zone_cell(two_axis_grid)
+
+    grid_json = out_dir / "two_axis_liquidity_grid.json"
+    write_two_axis_grid_json(two_axis_grid, danger_cell, grid_json)
+    logger.info("Wrote two-axis grid to %s", grid_json)
+
+    grid_md = out_dir / "two_axis_liquidity_grid.md"
+    write_two_axis_grid_md(two_axis_grid, danger_cell, grid_md)
+    logger.info("Wrote two-axis grid MD to %s", grid_md)
+
+    # Duration coverage
+    logger.info("Computing duration coverage...")
+    duration_coverage = _compute_duration_coverage(markets, samples)
+
+    dur_md = out_dir / "duration_coverage.md"
+    write_duration_coverage_md(duration_coverage, dur_md)
+    logger.info("Wrote duration coverage to %s", dur_md)
+
+    # Check artifact existence for raw payload
+    raw_payload_files_exist = (
+        (out_dir / "raw_clob_orderbook_payloads.jsonl").exists()
+        and (out_dir / "raw_payload_audit.md").exists()
+    )
+
+    # Verification status
+    instrumented_flags = {
+        "parser_fix": True,
+    }
+    verification_status = _compute_verification_status_v2(
+        out_dir=out_dir,
+        tte_buckets=tte_buckets,
+        distance_buckets=distance_buckets,
+        two_axis_grid=two_axis_grid,
+        duration_coverage=duration_coverage,
+        instrumented_flags=instrumented_flags,
+    )
+
+    logger.info("=" * 60)
+    logger.info("VERIFICATION STATUS: %s", verification_status)
+    logger.info("=" * 60)
+    logger.info("Near-expiry samples: %d", near_expiry.get("near_expiry_sample_count", 0))
+    logger.info("Near-expiry classification: %s", near_expiry.get("near_expiry_classification", "N/A"))
+    logger.info("Danger zone samples: %d", danger_cell.get("sample_count", 0))
+    logger.info("Danger zone classification: %s", danger_cell.get("classification", "N/A"))
+    logger.info("15m duration: %s", duration_coverage.get("15m", {}).get("status", "no_data"))
+    logger.info("Proxy prices: %d", len(proxy_prices))
+    logger.info("Reference source: %s", reference_source)
+    logger.info("Raw payload files: %s", "FOUND" if raw_payload_files_exist else "MISSING")
+
+    # Update summary with verification status
+    summary.verification_status = verification_status
+
+
+def _fetch_proxy_price(client, proxy: str) -> tuple:
+    """Fetch a single proxy price."""
+    return fetch_cex_proxy_price(client, proxy)
 
 
 def _fmt(val: float | None) -> str:
