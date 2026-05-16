@@ -475,11 +475,9 @@ def discover_btc_updown_markets(
     markets: list[BTCMarket] = []
 
     try:
-        # Use the markets endpoint with active filter
+        # Use the markets endpoint — active/closed filters are unreliable
         url = f"{GAMMA_API_BASE}/markets"
         params: dict[str, str] = {
-            "active": "true",
-            "closed": "false",
             "limit": str(min(max_markets, 200)),
             "order": "startDate",
             "ascending": "false",
@@ -625,10 +623,20 @@ def parse_orderbook_sample(
     asks = _normalize_levels(asks_raw)
     assert bids is not None and asks is not None
 
-    best_bid = float(bids[0]["price"]) if bids else None
-    best_ask = float(asks[0]["price"]) if asks else None
-    top_bid_size = float(bids[0]["size"]) if bids else None
-    top_ask_size = float(asks[0]["size"]) if asks else None
+    # Polymarket CLOB /book returns bids ASCENDING (worst first) and
+    # asks DESCENDING (worst first). Use max/min to get best prices.
+    best_bid = max(float(b["price"]) for b in bids) if bids else None
+    best_ask = min(float(a["price"]) for a in asks) if asks else None
+
+    # Top-of-book depth comes from the best-priced levels
+    top_bid_size = None
+    top_ask_size = None
+    if best_bid is not None:
+        top_bid_tier = next((b for b in bids if abs(float(b["price"]) - best_bid) < 1e-9), None)
+        top_bid_size = float(top_bid_tier["size"]) if top_bid_tier else None
+    if best_ask is not None:
+        top_ask_tier = next((a for a in asks if abs(float(a["price"]) - best_ask) < 1e-9), None)
+        top_ask_size = float(top_ask_tier["size"]) if top_ask_tier else None
 
     is_missing_flag = best_bid is None and best_ask is None
     is_one_sided = (best_bid is not None) != (best_ask is not None)
