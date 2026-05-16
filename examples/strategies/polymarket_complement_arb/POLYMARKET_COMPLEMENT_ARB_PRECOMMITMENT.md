@@ -9,6 +9,7 @@ The `UP ask + DOWN ask + fees + buffers < 1.00` relationship on same-condition P
 | Assumption | Value | Source |
 |---|---|---|
 | Base quote size | 100 shares | Precommitted before campaign |
+| Size ladder sizes | 5, 10, 25, 50, 100 | Diagnostic closeout |
 | Fill model | Pessimistic (cumulative compatible trade volume > depth ahead + quote size) | Shadow execution model |
 | Fee formula | `shares * feeRate * price * (1 - price)` per leg | Polymarket documentation |
 | Maker fee | 0 | Standard Polymarket structure, conservative |
@@ -48,6 +49,16 @@ The `UP ask + DOWN ask + fees + buffers < 1.00` relationship on same-condition P
 - Non-dust opportunities exist
 - Base quote size pessimistic fills = 0 or economically dust
 - Net shadow harvest ≤ 0
+- Size-ladder diagnostic (5/10/25/50/100) confirmed zero fills at all tested sizes
+
+### FROZEN_EDGE_ONLY_AT_DUST_SIZE
+- Trade evidence READY
+- Repeated-window gates met
+- Non-dust opportunities exist at base size
+- Only base quote size pessimistic fills are positive
+- Smaller quote sizes produce zero or negative net harvest
+- Net shadow harvest positive at base size only
+- Edge does not survive the full size range
 
 ### CANDIDATE_FOR_LONGER_OBSERVATION
 - Base quote size pessimistic paired fills positive

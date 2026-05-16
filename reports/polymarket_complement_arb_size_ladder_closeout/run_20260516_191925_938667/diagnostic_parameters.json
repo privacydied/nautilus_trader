@@ -1,0 +1,17 @@
+{
+  "config_hash": "209bb6cae1a72e33",
+  "duration_secs": 60.0,
+  "git_sha": "7156633f756f7b52a85e25a3b2785b2949960e85",
+  "ladder_run_type": "size_ladder_diagnostic",
+  "ladder_sizes": [
+    5,
+    10,
+    25,
+    50,
+    100
+  ],
+  "poll_interval_secs": 10.0,
+  "replay_verdict": "REPLAY_SCHEMA_INSUFFICIENT",
+  "run_id": "run_20260516_191925_938667",
+  "source": "fresh_diagnostic_capture"
+}

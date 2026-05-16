@@ -1,0 +1,64 @@
+{
+  "expected_edge_per_detected_opportunity": 0.0,
+  "net_shadow_harvest": 0,
+  "paired_gain": 0,
+  "rates": {
+    "non_dust_rate": {
+      "denominator": 18,
+      "numerator": 18,
+      "rate": 1.0
+    },
+    "one_leg_fill_rate": {
+      "denominator": 18,
+      "numerator": 0,
+      "rate": 0.0
+    },
+    "paired_fill_rate": {
+      "denominator": 18,
+      "numerator": 0,
+      "rate": 0.0
+    },
+    "pessimistic_paired_fill_rate": {
+      "denominator": 18,
+      "numerator": 0,
+      "rate": 0.0
+    },
+    "same_condition_valid_rate": {
+      "denominator": 18,
+      "numerator": 18,
+      "rate": 1.0
+    }
+  },
+  "raw": {
+    "detected_opportunity_count": 18,
+    "expected_edge_per_detected_opportunity": 0.0,
+    "net_shadow_harvest": 0,
+    "non_dust_opportunity_count": 18,
+    "observer_window_count": 6,
+    "one_leg_fill_count": 0,
+    "paired_gain": 0,
+    "pessimistic_paired_fill_count": 0,
+    "same_condition_valid_count": 18,
+    "unwind_loss": 0
+  },
+  "sufficiency": {
+    "min_base_size_paired_fills_for_candidate": 10,
+    "min_detected_opportunities": 50,
+    "min_non_dust_opportunities": 30,
+    "min_observer_windows": 5,
+    "min_pessimistic_paired_fills": 20,
+    "min_pessimistic_paired_fills_for_candidate": 20,
+    "min_repeated_windows_per_market": 3,
+    "min_same_condition_valid_opportunities": 30,
+    "min_total_repeated_windows": 6,
+    "min_trade_evidence_ready_windows_per_market_family": 3
+  },
+  "unwind_loss": 0,
+  "verdict": "NEEDS_MORE_DATA",
+  "verdict_reasons": [
+    "MIN_DETECTED_OPPORTUNITIES_NOT_MET",
+    "MIN_SAME_CONDITION_VALID_OPPORTUNITIES_NOT_MET",
+    "MIN_NON_DUST_OPPORTUNITIES_NOT_MET",
+    "MIN_PESSIMISTIC_PAIRED_FILLS_NOT_MET"
+  ]
+}

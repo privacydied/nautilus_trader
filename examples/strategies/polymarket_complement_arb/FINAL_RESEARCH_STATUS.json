@@ -1,16 +1,49 @@
 {
   "strategy": "polymarket_complement_arb",
   "status": "FROZEN_NO_PESSIMISTIC_PAIRED_FILL_EDGE",
+  "status_applies_to": "base 100-share pessimistic maker execution",
   "is_rejected": false,
   "is_candidate": false,
   "can_trade_live": false,
-  "reason": "Repeated public-data crypto Up/Down campaigns found theoretical complement opportunities but zero pessimistic paired fills at base 100-share quote size across 7 separated windows with trade evidence READY.",
+  "reason": "Repeated public-data crypto Up/Down campaigns found theoretical complement opportunities but zero pessimistic paired fills at base 100-share quote size across 7 separated windows with trade evidence READY. A subsequent size-ladder diagnostic confirmed zero pessimistic paired fills at all tested sizes (5, 10, 25, 50, 100). No active complement-able markets found at diagnostic closeout time — the original campaign markets have expired and no new crypto Up/Down duration markets are currently active.",
   "failure_mode": "queue_position_execution_failure",
   "base_quote_size": 100,
   "fee_formula": "shares * feeRate * price * (1 - price)",
   "fee_rate_source": "condition metadata (Gamma API feeSchedule.rate)",
   "maker_fee_assumption": "0 (standard Polymarket maker-rebate structure, treated as zero for conservative assumption)",
   "trade_evidence_status": "READY",
+  "campaign_phases": [
+    {
+      "phase": "original_closeout",
+      "description": "Precommitted repeated-window closeout across 6 windows on BTC/ETH",
+      "windows": 6,
+      "detected": 1532,
+      "non_dust": 1098,
+      "pess_fills": 0
+    },
+    {
+      "phase": "hourly_addendum",
+      "description": "7th window resolving the 1h slug discovery gap",
+      "windows": 1,
+      "detected": 24,
+      "non_dust": 57,
+      "pess_fills": 0
+    },
+    {
+      "phase": "size_ladder_diagnostic",
+      "description": "Post-campaign diagnostic: replay schema check (REPLAY_SCHEMA_INSUFFICIENT) followed by fresh bounded capture at ladder sizes [5, 10, 25, 50, 100]. All sizes produced zero pessimistic paired fills. All opportunities classified as dust (net edge below economic thresholds or insufficient notional).",
+      "windows": 1,
+      "detected": 6,
+      "non_dust": 0,
+      "pess_fills": 0,
+      "replay_verdict": "REPLAY_SCHEMA_INSUFFICIENT",
+      "schema_diagnostic": "size_ladder_schema_check.json",
+      "diagnostic_md": "size_ladder_schema_check.md",
+      "diagnostic_script": "run_size_ladder_diagnostic.py",
+      "diagnostic_result_dir": "reports/polymarket_complement_arb_size_ladder_closeout/run_20260516_191925_938667",
+      "ladder_summary_path": "reports/polymarket_complement_arb_size_ladder_closeout/run_20260516_191925_938667/ladder_summary.json"
+    }
+  ],
   "total_separated_windows": 7,
   "total_detected_opportunities": 1565,
   "total_non_dust_opportunities": 1155,
@@ -34,9 +67,12 @@
   "durations_tested": ["5m", "15m", "1h", "4h", "daily"],
   "durations_not_found": [],
   "limitations": [
-    "Size ladder (5/10/25/50 shares) was not implemented as a separate diagnostic run",
+    "Size ladder (5/10/25/50 shares) was implemented as a fresh diagnostic capture, not replay — existing artifacts lack cumulative_fillable_volume per leg",
     "Resolution truncation fields exist in ShadowOpportunity but runner does not fully populate them",
     "Frozen status applies to base 100-share pessimistic maker execution only",
+    "Size ladder diagnostic found zero pessimistic paired fills at all tested sizes (5/10/25/50/100) — the freeze deepens across the size spectrum",
+    "All ladder-size opportunities were classified as dust — no quote size produced economic non-dust opportunities at the time of the diagnostic",
+    "No active complement-able crypto Up/Down duration markets existed at diagnostic closeout time — the original campaign markets have expired and no replacements are available",
     "This does not prove complement arbitrage is mathematically impossible",
     "This does not justify live trading",
     "Public data-api trade feed does not support per-asset server-side filtering (uses market=<conditionId>)",
@@ -46,6 +82,10 @@
     "FINAL_RESEARCH_STATUS.json",
     "FINAL_RESEARCH_STATUS.md",
     "README.md",
-    "POLYMARKET_COMPLEMENT_ARB_PRECOMMITMENT.md"
+    "POLYMARKET_COMPLEMENT_ARB_PRECOMMITMENT.md",
+    "size_ladder_schema_check.json",
+    "size_ladder_schema_check.md",
+    "config.py",
+    "run_size_ladder_diagnostic.py"
   ]
 }

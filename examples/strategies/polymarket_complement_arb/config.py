@@ -68,5 +68,16 @@ class ComplementArbConfig:
     min_same_condition_valid_opportunities: int = 30
     min_non_dust_opportunities: int = 30
 
+    # --- Diagnostic size-ladder thresholds ---
+    # Pinned pre-run (Task 3) — do not tune after seeing results.
+    diagnostic_min_economic_net_harvest_usdc: float = 0.10
+    # Minimum net harvest in USDC for a quote size to be classified as economic.
+    # A 5-share quote yielding $0.003/share = $0.015 is dust.
+    # A 50-share quote yielding $0.003/share = $0.15 is economic.
+    # Default $0.10 = standard economic soil below which aggregate harvest is
+    # indistinguishable from noise.
+    diagnostic_min_net_edge_per_share: float = 0.005
+    # Defaults to the same precommitted min_net_edge_per_share from strategy config.
+
     # --- Live guards ---
     live_acknowledgement: bool = False

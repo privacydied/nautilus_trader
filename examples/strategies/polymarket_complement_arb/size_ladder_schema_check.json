@@ -1,0 +1,32 @@
+{
+  "schema_verdict": "REPLAY_SCHEMA_INSUFFICIENT",
+  "strategy": "polymarket_complement_arb",
+  "assessment_timestamp": "2026-05-16T20:06:00Z",
+  "replay_verdict": "REPLAY_SCHEMA_INSUFFICIENT",
+  "replay_possible": false,
+  "reason": "Existing shadow_opportunities.jsonl lack raw cumulative_fillable_volume per leg (the key arithmetic input for the pessimistic fill rule cumulative > depth_ahead + quote_size). Without cumulative_fillable_volume, the fill outcome at an arbitrary quote size cannot be recomputed from stored data. Additionally, 100% of pessimistic rows across all campaign runs were pre-rejected by size-invariant economic gates (NO_NET_EDGE_AFTER_COSTS or RESOLUTION_DANGER_WINDOW), so replay at any size would produce the same pre-fill rejections.",
+  "fields_present": {
+    "depth_ahead_per_leg": true,
+    "fill_status_already_computed": true,
+    "cumulative_fillable_volume": false,
+    "raw_trade_events": false,
+    "quote_side_per_leg": false,
+    "quote_size_per_leg": true,
+    "quote_price_per_leg": true,
+    "net_edge_per_share": true,
+    "sum_asks": true,
+    "max_safe_shares": true
+  },
+  "missing_fields": [
+    "cumulative_fillable_volume — the observed total compatible trade volume after quote_time, essential for recomputing the pessimistic fill threshold threshold at arbitrary quote sizes",
+    "raw_trade_events — individual trade price/size/side/timestamp entries used by evaluate_pessimistic_fill are ephemeral and not persisted",
+    "LegQuote.quote_side — not explicitly recorded (though implicitly BUY for complement arb)"
+  ],
+  "scope_limitations": [
+    "Frozen status applies to base 100-share pessimistic maker execution only",
+    "The campaign detected 1565 opportunities across 7 windows but 100% of pessimistic rows were pre-rejected by sum_asks >= 1.0 or net_edge_per_share <= 0",
+    "Quote-size-independent rejection means replay at 5/10/25/50 shares would produce identical outcomes",
+    "Only a fresh capture can provide the raw trade evidence needed for multi-size evaluation"
+  ],
+  "recommendation": "Proceed with a fresh bounded diagnostic capture that stores cumulative_fillable_volume per leg and evaluates fill at each ladder size (5, 10, 25, 50, 100) concurrently."
+}
