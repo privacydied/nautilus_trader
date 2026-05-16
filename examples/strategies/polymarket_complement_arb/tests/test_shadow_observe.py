@@ -99,10 +99,10 @@ def test_shadow_observe_runner_writes_reports_without_private_env_vars(tmp_path,
         },
         trades={
             "yes-token": [
-                {"timestamp": time.time() + 0.1, "price": 0.48, "size": 221.0, "side": "SELL", "asset": "yes-token"},
+                {"timestamp": time.time() + 0.1, "price": 0.48, "size": 221.0, "side": "SELL", "asset": "yes-token", "conditionId": "cond-shadow"},
             ],
             "no-token": [
-                {"timestamp": time.time() + 0.2, "price": 0.48, "size": 221.0, "side": "SELL", "asset": "no-token"},
+                {"timestamp": time.time() + 0.2, "price": 0.48, "size": 221.0, "side": "SELL", "asset": "no-token", "conditionId": "cond-shadow"},
             ],
         },
     )

@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import json
 import logging
+import re
 import subprocess
 import time
 import urllib.parse
@@ -51,8 +52,9 @@ GAMMA_API_BASE = "https://gamma-api.polymarket.com"
 CLOB_API_BASE = "https://clob.polymarket.com"
 DATA_API_BASE = "https://data-api.polymarket.com"
 USER_AGENT = "nautilus-complement-shadow-observer/1.0"
-TRADE_FETCH_LIMIT = 1000  # data-api max is 1000 trades per call (ignores asset filter—global feed)
+TRADE_FETCH_LIMIT = 1000  # data-api max per call
 
+# Trade evidence status constants
 TRADE_EVIDENCE_READY = "TRADE_EVIDENCE_READY"
 TRADE_EVIDENCE_EMPTY = "TRADE_EVIDENCE_EMPTY"
 TRADE_EVIDENCE_JOIN_FAILED = "TRADE_EVIDENCE_JOIN_FAILED"
@@ -61,11 +63,31 @@ TRADE_EVIDENCE_TIME_WINDOW_MISMATCH = "TRADE_EVIDENCE_TIME_WINDOW_MISMATCH"
 TRADE_EVIDENCE_IDENTIFIER_MISMATCH = "TRADE_EVIDENCE_IDENTIFIER_MISMATCH"
 PUBLIC_TRADE_EVIDENCE_INSUFFICIENT = "PUBLIC_TRADE_EVIDENCE_INSUFFICIENT"
 
+# Crypto Up/Down duration market pattern
+CRYPTO_UP_PATTERN = re.compile(
+    r"^(btc|eth|sol|xrp|doge|hype|bnb)-up(down)?-(5m|15m|1h|4h|daily)-\d+$",
+    re.IGNORECASE,
+)
+
+# Duration label extraction
+DURATION_LABELS: dict[str, str] = {
+    "5m": "5m",
+    "15m": "15m",
+    "1h": "1h",
+    "4h": "4h",
+    "daily": "daily",
+}
+
 
 class PublicDataClient(Protocol):
     async def discover_markets(self, limit: int) -> list[dict[str, Any]]: ...
     async def fetch_book(self, token_id: str) -> BookSnapshot | None: ...
-    async def fetch_trades(self, after_ts: int | None = None, limit: int = TRADE_FETCH_LIMIT) -> list[dict[str, Any]]: ...
+    async def fetch_trades(
+        self,
+        condition_ids: str | None = None,
+        after_ts: int | None = None,
+        limit: int = TRADE_FETCH_LIMIT,
+    ) -> list[dict[str, Any]]: ...
 
 
 def _get_json(url: str, params: dict[str, Any] | None = None, timeout: float = 15.0) -> Any:
@@ -115,20 +137,26 @@ class UrlPublicDataClient:
             timestamp_ms=time.time() * 1000,
         )
 
-    async def fetch_trades(self, after_ts: int | None = None, limit: int = TRADE_FETCH_LIMIT) -> list[dict[str, Any]]:
-        """
-        Fetch latest trades from the public data-api global trade feed.
+    async def fetch_trades(
+        self,
+        condition_ids: str | None = None,
+        after_ts: int | None = None,
+        limit: int = TRADE_FETCH_LIMIT,
+    ) -> list[dict[str, Any]]:
+        """Fetch trades from the public data-api, optionally filtered by condition IDs.
 
-        NOTE: The data-api ``/trades`` endpoint does NOT support per-asset or
-        per-market server-side filtering. The ``asset``, ``token_id``,
-        ``conditionId``, and ``slug`` query parameters are all silently ignored.
-        This endpoint returns the latest N global trades (max 1000). Client-side
-        filtering by ``asset`` (CLOB token ID) is required for per-token lookup.
+        The data-api ``/trades`` endpoint supports ``market`` as a comma-separated
+        list of condition IDs for server-side filtering (e.g.
+        ``?market=<cond_id1>,<cond_id2>&limit=1000``).  When ``condition_ids`` is
+        set, only trades for those conditions are returned.  When omitted, the
+        global feed (latest N trades across all markets) is returned.
 
         Use ``after_ts`` (Unix seconds) to fetch only trades newer than a known
         timestamp for incremental accumulation.
         """
         params: dict[str, Any] = {"limit": limit}
+        if condition_ids:
+            params["market"] = condition_ids
         if after_ts is not None:
             params["after"] = after_ts
         try:
@@ -160,11 +188,19 @@ class InMemoryPublicDataClient:
             return None
         return values[min(calls, len(values) - 1)]
 
-    async def fetch_trades(self, after_ts: int | None = None, limit: int = 1000) -> list[dict[str, Any]]:
-        """Return all stored trades across all tokens (global feed mock)."""
+    async def fetch_trades(
+        self,
+        condition_ids: str | None = None,
+        after_ts: int | None = None,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Return stored trades matching condition IDs, or all if None."""
         all_rows: list[dict[str, Any]] = []
         for rows in self._trades.values():
             all_rows.extend(rows)
+        if condition_ids:
+            cond_set = set(c.strip() for c in condition_ids.split(","))
+            all_rows = [r for r in all_rows if r.get("conditionId") in cond_set]
         if after_ts is None:
             return all_rows
         after_ns = after_ts * 1_000_000_000
@@ -332,6 +368,306 @@ def _sufficiency_from_config(config: ComplementArbConfig) -> ShadowSufficiencyCo
     )
 
 
+def _parse_duration_from_slug(slug: str) -> str | None:
+    """Extract duration label from a crypto updown slug (e.g. ``btc-updown-5m-...`` → ``5m``)."""
+    m = CRYPTO_UP_PATTERN.match(slug)
+    if m:
+        dur = m.group(3).lower()
+        return DURATION_LABELS.get(dur)
+    return None
+
+
+def _parse_asset_from_slug(slug: str) -> str | None:
+    """Extract asset label from a crypto updown slug (e.g. ``btc-updown-5m-...`` → ``BTC``)."""
+    m = CRYPTO_UP_PATTERN.match(slug)
+    return m.group(1).upper() if m else None
+
+
+def _is_crypto_updown_event(event: dict[str, Any]) -> bool:
+    """Check if an event matches the crypto Up/Down duration market pattern."""
+    slug = str(event.get("slug", "") or "")
+    return bool(CRYPTO_UP_PATTERN.match(slug))
+
+
+def _market_meta(event: dict[str, Any]) -> dict[str, Any]:
+    """Extract asset and duration from an event's slug for crypto updown markets."""
+    slug = str(event.get("slug", "") or "")
+    return {
+        "asset": _parse_asset_from_slug(slug),
+        "duration": _parse_duration_from_slug(slug),
+        "resolution_source": event.get("resolutionSource") or "",
+    }
+
+
+def _build_market_from_raw(
+    m: dict[str, Any],
+    event_slug: str,
+    meta: dict[str, Any],
+) -> ComplementMarket | None:
+    """Build a ComplementMarket from a raw Gamma market dict.
+
+    Handles both ``Up/Down`` and ``Yes/No`` outcome conventions, parsing
+    ``clobTokenIds`` and ``outcomes`` from their JSON-string format.
+    Returns None if the market is neg-risk or structurally malformed.
+    """
+    condition_id = str(m.get("conditionId", "") or "")
+    slug = str(m.get("slug", "") or "")
+    if not condition_id:
+        return None
+
+    # Parse outcomes and token IDs from JSON strings
+    outcomes_raw = m.get("outcomes")
+    clob_raw = m.get("clobTokenIds")
+    if isinstance(outcomes_raw, str):
+        import ast
+        try:
+            outcomes_raw = ast.literal_eval(outcomes_raw)
+        except Exception:
+            outcomes_raw = []
+    if isinstance(clob_raw, str):
+        import ast
+        try:
+            clob_raw = ast.literal_eval(clob_raw)
+        except Exception:
+            clob_raw = []
+    if not isinstance(outcomes_raw, list) or not isinstance(clob_raw, list):
+        return None
+    if len(outcomes_raw) != 2 or len(clob_raw) != 2:
+        return None
+
+    # Map outcomes to YES/UP and NO/DOWN
+    yes_token: str | None = None
+    no_token: str | None = None
+    for tid, outcome in zip(clob_raw, outcomes_raw):
+        oc = outcome.upper().strip()
+        if oc in ("YES", "UP"):
+            yes_token = str(tid)
+        elif oc in ("NO", "DOWN"):
+            no_token = str(tid)
+    if not yes_token or not no_token:
+        return None
+
+    if m.get("negRisk", False):
+        return None
+
+    yes_inst_id = f"{condition_id}-{yes_token}.POLYMARKET"
+    no_inst_id = f"{condition_id}-{no_token}.POLYMARKET"
+    end_date_iso = m.get("endDate") or m.get("endDateIso")
+    fee = 0.0
+    fs = m.get("feeSchedule")
+    if isinstance(fs, dict):
+        fee = float(fs.get("rate", 0.0))
+
+    return ComplementMarket(
+        condition_id=condition_id,
+        market_slug=slug,
+        event_slug=event_slug,
+        question=str(m.get("question", "") or ""),
+        yes_token_id=yes_token,
+        no_token_id=no_token,
+        yes_instrument_id_str=yes_inst_id,
+        no_instrument_id_str=no_inst_id,
+        neg_risk=False,
+        active=bool(m.get("active", True)),
+        closed=bool(m.get("closed", False)),
+        accepting_orders=bool(m.get("acceptingOrders", True)),
+        end_date_iso=str(end_date_iso) if end_date_iso else None,
+        minimum_tick_size=float(m.get("orderPriceMinTickSize", 0.001) or 0.001),
+        minimum_order_size=float(m.get("orderMinSize", 5.0) or 5.0),
+        taker_fee_rate=fee,
+        category=meta.get("category") or meta.get("asset") or "crypto-updown",
+        liquidity_num=float(m.get("liquidityNum", 0) or 0),
+        volume_num=float(m.get("volumeNum", 0) or 0),
+    )
+
+
+async def _resolve_event_slugs(
+    slugs: list[str],
+    *,
+    gamma_base: str = GAMMA_API_BASE,
+) -> list[ComplementMarket]:
+    """Resolve event slugs to their CLOB ComplementMarket objects.
+
+    Builds ComplementMarket objects directly from the resolved event data,
+    bypassing the general-market closed/active filters since the user
+    explicitly specified these slugs.
+    """
+    markets: list[ComplementMarket] = []
+    for slug in slugs:
+        try:
+            events = await asyncio.to_thread(
+                _get_json,
+                f"{gamma_base}/events",
+                {"slug": slug},
+                15.0,
+            )
+            if not isinstance(events, list):
+                continue
+            for ev in events:
+                meta = _market_meta(ev)
+                raw_markets = ev.get("markets") or []
+                event_slug = str(ev.get("slug", "") or "")
+                for m in raw_markets:
+                    cm = _build_market_from_raw(m, event_slug, meta)
+                    if cm is not None:
+                        markets.append(cm)
+        except Exception as exc:
+            logger.warning("failed to resolve event slug=%s error=%s", slug, exc)
+    logger.info("event-slug resolution: %s slugs, %s markets", len(slugs), len(markets))
+    return markets
+
+
+async def _discover_crypto_updown(
+    target_assets: set[str],
+    target_durations: set[str],
+    config: ComplementArbConfig,
+    *,
+    client: PublicDataClient,
+    gamma_base: str = GAMMA_API_BASE,
+) -> tuple[list[ComplementMarket], list[dict[str, Any]]]:
+    """Discover crypto Up/Down duration markets from Gamma.
+
+    Searches Gamma events for crypto Up/Down patterns matching the target
+    assets and durations, then extracts CLOB markets from each matching event.
+    Returns eligible ComplementMarkets and a list of market metadata dicts.
+    """
+    raw_events: list[dict[str, Any]] = []
+    try:
+        raw_events = await asyncio.to_thread(
+            _get_json,
+            f"{gamma_base}/events",
+            {"active": "true", "closed": "false", "archived": "false", "limit": 250},
+            30.0,
+        )
+    except Exception as exc:
+        logger.warning("gamma events discovery failed error=%s", exc)
+        return [], []
+
+    matching_events = [e for e in raw_events if _is_crypto_updown_event(e)]
+    logger.info(
+        "crypto-updown discovery: %s events found, %s matching pattern",
+        len(raw_events),
+        len(matching_events),
+    )
+
+    # Filter by target assets and durations
+    filtered: list[dict[str, Any]] = []
+    for ev in matching_events:
+        meta = _market_meta(ev)
+        asset = (meta.get("asset") or "").upper()
+        dur = meta.get("duration") or ""
+        if asset and asset in target_assets and dur and dur in target_durations:
+            filtered.append(ev)
+
+    logger.info(
+        "crypto-updown filtered: %s after asset/duration filter (assets=%s, durations=%s)",
+        len(filtered),
+        sorted(target_assets),
+        sorted(target_durations),
+    )
+
+    markets: list[ComplementMarket] = []
+    market_meta_list: list[dict[str, Any]] = []
+    for ev in filtered:
+        raw_markets = ev.get("markets") or []
+        meta = _market_meta(ev)
+        for m in raw_markets:
+            condition_id = str(m.get("conditionId", "") or "")
+            slug = str(m.get("slug", "") or "")
+            outcomes_raw = m.get("outcomes")
+            clob_raw = m.get("clobTokenIds")
+            if isinstance(outcomes_raw, str):
+                import ast
+                try:
+                    outcomes_raw = ast.literal_eval(outcomes_raw)
+                except Exception:
+                    outcomes_raw = []
+            if isinstance(clob_raw, str):
+                import ast
+                try:
+                    clob_raw = ast.literal_eval(clob_raw)
+                except Exception:
+                    clob_raw = []
+            if not isinstance(outcomes_raw, list) or not isinstance(clob_raw, list):
+                continue
+            if len(outcomes_raw) != 2 or len(clob_raw) != 2:
+                continue
+            up_token: str | None = None
+            down_token: str | None = None
+            for tid, outcome in zip(clob_raw, outcomes_raw):
+                oc = outcome.upper().strip()
+                if oc == "UP":
+                    up_token = str(tid)
+                elif oc == "DOWN":
+                    down_token = str(tid)
+            if not up_token or not down_token:
+                continue
+            # For complement arb, UP = YES, DOWN = NO
+            yes_inst_id = f"{condition_id}-{up_token}.POLYMARKET"
+            no_inst_id = f"{condition_id}-{down_token}.POLYMARKET"
+            neg_risk = bool(m.get("negRisk", False))
+            if neg_risk:
+                continue
+            active = bool(m.get("active", True))
+            closed = bool(m.get("closed", False))
+            end_date_iso = m.get("endDate") or ev.get("endDate")
+            market_entry = ComplementMarket(
+                condition_id=condition_id,
+                market_slug=slug,
+                event_slug=str(ev.get("slug", "")),
+                question=str(m.get("question", "")),
+                yes_token_id=up_token,
+                no_token_id=down_token,
+                yes_instrument_id_str=yes_inst_id,
+                no_instrument_id_str=no_inst_id,
+                neg_risk=neg_risk,
+                active=active,
+                closed=closed,
+                accepting_orders=True,
+                end_date_iso=str(end_date_iso) if end_date_iso else None,
+                minimum_tick_size=0.001,
+                minimum_order_size=1.0,
+                taker_fee_rate=float(m.get("feeSchedule", {}).get("rate", 0.0) if isinstance(m.get("feeSchedule"), dict) else 0.0),
+                category="crypto-updown",
+                liquidity_num=float(m.get("liquidity", 0) or 0),
+                volume_num=float(m.get("volume", 0) or 0),
+            )
+            market_meta_list.append({**meta, "slug": slug, "condition_id": condition_id})
+            markets.append(market_entry)
+    return markets, market_meta_list
+
+
+async def _discover_markets(
+    config: ComplementArbConfig,
+    client: PublicDataClient,
+    *,
+    event_slugs: list[str] | None = None,
+    crypto_assets: set[str] | None = None,
+    crypto_durations: set[str] | None = None,
+    limit: int = 200,
+) -> tuple[list[ComplementMarket], dict[str, Any]]:
+    """Discover markets using the configured universe mode.
+
+    Returns (markets, universe_metadata) where universe_metadata describes
+    the discovery path taken.
+    """
+    if event_slugs:
+        markets = await _resolve_event_slugs(event_slugs)
+        logger.info("event-slug discovery: %s slugs, %s eligible markets", len(event_slugs), len(markets))
+        return markets, {"mode": "event-slugs", "slugs": event_slugs}
+
+    if crypto_assets and crypto_durations:
+        markets, meta_list = await _discover_crypto_updown(crypto_assets, crypto_durations, config, client=client)
+        logger.info("crypto-updown discovery: %s eligible markets from assets=%s durations=%s", len(markets), sorted(crypto_assets), sorted(crypto_durations))
+        return markets, {"mode": "crypto-updown", "assets": sorted(crypto_assets), "durations": sorted(crypto_durations), "market_meta": meta_list}
+
+    # Default: general Gamma discovery
+    raw = await client.discover_markets(limit)
+    eligible, skips = extract_complement_markets(raw, config)
+    logger.info("general discovery: %s eligible markets, %s skipped", len(eligible), len(skips))
+    return eligible, {"mode": "general", "raw_fetched": len(raw), "eligible": len(eligible), "skipped": len(skips)}
+
+
 async def run_shadow_observe(  # noqa: C901
     *,
     markets: list[ComplementMarket],
@@ -373,11 +709,16 @@ async def run_shadow_observe(  # noqa: C901
         now_ms = time.time() * 1000
         ts_event_ns = time.time_ns()
 
-        # Fetch trades ONCE per poll — data-api ignores asset/conditionId filters,
-        # returns the latest N global trades. Use after_ts for incremental fetch.
+        # Fetch trades — when we have condition IDs, filter server-side via
+        # ?market=<comma-sep-condition-ids> for much greater efficiency.
+        observed_condition_ids = ",".join(sorted({m.condition_id for m in markets}))
         trade_fetch_attempt_count += 1
         try:
-            trade_rows = await client.fetch_trades(after_ts=last_trade_ts, limit=TRADE_FETCH_LIMIT)
+            trade_rows = await client.fetch_trades(
+                condition_ids=observed_condition_ids,
+                after_ts=last_trade_ts,
+                limit=TRADE_FETCH_LIMIT,
+            )
             if isinstance(trade_rows, list):
                 trade_fetch_success_count += 1
                 if not trade_rows:
@@ -528,10 +869,9 @@ async def run_shadow_observe(  # noqa: C901
 
 
 async def _discover_eligible(config: ComplementArbConfig, client: PublicDataClient, limit: int) -> list[ComplementMarket]:
-    raw = await client.discover_markets(limit)
-    eligible, skips = extract_complement_markets(raw, config)
-    logger.info("eligible markets=%s skipped=%s", len(eligible), len(skips))
-    return eligible
+    """Legacy discovery helper (kept for backcompat). Delegates to _discover_markets."""
+    markets, _ = await _discover_markets(config, client, limit=limit)
+    return markets
 
 
 async def run_trade_evidence_debug(
@@ -562,7 +902,12 @@ async def run_trade_evidence_debug(
     total_trade_errors = 0
 
     while True:
-        trade_rows = await client.fetch_trades(after_ts=None, limit=TRADE_FETCH_LIMIT)
+        observed_condition_ids = ",".join(sorted({m.condition_id for m in markets}))
+        trade_rows = await client.fetch_trades(
+            condition_ids=observed_condition_ids,
+            after_ts=None,
+            limit=TRADE_FETCH_LIMIT,
+        )
         total_trade_fetches += 1
         if not isinstance(trade_rows, list):
             total_trade_errors += 1
@@ -686,6 +1031,31 @@ async def main() -> None:
     parser.add_argument("--event-slug", type=str)
     parser.add_argument("--output-root", type=Path, default=Path("reports/polymarket_complement_arb_shadow"))
     parser.add_argument("--debug-trade-evidence", action="store_true", help="Run evidence-only debug mode")
+    parser.add_argument(
+        "--universe",
+        type=str,
+        choices=["general", "crypto-updown"],
+        default="general",
+        help="Market universe to discover (general or crypto-updown)",
+    )
+    parser.add_argument(
+        "--assets",
+        type=str,
+        default="",
+        help="Comma-separated asset symbols for crypto-updown (e.g. BTC,ETH,SOL)",
+    )
+    parser.add_argument(
+        "--durations",
+        type=str,
+        default="",
+        help="Comma-separated durations for crypto-updown (e.g. 5m,15m,1h,4h,daily)",
+    )
+    parser.add_argument(
+        "--event-slugs",
+        type=str,
+        default="",
+        help="Comma-separated event slugs to resolve directly (e.g. btc-updown-5m-1778949900)",
+    )
     args = parser.parse_args()
 
     config = ComplementArbConfig(
@@ -696,7 +1066,30 @@ async def main() -> None:
         event_slug_allowlist=(args.event_slug,) if args.event_slug else (),
     )
     client = UrlPublicDataClient()
-    markets = await _discover_eligible(config, client, limit=max(args.max_markets * 20, 200))
+
+    # Parse universe arguments
+    event_slugs = [s.strip() for s in args.event_slugs.split(",") if s.strip()] if args.event_slugs else None
+    crypto_assets: set[str] | None = None
+    crypto_durations: set[str] | None = None
+    if args.universe == "crypto-updown":
+        assets = set(a.strip().upper() for a in args.assets.split(",") if a.strip())
+        durations = set(d.strip().lower() for d in args.durations.split(",") if d.strip())
+        crypto_assets = assets or {"BTC", "ETH", "SOL", "XRP", "DOGE", "HYPE", "BNB"}
+        crypto_durations = durations or {"5m", "15m", "1h", "4h", "daily"}
+        logger.info(
+            "universe=crypto-updown assets=%s durations=%s",
+            sorted(crypto_assets),
+            sorted(crypto_durations),
+        )
+
+    markets, universe_meta = await _discover_markets(
+        config,
+        client,
+        event_slugs=event_slugs,
+        crypto_assets=crypto_assets,
+        crypto_durations=crypto_durations,
+        limit=max(args.max_markets * 20, 200),
+    )
     if not markets:
         raise SystemExit("No eligible same-condition YES/NO complement markets discovered")
 

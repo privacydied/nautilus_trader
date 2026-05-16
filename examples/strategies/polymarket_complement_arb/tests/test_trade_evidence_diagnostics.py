@@ -1,17 +1,18 @@
-"""
-Tests for trade evidence diagnostics in the shadow observe pipeline.
+"""Tests for trade evidence diagnostics in the shadow observe pipeline.
 
-The Polymarket data-api /trades endpoint is a global trade feed that returns the
-latest N trades across all tokens. It does NOT support per-asset server-side
-filtering — the ``asset``, ``conditionId``, and ``slug`` query parameters are
-silently ignored. Trades for specific tokens only appear if they happen to be
-among the most recent ~1000 global trades.
+The Polymarket data-api /trades endpoint supports ``market=<conditionId>``
+as a server-side filter (comma-separated condition IDs).  When provided,
+the endpoint returns only trades for those conditions.  Without it, the
+global feed (latest ~1000 trades across all markets) is returned.
 
 These tests validate that:
 1. Trade evidence status classifications are correct
 2. Diagnostics are written to summary and markdown output
-3. No execution-client imports are introduced
-4. run_live_guarded.py remains stubbed
+3. The ``market=<condition_id>`` filter is used correctly
+4. Crypto-updown universe discovery works for target assets/durations
+5. Event slug allowlist resolves to market/token IDs
+6. No execution-client imports are introduced
+7. run_live_guarded.py remains stubbed
 """
 
 from __future__ import annotations
@@ -24,22 +25,22 @@ from examples.strategies.polymarket_complement_arb.models import BookSnapshot
 from examples.strategies.polymarket_complement_arb.models import ComplementMarket
 from examples.strategies.polymarket_complement_arb.run_shadow_observe import (
     PUBLIC_TRADE_EVIDENCE_INSUFFICIENT,
-)
-from examples.strategies.polymarket_complement_arb.run_shadow_observe import TRADE_EVIDENCE_EMPTY
-from examples.strategies.polymarket_complement_arb.run_shadow_observe import (
+    TRADE_EVIDENCE_EMPTY,
     TRADE_EVIDENCE_ENDPOINT_ERROR,
-)
-from examples.strategies.polymarket_complement_arb.run_shadow_observe import (
     TRADE_EVIDENCE_JOIN_FAILED,
-)
-from examples.strategies.polymarket_complement_arb.run_shadow_observe import TRADE_EVIDENCE_READY
-from examples.strategies.polymarket_complement_arb.run_shadow_observe import (
+    TRADE_EVIDENCE_READY,
+    _build_market_from_raw,
     _compute_trade_evidence_status,
+    _is_crypto_updown_event,
+    _parse_asset_from_slug,
+    _parse_duration_from_slug,
+    run_shadow_observe,
 )
-from examples.strategies.polymarket_complement_arb.run_shadow_observe import run_shadow_observe
-from examples.strategies.polymarket_complement_arb.shadow_execution import ShadowOpportunityResult
-from examples.strategies.polymarket_complement_arb.shadow_execution import ShadowSufficiencyConfig
-from examples.strategies.polymarket_complement_arb.shadow_execution import write_shadow_reports
+from examples.strategies.polymarket_complement_arb.shadow_execution import (
+    ShadowOpportunityResult,
+    ShadowSufficiencyConfig,
+    write_shadow_reports,
+)
 
 
 # --- _compute_trade_evidence_status tests ---
@@ -140,7 +141,6 @@ def test_successful_trade_join_produces_ready():
 
 
 def test_trade_diagnostics_written_to_summary(tmp_path: Path):
-    """Trade evidence diagnostics appear in shadow summary enriched output."""
     results: list[ShadowOpportunityResult] = []
     trade_evidence = {
         "status": TRADE_EVIDENCE_EMPTY,
@@ -160,14 +160,12 @@ def test_trade_diagnostics_written_to_summary(tmp_path: Path):
         trade_evidence=trade_evidence,
     )
     report_text = paths["report"].read_text()
-    # Check markdown includes the trade evidence section
     assert "## Trade Evidence" in report_text
     assert TRADE_EVIDENCE_EMPTY in report_text
     assert "fetch attempts: 3" in report_text
 
 
 def test_varied_trade_evidence_renderings(tmp_path: Path):
-    """Different trade evidence status values produce appropriate markdown."""
     for status, keyword in [
         (TRADE_EVIDENCE_EMPTY, "no data"),
         (PUBLIC_TRADE_EVIDENCE_INSUFFICIENT, "did return some"),
@@ -197,11 +195,99 @@ def test_varied_trade_evidence_renderings(tmp_path: Path):
         assert keyword.lower() in report.lower(), f"Expected '{keyword}' in report for status {status}"
 
 
+# --- Crypto updown discovery ---
+
+
+def test_parse_asset_from_slug():
+    assert _parse_asset_from_slug("btc-updown-5m-12345") == "BTC"
+    assert _parse_asset_from_slug("eth-updown-15m-12345") == "ETH"
+    assert _parse_asset_from_slug("sol-updown-1h-12345") == "SOL"
+    assert _parse_asset_from_slug("xrp-updown-4h-12345") == "XRP"
+    assert _parse_asset_from_slug("doge-updown-daily-12345") == "DOGE"
+    assert _parse_asset_from_slug("hype-updown-5m-12345") == "HYPE"
+    assert _parse_asset_from_slug("bnb-updown-15m-12345") == "BNB"
+
+
+def test_parse_duration_from_slug():
+    assert _parse_duration_from_slug("btc-updown-5m-12345") == "5m"
+    assert _parse_duration_from_slug("btc-updown-15m-12345") == "15m"
+    assert _parse_duration_from_slug("btc-updown-1h-12345") == "1h"
+    assert _parse_duration_from_slug("btc-updown-4h-12345") == "4h"
+    assert _parse_duration_from_slug("btc-updown-daily-12345") == "daily"
+
+
+def test_is_crypto_updown_event():
+    assert _is_crypto_updown_event({"slug": "btc-updown-5m-1778949900"}) is True
+    assert _is_crypto_updown_event({"slug": "btc-updown-15m-1778949900"}) is True
+    assert _is_crypto_updown_event({"slug": "btc-updown-4h-1778947200"}) is True
+    assert _is_crypto_updown_event({"slug": "bitcoin-up-or-down-on-may-17-2026"}) is False
+    assert _is_crypto_updown_event({"slug": "some-other-market"}) is False
+
+
+def test_non_target_asset_excluded():
+    assert _is_crypto_updown_event({"slug": "ltc-updown-5m-12345"}) is False
+    assert _is_crypto_updown_event({"slug": "ada-updown-15m-12345"}) is False
+
+
+def test_non_target_duration_excluded():
+    assert _is_crypto_updown_event({"slug": "btc-updown-30m-12345"}) is False
+    assert _is_crypto_updown_event({"slug": "btc-updown-1w-12345"}) is False
+
+
+# --- _build_market_from_raw ---
+
+
+def test_build_market_from_updown_outcomes():
+    raw = {
+        "conditionId": "0xabc123",
+        "slug": "btc-updown-5m-12345",
+        "outcomes": '["Up", "Down"]',
+        "clobTokenIds": '["111111", "222222"]',
+        "active": True,
+        "closed": False,
+        "acceptingOrders": True,
+    }
+    meta = {"asset": "BTC", "duration": "5m", "resolution_source": "chainlink"}
+    m = _build_market_from_raw(raw, "btc-updown-5m-12345", meta)
+    assert m is not None
+    assert m.condition_id == "0xabc123"
+    assert m.yes_token_id == "111111"
+    assert m.no_token_id == "222222"
+    assert m.market_slug == "btc-updown-5m-12345"
+    assert m.neg_risk is False
+
+
+def test_build_market_from_yesno_outcomes():
+    raw = {
+        "conditionId": "0xdef456",
+        "slug": "test-market",
+        "outcomes": '["Yes", "No"]',
+        "clobTokenIds": '["333333", "444444"]',
+        "active": True,
+        "closed": False,
+    }
+    m = _build_market_from_raw(raw, "test-event", {"asset": "TEST"})
+    assert m is not None
+    assert m.yes_token_id == "333333"
+    assert m.no_token_id == "444444"
+
+
+def test_build_market_negrisk_excluded():
+    raw = {
+        "conditionId": "0xneg",
+        "slug": "neg-risk-market",
+        "outcomes": '["Yes", "No"]',
+        "clobTokenIds": '["555555", "666666"]',
+        "negRisk": True,
+    }
+    m = _build_market_from_raw(raw, "neg-event", {"asset": "TEST"})
+    assert m is None
+
+
 # --- No execution-client imports ---
 
 
 def test_no_execution_client_imports_in_shadow_modules():
-    """run_shadow_observe.py and shadow_execution.py have no exec imports."""
     banned = ["ExecutionClient", "LiveExec", "PolymarketLiveExec", "submit_order", "create_order"]
     for mod_name in ["run_shadow_observe.py", "shadow_execution.py"]:
         mod_path = Path(f"examples/strategies/polymarket_complement_arb/{mod_name}")
@@ -229,7 +315,6 @@ def test_run_live_guarded_remains_stubbed():
 
 
 def test_shadow_observe_with_mock_trade_evidence(tmp_path: Path):
-    """run_shadow_observe with mocked client produces correct diagnostics."""
     import asyncio
 
     config = ComplementArbConfig(max_markets=2, min_observer_windows=1)
@@ -268,7 +353,7 @@ def test_shadow_observe_with_mock_trade_evidence(tmp_path: Path):
                 timestamp_ms=1000.0,
             )
 
-        async def fetch_trades(self, after_ts=None, limit=1000):
+        async def fetch_trades(self, condition_ids=None, after_ts=None, limit=1000):
             return []  # Empty global feed
 
     async def _run():
@@ -290,7 +375,6 @@ def test_shadow_observe_with_mock_trade_evidence(tmp_path: Path):
 
 
 def test_missing_trade_data_produces_needs_more_data_not_rejection():
-    """Missing trade evidence leads to NEEDS_MORE_DATA, not REJECTED."""
     from examples.strategies.polymarket_complement_arb.shadow_execution import (
         classify_shadow_verdict,
     )
