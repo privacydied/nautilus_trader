@@ -41,7 +41,8 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 | Derivatives lead-lag v1 (smoke) | notional burst, price shock, signed imbalance | Coinbase spot -> Kraken spot BTC | REJECTED_SPOT_SPOT_SMOKE | Best -18.74 bps, win rate 0% | `derivatives-lead-lag-v1-spot-smoke-rejected` |
 | Derivatives-source spot lead-lag v2 | notional_burst, large_trade, signed_imbalance | Binance USD-M perp → Kraken/Coinbase spot | REJECTED | May 15 FULL_ACTIVE: 63 groups, best raw edge 0.098 bps vs 50 bps all-in cost. 0 viable at any cost level. 0 recurring groups May 14→May 15. COST_WALL_BLOCKED. Diagnostics complete: cost sensitivity, heatmap, permutation null (skipped), cross-capture consistency, candidate falsification. | `derivatives-v2-binance-perp-to-spot-rejected` |
 || DEX-CEX spot dislocation v1 | DEX pool price/volume/liquidity -> CEX forward returns | DEX Screener -> Kraken/Coinbase spot | NEEDS_MORE_DATA | 0 events from 70 snapshots, 2-min window too short, DEX search 5m volumes too stable | `dex-cex-v1-needs-more-data` |
-|| Cross-asset spot impulse v1 | BTC/ETH spot impulse -> alt spot forward returns | Coinbase/Kraken/Binance spot | MARKET_MODERATE_DIAGNOSTIC | Best pair -43.98 bps (coinbase:ETH/USDT->coinbase:LINK/USD) in a quiet/moderate capture. BTC/ETH source movement during actual capture was only ~9-17 bps, below the 30 bps source-range gate required to test stress beta-lag. Not a full volatile-window rejection. | 2026-05-13 07:37-07:53 UTC, 906s capture, quiet/moderate market (BTC 12.6 bps, ETH 16.2 bps). 72 pairs, 11,890 signals, 50 pairs with overlap, 0 pairs with sufficient source/target movement. Diagnostic evidence only — open for volatile-window retest. |
+||| Cross-asset spot impulse v1 | BTC/ETH spot impulse -> alt spot forward returns | Coinbase/Kraken/Binance spot | MARKET_MODERATE_DIAGNOSTIC | Best pair -43.98 bps (coinbase:ETH/USDT->coinbase:LINK/USD) in a quiet/moderate capture. BTC/ETH source movement during actual capture was only ~9-17 bps, below the 30 bps source-range gate required to test stress beta-lag. Not a full volatile-window rejection. | 2026-05-13 07:37-07:53 UTC, 906s capture, quiet/moderate market (BTC 12.6 bps, ETH 16.2 bps). 72 pairs, 11,890 signals, 50 pairs with overlap, 0 pairs with sufficient source/target movement. Diagnostic evidence only — open for volatile-window retest. |
+||| Polymarket BTC Up/Down short-expiry liquidity probe v0 | CLOB orderbook liquidity near expiry | Polymarket CLOB (BTC Up/Down binary options) | REJECTED | Near-expiry depth collapses below $100 non-dust floor: $89 at 5-15m → $13 at 0-30s. Spreads tight (1c median) but depth wall blocks Chainlink/CLOB lag hypothesis. Parser-confounded 98c finding corrected and superseded. | `polymarket-btc-updown-liquidity-v0-rejected` |
 
 ## Locked Gates — Do Not Revisit Without Structural Change
 
@@ -51,6 +52,56 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 4. **Direct cash-and-carry** under Kraken USD spot + Binance/Bybit USDT perp cost model. Net edge below all-in cost. Rejected.
 5. **Same-asset spot/spot lead-lag** tested as a smoke run for the derivatives lead-lag v1 observer. REJECTED_SPOT_SPOT_SMOKE. The observer implementation is correct but the run only re-proved an already locked gate.
 6. **Derivatives flow impulse → spot lead-lag** (Binance USD-M perp → Kraken/Coinbase spot). REJECTED after full-empirical capture (May 15 FULL_ACTIVE). Best raw edge 0.098 bps vs 50 bps all-in cost. 0 viable groups at any cost level. 0 recurring groups across two separate captures. Closed under this execution stack. Do not revisit without materially different execution assumptions: HFT-grade colocated execution, much lower fees, different venue microstructure, or a genuinely different signal family. Do not reopen by merely changing lookbacks, horizons, or adding OI filters.
+7. **Polymarket BTC Up/Down short-expiry Chainlink/CLOB lag** — Near-expiry depth collapses below $100 non-dust floor. Parser-confounded 98c spread finding corrected and superseded. Spreads are tight (1c median) but depth wall is real. Distance-to-strike structurally unavailable on directional Up/Down markets (no strike price in question text). Probe infrastructure preserved for Price Target markets, which are a separate hypothesis requiring their own precommitment.
+
+## Polymarket BTC Up/Down Liquidity Probe v0 — Rejection Detail
+
+**Date:** 2026-05-16
+**Pipeline:** `run_polymarket_btc_updown_liquidity_probe` + direct slug injection
+**Probe module:** `polymarket_btc_updown_liquidity_probe.py`
+**Status:** REJECTED — blocked by near-expiry depth wall under current observed liquidity
+
+### Correction History
+
+The original probe found a ~98c median spread on some market samples. This was traced to incorrect orderbook parsing (using min bid / max ask instead of max bid / min ask). After the parser fix, TTE bucketing was also verified correct via `_check_tte_sanity()` diagnostic. This rejection supersedes the earlier parser-confounded liquidity read.
+
+### Experiment
+
+| Parameter | Value |
+|---|---|
+| Duration | 30 minutes (1800s) |
+| Poll interval | 5 seconds |
+| Markets | 17 BTC Up/Down markets across 5m, 15m, 1h, 4h, 1d durations |
+| Total samples | 12,240 |
+| Reference proxy | Binance BTC/USDT via REST (30 polls, 60s interval) |
+
+### Near-Expiry Depth Collapse (Primary Rejection Evidence)
+
+| TTE Bucket | Samples | Median Spread | P95 Spread | Top Depth (bid+ask) | $100 Threshold |
+|---|---|---|---|---|---|
+| 5-15m | 1,554 | 1c | 1c | $89 | BELOW |
+| 2-5m | 576 | 1c | 1c | $43 | BELOW |
+| 1-2m | 206 | 1c | 2c | $28 | BELOW |
+| 30s-1m | 108 | 1c | 4c | $18 | BELOW |
+| 0-30s | 108 | 1c | 7c | $13 | BELOW |
+
+Near-expiry rollup (tte<=120s): 422 samples, 9 markets, GREEN on spread (1c median), but depth below $100 threshold.
+
+### Key Findings
+
+1. **Spread was a parser artifact; depth is real.** After correction, spreads are 1c median globally. But near-expiry depth drops monotonically from ~$89 to ~$13 in the final 2 minutes.
+2. **Two-sided rate degrades near expiry.** 92.6% at 30s-1m, 75.9% at 0-30s, 0% expired.
+3. **P95 spread widens near expiry.** 1-2c for TTE > 1m, rising to 4c at 30s-1m and 7c at 0-30s.
+4. **Distance-to-strike structurally unavailable.** BTC Up/Down markets have no numerical strike price. `_extract_price_to_beat()` correctly returns None for directional questions.
+5. **Proxy routing infrastructure works.** 30 Binance proxy prices captured with `reference_source: BINANCE`.
+
+### Preserved Infrastructure
+
+The liquidity probe module and CLI runner remain reusable for Price Target markets. TTE computation, orderbook parser, CEX proxy routing, distance-to-strike buckets, two-axis grid, duration coverage, and verification status pipeline are all verified working.
+
+### Price Target Markets — Separate Future Hypothesis
+
+BTC Price Target markets (e.g., "Will BTC be above $X by Y?") embed a numerical strike price enabling distance-to-strike computation. This is a separate hypothesis requiring its own precommitment document, market discovery logic, and independent liquidity thresholds. The Up/Down rejection does not automatically disqualify Price Target markets.
 
 ## Still Open
 
