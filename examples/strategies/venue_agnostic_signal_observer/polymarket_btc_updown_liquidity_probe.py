@@ -718,7 +718,6 @@ def parse_orderbook_sample(
     # Normalize: could be list of [price, size] or list of {"price": ..., "size": ...}
     bids = _normalize_levels(bids_raw)
     asks = _normalize_levels(asks_raw)
-    assert bids is not None and asks is not None
 
     # Polymarket CLOB /book returns bids ASCENDING (worst first) and
     # asks DESCENDING (worst first). Use max/min to get best prices.
@@ -1614,6 +1613,10 @@ def _compute_tte_buckets(
         ])
         combined = sorted(bid_depths + ask_depths)
 
+        # Market metadata
+        bucket_market_slugs = list({s.market_slug for s in b_samples})
+        bucket_durations = list({_classify_duration(s.market_slug) for s in b_samples})
+
         median_spread_cents = _percentile(spreads_cents, 50)
         p75_spread_cents = _percentile(spreads_cents, 75)
         p95_spread_cents = _percentile(spreads_cents, 95)
@@ -1629,6 +1632,9 @@ def _compute_tte_buckets(
         buckets_out[label] = {
             "sample_count": total,
             "valid_sample_count": valid_count,
+            "market_count": len(bucket_market_slugs),
+            "market_slugs": bucket_market_slugs,
+            "durations_observed": bucket_durations,
             "two_sided_rate": round(two_sided_rate, 2),
             "median_spread_cents": median_spread_cents,
             "p75_spread_cents": p75_spread_cents,
@@ -1672,6 +1678,18 @@ def _compute_near_expiry_rollup(
         if ad is not None:
             all_ask.append(ad)
 
+    # Collect market metadata
+    all_market_slugs = set()
+    all_durations = set()
+    for b in near_buckets:
+        bucket = tte_buckets.get(b, {})
+        slugs = bucket.get("market_slugs", [])
+        if isinstance(slugs, list):
+            all_market_slugs.update(slugs)
+        durations = bucket.get("durations_observed", [])
+        if isinstance(durations, list):
+            all_durations.update(durations)
+
     median_spread = sorted(all_spreads)[len(all_spreads) // 2] if all_spreads else None
     p95_spread = sorted(all_spreads)[-1] if len(all_spreads) > 1 else median_spread
     median_bid = sorted(all_bid)[len(all_bid) // 2] if all_bid else None
@@ -1693,6 +1711,9 @@ def _compute_near_expiry_rollup(
         "near_expiry_definition": "tte <= 120s",
         "near_expiry_sample_count": total_count,
         "near_expiry_valid_sample_count": all_valid,
+        "near_expiry_market_count": len(all_market_slugs),
+        "near_expiry_market_slugs": list(all_market_slugs),
+        "near_expiry_durations_observed": list(all_durations),
         "near_expiry_median_spread_cents": median_spread,
         "near_expiry_p95_spread_cents": p95_spread,
         "near_expiry_median_bid_depth_usd": median_bid,

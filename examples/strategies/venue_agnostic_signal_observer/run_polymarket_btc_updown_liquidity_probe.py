@@ -274,9 +274,21 @@ async def main() -> int:
     logger.info("Done. Output directory: %s", out_dir.resolve())
 
     # Step 5: Post-capture verification (TTE, distance, two-axis grid)
+    verification_status = None
     if markets and samples:
-        _run_verification(out_dir, markets, samples, args.reference_proxy,
-                          summary, manifest)
+        verification_status = _run_verification(out_dir, markets, samples, args.reference_proxy,
+                                                summary, manifest)
+
+    # Re-write summary JSON and MD with updated verification status
+    if verification_status:
+        summary.verification_status = verification_status
+        summary_path = out_dir / "liquidity_probe_summary.json"
+        write_summary_json(summary, summary_path)
+        logger.info("Re-wrote summary JSON with verification status: %s", verification_status)
+
+        summary_md_path = out_dir / "liquidity_probe_summary.md"
+        write_summary_md(summary, manifest, summary_md_path)
+        logger.info("Re-wrote summary MD with verification status")
 
     return 0
 
@@ -288,8 +300,11 @@ def _run_verification(
     reference_proxy: str | None,
     summary: ProbeSummary,
     manifest: CaptureManifest,
-) -> None:
-    """Run post-capture verification: TTE, distance, two-axis grid, duration."""
+) -> str | None:
+    """Run post-capture verification: TTE, distance, two-axis grid, duration.
+
+    Returns verification status string, or None if not computed.
+    """
     from .polymarket_btc_updown_liquidity_probe import (
         _compute_tte_buckets,
         _compute_near_expiry_rollup,
@@ -410,6 +425,8 @@ def _run_verification(
 
     # Update summary with verification status
     summary.verification_status = verification_status
+
+    return verification_status
 
 
 def _fetch_proxy_price(client, proxy: str) -> tuple:
