@@ -69,6 +69,27 @@ CRYPTO_UP_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Hourly crypto Up/Down pattern: bitcoin-up-or-down-may-16-2026-2pm-et
+_HOURLY_CRYPTO_PATTERN = re.compile(
+    r"^(bitcoin|ethereum|solana|xrp|ripple|dogecoin|bnb|hyperliquid|hype)"
+    r"-up-or-down-"
+    r"[a-z]+-\d+-\d{4}-\d{1,2}(am|pm)-et$",
+    re.IGNORECASE,
+)
+
+# Map asset full names to short codes for hourly slugs
+_HOURLY_ASSET_MAP: dict[str, str] = {
+    "bitcoin": "BTC",
+    "ethereum": "ETH",
+    "solana": "SOL",
+    "xrp": "XRP",
+    "ripple": "XRP",
+    "dogecoin": "DOGE",
+    "bnb": "BNB",
+    "hyperliquid": "HYPE",
+    "hype": "HYPE",
+}
+
 # Duration label extraction
 DURATION_LABELS: dict[str, str] = {
     "5m": "5m",
@@ -369,24 +390,39 @@ def _sufficiency_from_config(config: ComplementArbConfig) -> ShadowSufficiencyCo
 
 
 def _parse_duration_from_slug(slug: str) -> str | None:
-    """Extract duration label from a crypto updown slug (e.g. ``btc-updown-5m-...`` → ``5m``)."""
+    """Extract duration label from a crypto updown slug.
+
+    Standard slugs (e.g. ``btc-updown-5m-...``) → ``5m``.
+    Hourly slugs (e.g. ``bitcoin-up-or-down-may-16-2026-2pm-et``) → ``1h``.
+    """
     m = CRYPTO_UP_PATTERN.match(slug)
     if m:
         dur = m.group(3).lower()
         return DURATION_LABELS.get(dur)
+    if _HOURLY_CRYPTO_PATTERN.match(slug):
+        return "1h"
     return None
 
 
 def _parse_asset_from_slug(slug: str) -> str | None:
-    """Extract asset label from a crypto updown slug (e.g. ``btc-updown-5m-...`` → ``BTC``)."""
+    """Extract asset label from a crypto updown slug.
+
+    Standard slugs (e.g. ``btc-updown-5m-...``) → ``BTC``.
+    Hourly slugs (e.g. ``bitcoin-up-or-down-...``) → ``BTC``.
+    """
     m = CRYPTO_UP_PATTERN.match(slug)
-    return m.group(1).upper() if m else None
+    if m:
+        return m.group(1).upper()
+    hm = _HOURLY_CRYPTO_PATTERN.match(slug)
+    if hm:
+        return _HOURLY_ASSET_MAP.get(hm.group(1).lower())
+    return None
 
 
 def _is_crypto_updown_event(event: dict[str, Any]) -> bool:
-    """Check if an event matches the crypto Up/Down duration market pattern."""
+    """Check if an event matches a crypto Up/Down duration market pattern."""
     slug = str(event.get("slug", "") or "")
-    return bool(CRYPTO_UP_PATTERN.match(slug))
+    return bool(CRYPTO_UP_PATTERN.match(slug) or _HOURLY_CRYPTO_PATTERN.match(slug))
 
 
 def _market_meta(event: dict[str, Any]) -> dict[str, Any]:

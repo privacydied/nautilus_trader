@@ -387,3 +387,38 @@ def test_missing_trade_data_produces_needs_more_data_not_rejection():
     assert verdict.verdict == "NEEDS_MORE_DATA"
     assert "MIN_PESSIMISTIC_PAIRED_FILLS_NOT_MET" in verdict.reasons
     assert "REJECTED" not in verdict.verdict
+
+
+# --- Hourly slug pattern tests ---
+
+
+def test_hourly_slug_parse_asset():
+    """Hourly slug bitcion-up-or-down-... resolves to BTC."""
+    assert _parse_asset_from_slug("bitcoin-up-or-down-may-16-2026-2pm-et") == "BTC"
+    assert _parse_asset_from_slug("ethereum-up-or-down-may-16-2026-3pm-et") == "ETH"
+    assert _parse_asset_from_slug("solana-up-or-down-may-16-2026-4pm-et") == "SOL"
+
+
+def test_hourly_slug_parse_duration():
+    """Hourly slug resolves to 1h duration."""
+    assert _parse_duration_from_slug("bitcoin-up-or-down-may-16-2026-2pm-et") == "1h"
+    assert _parse_duration_from_slug("ethereum-up-or-down-may-16-2026-3pm-et") == "1h"
+
+
+def test_hourly_slug_is_crypto_updown():
+    """Hourly slug is correctly identified as crypto updown event."""
+    assert _is_crypto_updown_event({"slug": "bitcoin-up-or-down-may-16-2026-2pm-et"}) is True
+    assert _is_crypto_updown_event({"slug": "ethereum-up-or-down-may-16-2026-3pm-et"}) is True
+
+
+def test_hourly_slug_distinct_from_daily():
+    """Hourly slug is not confused with daily market slug."""
+    daily_slug = "bitcoin-up-or-down-on-may-17-2026"
+    hourly_slug = "bitcoin-up-or-down-may-16-2026-2pm-et"
+    assert _is_crypto_updown_event({"slug": hourly_slug}) is True
+    # Daily slug is a *different* pattern; it may or may not match crypto-updown
+    # depending on how the daily pattern is classified. The hourly-only regex
+    # does not match the `-on-` insert.
+    assert _parse_duration_from_slug(hourly_slug) == "1h"
+    assert _parse_duration_from_slug(daily_slug) != "1h"
+

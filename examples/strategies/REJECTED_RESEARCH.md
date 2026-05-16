@@ -116,9 +116,9 @@ BTC Price Target markets (e.g., "Will BTC be above $X by Y?") embed a numerical 
 |---|---|
 | Duration | 6 separated windows (60-720s each) |
 | Poll interval | 2 seconds |
-| Markets tested | BTC 5m, BTC 15m (×2 windows), ETH 5m, ETH 15m, BTC 4h, BTC daily |
-| Total detected | 1541 |
-| Total non-dust | 1098 |
+| Markets tested | BTC 5m, BTC 15m (×2 windows), BTC 1h, ETH 5m, ETH 15m, BTC 4h, BTC daily |
+| Total detected | 1565 |
+| Total non-dust | 1155 |
 | Missing trade data events | 0 (all windows READY) |
 | Pessimistic paired fills | 0 across all windows |
 | Base quote size | 100 shares |
@@ -127,9 +127,10 @@ BTC Price Target markets (e.g., "Will BTC be above $X by Y?") embed a numerical 
 
 | Duration | Outcome | Explanation |
 |---|---|---|
-| BTC / ETH 5m | No economic depth | 0 non-dust opportunities — insufficient orderbook depth for 100-share quote |
-| BTC / ETH 15m | Edges detected, zero fills | 27-35 detections, 24-93 non-dust, but cumulative compatible trade volume never exceeds depth_ahead + quote_size |
-| BTC 4h / daily | Abundant edge, zero fills | 1473 detections, 978 non-dust, same zero-fill result — queue never clears in observed windows |
+| BTC / ETH 5m | No economic depth | 0 non-dust opportunities |
+| BTC / ETH 15m | Edges detected, zero fills | 27-35 detections, 24-93 non-dust, but queue never clears |
+| BTC 1h | Edges detected, zero fills | 24 detections, 57 non-dust, same zero-fill result as 15m |
+| BTC 4h / daily | Abundant edge, zero fills | 1473 detections, 978 non-dust, queue never clears |
 
 ### Correction History
 
