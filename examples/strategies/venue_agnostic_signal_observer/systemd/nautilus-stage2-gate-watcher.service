@@ -1,14 +1,34 @@
 [Unit]
-Description=NautilusTrader Stage 2 derivatives gate watcher
+Description=NautilusTrader Stage 2 cross-asset beta lag gate watcher
 Documentation=https://github.com/privacydied/nautilus_trader
 After=graphical-session.target
 Wants=graphical-session.target
 
 [Service]
 Type=simple
-WorkingDirectory=/mnt/nasirjones/py/nautilus_trader
+
+# Run from a dedicated clean git worktree, NOT the active development repo.
+# This keeps watcher git metadata clean even when the main repo has
+# uncommitted strategy work.
+WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_runtime
+
+# Path configuration — reports/data point to the main repo's existing
+# artifact directories so status files, logs, and capture data stay in
+# their stable locations regardless of which source tree runs the code.
+Environment=NAUTILUS_STAGE2_REPO_ROOT=/mnt/nasirjones/py/nautilus_trader_stage2_runtime
+Environment=NAUTILUS_STAGE2_REPORTS_ROOT=/mnt/nasirjones/py/nautilus_trader/reports
+Environment=NAUTILUS_STAGE2_DATA_ROOT=/mnt/nasirjones/py/nautilus_trader/data
+Environment=NAUTILUS_STAGE2_STATUS_PATH=/mnt/nasirjones/py/nautilus_trader/reports/stage2_gate_watcher_status.json
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/mnt/nasirjones/py/nautilus_trader/.venv/bin/python -u -m examples.strategies.venue_agnostic_signal_observer.run_stage2_gate_watcher --interval-seconds 30 --max-runtime-seconds 0 --preflight-seconds 60 --fast-duration-seconds 900 --full-duration-seconds 1800 --oi-interval-seconds 5 --prefer-gpu --notify --sound
+
+ExecStart=/mnt/nasirjones/py/nautilus_trader_stage2_runtime/.venv/bin/python -m examples.strategies.venue_agnostic_signal_observer.stage2_gate_watcher --poll-seconds 60 --stress-bps 150 --require-acceleration
+
+# Note: --workdir is NOT explicitly passed here because it defaults to
+# $NAUTILUS_STAGE2_REPO_ROOT (set above), which points to the worktree.
+# All relative paths used by modules imported by the watcher resolve from
+# WorkingDirectory, which is also the worktree. Reports/data paths use
+# the explicit env vars above.
+
 Restart=no
 KillSignal=SIGINT
 TimeoutStopSec=30

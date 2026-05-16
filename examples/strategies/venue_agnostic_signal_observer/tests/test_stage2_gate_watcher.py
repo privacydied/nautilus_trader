@@ -648,21 +648,20 @@ class TestServiceTemplate:
         assert SERVICE_PATH.exists(), f"Service template not found: {SERVICE_PATH}"
 
     def test_service_uses_venv_python(self):
-        """Service template uses .venv/bin/python, not bare python."""
+        """Service template uses .venv/bin/python from the runtime worktree."""
         content = SERVICE_PATH.read_text()
         assert ".venv/bin/python" in content
-        assert "python " not in content.split("[Service]")[1].split("\n")[0]
-        assert "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python" in content
+        assert "nautilus_trader_stage2_runtime/.venv/bin/python" in content
 
     def test_service_uses_correct_working_directory(self):
-        """Service template uses WorkingDirectory=/mnt/nasirjones/py/nautilus_trader."""
+        """Service template uses WorkingDirectory pointing to the runtime worktree."""
         content = SERVICE_PATH.read_text()
-        assert "WorkingDirectory=/mnt/nasirjones/py/nautilus_trader" in content
+        assert "WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_runtime" in content
 
-    def test_service_includes_notify(self):
-        """Service template includes --notify flag."""
+    def test_service_includes_env_vars(self):
+        """Service template includes NAUTILUS_STAGE2_* env vars."""
         content = SERVICE_PATH.read_text()
-        assert "--notify" in content
+        assert "NAUTILUS_STAGE2_REPO_ROOT" in content
 
     def test_service_uses_restart_no(self):
         """Service template uses Restart=no."""
@@ -706,3 +705,164 @@ class TestNotificationCliArgs:
         parser = watcher.build_parser()
         args = parser.parse_args(["--interval-seconds", "1", "--max-runtime-seconds", "1"])
         assert args.notify_timeout_ms == 10000
+
+
+# ---------------------------------------------------------------------------
+# Path configuration tests
+# ---------------------------------------------------------------------------
+
+
+class TestPathConfiguration:
+    """Tests for path configuration functions in stage2_gate_watcher.py."""
+
+    def test_write_status_includes_runtime_paths(self, tmp_path):
+        """Status JSON includes runtime_repo_root, reports_root, data_root."""
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+
+        # Reset module-level overrides
+        v1_watcher._REPORTS_ROOT = tmp_path / "reports"
+        v1_watcher._DATA_ROOT = tmp_path / "data"
+        v1_watcher._REPO_ROOT = tmp_path / "runtime"
+
+        status_path = tmp_path / "reports" / "stage2_gate_watcher_status.json"
+        v1_watcher._STATUS_PATH_OVERRIDE = status_path
+
+        # Write status
+        v1_watcher._write_status(readiness_status="TEST")
+
+        assert status_path.exists()
+        data = json.loads(status_path.read_text())
+        assert "runtime_repo_root" in data
+        assert "reports_root" in data
+        assert "data_root" in data
+        assert str(tmp_path / "runtime") in data["runtime_repo_root"]
+        assert str(tmp_path / "reports") in data["reports_root"]
+
+    def test_path_defaults_match_current_behavior(self, tmp_path):
+        """Path functions return expected defaults when no overrides are set."""
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+
+        # Clear any overrides
+        saved_reports = v1_watcher._REPORTS_ROOT
+        saved_data = v1_watcher._DATA_ROOT
+        saved_repo = v1_watcher._REPO_ROOT
+        saved_status_override = v1_watcher._STATUS_PATH_OVERRIDE
+        saved_python_exe_override = v1_watcher._PYTHON_EXE_OVERRIDE
+        v1_watcher._REPORTS_ROOT = None
+        v1_watcher._DATA_ROOT = None
+        v1_watcher._REPO_ROOT = None
+        v1_watcher._STATUS_PATH_OVERRIDE = None
+        v1_watcher._PYTHON_EXE_OVERRIDE = None
+
+        try:
+            old_cwd = Path.cwd()
+            os.chdir(tmp_path)
+
+            # Create expected paths
+            (tmp_path / "reports").mkdir()
+            (tmp_path / "data").mkdir()
+
+            status_path = v1_watcher._get_status_path()
+            data_root = v1_watcher._get_data_root()
+            reports_root = v1_watcher._get_reports_root()
+
+            assert status_path == Path("reports") / "stage2_gate_watcher_status.json"
+            assert data_root == Path("data")
+            assert reports_root == Path("reports")
+        finally:
+            os.chdir(old_cwd)
+            v1_watcher._REPORTS_ROOT = saved_reports
+            v1_watcher._DATA_ROOT = saved_data
+            v1_watcher._REPO_ROOT = saved_repo
+            v1_watcher._STATUS_PATH_OVERRIDE = saved_status_override
+            v1_watcher._PYTHON_EXE_OVERRIDE = saved_python_exe_override
+
+    def test_env_override_via_args(self):
+        """CLI args override defaults arg-parser level."""
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+
+        parser = v1_watcher.build_parser()
+        args = parser.parse_args([
+            "--poll-seconds", "60", "--once",
+            "--reports-root", "/custom/reports",
+            "--data-root", "/custom/data",
+        ])
+        assert args.reports_root == "/custom/reports"
+        assert args.data_root == "/custom/data"
+        assert args.workdir is not None  # Has default
+
+    def test_workdir_has_default(self):
+        """--workdir has a meaningful default value."""
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+
+        parser = v1_watcher.build_parser()
+        args = parser.parse_args(["--poll-seconds", "60", "--once"])
+        assert args.workdir is not None
+        assert "/mnt/nasirjones/py/nautilus_trader" in args.workdir
+
+    def test_resolve_python_exe_finds_venv(self, tmp_path):
+        """_resolve_python_exe finds .venv/bin/python in the worktree."""
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+
+        venv_dir = tmp_path / ".venv" / "bin"
+        venv_dir.mkdir(parents=True)
+        python_exe = venv_dir / "python"
+        python_exe.write_text("#!/bin/sh\necho mock")
+        python_exe.chmod(0o755)
+
+        result = v1_watcher._resolve_python_exe(tmp_path)
+        assert result == python_exe.resolve()
+
+    def test_no_live_trading_imports(self):
+        """No execution/trading/order imports in stage2_gate_watcher."""
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+        content = Path(v1_watcher.__file__).read_text()
+        # Check specifically for execution-related imports
+        assert "from .execution" not in content
+        assert "from .order" not in content
+        assert "nautilus_trader.execution" not in content
+
+    def test_service_file_has_worktree_workdir(self):
+        """systemd service file references the runtime worktree."""
+        service_path = Path(
+            __file__).resolve().parents[1] / "systemd" / "nautilus-stage2-gate-watcher.service"
+        content = service_path.read_text()
+        assert "WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_runtime" in content
+
+    def test_service_file_has_worktree_python(self):
+        """systemd service uses python from the runtime worktree venv."""
+        service_path = Path(
+            __file__).resolve().parents[1] / "systemd" / "nautilus-stage2-gate-watcher.service"
+        content = service_path.read_text()
+        assert "nautilus_trader_stage2_runtime/.venv/bin/python" in content
+
+    def test_service_file_has_env_vars(self):
+        """systemd service sets NAUTILUS_STAGE2_* environment variables."""
+        service_path = Path(
+            __file__).resolve().parents[1] / "systemd" / "nautilus-stage2-gate-watcher.service"
+        content = service_path.read_text()
+        assert "NAUTILUS_STAGE2_REPO_ROOT" in content
+        assert "NAUTILUS_STAGE2_REPORTS_ROOT" in content
+        assert "NAUTILUS_STAGE2_DATA_ROOT" in content
+        assert "NAUTILUS_STAGE2_STATUS_PATH" in content
+
+    def test_service_executable_is_stage2_gate_watcher(self):
+        """Service uses stage2_gate_watcher module, not run_stage2_gate_watcher."""
+        service_path = Path(
+            __file__).resolve().parents[1] / "systemd" / "nautilus-stage2-gate-watcher.service"
+        content = service_path.read_text()
+        assert "stage2_gate_watcher" in content
+        # Ensure it's not using the old run_stage2_gate_watcher
+        assert "run_stage2_gate_watcher" not in content

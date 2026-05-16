@@ -38,18 +38,88 @@ from .run_artifacts import create_run_id, atomic_write_json
 from .run_index import append_run_index_row, build_run_index_row
 
 # ---------------------------------------------------------------------------
-# Constants
+# Runtime path configuration
 # ---------------------------------------------------------------------------
+# These module-level globals are set in main() after CLI/env resolution.
+# Functions that depend on paths resolve against these at call time.
+_REPORTS_ROOT: Path | None = None
+_DATA_ROOT: Path | None = None
+_REPO_ROOT: Path | None = None
+_STATUS_PATH_OVERRIDE: Path | None = None
+_PYTHON_EXE_OVERRIDE: Path | None = None
 
-_LOG_DIR = Path("reports", "stage2_gate_watcher_logs")
-_STATUS_PATH = Path("reports", "stage2_gate_watcher_status.json")
-_CONCURRENCY_LOCK_PATH = Path("reports", "cross_asset_beta_lag_watcher.lock")
-_COLLECTION_LOCK_PATH = Path("reports", "stage2_collection_lock.json")
-_STATE_PATH = Path("reports", "cross_asset_beta_lag_watcher_state.json")
+# Defaults (used when no override is set)
+_DEFAULT_LOG_DIR = Path("reports", "stage2_gate_watcher_logs")
+_DEFAULT_STATUS_PATH = Path("reports", "stage2_gate_watcher_status.json")
+_DEFAULT_CONCURRENCY_LOCK_PATH = Path("reports", "cross_asset_beta_lag_watcher.lock")
+_DEFAULT_COLLECTION_LOCK_PATH = Path("reports", "stage2_collection_lock.json")
+_DEFAULT_STATE_PATH = Path("reports", "cross_asset_beta_lag_watcher_state.json")
+_DEFAULT_IN_CAPTURE_FLAG = Path("reports", "cross_asset_beta_lag_capturing.flag")
+_DEFAULT_DATA_ROOT = Path("data")
 
-_PYTHON_EXE = Path(
-    "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python"
-).resolve()
+
+def _get_reports_root() -> Path:
+    """Return the effective reports root (override or default)."""
+    if _REPORTS_ROOT is not None:
+        return _REPORTS_ROOT
+    return Path("reports")
+
+
+def _get_data_root() -> Path:
+    """Return the effective data root (override or default)."""
+    if _DATA_ROOT is not None:
+        return _DATA_ROOT
+    return _DEFAULT_DATA_ROOT
+
+
+def _get_status_path() -> Path:
+    """Return the effective status JSON path."""
+    if _STATUS_PATH_OVERRIDE is not None:
+        return _STATUS_PATH_OVERRIDE
+    return _get_reports_root() / "stage2_gate_watcher_status.json"
+
+
+def _get_concurrency_lock_path() -> Path:
+    return _get_reports_root() / "cross_asset_beta_lag_watcher.lock"
+
+
+def _get_collection_lock_path() -> Path:
+    return _get_reports_root() / "stage2_collection_lock.json"
+
+
+def _get_state_path() -> Path:
+    return _get_reports_root() / "cross_asset_beta_lag_watcher_state.json"
+
+
+def _get_in_capture_flag_path() -> Path:
+    return _get_reports_root() / "cross_asset_beta_lag_capturing.flag"
+
+
+def _get_log_dir() -> Path:
+    return _get_reports_root() / "stage2_gate_watcher_logs"
+
+
+def _resolve_python_exe(repo_root: Path) -> Path:
+    """Resolve python executable from the runtime worktree's venv.
+
+    Falls back to legacy hardcoded path only as last resort.
+    """
+    candidate = repo_root / ".venv" / "bin" / "python"
+    if candidate.exists():
+        return candidate.resolve()
+    return Path(
+        "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python"
+    ).resolve()
+
+
+def _get_python_exe() -> Path:
+    if _PYTHON_EXE_OVERRIDE is not None:
+        return _PYTHON_EXE_OVERRIDE
+    if _REPO_ROOT is not None:
+        return _resolve_python_exe(_REPO_ROOT)
+    return Path(
+        "/mnt/nasirjones/py/nautilus_trader/.venv/bin/python"
+    ).resolve()
 
 _SIGNAL_FAMILY = "cross_asset_beta_lag_v1"
 
@@ -71,7 +141,7 @@ class ConcurrencyLock:
     """
 
     def __init__(self, path: Path | None = None) -> None:
-        self._path = (path or _CONCURRENCY_LOCK_PATH).resolve()
+        self._path = (path or _get_concurrency_lock_path()).resolve()
         self._fd: int | None = None
 
     def acquire(self) -> tuple[bool, str]:
@@ -114,24 +184,28 @@ class ConcurrencyLock:
 # Captured capture guard (prevents overlapping captures within one watcher)
 # ---------------------------------------------------------------------------
 
-_IN_CAPTURE_FLAG = Path("reports", "cross_asset_beta_lag_capturing.flag")
-
 
 class CaptureGuard:
     """Process-local flag that prevents overlapping captures."""
 
     @staticmethod
+    def _flag_path() -> Path:
+        return _get_in_capture_flag_path()
+
+    @staticmethod
     def try_acquire() -> bool:
-        if _IN_CAPTURE_FLAG.exists():
+        path = CaptureGuard._flag_path()
+        if path.exists():
             return False
-        _IN_CAPTURE_FLAG.parent.mkdir(parents=True, exist_ok=True)
-        _IN_CAPTURE_FLAG.write_text(str(os.getpid()))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(os.getpid()))
         return True
 
     @staticmethod
     def release() -> None:
+        path = CaptureGuard._flag_path()
         try:
-            _IN_CAPTURE_FLAG.unlink(missing_ok=True)
+            path.unlink(missing_ok=True)
         except OSError:
             pass
 
@@ -148,7 +222,7 @@ class WatcherState:
     """
 
     def __init__(self, min_gap_seconds: int = 3600) -> None:
-        self._path = _STATE_PATH.resolve()
+        self._path = _get_state_path().resolve()
         self._min_gap = min_gap_seconds
         self._data: dict[str, Any] = self._load()
 
@@ -321,7 +395,7 @@ def _run_capture(log: WatcherLogger) -> str | None:
     # For cross-asset beta lag we need tick data for all involved symbols.
     # The existing run_derivatives_spot_capture captures perp + spot ticks.
     cmd = [
-        str(_PYTHON_EXE),
+        str(_get_python_exe()),
         "-m", "examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture",
         "--source-venue", "binance_perp",
         "--source-symbols", "BTC/USDT,ETH/USDT,SOL/USDT,LINK/USDT,DOGE/USDT,AVAX/USDT",
@@ -402,7 +476,7 @@ def _count_validated_full_active() -> int:
     signal families (e.g. derivatives v2) are excluded.
     """
     count = 0
-    data_root = Path("data")
+    data_root = _get_data_root()
     if not data_root.exists():
         return 0
 
@@ -455,10 +529,14 @@ def _write_status(**kw: Any) -> None:
         "signal_family": _SIGNAL_FAMILY,
         "gateway_replaced_by_systemd": True,
         "safety": "public data observer only",
+        "runtime_repo_root": str(_REPO_ROOT or Path.cwd().resolve()),
+        "reports_root": str(_get_reports_root().resolve()),
+        "data_root": str(_get_data_root().resolve()),
     }
     data.update(kw)
-    _STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_json(_STATUS_PATH, data)
+    status_path = _get_status_path()
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(status_path, data)
 
 
 # ---------------------------------------------------------------------------
@@ -466,36 +544,61 @@ def _write_status(**kw: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
+def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser."""
+    p = argparse.ArgumentParser(
         description="Stage 2 Gate Watcher — cross_asset_beta_lag_v1 "
                     "stress polling.  Public data observer only.",
     )
-    parser.add_argument("--poll-seconds", type=int, default=60,
-                        help="Polling interval in seconds (default: 60)")
-    parser.add_argument("--stress-bps", type=float, default=150.0,
-                        help="BTC 1h stress threshold in bps (default: 150)")
-    parser.add_argument("--require-acceleration", action="store_true",
-                        default=True,
-                        help="Require ACCELERATING gate verdict (default: True)")
-    parser.add_argument("--workdir", type=str,
-                        default="/mnt/nasirjones/py/nautilus_trader",
-                        help="Working directory")
-    parser.add_argument("--log-dir", type=str, default=None,
-                        help="Log directory (default: reports/stage2_gate_watcher_logs)")
-    parser.add_argument("--out-base", type=str, default="data",
-                        help="Data output base (default: data)")
-    parser.add_argument("--reports-base", type=str, default="reports",
-                        help="Reports base (default: reports)")
-    parser.add_argument("--no-capture", action="store_true", default=False,
-                        help="Test mode: do not capture, only report gate status")
-    parser.add_argument("--dry-run", action="store_true", default=False,
-                        help="Alias for --no-capture")
-    parser.add_argument("--once", action="store_true", default=False,
-                        help="Run one poll cycle then exit")
-    parser.add_argument("--min-gap-seconds", type=int, default=3600,
-                        help="Minimum gap between corpus-eligible FULL_ACTIVE captures "
-                             "in seconds (default: 3600)")
+    p.add_argument("--poll-seconds", type=int, default=60,
+                    help="Polling interval in seconds (default: 60)")
+    p.add_argument("--stress-bps", type=float, default=150.0,
+                    help="BTC 1h stress threshold in bps (default: 150)")
+    p.add_argument("--require-acceleration", action="store_true",
+                    default=True,
+                    help="Require ACCELERATING gate verdict (default: True)")
+    p.add_argument("--workdir", type=str,
+                    default=os.environ.get(
+                        "NAUTILUS_STAGE2_REPO_ROOT",
+                        "/mnt/nasirjones/py/nautilus_trader",
+                    ),
+                    help="Working directory (default: $NAUTILUS_STAGE2_REPO_ROOT or /mnt/nasirjones/py/nautilus_trader)")
+    p.add_argument("--reports-root", type=str,
+                    default=os.environ.get("NAUTILUS_STAGE2_REPORTS_ROOT"),
+                    help="Reports/status output root (default: workdir/reports). "
+                         "Overrides: $NAUTILUS_STAGE2_REPORTS_ROOT")
+    p.add_argument("--data-root", type=str,
+                    default=os.environ.get("NAUTILUS_STAGE2_DATA_ROOT"),
+                    help="Data/capture output root (default: workdir/data). "
+                         "Overrides: $NAUTILUS_STAGE2_DATA_ROOT")
+    p.add_argument("--status-path", type=str,
+                    default=os.environ.get("NAUTILUS_STAGE2_STATUS_PATH"),
+                    help="Exact status JSON path (default: reports-root/stage2_gate_watcher_status.json). "
+                         "Overrides: $NAUTILUS_STAGE2_STATUS_PATH")
+    p.add_argument("--python-exe", type=str,
+                    default=os.environ.get("NAUTILUS_STAGE2_PYTHON_EXE"),
+                    help="Path to python executable (default: worktree .venv/bin/python). "
+                         "Overrides: $NAUTILUS_STAGE2_PYTHON_EXE")
+    p.add_argument("--log-dir", type=str, default=None,
+                    help="Log directory (default: reports/stage2_gate_watcher_logs)")
+    p.add_argument("--out-base", type=str, default="data",
+                    help="Data output base (default: data)")
+    p.add_argument("--reports-base", type=str, default="reports",
+                    help="Reports base (default: reports)")
+    p.add_argument("--no-capture", action="store_true", default=False,
+                    help="Test mode: do not capture, only report gate status")
+    p.add_argument("--dry-run", action="store_true", default=False,
+                    help="Alias for --no-capture")
+    p.add_argument("--once", action="store_true", default=False,
+                    help="Run one poll cycle then exit")
+    p.add_argument("--min-gap-seconds", type=int, default=3600,
+                    help="Minimum gap between corpus-eligible FULL_ACTIVE captures "
+                         "in seconds (default: 3600)")
+    return p
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
 
     # Combine --dry-run into --no-capture
@@ -504,6 +607,19 @@ def main() -> None:
 
     workdir = Path(args.workdir).resolve()
     os.chdir(str(workdir))
+
+    # Configure module-level path globals
+    global _REPORTS_ROOT, _DATA_ROOT, _REPO_ROOT, _STATUS_PATH_OVERRIDE, _PYTHON_EXE_OVERRIDE
+    _REPO_ROOT = workdir
+
+    if args.reports_root:
+        _REPORTS_ROOT = Path(args.reports_root).resolve()
+    if args.data_root:
+        _DATA_ROOT = Path(args.data_root).resolve()
+    if args.status_path:
+        _STATUS_PATH_OVERRIDE = Path(args.status_path).resolve()
+    if args.python_exe:
+        _PYTHON_EXE_OVERRIDE = Path(args.python_exe).resolve()
 
     log = WatcherLogger()
     state = WatcherState(min_gap_seconds=args.min_gap_seconds)
@@ -663,7 +779,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
 
         try:
             # --- Create collection lock if needed ---
-            if not _COLLECTION_LOCK_PATH.exists():
+            if not _get_collection_lock_path().exists():
                 lock_mgr = CollectionLock()
                 run_id = create_run_id(prefix="cross_asset_beta_lag_lock")
                 lock_mgr.create(
