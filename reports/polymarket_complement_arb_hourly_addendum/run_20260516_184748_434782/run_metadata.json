@@ -1,0 +1,30 @@
+{
+  "book_fetch_errors": 0,
+  "config_hash": "7083201984886e07",
+  "eligible_same_condition_pairs": 1,
+  "end_timestamp": "2026-05-16T18:49:49.825229+00:00",
+  "git_sha": "c4bc4eedf1bca68967f4da007b677e3337aa88a2",
+  "markets_scanned": 1,
+  "missing_trade_data_events": 0,
+  "observer_duration_secs": 121.39036011695862,
+  "observer_window_count": 30,
+  "report_paths": {
+    "opportunities": "reports/polymarket_complement_arb_hourly_addendum/run_20260516_184748_434782/shadow_opportunities.jsonl",
+    "report": "reports/polymarket_complement_arb_hourly_addendum/run_20260516_184748_434782/shadow_report.md",
+    "summary": "reports/polymarket_complement_arb_hourly_addendum/run_20260516_184748_434782/shadow_summary.json"
+  },
+  "run_arguments": {
+    "duration_secs": 120.0,
+    "poll_interval_secs": 2.0
+  },
+  "run_id": "run_20260516_184748_434782",
+  "start_timestamp": "2026-05-16T18:47:48.434872+00:00",
+  "total_book_fetches": 60,
+  "trade_evidence_status": "TRADE_EVIDENCE_READY",
+  "trade_fetch_attempt_count": 30,
+  "trade_fetch_empty_count": 0,
+  "trade_fetch_error_count": 0,
+  "trade_fetch_success_count": 30,
+  "trade_rows_joined_to_opportunity_count": 24,
+  "trade_rows_total": 673
+}

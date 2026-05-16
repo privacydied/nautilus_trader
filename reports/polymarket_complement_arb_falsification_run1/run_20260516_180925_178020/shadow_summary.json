@@ -1,0 +1,101 @@
+{
+  "expected_edge_per_detected_opportunity": 0.0,
+  "metadata": {
+    "book_fetch_errors": 0,
+    "config_hash": "7083201984886e07",
+    "eligible_same_condition_pairs": 2,
+    "end_timestamp": "2026-05-16T18:21:26.119641+00:00",
+    "git_sha": "cd9dfcd11a42162703685dc7d599a65c89f99e36",
+    "markets_scanned": 2,
+    "missing_trade_data_events": 0,
+    "observer_duration_secs": 720.9415194988251,
+    "observer_window_count": 265,
+    "report_paths": {
+      "opportunities": "reports/polymarket_complement_arb_falsification_run1/run_20260516_180925_178020/shadow_opportunities.jsonl",
+      "report": "reports/polymarket_complement_arb_falsification_run1/run_20260516_180925_178020/shadow_report.md",
+      "summary": "reports/polymarket_complement_arb_falsification_run1/run_20260516_180925_178020/shadow_summary.json"
+    },
+    "run_arguments": {
+      "duration_secs": 720.0,
+      "poll_interval_secs": 2.0
+    },
+    "run_id": "run_20260516_180925_178020",
+    "start_timestamp": "2026-05-16T18:09:25.178125+00:00",
+    "total_book_fetches": 1060,
+    "trade_evidence_status": "TRADE_EVIDENCE_READY",
+    "trade_fetch_attempt_count": 265,
+    "trade_fetch_empty_count": 0,
+    "trade_fetch_error_count": 0,
+    "trade_fetch_success_count": 265,
+    "trade_rows_joined_to_opportunity_count": 491,
+    "trade_rows_total": 440
+  },
+  "net_shadow_harvest": 0,
+  "paired_gain": 0,
+  "rates": {
+    "non_dust_rate": {
+      "denominator": 1473,
+      "numerator": 978,
+      "rate": 0.6639511201629328
+    },
+    "one_leg_fill_rate": {
+      "denominator": 1473,
+      "numerator": 0,
+      "rate": 0.0
+    },
+    "paired_fill_rate": {
+      "denominator": 1473,
+      "numerator": 0,
+      "rate": 0.0
+    },
+    "pessimistic_paired_fill_rate": {
+      "denominator": 1473,
+      "numerator": 0,
+      "rate": 0.0
+    },
+    "same_condition_valid_rate": {
+      "denominator": 1473,
+      "numerator": 1473,
+      "rate": 1.0
+    }
+  },
+  "raw": {
+    "detected_opportunity_count": 1473,
+    "expected_edge_per_detected_opportunity": 0.0,
+    "net_shadow_harvest": 0,
+    "non_dust_opportunity_count": 978,
+    "observer_window_count": 265,
+    "one_leg_fill_count": 0,
+    "paired_gain": 0,
+    "pessimistic_paired_fill_count": 0,
+    "same_condition_valid_count": 1473,
+    "unwind_loss": 0
+  },
+  "sufficiency": {
+    "min_base_size_paired_fills_for_candidate": 10,
+    "min_detected_opportunities": 50,
+    "min_non_dust_opportunities": 30,
+    "min_observer_windows": 5,
+    "min_pessimistic_paired_fills": 20,
+    "min_pessimistic_paired_fills_for_candidate": 20,
+    "min_repeated_windows_per_market": 3,
+    "min_same_condition_valid_opportunities": 30,
+    "min_total_repeated_windows": 6,
+    "min_trade_evidence_ready_windows_per_market_family": 3
+  },
+  "trade_evidence": {
+    "fetch_attempts": 265,
+    "fetch_empty_responses": 0,
+    "fetch_errors": 0,
+    "fetch_successes": 265,
+    "missing_trade_data_events": 0,
+    "rows_fetched_total": 440,
+    "rows_joined_to_opportunities": 491,
+    "status": "TRADE_EVIDENCE_READY"
+  },
+  "unwind_loss": 0,
+  "verdict": "NEEDS_MORE_DATA",
+  "verdict_reasons": [
+    "MIN_PESSIMISTIC_PAIRED_FILLS_NOT_MET"
+  ]
+}
