@@ -73,10 +73,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Capture duration in seconds (default: {DEFAULT_DURATION})",
     )
     parser.add_argument(
-        "--poll-interval",
+        "--discovery-poll-interval-seconds",
         type=float,
         default=DEFAULT_POLL_INTERVAL,
-        help=f"Orderbook poll interval in seconds (default: {DEFAULT_POLL_INTERVAL})",
+        help=(
+            "Poll interval for REST orderbook refresh in seconds "
+            f"(default: {DEFAULT_POLL_INTERVAL}). "
+            "CLOB WebSocket messages are recorded as received."
+        ),
     )
     parser.add_argument(
         "--out",
@@ -191,7 +195,7 @@ async def main() -> int:
         "Starting capture: %d markets, %ds duration, %.1fs poll interval",
         len(actionable),
         args.duration_seconds,
-        args.poll_interval,
+        args.discovery_poll_interval_seconds,
     )
 
     markets_out, samples, cl_ticks, manifest = await capture_loop(

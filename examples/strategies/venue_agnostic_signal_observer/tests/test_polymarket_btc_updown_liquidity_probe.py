@@ -353,7 +353,8 @@ class TestSpreadCalculation:
         sample = parse_orderbook_sample(raw, market, "0x111", 200.0)
         assert sample.best_bid == pytest.approx(0.55, abs=1e-6)
         assert sample.best_ask == pytest.approx(0.57, abs=1e-6)
-        assert sample.spread_cents == pytest.approx(0.02, abs=1e-6)
+        assert sample.spread_price_units == pytest.approx(0.02, abs=1e-6)
+        assert sample.spread_cents == pytest.approx(2.0, abs=1e-6)
         assert sample.is_two_sided
         assert not sample.is_crossed
         assert not sample.is_missing
@@ -553,9 +554,10 @@ class TestNoForbiddenVerdictsInSummary:
             markets_with_tokens=3,
             samples_collected=100,
             valid_samples=80,
-            median_spread_cents=0.02,
-            p75_spread_cents=0.04,
-            p95_spread_cents=0.06,
+            median_spread_price_units=0.02,
+            median_spread_cents=2.0,
+            p75_spread_cents=4.0,
+            p95_spread_cents=6.0,
             median_top_bid_depth_usd=500.0,
             median_top_ask_depth_usd=300.0,
             percent_two_sided=75.0,
@@ -623,7 +625,8 @@ class TestComputeSummaryDeterministic:
                     price_to_beat=100000.0,
                     best_bid=0.50 + i * 0.001,
                     best_ask=0.52 + i * 0.001,
-                    spread_cents=0.02,
+                    spread_price_units=0.02,
+                    spread_cents=2.0,
                     top_bid_size=5000.0,
                     top_ask_size=3000.0,
                     estimated_top_bid_depth_usd=2500.0,
@@ -642,7 +645,8 @@ class TestComputeSummaryDeterministic:
         assert summary.markets_discovered == 1
         assert summary.samples_collected == 40  # 20 * 2 tokens
         assert summary.valid_samples == 40
-        assert summary.median_spread_cents == pytest.approx(0.02, abs=0.001)
+        assert summary.median_spread_cents == pytest.approx(2.0, abs=0.001)
+        assert summary.median_spread_price_units == pytest.approx(0.02, abs=0.001)
         assert summary.diagnostic_classification == GREEN_DIAG
 
     def test_compute_summary_deterministic(self):
@@ -669,7 +673,7 @@ class TestComputeSummaryDeterministic:
                 expiry="2025-12-30",
                 price_to_beat=100000.0,
                 best_bid=None, best_ask=None,
-                spread_cents=None,
+                spread_price_units=None, spread_cents=None,
                 top_bid_size=None, top_ask_size=None,
                 estimated_top_bid_depth_usd=None,
                 estimated_top_ask_depth_usd=None,
@@ -727,7 +731,7 @@ class TestOutputWriters:
             token_id="0x111", side="yes",
             expiry="2025-12-31", price_to_beat=100000.0,
             best_bid=0.55, best_ask=0.57,
-            spread_cents=0.02, top_bid_size=1000.0,
+            spread_price_units=0.02, spread_cents=2.0, top_bid_size=1000.0,
             top_ask_size=500.0,
             estimated_top_bid_depth_usd=550.0,
             estimated_top_ask_depth_usd=285.0,
@@ -739,7 +743,8 @@ class TestOutputWriters:
             write_orderbook_samples([sample], path)
             assert path.exists()
             parsed = json.loads(path.read_text().strip())
-            assert parsed["spread_cents"] == 0.02
+            assert parsed["spread_price_units"] == 0.02
+            assert parsed["spread_cents"] == 2.0
             assert parsed["is_two_sided"]
 
     def test_chainlink_ticks_jsonl(self):
@@ -780,8 +785,9 @@ class TestOutputWriters:
         summary = ProbeSummary(
             markets_discovered=1, markets_with_tokens=1,
             samples_collected=10, valid_samples=8,
-            median_spread_cents=0.02, p75_spread_cents=0.04,
-            p95_spread_cents=0.06,
+            median_spread_price_units=0.02, median_spread_cents=2.0,
+            p75_spread_cents=4.0,
+            p95_spread_cents=6.0,
             median_top_bid_depth_usd=500.0,
             median_top_ask_depth_usd=300.0,
             percent_two_sided=75.0, percent_stale=5.0,
@@ -802,8 +808,9 @@ class TestOutputWriters:
         summary = ProbeSummary(
             markets_discovered=1, markets_with_tokens=1,
             samples_collected=10, valid_samples=8,
-            median_spread_cents=0.02, p75_spread_cents=0.04,
-            p95_spread_cents=0.06,
+            median_spread_price_units=0.02, median_spread_cents=2.0,
+            p75_spread_cents=4.0,
+            p95_spread_cents=6.0,
             median_top_bid_depth_usd=500.0,
             median_top_ask_depth_usd=300.0,
             percent_two_sided=75.0, percent_stale=5.0,
@@ -937,6 +944,7 @@ class TestOrderbookSampleFields:
         "price_to_beat",
         "best_bid",
         "best_ask",
+        "spread_price_units",
         "spread_cents",
         "top_bid_size",
         "top_ask_size",
@@ -958,7 +966,8 @@ class TestOrderbookSampleFields:
             price_to_beat=100000.0,
             best_bid=0.55,
             best_ask=0.57,
-            spread_cents=0.02,
+            spread_price_units=0.02,
+            spread_cents=2.0,
             top_bid_size=1000.0,
             top_ask_size=500.0,
             estimated_top_bid_depth_usd=550.0,

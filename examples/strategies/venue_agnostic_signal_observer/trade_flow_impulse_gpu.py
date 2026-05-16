@@ -63,6 +63,8 @@ def check_cuda_available(device: str = "cuda:0") -> tuple[bool, str]:
         import torch  # noqa: PLC0415
     except ImportError:
         return False, "torch_not_installed"
+    if not hasattr(torch, "cuda") or torch.cuda is None:
+        return False, "torch_cuda_unavailable"
     if not torch.cuda.is_available():
         return False, "torch_cuda_unavailable"
     try:

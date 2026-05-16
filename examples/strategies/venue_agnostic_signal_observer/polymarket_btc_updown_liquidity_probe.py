@@ -147,7 +147,8 @@ class OrderbookSample:
     price_to_beat: float | None
     best_bid: float | None
     best_ask: float | None
-    spread_cents: float | None  # (best_ask - best_bid)
+    spread_price_units: float | None  # (best_ask - best_bid) in token price units
+    spread_cents: float | None  # same value in cents for human readability
     top_bid_size: float | None
     top_ask_size: float | None
     estimated_top_bid_depth_usd: float | None
@@ -168,6 +169,7 @@ class OrderbookSample:
             "price_to_beat": self.price_to_beat,
             "best_bid": self.best_bid,
             "best_ask": self.best_ask,
+            "spread_price_units": self.spread_price_units,
             "spread_cents": self.spread_cents,
             "top_bid_size": self.top_bid_size,
             "top_ask_size": self.top_ask_size,
@@ -269,6 +271,7 @@ class ProbeSummary:
     markets_with_tokens: int
     samples_collected: int
     valid_samples: int
+    median_spread_price_units: float | None
     median_spread_cents: float | None
     p75_spread_cents: float | None
     p95_spread_cents: float | None
@@ -288,6 +291,7 @@ class ProbeSummary:
             "markets_with_tokens": self.markets_with_tokens,
             "samples_collected": self.samples_collected,
             "valid_samples": self.valid_samples,
+            "median_spread_price_units": self.median_spread_price_units,
             "median_spread_cents": self.median_spread_cents,
             "p75_spread_cents": self.p75_spread_cents,
             "p95_spread_cents": self.p95_spread_cents,
@@ -562,6 +566,7 @@ def parse_orderbook_sample(
             price_to_beat=market.price_to_beat,
             best_bid=None,
             best_ask=None,
+            spread_price_units=None,
             spread_cents=None,
             top_bid_size=None,
             top_ask_size=None,
@@ -590,11 +595,17 @@ def parse_orderbook_sample(
     is_missing_flag = best_bid is None and best_ask is None
     is_one_sided = (best_bid is not None) != (best_ask is not None)
 
-    spread_cents: float | None = None
+    spread_price_units: float | None = None
     if best_bid is not None and best_ask is not None:
-        spread_cents = best_ask - best_bid
-        if spread_cents < 0:
-            spread_cents = None  # crossed book, don't report negative spread
+        spread_price_units = best_ask - best_bid
+        if spread_price_units < 0:
+            spread_price_units = None  # crossed book
+
+    spread_cents: float | None = (
+        round(spread_price_units * 100, 2)
+        if spread_price_units is not None
+        else None
+    )
 
     is_crossed_flag = (
         best_bid is not None
@@ -636,6 +647,7 @@ def parse_orderbook_sample(
         price_to_beat=market.price_to_beat,
         best_bid=best_bid,
         best_ask=best_ask,
+        spread_price_units=spread_price_units,
         spread_cents=spread_cents,
         top_bid_size=top_bid_size,
         top_ask_size=top_ask_size,
@@ -875,19 +887,15 @@ def compute_summary(
         and not s.is_crossed
         and s.best_bid is not None
         and s.best_ask is not None
-        and s.spread_cents is not None
-        and s.spread_cents >= 0
+        and s.spread_price_units is not None
+        and s.spread_price_units >= 0
     ]
-
-    # Also include valid non-negative spreads
-    # but double-check spread > 0
-    valid = [s for s in valid if s.spread_cents is not None and s.spread_cents >= 0]
 
     valid_samples = len(valid)
 
-    # Extract spreads
-    spreads = [s.spread_cents for s in valid if s.spread_cents is not None]
-    spreads_sorted = sorted(spreads)
+    # Extract spreads in price units (e.g., 0.02 = 2 cents)
+    spreads_price_units = [s.spread_price_units for s in valid if s.spread_price_units is not None]
+    spreads_price_units_sorted = sorted(spreads_price_units)
 
     # Depth
     bid_depths = [
@@ -920,15 +928,30 @@ def compute_summary(
         idx = max(0, int(len(data) * p / 100))
         return data[min(idx, len(data) - 1)]
 
-    median_spread = percentile(spreads_sorted, 50)
-    p75_spread = percentile(spreads_sorted, 75)
-    p95_spread = percentile(spreads_sorted, 95)
+    median_spread_price_units = percentile(spreads_price_units_sorted, 50)
+    p75_spread_price_units = percentile(spreads_price_units_sorted, 75)
+    p95_spread_price_units = percentile(spreads_price_units_sorted, 95)
+    median_spread_cents = (
+        round(median_spread_price_units * 100, 2)
+        if median_spread_price_units is not None
+        else None
+    )
+    p75_spread_cents = (
+        round(p75_spread_price_units * 100, 2)
+        if p75_spread_price_units is not None
+        else None
+    )
+    p95_spread_cents = (
+        round(p95_spread_price_units * 100, 2)
+        if p95_spread_price_units is not None
+        else None
+    )
     median_bid_depth = percentile(sorted(bid_depths), 50) if bid_depths else None
     median_ask_depth = percentile(sorted(ask_depths), 50) if ask_depths else None
 
     # Classification
     diagnostic = _classify_liquidity(
-        spreads=spreads_sorted,
+        spreads=spreads_price_units_sorted,
         bid_depths=bid_depths,
         ask_depths=ask_depths,
         total_valid=valid_samples,
@@ -945,9 +968,10 @@ def compute_summary(
         markets_with_tokens=markets_with_tokens,
         samples_collected=samples_collected,
         valid_samples=valid_samples,
-        median_spread_cents=median_spread,
-        p75_spread_cents=p75_spread,
-        p95_spread_cents=p95_spread,
+        median_spread_price_units=median_spread_price_units,
+        median_spread_cents=median_spread_cents,
+        p75_spread_cents=p75_spread_cents,
+        p95_spread_cents=p95_spread_cents,
         median_top_bid_depth_usd=median_bid_depth,
         median_top_ask_depth_usd=median_ask_depth,
         percent_two_sided=pct_two_sided,
@@ -956,7 +980,7 @@ def compute_summary(
         percent_missing=pct_missing,
         diagnostic_classification=diagnostic,
         verdict_statement=verdict,
-        spread_list_sample_count=len(spreads),
+        spread_list_sample_count=len(spreads_price_units),
     )
 
 

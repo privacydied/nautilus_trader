@@ -282,7 +282,10 @@ class TestCPUGPUParity:
 
 class TestGPUUnavailable:
     def test_gpu_unavailable_with_mocked_torch(self):
-        """Mock torch.cuda.is_available to return False; verify GPU_UNAVAILABLE_DIAGNOSTIC."""
+        """Mock torch.cuda.is_available to return False; verify GPU_UNAVAILABLE_DIAGNOSTIC.
+
+        Also handles torch installed without CUDA support (no torch.cuda module).
+        """
         src_ts = _make_ts(100)
         tgt_ts = _make_ts(100)
         src_vals = [100.0] * 100
@@ -290,9 +293,16 @@ class TestGPUUnavailable:
 
         # Need to reload the module with torch.cuda.is_available patched
         import torch
-        original_is_available = torch.cuda.is_available
+        has_cuda_module = hasattr(torch, "cuda") and torch.cuda is not None
+        if has_cuda_module:
+            original_is_available = torch.cuda.is_available
+        else:
+            original_is_available = None
+
         try:
-            torch.cuda.is_available = lambda: False
+            if has_cuda_module:
+                torch.cuda.is_available = lambda: False
+
             # Re-check should return (False, ...)
             ok, reason = check_cuda_available("cuda:0")
             assert ok is False
@@ -311,7 +321,8 @@ class TestGPUUnavailable:
             )
             assert summary.verdict == _GPU_UNAVAILABLE, f"Expected GPU_UNAVAILABLE, got {summary.verdict}"
         finally:
-            torch.cuda.is_available = original_is_available
+            if has_cuda_module and original_is_available is not None:
+                torch.cuda.is_available = original_is_available
 
 
 # ---------------------------------------------------------------------------
