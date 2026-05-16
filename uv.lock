@@ -1635,6 +1635,7 @@ docs = [
 test = [
     { name = "aiohttp" },
     { name = "coverage" },
+    { name = "jsonschema" },
     { name = "pytest" },
     { name = "pytest-aiohttp" },
     { name = "pytest-asyncio" },
@@ -1691,6 +1692,7 @@ docs = [
 test = [
     { name = "aiohttp", specifier = "==3.13.5,<4.0.0" },
     { name = "coverage", specifier = ">=7.13.5,<8.0.0" },
+    { name = "jsonschema", specifier = ">=4.0,<5.0" },
     { name = "pytest", specifier = ">=7.4.4,<8.0.0" },
     { name = "pytest-aiohttp", specifier = ">=1.1.0,<2.0.0" },
     { name = "pytest-asyncio", specifier = "==0.23.8" },
