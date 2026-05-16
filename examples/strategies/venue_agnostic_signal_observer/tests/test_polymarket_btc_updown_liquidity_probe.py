@@ -38,7 +38,8 @@ from ..polymarket_btc_updown_liquidity_probe import (
     fetch_orderbook,
     parse_orderbook_sample,
     compute_summary,
-    _is_btc_updown,
+    _is_btc_updown_market,
+    _parse_updown_tokens,
     _extract_price_to_beat,
     _normalize_levels,
     _classify_liquidity,
@@ -201,56 +202,91 @@ class TestSafetyNoOrders:
 # ===================================================================
 
 
-class TestBtcUpDownDiscovery:
-    """Test the _is_btc_updown filter function."""
+class TestBtcPriceMarketDiscovery:
+    """Test the _is_btc_updown_market filter function."""
 
-    def test_up_detected(self):
-        assert _is_btc_updown("Will BTC be up on 31Dec?") == "up"
+    def test_updown_slug(self):
+        assert _is_btc_updown_market("btc-updown-15m-1778794200", "Will BTC be higher in 15m?") == "up"
 
-    def test_down_detected(self):
-        assert _is_btc_updown("Will Bitcoin be down on 31Dec?") == "down"
+    def test_bitcoin_up_or_down_slug(self):
+        assert _is_btc_updown_market("bitcoin-up-or-down-may-13", "Bitcoin up or down?") == "up"
 
-    def test_above_is_up(self):
-        assert _is_btc_updown("Will BTC be above $105,000 by Friday?") == "up"
+    def test_updown_in_question(self):
+        assert _is_btc_updown_market("some-slug", "BTC up/down 15m?") == "up"
 
-    def test_below_is_down(self):
-        assert _is_btc_updown("Will BTC be below $90,000 by Friday?") == "down"
+    def test_not_updown(self):
+        assert _is_btc_updown_market("btc-something", "Will BTC be above $100k?") is None
 
     def test_not_btc(self):
-        assert _is_btc_updown("Will ETH be up on Friday?") is None
-
-    def test_no_direction_keyword(self):
-        assert _is_btc_updown("Will BTC be at $100k?") is not None  # default to up
-
-    def test_not_bitcoin(self):
-        assert _is_btc_updown("Will SOL be up?") is None
+        assert _is_btc_updown_market("eth-updown-15m", "ETH up/down?") is None
 
     def test_empty(self):
-        assert _is_btc_updown("") is None
+        assert _is_btc_updown_market("", "") is None
 
-    def test_mixed_case(self):
-        assert _is_btc_updown("BTC Up Friday") == "up"
-        assert _is_btc_updown("Bitcoin DOWN Today") == "down"
+    def test_not_bitcoin(self):
+        assert _is_btc_updown_market("sol-updown", "SOL up or down?") is None
+
+
+class TestParseUpdownTokens:
+    """Test _parse_updown_tokens function."""
+
+    def test_json_array_string(self):
+        market = {
+            "clobTokenIds": '["0x111", "0x222"]',
+            "outcomes": '["Yes", "No"]',
+        }
+        yes, no = _parse_updown_tokens(market)
+        assert yes == "0x111"
+        assert no == "0x222"
+
+    def test_list_types(self):
+        market = {
+            "clobTokenIds": ["0x111", "0x222"],
+            "outcomes": ["Yes", "No"],
+        }
+        yes, no = _parse_updown_tokens(market)
+        assert yes == "0x111"
+        assert no == "0x222"
+
+    def test_up_down_outcomes(self):
+        market = {
+            "clobTokenIds": ["0xaaa", "0xbbb"],
+            "outcomes": ["UP", "DOWN"],
+        }
+        yes, no = _parse_updown_tokens(market)
+        assert yes == "0xaaa"
+        assert no == "0xbbb"
+
+    def test_no_tokens(self):
+        market = {}
+        yes, no = _parse_updown_tokens(market)
+        assert yes is None
+        assert no is None
+
+    def test_partial_outcomes(self):
+        market = {
+            "clobTokenIds": '["0x111"]',
+            "outcomes": '["Yes"]',
+        }
+        yes, no = _parse_updown_tokens(market)
+        assert yes == "0x111"
+        assert no is None
 
 
 class TestNonBtcSkipped:
-    """Test that non-BTC markets are skipped."""
+    """Test that non-BTC and non-UpDown markets are skipped."""
 
-    def test_eth_updown_skipped(self):
-        result = _is_btc_updown("Will ETH be up on Friday?")
-        assert result is None, "ETH market should be skipped"
+    def test_eth_updown(self):
+        r = _is_btc_updown_market("eth-updown-15m", "ETH up or down?")
+        assert r is None, "ETH market should be skipped"
 
-    def test_sol_updown_skipped(self):
-        result = _is_btc_updown("Will SOL be up on Friday?")
-        assert result is None, "SOL market should be skipped"
+    def test_generic_market(self):
+        r = _is_btc_updown_market("trump-wins", "Trump wins 2024?")
+        assert r is None
 
-    def test_generic_market_skipped(self):
-        result = _is_btc_updown("Will the S&P 500 be up?")
-        assert result is None, "S&P market should be skipped"
-
-    def test_polymarket_question_without_direction(self):
-        result = _is_btc_updown("Trump wins 2024?")
-        assert result is None, "Non-BTC market should be skipped"
+    def test_btc_but_no_updown(self):
+        r = _is_btc_updown_market("btc-price", "Will BTC hit $100k?")
+        assert r is None
 
 
 class TestPriceToBeatExtraction:

@@ -1,0 +1,19 @@
+{
+  "markets_discovered": 8,
+  "markets_with_tokens": 8,
+  "samples_collected": 1920,
+  "valid_samples": 0,
+  "median_spread_price_units": null,
+  "median_spread_cents": null,
+  "p75_spread_cents": null,
+  "p95_spread_cents": null,
+  "median_top_bid_depth_usd": null,
+  "median_top_ask_depth_usd": null,
+  "percent_two_sided": 0.0,
+  "percent_stale": 0.0,
+  "percent_crossed": 0.0,
+  "percent_missing": 100.0,
+  "diagnostic_classification": "CAPTURE_UNUSABLE",
+  "verdict_statement": "No trade candidate emitted. This is a liquidity/actionability diagnostic only. It cannot produce CANDIDATE, REJECTED, EXECUTION_READY, or TRADE_READY verdicts.",
+  "spread_list_sample_count": 0
+}

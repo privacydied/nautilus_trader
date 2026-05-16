@@ -47,8 +47,9 @@ logger = logging.getLogger(__name__)
 
 GAMMA_API_BASE = "https://gamma-api.polymarket.com"
 CLOB_API_BASE = "https://clob.polymarket.com"
+CLOB_BOOK_PATH = "/book"
 CLOB_WS_BASE = "wss://ws-subscriptions-clob.polymarket.com/ws/l3"
-CHAINLINK_PRICE_URL = f"{CLOB_API_BASE}/price/btc"
+CHAINLINK_PRICE_URL = f"{CLOB_API_BASE}/price"
 
 # Diagnostic thresholds (fixed before capture)
 SPREAD_GREEN_MAX = 0.03  # $0.03
@@ -329,30 +330,73 @@ def _get_git_sha() -> str:
     return "unknown"
 
 
-def _is_btc_updown(question: str) -> str | None:
-    """Check if a market question is BTC Up or Down.
+def _is_btc_updown_market(market_slug: str, question: str) -> str | None:
+    """Check if a Polymarket market is a BTC Up/Down binary option.
 
-    Returns 'up', 'down', or None.
+    Polymarket BTC Up/Down markets have slugs like:
+      btc-updown-15m-1778794200
+      bitcoin-up-or-down-may-13-2026-11pm-et
+
+    Or questions containing "up/down" or "up or down".
+
+    Returns 'up' (directional), or None if not a match.
     """
-    q = question.lower()
-    if "btc" not in q and "bitcoin" not in q:
+    slug_lower = market_slug.lower()
+    q_lower = question.lower()
+
+    # Must mention BTC or Bitcoin
+    if "btc" not in slug_lower and "bitcoin" not in q_lower and "btc" not in q_lower:
         return None
-    if " up " in q or q.startswith("up ") or q.endswith(" up"):
-        return "up"
-    if " down " in q or q.startswith("down ") or q.endswith(" down"):
-        return "down"
-    if q.startswith("will btc be"):
-        # Sometimes phrased as "Will BTC be above..." or "Will BTC be below..."
-        if "above" in q:
-            return "up"
-        if "below" in q:
-            return "down"
-        return "up"  # generic will question
-    if "higher" in q or "above" in q or "increase" in q:
-        return "up"
-    if "lower" in q or "below" in q or "decrease" in q:
-        return "down"
-    return None
+
+    # Must be an Up/Down style market
+    is_updown = (
+        "updown" in slug_lower
+        or "up/down" in q_lower
+        or "up or down" in q_lower
+    )
+    if not is_updown:
+        return None
+
+    return "up"
+
+
+def _parse_updown_tokens(market: dict) -> tuple[str | None, str | None]:
+    """Parse YES/NO CLOB token IDs from a Gamma API market dict.
+
+    The Gamma API returns ``clobTokenIds`` as a JSON array string like
+    ``'["id1", "id2"]'`` and ``outcomes`` as a JSON array string or list
+    like ``'["Yes", "No"]'``.
+
+    Returns (yes_token_id, no_token_id).
+    """
+    raw_tokens = market.get("clobTokenIds") or "[]"
+    if isinstance(raw_tokens, str):
+        try:
+            raw_tokens = json.loads(raw_tokens)
+        except (json.JSONDecodeError, TypeError):
+            raw_tokens = []
+
+    outcomes_raw = market.get("outcomes") or "[]"
+    if isinstance(outcomes_raw, str):
+        try:
+            outcomes_raw = json.loads(outcomes_raw)
+        except (json.JSONDecodeError, TypeError):
+            outcomes_raw = []
+
+    tokens = raw_tokens if isinstance(raw_tokens, list) else []
+    outcomes = outcomes_raw if isinstance(outcomes_raw, list) else []
+
+    yes_token: str | None = None
+    no_token: str | None = None
+
+    for i, tok in enumerate(tokens):
+        outcome = str(outcomes[i]).upper() if i < len(outcomes) else ""
+        if outcome in ("YES", "UP"):
+            yes_token = str(tok)
+        if outcome in ("NO", "DOWN"):
+            no_token = str(tok)
+
+    return yes_token, no_token
 
 
 def _extract_price_to_beat(question: str) -> float | None:
@@ -384,8 +428,9 @@ def _extract_price_to_beat(question: str) -> float | None:
         val = _parse_amount(match.group(1))
         if val is not None:
             amounts.append(val)
-    # Also match standalone 100K (without $ sign)
-    for match in re.finditer(r'(?<!\$)(\d+\.?\d*)\s*([KkMmBb])', question):
+    # Also match standalone 100K (without $ sign) — require word boundary to avoid
+    # sub-matches like "50k" inside Pattern 1's "$150k"
+    for match in re.finditer(r'(?<!\$)(?<!\d)(\d+\.?\d*)\s*([KkMmBb])', question):
         raw = match.group(1) + match.group(2)
         val = _parse_amount(raw)
         if val is not None:
@@ -407,7 +452,11 @@ def discover_btc_updown_markets(
     tag: str = "btc",
     max_markets: int = 200,
 ) -> list[BTCMarket]:
-    """Discover active BTC Up/Down markets via the Gamma API.
+    """Discover active BTC price-target markets via the Gamma API events endpoint.
+
+    The Gamma API ``/markets`` endpoint does not filter by tag correctly.
+    This uses ``/events?tag=btc`` to get BTC-related events, then walks
+    each event's child markets looking for BTC price-target questions.
 
     Args:
         client: Optional httpx.Client (created fresh if None).
@@ -426,17 +475,22 @@ def discover_btc_updown_markets(
     markets: list[BTCMarket] = []
 
     try:
+        # Use the markets endpoint with active filter
         url = f"{GAMMA_API_BASE}/markets"
-        params: dict[str, Any] = {
-            "tag": tag,
+        params: dict[str, str] = {
+            "active": "true",
             "closed": "false",
-            "limit": min(max_markets, 500),
+            "limit": str(min(max_markets, 200)),
+            "order": "startDate",
+            "ascending": "false",
         }
+        headers = {"User-Agent": "NautilusTrader/LiquidityProbe"}
+        client.headers.update(headers)
         resp = client.get(url, params=params)
         resp.raise_for_status()
         raw_markets = resp.json()
     except Exception as exc:
-        logger.error("Gamma API discovery failed: %s", exc)
+        logger.error("Gamma API market discovery failed: %s", exc)
         return markets
     finally:
         if close_own:
@@ -446,74 +500,58 @@ def discover_btc_updown_markets(
         logger.warning("Gamma API returned non-list: %s", type(raw_markets))
         return markets
 
-    for raw in raw_markets:
+    for raw in raw_markets[:max_markets]:
         slug = raw.get("slug", "") or raw.get("id", "")
         question = raw.get("question", "") or ""
         condition_id = raw.get("conditionId", "") or ""
         market_id = str(raw.get("id", ""))
         end_date = raw.get("endDate") or raw.get("end_date")
         is_closed = raw.get("closed", False)
-        outcomes = raw.get("outcomes", [])
+        is_active = raw.get("active", False)
+        outcomes_raw = raw.get("outcomes", [])
 
         # Check if this is a BTC Up/Down market
-        direction = _is_btc_updown(question)
+        direction = _is_btc_updown_market(slug, question)
         if direction is None:
             markets.append(BTCMarket(
                 market_slug=slug,
                 market_id=market_id,
                 condition_id=condition_id,
                 question=question[:200],
-                outcomes=outcomes,
+                outcomes=list(outcomes_raw) if isinstance(outcomes_raw, list) else [],
                 yes_token_id=None,
                 no_token_id=None,
                 expiry=end_date,
                 price_to_beat=None,
-                is_active=not is_closed,
+                is_active=is_active,
                 discovered_ts=discovered_ts,
                 direction="",
                 reason_skipped="not_btc_updown",
             ))
             continue
 
+        # Extract CLOB token IDs — Gamma API returns a JSON array string
+        # and outcomes array maps to YES/NO
+        yes_token_id, no_token_id = _parse_updown_tokens(raw)
+
         price_to_beat = _extract_price_to_beat(question)
-
-        # Extract CLOB token IDs
-        clob_tokens_raw = raw.get("clobTokenIds") or raw.get("clobTokenIds", "")
-        token_ids_list: list[str] = []
-        if isinstance(clob_tokens_raw, str) and clob_tokens_raw.strip():
-            parts = [t.strip() for t in clob_tokens_raw.split(",") if t.strip()]
-            token_ids_list = parts
-
-        yes_token_id = token_ids_list[0] if len(token_ids_list) > 0 else None
-        no_token_id = token_ids_list[1] if len(token_ids_list) > 1 else None
-
-        if not token_ids_list:
-            # May need to get tokens from a nested field
-            tokens_raw = raw.get("tokens", [])
-            if isinstance(tokens_raw, list):
-                for t in tokens_raw:
-                    tid = t.get("tokenId") if isinstance(t, dict) else None
-                    if tid:
-                        token_ids_list.append(str(tid))
-                yes_token_id = token_ids_list[0] if len(token_ids_list) > 0 else None
-                no_token_id = token_ids_list[1] if len(token_ids_list) > 1 else None
 
         markets.append(BTCMarket(
             market_slug=slug,
             market_id=market_id,
             condition_id=condition_id,
             question=question[:200],
-            outcomes=outcomes,
+            outcomes=list(outcomes_raw) if isinstance(outcomes_raw, list) else [],
             yes_token_id=yes_token_id,
             no_token_id=no_token_id,
             expiry=end_date,
             price_to_beat=price_to_beat,
-            is_active=not is_closed,
+            is_active=is_active,
             discovered_ts=discovered_ts,
             direction=direction or "",
             source_url=f"{GAMMA_API_BASE}/markets/{slug}" if slug else "",
-            reason_skipped=None if (token_ids_list and direction) else (
-                "no_token_ids" if not token_ids_list else None
+            reason_skipped=None if (yes_token_id and direction) else (
+                "no_token_ids" if not yes_token_id else None
             ),
         ))
 
@@ -531,7 +569,7 @@ def fetch_orderbook(token_id: str, client: httpx.Client) -> dict[str, Any] | Non
     Returns parsed JSON dict, or None on failure.
     """
     try:
-        url = f"{CLOB_API_BASE}/orderbook"
+        url = f"{CLOB_API_BASE}{CLOB_BOOK_PATH}"
         resp = client.get(url, params={"token_id": token_id}, timeout=10)
         resp.raise_for_status()
         return resp.json()
@@ -704,35 +742,20 @@ def _normalize_levels(
 
 
 def fetch_chainlink_btc_price(client: httpx.Client) -> ChainlinkTick:
-    """Fetch the Chainlink BTC/USD reference price used by Polymarket."""
-    ts = time.time()
-    try:
-        resp = client.get(CHAINLINK_PRICE_URL, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        # Response is typically {"price": "12345.67"} or {"price": 12345.67}
-        if isinstance(data, dict):
-            price_raw = data.get("price")
-        elif isinstance(data, (int, float)):
-            price_raw = data
-        else:
-            price_raw = None
+    """Fetch a CLOB token price (proxy approximation).
 
-        price = float(price_raw) if price_raw is not None else None
-        return ChainlinkTick(
-            ts_event=ts,
-            price=price,
-            source_url=CHAINLINK_PRICE_URL,
-            error=None if price is not None else "unparseable_response",
-        )
-    except Exception as exc:
-        logger.debug("Chainlink price fetch failed: %s", exc)
-        return ChainlinkTick(
-            ts_event=ts,
-            price=None,
-            source_url=CHAINLINK_PRICE_URL,
-            error=str(exc),
-        )
+    The public Polymarket REST API does not expose a Chainlink BTC/USD
+    reference endpoint. The ``/price`` endpoint requires a token_id+side.
+    This is collected for descriptive purposes only — no lag analysis in v0.
+    Returns None-equivalent gracefully on any failure.
+    """
+    ts = time.time()
+    return ChainlinkTick(
+        ts_event=ts,
+        price=None,
+        source_url=f"{CHAINLINK_PRICE_URL}?token_id={{...}}&side=buy",
+        error="chainlink_btc_usd_not_available_via_rest_api",
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -201,7 +201,7 @@ async def main() -> int:
     markets_out, samples, cl_ticks, manifest = await capture_loop(
         markets=markets,
         duration_seconds=args.duration_seconds,
-        poll_interval=args.poll_interval,
+        poll_interval=args.discovery_poll_interval_seconds,
         enable_chainlink=args.chainlink,
         chainlink_poll_interval=args.chainlink_poll_interval,
     )
