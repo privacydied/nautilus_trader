@@ -1,0 +1,52 @@
+{
+  "reference_source": "BINANCE",
+  "distance_buckets": {
+    "distance_lte_5_bps": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "no_samples",
+      "reference_source": "BINANCE"
+    },
+    "distance_5_to_10_bps": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "no_samples",
+      "reference_source": "BINANCE"
+    },
+    "distance_10_to_25_bps": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "no_samples",
+      "reference_source": "BINANCE"
+    },
+    "distance_25_to_50_bps": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "no_samples",
+      "reference_source": "BINANCE"
+    },
+    "distance_gt_50_bps": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "no_samples",
+      "reference_source": "BINANCE"
+    },
+    "unknown": {
+      "sample_count": 36,
+      "valid_sample_count": 36,
+      "market_count": 1,
+      "market_slugs": [
+        "bitcoin-up-or-down-may-18-2026-12am-et"
+      ],
+      "median_spread_cents": 2.0,
+      "p75_spread_cents": 2.0,
+      "p95_spread_cents": 2.0,
+      "median_bid_depth_usd": 268.03,
+      "median_ask_depth_usd": 278.97,
+      "median_combined_top_depth_usd": 278.97,
+      "two_sided_rate": 100.0,
+      "bucket_classification": "GREEN_LIQUIDITY_DIAGNOSTIC",
+      "reference_source": "BINANCE"
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "run_id": "polymarket_liquidity_probe_1778905030",
+  "git_sha": "1524cf05281f0c4b08ad9a08c71da0bfc02c07b7",
+  "started_at": "2026-05-16T04:17:10.809559+00:00",
+  "ended_at": "2026-05-16T04:20:10.982669+00:00",
+  "requested_duration_seconds": 180,
+  "actual_duration_seconds": 180.17,
+  "feeds_requested": [
+    "clob:bitcoin-up-or-down-may-18-2026-12am-et:94080672237817449026849020798503892368676829855756182734461082029312660657672",
+    "clob:bitcoin-up-or-down-may-18-2026-12am-et:21678099351331588517866170505733502959590193186928734548333878523878309454350"
+  ],
+  "feeds_connected": [
+    "clob:bitcoin-up-or-down-may-18-2026-12am-et:94080672237817449026849020798503892368676829855756182734461082029312660657672",
+    "clob:bitcoin-up-or-down-may-18-2026-12am-et:21678099351331588517866170505733502959590193186928734548333878523878309454350"
+  ],
+  "feed_stats": {
+    "clob:bitcoin-up-or-down-may-18-2026-12am-et:94080672237817449026849020798503892368676829855756182734461082029312660657672": {
+      "name": "clob:bitcoin-up-or-down-may-18-2026-12am-et:94080672237817449026849020798503892368676829855756182734461082029312660657672",
+      "sample_count": 18,
+      "reconnect_count": 0,
+      "error_count": 0,
+      "first_sample_ts": 1778905030.8558414,
+      "last_sample_ts": 1778905200.993434
+    },
+    "clob:bitcoin-up-or-down-may-18-2026-12am-et:21678099351331588517866170505733502959590193186928734548333878523878309454350": {
+      "name": "clob:bitcoin-up-or-down-may-18-2026-12am-et:21678099351331588517866170505733502959590193186928734548333878523878309454350",
+      "sample_count": 18,
+      "reconnect_count": 0,
+      "error_count": 0,
+      "first_sample_ts": 1778905030.8705904,
+      "last_sample_ts": 1778905201.0066578
+    }
+  },
+  "market_slugs": [
+    "bitcoin-up-or-down-may-18-2026-12am-et"
+  ],
+  "token_ids": [
+    "21678099351331588517866170505733502959590193186928734548333878523878309454350",
+    "94080672237817449026849020798503892368676829855756182734461082029312660657672"
+  ],
+  "errors": [],
+  "overlap_duration_seconds": 0.0,
+  "no_auth_no_orders_statement": "This capture used public Polymarket Gamma and CLOB APIs only. No authentication, no API keys, no wallet, no signing, no order submission. Observer-only."
+}

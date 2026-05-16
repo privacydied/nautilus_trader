@@ -1,0 +1,362 @@
+{
+  "two_axis_liquidity_grid": {
+    "tte_gt_15m": {
+      "distance_lte_5_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": 2.0,
+        "p95_spread_cents": 2.0,
+        "classification": "no_samples"
+      },
+      "distance_5_to_10_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": 2.0,
+        "p95_spread_cents": 2.0,
+        "classification": "no_samples"
+      },
+      "distance_10_to_25_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": 2.0,
+        "p95_spread_cents": 2.0,
+        "classification": "no_samples"
+      },
+      "distance_25_to_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": 2.0,
+        "p95_spread_cents": 2.0,
+        "classification": "no_samples"
+      },
+      "distance_gt_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": 2.0,
+        "p95_spread_cents": 2.0,
+        "classification": "no_samples"
+      },
+      "unknown": {
+        "sample_count": 36,
+        "market_count": 0,
+        "median_spread_cents": 2.0,
+        "p95_spread_cents": 2.0,
+        "classification": "GREEN_LIQUIDITY_DIAGNOSTIC"
+      }
+    },
+    "tte_5m_to_15m": {
+      "distance_lte_5_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_5_to_10_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_10_to_25_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_25_to_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_gt_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "unknown": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "GREEN_LIQUIDITY_DIAGNOSTIC"
+      }
+    },
+    "tte_2m_to_5m": {
+      "distance_lte_5_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_5_to_10_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_10_to_25_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_25_to_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_gt_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "unknown": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "GREEN_LIQUIDITY_DIAGNOSTIC"
+      }
+    },
+    "tte_1m_to_2m": {
+      "distance_lte_5_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_5_to_10_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_10_to_25_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_25_to_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_gt_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "unknown": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "GREEN_LIQUIDITY_DIAGNOSTIC"
+      }
+    },
+    "tte_30s_to_1m": {
+      "distance_lte_5_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_5_to_10_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_10_to_25_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_25_to_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_gt_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "unknown": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "GREEN_LIQUIDITY_DIAGNOSTIC"
+      }
+    },
+    "tte_0s_to_30s": {
+      "distance_lte_5_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_5_to_10_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_10_to_25_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_25_to_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_gt_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "unknown": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "GREEN_LIQUIDITY_DIAGNOSTIC"
+      }
+    },
+    "tte_expired": {
+      "distance_lte_5_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_5_to_10_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_10_to_25_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_25_to_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_gt_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "unknown": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "GREEN_LIQUIDITY_DIAGNOSTIC"
+      }
+    },
+    "tte_unknown": {
+      "distance_lte_5_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_5_to_10_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_10_to_25_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_25_to_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "distance_gt_50_bps": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "no_samples"
+      },
+      "unknown": {
+        "sample_count": 0,
+        "market_count": 0,
+        "median_spread_cents": null,
+        "p95_spread_cents": null,
+        "classification": "GREEN_LIQUIDITY_DIAGNOSTIC"
+      }
+    }
+  },
+  "convex_danger_zone_cell": {
+    "tte_range": "<= 120s",
+    "distance_range": "<= 10 bps",
+    "sample_count": 0,
+    "classification": "no_data"
+  }
+}
