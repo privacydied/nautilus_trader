@@ -2216,6 +2216,8 @@ def _compute_duration_coverage(
     duration_samples: dict[str, list[OrderbookSample]] = {d: [] for d in DURATION_LABELS}
     for s in samples:
         dur = market_durations.get(s.market_slug, DUR_UNKNOWN)
+        if dur not in duration_samples:
+            dur = DUR_UNKNOWN
         duration_samples[dur].append(s)
 
     coverage = {}

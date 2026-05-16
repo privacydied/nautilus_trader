@@ -335,7 +335,13 @@ def _run_verification(
     proxy_prices: list[tuple[float, float]] = []
     reference_source = REF_UNAVAILABLE
 
-    if reference_proxy:
+    # Use captured proxy prices from capture_loop if available
+    if _proxy_prices:
+        logger.info("Using %d captured proxy prices from capture loop", len(_proxy_prices))
+        proxy_prices = list(_proxy_prices)
+        reference_source = str(reference_proxy).upper() if reference_proxy else REF_UNAVAILABLE
+
+    if reference_proxy and not proxy_prices:
         try:
             import httpx
             with httpx.Client(timeout=10) as cl:
