@@ -86,6 +86,34 @@ ALLOWED_DIAGNOSTICS = {
 }
 
 # ---------------------------------------------------------------------------
+# Verification statuses (post-parser-fix audit)
+# ---------------------------------------------------------------------------
+
+PARSER_FIX_UNVERIFIED = "PARSER_FIX_UNVERIFIED"
+RAW_PAYLOAD_VERIFIED = "RAW_PAYLOAD_VERIFIED"
+NEAR_EXPIRY_LIQUIDITY_VERIFIED = "NEAR_EXPIRY_LIQUIDITY_VERIFIED"
+LIQUIDITY_GATE_VERIFIED = "LIQUIDITY_GATE_VERIFIED"
+LIQUIDITY_GATE_NOT_VERIFIED = "LIQUIDITY_GATE_NOT_VERIFIED"
+
+# TTE bucket labels
+TTE_GT_15M = "tte_gt_15m"
+TTE_5M_TO_15M = "tte_5m_to_15m"
+TTE_2M_TO_5M = "tte_2m_to_5m"
+TTE_1M_TO_2M = "tte_1m_to_2m"
+TTE_30S_TO_1M = "tte_30s_to_1m"
+TTE_0S_TO_30S = "tte_0s_to_30s"
+TTE_EXPIRED = "tte_expired"
+TTE_UNKNOWN = "tte_unknown"
+
+TTE_BUCKET_LABELS = [
+    TTE_GT_15M, TTE_5M_TO_15M, TTE_2M_TO_5M, TTE_1M_TO_2M,
+    TTE_30S_TO_1M, TTE_0S_TO_30S, TTE_EXPIRED, TTE_UNKNOWN,
+]
+
+# Near-expiry definition: tte <= 120 seconds
+NEAR_EXPIRY_MAX_TTE_S = 120.0
+
+# ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
 
@@ -285,9 +313,19 @@ class ProbeSummary:
     diagnostic_classification: str
     verdict_statement: str
     spread_list_sample_count: int
+    # Verification fields
+    verification_status: str = PARSER_FIX_UNVERIFIED
+    tte_buckets: dict[str, dict[str, Any]] | None = None
+    near_expiry_definition: str = "tte <= 120s"
+    near_expiry_sample_count: int = 0
+    near_expiry_median_spread_cents: float | None = None
+    near_expiry_p95_spread_cents: float | None = None
+    near_expiry_median_bid_depth_usd: float | None = None
+    near_expiry_median_ask_depth_usd: float | None = None
+    near_expiry_classification: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             "markets_discovered": self.markets_discovered,
             "markets_with_tokens": self.markets_with_tokens,
             "samples_collected": self.samples_collected,
@@ -305,7 +343,17 @@ class ProbeSummary:
             "diagnostic_classification": self.diagnostic_classification,
             "verdict_statement": self.verdict_statement,
             "spread_list_sample_count": self.spread_list_sample_count,
+            "verification_status": self.verification_status,
+            "tte_buckets": self.tte_buckets,
+            "near_expiry_definition": self.near_expiry_definition,
+            "near_expiry_sample_count": self.near_expiry_sample_count,
+            "near_expiry_median_spread_cents": self.near_expiry_median_spread_cents,
+            "near_expiry_p95_spread_cents": self.near_expiry_p95_spread_cents,
+            "near_expiry_median_bid_depth_usd": self.near_expiry_median_bid_depth_usd,
+            "near_expiry_median_ask_depth_usd": self.near_expiry_median_ask_depth_usd,
+            "near_expiry_classification": self.near_expiry_classification,
         }
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -903,8 +951,13 @@ async def capture_loop(
 def compute_summary(
     markets: list[BTCMarket],
     samples: list[OrderbookSample],
+    raw_payloads: list[RawPayloadRecord] | None = None,
 ) -> ProbeSummary:
-    """Compute liquidity statistics and diagnostic classification."""
+    """Compute liquidity statistics and diagnostic classification.
+
+    Also computes TTE bucket breakdown and verification status
+    if raw_payloads are provided.
+    """
     markets_discovered = len([m for m in markets if m.reason_skipped is None])
     all_markets = len(markets)
     markets_with_tokens = len([m for m in markets if m.has_tokens])
@@ -994,6 +1047,17 @@ def compute_summary(
         "It cannot produce CANDIDATE, REJECTED, EXECUTION_READY, or TRADE_READY verdicts."
     )
 
+    # Compute TTE buckets and verification status if raw payloads available
+    tte_buckets = None
+    near_expiry_rollup = {}
+    verification_status = PARSER_FIX_UNVERIFIED
+    raw_payload_count = len(raw_payloads) if raw_payloads else 0
+
+    if raw_payloads is not None and markets and samples:
+        tte_buckets = _compute_tte_buckets(markets, samples)
+        near_expiry_rollup = _compute_near_expiry_rollup(tte_buckets)
+        verification_status = _compute_verification_status(raw_payload_count, tte_buckets)
+
     return ProbeSummary(
         markets_discovered=markets_discovered,
         markets_with_tokens=markets_with_tokens,
@@ -1012,6 +1076,14 @@ def compute_summary(
         diagnostic_classification=diagnostic,
         verdict_statement=verdict,
         spread_list_sample_count=len(spreads_price_units),
+        verification_status=verification_status,
+        tte_buckets=tte_buckets,
+        near_expiry_sample_count=near_expiry_rollup.get("near_expiry_sample_count", 0),
+        near_expiry_median_spread_cents=near_expiry_rollup.get("near_expiry_median_spread_cents"),
+        near_expiry_p95_spread_cents=near_expiry_rollup.get("near_expiry_p95_spread_cents"),
+        near_expiry_median_bid_depth_usd=near_expiry_rollup.get("near_expiry_median_bid_depth_usd"),
+        near_expiry_median_ask_depth_usd=near_expiry_rollup.get("near_expiry_median_ask_depth_usd"),
+        near_expiry_classification=near_expiry_rollup.get("near_expiry_classification", ""),
     )
 
 
@@ -1199,6 +1271,512 @@ def write_summary_md(
     lines.append("")
     lines.append("*This summary was produced by a liquidity/actionability probe.*")
     lines.append("*It is not a trading signal or strategy recommendation.*")
+
+    path.write_text("\n".join(lines) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Raw payload audit
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RawPayloadRecord:
+    """Unmodified raw orderbook payload for audit verification."""
+
+    ts_event: float
+    market_slug: str
+    token_id: str
+    side: str | None
+    expiry: str | None
+    price_to_beat: float | None
+    raw_bids: list[dict[str, Any]]
+    raw_asks: list[dict[str, Any]]
+    computed_best_bid: float | None
+    computed_best_ask: float | None
+    computed_spread_price_units: float | None
+    computed_spread_cents: float | None
+    computed_top_bid_size: float | None
+    computed_top_ask_size: float | None
+    computed_bid_depth_usd: float | None
+    computed_ask_depth_usd: float | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ts_event": self.ts_event,
+            "market_slug": self.market_slug,
+            "token_id": self.token_id,
+            "side": self.side,
+            "expiry": self.expiry,
+            "price_to_beat": self.price_to_beat,
+            "raw_bids": self.raw_bids,
+            "raw_asks": self.raw_asks,
+            "computed_best_bid": self.computed_best_bid,
+            "computed_best_ask": self.computed_best_ask,
+            "computed_spread_price_units": self.computed_spread_price_units,
+            "computed_spread_cents": self.computed_spread_cents,
+            "computed_top_bid_size": self.computed_top_bid_size,
+            "computed_top_ask_size": self.computed_top_ask_size,
+            "computed_bid_depth_usd": self.computed_bid_depth_usd,
+            "computed_ask_depth_usd": self.computed_ask_depth_usd,
+        }
+
+
+def write_raw_payloads(payloads: list[RawPayloadRecord], path: Path) -> None:
+    """Write raw CLOB payloads to JSONL."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for p in payloads:
+        _append_jsonl(path, p.to_dict())
+
+
+def write_raw_payload_audit(
+    payloads: list[RawPayloadRecord],
+    path: Path,
+) -> None:
+    """Write human-readable raw payload audit report."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    lines = [
+        "# Raw CLOB Orderbook Payload Audit",
+        "",
+        "Verifies that parser best-bid/ask selection and depth calculation "
+        "match the raw CLOB API responses.",
+        "",
+        "---",
+        "",
+        f"**Total payloads captured:** {len(payloads)}",
+        "",
+    ]
+
+    # Select representative samples
+    if payloads:
+        valid_with_spread = [p for p in payloads if p.computed_spread_cents is not None]
+        valid_with_spread.sort(key=lambda p: p.computed_spread_cents or 0)
+
+        # Tightest spread
+        if valid_with_spread:
+            lines.append("### Tightest Spread Sample")
+            lines.append("")
+            lines.extend(_format_payload(valid_with_spread[0]))
+
+        # Widest spread
+        if len(valid_with_spread) > 1:
+            lines.append("### Widest Spread Sample")
+            lines.append("")
+            lines.extend(_format_payload(valid_with_spread[-1]))
+
+        # Median spread
+        if len(valid_with_spread) >= 3:
+            mid = valid_with_spread[len(valid_with_spread) // 2]
+            lines.append("### Median Spread Sample")
+            lines.append("")
+            lines.extend(_format_payload(mid))
+
+        # Early and late samples
+        payloads_by_ts = sorted(payloads, key=lambda p: p.ts_event)
+        if len(payloads_by_ts) >= 2:
+            lines.append("### Early-Life Sample")
+            lines.append("")
+            lines.extend(_format_payload(payloads_by_ts[0]))
+
+            lines.append("### Late-Life Sample")
+            lines.append("")
+            lines.extend(_format_payload(payloads_by_ts[-1]))
+
+    lines.append("---")
+    lines.append("")
+    lines.append("*Raw payload audit — no trading signal or strategy recommendation.*")
+
+    path.write_text("\n".join(lines) + "\n")
+
+
+def _format_payload(p: RawPayloadRecord) -> list[str]:
+    """Format a single raw payload as audit markdown."""
+    lines = [
+        f"- **Market:** `{p.market_slug}`",
+        f"- **Token:** `{p.token_id[:24]}...` ({p.side})",
+        f"- **Expiry:** {p.expiry or 'N/A'}",
+        f"- **Timestamp:** {p.ts_event}",
+        "",
+        "#### Raw Bids",
+    ]
+    if p.raw_bids:
+        lines.append("")
+        lines.append("| Price | Size |")
+        lines.append("|-------|------|")
+        for b in p.raw_bids:
+            lines.append(f"| {b.get('price', '?')} | {b.get('size', '?')} |")
+        lines.append("")
+        # Show what max/best picks
+        prices = [float(b["price"]) for b in p.raw_bids if "price" in b]
+        if prices:
+            lines.append(f"- max(bid prices) = {max(prices):.4f} ← **best bid**")
+    else:
+        lines.append("_(empty)_")
+
+    lines.append("")
+    lines.append("#### Raw Asks")
+    if p.raw_asks:
+        lines.append("")
+        lines.append("| Price | Size |")
+        lines.append("|-------|------|")
+        for a in p.raw_asks:
+            lines.append(f"| {a.get('price', '?')} | {a.get('size', '?')} |")
+        lines.append("")
+        prices = [float(a["price"]) for a in p.raw_asks if "price" in a]
+        if prices:
+            lines.append(f"- min(ask prices) = {min(prices):.4f} ← **best ask**")
+    else:
+        lines.append("_(empty)_")
+
+    lines.append("")
+    lines.append("#### Parser Selection")
+    lines.append("")
+    lines.append(f"| Field | Value |")
+    lines.append(f"|-------|-------|")
+    lines.append(f"| best_bid | {_fmt(p.computed_best_bid)} |")
+    lines.append(f"| best_ask | {_fmt(p.computed_best_ask)} |")
+    lines.append(f"| spread_price_units | {_fmt(p.computed_spread_price_units)} |")
+    lines.append(f"| spread_cents | {_fmt(p.computed_spread_cents)} |")
+    bb_size = p.computed_top_bid_size or 0
+    ba_size = p.computed_top_ask_size or 0
+    lines.append(f"| top_bid_size | {bb_size:.4f} |")
+    lines.append(f"| top_ask_size | {ba_size:.4f} |")
+    lines.append(f"| bid_depth_usd (best_bid * top_bid_size) | {_fmt(p.computed_bid_depth_usd)} |")
+    lines.append(f"| ask_depth_usd (best_ask * top_ask_size) | {_fmt(p.computed_ask_depth_usd)} |")
+    lines.append(f"| spread_calc (best_ask - best_bid) | {_fmt(p.computed_spread_price_units)} |")
+    if p.computed_best_bid is not None and p.computed_best_ask is not None:
+        spread_check = p.computed_best_ask - p.computed_best_bid
+        ok = "PASS" if abs(spread_check - (p.computed_spread_price_units or 0)) < 1e-6 else "FAIL"
+        lines.append(f"| spread_self_check | {ok} |")
+    lines.append("")
+
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# TTE bucket computation
+# ---------------------------------------------------------------------------
+
+
+def _parse_expiry_to_tte(expiry_str: str | None, ts_event: float) -> float | None:
+    """Parse an ISO 8601 expiry string and compute time-to-expiry in seconds.
+
+    Returns None if expiry cannot be parsed.
+    """
+    if not expiry_str:
+        return None
+    try:
+        from datetime import datetime, timezone
+        clean = str(expiry_str)[:26].replace("Z", "+00:00")
+        if "+" not in clean and clean.count("-") == 2:
+            clean += "+00:00"
+        expiry_dt = datetime.fromisoformat(clean)
+        if expiry_dt.tzinfo is None:
+            expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+        tte_s = (expiry_dt.timestamp() - ts_event)
+        return max(tte_s, 0.0) if tte_s >= 0 else 0.0
+    except (ValueError, TypeError, IndexError):
+        return None
+
+
+def _classify_tte_bucket(tte_s: float | None) -> str:
+    """Classify a time-to-expiry value into a TTE bucket label."""
+    if tte_s is None:
+        return TTE_UNKNOWN
+    if tte_s <= 0:
+        return TTE_EXPIRED
+    if tte_s <= 30:
+        return TTE_0S_TO_30S
+    if tte_s <= 60:
+        return TTE_30S_TO_1M
+    if tte_s <= 120:
+        return TTE_1M_TO_2M
+    if tte_s <= 300:
+        return TTE_2M_TO_5M
+    if tte_s <= 900:
+        return TTE_5M_TO_15M
+    return TTE_GT_15M
+
+
+def _compute_tte_buckets(
+    markets: list[BTCMarket],
+    samples: list[OrderbookSample],
+) -> dict[str, dict[str, Any]]:
+    """Compute TTE bucket statistics from samples.
+
+    Returns dict mapping TTE bucket label -> bucket stats.
+    """
+    # Build market expiry lookup
+    expiry_map: dict[str, str | None] = {}
+    for m in markets:
+        expiry_map[m.market_slug] = m.expiry
+
+    # Assign each sample to a TTE bucket
+    bucket_samples: dict[str, list[OrderbookSample]] = {b: [] for b in TTE_BUCKET_LABELS}
+
+    for s in samples:
+        expiry = s.expiry or expiry_map.get(s.market_slug)
+        tte = _parse_expiry_to_tte(expiry, s.ts_event)
+        bucket = _classify_tte_bucket(tte)
+        bucket_samples[bucket].append(s)
+
+    # Compute stats per bucket
+    def _percentile(data, p):
+        if not data:
+            return None
+        s = sorted(data)
+        idx = max(0, int(len(s) * p / 100))
+        return s[min(idx, len(s) - 1)]
+
+    buckets_out: dict[str, dict[str, Any]] = {}
+    for label in TTE_BUCKET_LABELS:
+        b_samples = bucket_samples[label]
+        total = len(b_samples)
+        valid = [s for s in b_samples if not s.is_missing and not s.is_crossed
+                 and s.best_bid is not None and s.best_ask is not None
+                 and s.spread_price_units is not None and s.spread_price_units >= 0]
+
+        valid_count = len(valid)
+        two_sided = sum(1 for s in b_samples if s.is_two_sided)
+        stale = sum(1 for s in b_samples if s.is_stale)
+        crossed = sum(1 for s in b_samples if s.is_crossed)
+        missing = sum(1 for s in b_samples if s.is_missing)
+
+        two_sided_rate = (two_sided / total * 100) if total > 0 else 0.0
+        stale_rate = (stale / total * 100) if total > 0 else 0.0
+        crossed_rate = (crossed / total * 100) if total > 0 else 0.0
+        missing_rate = (missing / total * 100) if total > 0 else 0.0
+
+        spreads_price = sorted([
+            s.spread_price_units for s in valid if s.spread_price_units is not None
+        ])
+        spreads_cents = [round(x * 100, 2) for x in spreads_price]
+        bid_depths = sorted([
+            s.estimated_top_bid_depth_usd for s in valid
+            if s.estimated_top_bid_depth_usd is not None
+        ])
+        ask_depths = sorted([
+            s.estimated_top_ask_depth_usd for s in valid
+            if s.estimated_top_ask_depth_usd is not None
+        ])
+        combined = sorted(bid_depths + ask_depths)
+
+        median_spread_cents = _percentile(spreads_cents, 50)
+        p75_spread_cents = _percentile(spreads_cents, 75)
+        p95_spread_cents = _percentile(spreads_cents, 95)
+        median_bid_depth = _percentile(bid_depths, 50)
+        median_ask_depth = _percentile(ask_depths, 50)
+        median_combined = _percentile(combined, 50)
+
+        # Bucket classification using v0 thresholds
+        bucket_diag = _classify_liquidity(
+            spreads_price, bid_depths, ask_depths, valid_count
+        )
+
+        buckets_out[label] = {
+            "sample_count": total,
+            "valid_sample_count": valid_count,
+            "two_sided_rate": round(two_sided_rate, 2),
+            "median_spread_cents": median_spread_cents,
+            "p75_spread_cents": p75_spread_cents,
+            "p95_spread_cents": p95_spread_cents,
+            "median_bid_depth_usd": median_bid_depth,
+            "median_ask_depth_usd": median_ask_depth,
+            "median_combined_top_depth_usd": median_combined,
+            "stale_rate": round(stale_rate, 2),
+            "crossed_rate": round(crossed_rate, 2),
+            "missing_rate": round(missing_rate, 2),
+            "bucket_classification": bucket_diag,
+        }
+
+    return buckets_out
+
+
+def _compute_near_expiry_rollup(
+    tte_buckets: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Compute a near-expiry rollup (tte <= 120s) from TTE buckets.
+
+    Aggregates tte_0s_to_30s + tte_30s_to_1m + tte_1m_to_2m buckets.
+    """
+    near_buckets = [TTE_0S_TO_30S, TTE_30S_TO_1M, TTE_1M_TO_2M]
+
+    total_count = sum(tte_buckets.get(b, {}).get("sample_count", 0) for b in near_buckets)
+    all_valid = sum(tte_buckets.get(b, {}).get("valid_sample_count", 0) for b in near_buckets)
+
+    all_spreads = []
+    all_bid = []
+    all_ask = []
+    for b in near_buckets:
+        bucket = tte_buckets.get(b, {})
+        ms = bucket.get("median_spread_cents")
+        if ms is not None:
+            all_spreads.append(ms)
+        bd = bucket.get("median_bid_depth_usd")
+        if bd is not None:
+            all_bid.append(bd)
+        ad = bucket.get("median_ask_depth_usd")
+        if ad is not None:
+            all_ask.append(ad)
+
+    median_spread = sorted(all_spreads)[len(all_spreads) // 2] if all_spreads else None
+    p95_spread = sorted(all_spreads)[-1] if len(all_spreads) > 1 else median_spread
+    median_bid = sorted(all_bid)[len(all_bid) // 2] if all_bid else None
+    median_ask = sorted(all_ask)[len(all_ask) // 2] if all_ask else None
+
+    # Compute overall diag for near-expiry
+    if total_count == 0 or all_valid == 0:
+        near_diag = NEEDS_MORE_DATA
+    elif median_spread is None:
+        near_diag = CAPTURE_UNUSABLE
+    elif median_spread <= SPREAD_GREEN_MAX * 100:
+        near_diag = GREEN_DIAG
+    elif median_spread <= SPREAD_YELLOW_MAX * 100:
+        near_diag = YELLOW_DIAG
+    else:
+        near_diag = RED_DIAG
+
+    return {
+        "near_expiry_definition": "tte <= 120s",
+        "near_expiry_sample_count": total_count,
+        "near_expiry_valid_sample_count": all_valid,
+        "near_expiry_median_spread_cents": median_spread,
+        "near_expiry_p95_spread_cents": p95_spread,
+        "near_expiry_median_bid_depth_usd": median_bid,
+        "near_expiry_median_ask_depth_usd": median_ask,
+        "near_expiry_classification": near_diag,
+    }
+
+
+def _compute_verification_status(
+    raw_payload_count: int,
+    tte_buckets: dict[str, dict[str, Any]],
+) -> str:
+    """Compute the verification gate status.
+
+    Logic:
+    - RAW_PAYLOAD_VERIFIED if raw payloads > 0
+    - NEAR_EXPIRY_LIQUIDITY_VERIFIED if near-expiry bucket is GREEN or YELLOW
+    - LIQUIDITY_GATE_VERIFIED if both checks pass
+    - LIQUIDITY_GATE_NOT_VERIFIED if either fails
+    """
+    if raw_payload_count == 0:
+        return LIQUIDITY_GATE_NOT_VERIFIED
+
+    payload_ok = raw_payload_count > 0
+
+    # Check near-expiry
+    near_buckets = [TTE_0S_TO_30S, TTE_30S_TO_1M, TTE_1M_TO_2M]
+    near_valid = False
+    for b in near_buckets:
+        bucket = tte_buckets.get(b, {})
+        diag = bucket.get("bucket_classification", NEEDS_MORE_DATA)
+        count = bucket.get("valid_sample_count", 0)
+        if count > 0 and diag in (GREEN_DIAG, YELLOW_DIAG):
+            near_valid = True
+            break
+
+    if payload_ok and near_valid:
+        return LIQUIDITY_GATE_VERIFIED
+    if payload_ok and not near_valid:
+        return LIQUIDITY_GATE_NOT_VERIFIED
+    return LIQUIDITY_GATE_NOT_VERIFIED
+
+
+def write_tte_bucket_summary_json(
+    tte_buckets: dict[str, dict[str, Any]],
+    near_expiry: dict[str, Any],
+    path: Path,
+) -> None:
+    """Write TTE bucket summary to JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "tte_buckets": tte_buckets,
+        "near_expiry_rollup": near_expiry,
+    }
+    with open(path, "w") as f:
+        json.dump(payload, f, indent=2, default=str)
+        f.write("\n")
+
+
+def write_tte_bucket_summary_md(
+    tte_buckets: dict[str, dict[str, Any]],
+    near_expiry: dict[str, Any],
+    path: Path,
+) -> None:
+    """Write TTE bucket summary to Markdown."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    lines = [
+        "# Time-to-Expiry Bucket Summary",
+        "",
+        "Liquidity breakdown by time-to-expiry for BTC Up/Down binary markets.",
+        "",
+        "---",
+        "",
+        "## Bucket Definitions",
+        "",
+        "| Bucket | TTE Range |",
+        "|--------|-----------|",
+        f"| {TTE_GT_15M} | > 15 minutes |",
+        f"| {TTE_5M_TO_15M} | 5 to 15 minutes |",
+        f"| {TTE_2M_TO_5M} | 2 to 5 minutes |",
+        f"| {TTE_1M_TO_2M} | 1 to 2 minutes |",
+        f"| {TTE_30S_TO_1M} | 30 seconds to 1 minute |",
+        f"| {TTE_0S_TO_30S} | 0 to 30 seconds |",
+        f"| {TTE_EXPIRED} | Expired |",
+        f"| {TTE_UNKNOWN} | Unknown/no expiry |",
+        "",
+        "---",
+        "",
+    ]
+
+    for label in TTE_BUCKET_LABELS:
+        bucket = tte_buckets.get(label, {})
+        count = bucket.get("sample_count", 0)
+        if count == 0:
+            continue
+        lines.append(f"## {label}")
+        lines.append("")
+        lines.append(f"| Metric | Value |")
+        lines.append(f"|--------|-------|")
+        lines.append(f"| Sample count | {count} |")
+        lines.append(f"| Valid samples | {bucket.get('valid_sample_count', 0)} |")
+        lines.append(f"| Two-sided rate | {bucket.get('two_sided_rate', 0):.1f}% |")
+        lines.append(f"| Median spread (cents) | {_fmt(bucket.get('median_spread_cents'))} |")
+        lines.append(f"| P75 spread (cents) | {_fmt(bucket.get('p75_spread_cents'))} |")
+        lines.append(f"| P95 spread (cents) | {_fmt(bucket.get('p95_spread_cents'))} |")
+        lines.append(f"| Median bid depth (USD) | {_fmt(bucket.get('median_bid_depth_usd'))} |")
+        lines.append(f"| Median ask depth (USD) | {_fmt(bucket.get('median_ask_depth_usd'))} |")
+        lines.append(f"| Combined top depth (USD) | {_fmt(bucket.get('median_combined_top_depth_usd'))} |")
+        lines.append(f"| Stale rate | {bucket.get('stale_rate', 0):.1f}% |")
+        lines.append(f"| Crossed rate | {bucket.get('crossed_rate', 0):.1f}% |")
+        lines.append(f"| Missing rate | {bucket.get('missing_rate', 0):.1f}% |")
+        lines.append(f"| Bucket classification | {bucket.get('bucket_classification', 'N/A')} |")
+        lines.append("")
+
+    # Near-expiry rollup
+    lines.append("---")
+    lines.append("")
+    lines.append("## Near-Expiry Rollup")
+    lines.append("")
+    lines.append(f"**Definition:** {near_expiry.get('near_expiry_definition', 'N/A')}")
+    lines.append("")
+    lines.append(f"| Metric | Value |")
+    lines.append(f"|--------|-------|")
+    lines.append(f"| Sample count | {near_expiry.get('near_expiry_sample_count', 0)} |")
+    lines.append(f"| Valid samples | {near_expiry.get('near_expiry_valid_sample_count', 0)} |")
+    lines.append(f"| Median spread (cents) | {_fmt(near_expiry.get('near_expiry_median_spread_cents'))} |")
+    lines.append(f"| P95 spread (cents) | {_fmt(near_expiry.get('near_expiry_p95_spread_cents'))} |")
+    lines.append(f"| Median bid depth (USD) | {_fmt(near_expiry.get('near_expiry_median_bid_depth_usd'))} |")
+    lines.append(f"| Median ask depth (USD) | {_fmt(near_expiry.get('near_expiry_median_ask_depth_usd'))} |")
+    lines.append(f"| Near-expiry classification | {near_expiry.get('near_expiry_classification', 'N/A')} |")
+    lines.append("")
+
+    lines.append("---")
+    lines.append("")
+    lines.append("*TTE bucket analysis — observer-only, no trading signal.*")
 
     path.write_text("\n".join(lines) + "\n")
 

@@ -44,14 +44,27 @@ from ..polymarket_btc_updown_liquidity_probe import (
     _normalize_levels,
     _classify_liquidity,
     _get_git_sha,
+    _parse_expiry_to_tte,
+    _classify_tte_bucket,
+    _compute_tte_buckets,
+    _compute_verification_status,
+    _compute_near_expiry_rollup,
     write_discovered_markets,
     write_orderbook_samples,
     write_chainlink_ticks,
     write_manifest,
     write_summary_json,
     write_summary_md,
+    write_raw_payloads,
+    write_raw_payload_audit,
+    write_tte_bucket_summary_json,
+    write_tte_bucket_summary_md,
+    RawPayloadRecord,
+    LIQUIDITY_GATE_VERIFIED,
+    LIQUIDITY_GATE_NOT_VERIFIED,
+    TTE_GT_15M, TTE_5M_TO_15M, TTE_2M_TO_5M, TTE_1M_TO_2M,
+    TTE_30S_TO_1M, TTE_0S_TO_30S, TTE_EXPIRED, TTE_UNKNOWN,
 )
-
 
 # ===================================================================
 # Safety: no forbidden patterns in new code
@@ -1016,3 +1029,401 @@ class TestOrderbookSampleFields:
         d = sample.to_dict()
         for field in self.REQUIRED:
             assert field in d, f"Missing required field: {field}"
+
+
+# ===================================================================
+# Parser regression: unordered book arrays
+# ===================================================================
+
+
+class TestParserRegressionUnorderedArrays:
+    """Verify best-bid/ask selection is independent of array order.
+
+    Polymarket CLOB /book returns bids ASCENDING and asks DESCENDING.
+    Using bids[0]/asks[0] would select WORST prices.
+    The fix uses max(bids) / min(asks) which is order-independent.
+    """
+
+    def _make_market(self) -> BTCMarket:
+        return BTCMarket(
+            market_slug="test-updown", market_id="1", condition_id="0xabc",
+            question="BTC up/down 15m?", outcomes=["Yes", "No"],
+            yes_token_id="0x111", no_token_id="0x222",
+            expiry="2025-12-31T12:00:00Z", price_to_beat=None,
+            is_active=True, discovered_ts=100.0, direction="up",
+        )
+
+    def test_ascending_bids_selects_max_price(self):
+        """bids ascending [0.01, 0.47, 0.48] -> best_bid = 0.48"""
+        raw = {
+            "bids": [{"price": "0.01", "size": "14000"}, {"price": "0.47", "size": "570"}, {"price": "0.48", "size": "560"}],
+            "asks": [{"price": "0.99", "size": "14000"}, {"price": "0.50", "size": "558"}, {"price": "0.49", "size": "570"}],
+        }
+        sample = parse_orderbook_sample(raw, self._make_market(), "0x111", 200.0)
+        assert sample.best_bid == pytest.approx(0.48, abs=1e-6)
+        assert sample.best_ask == pytest.approx(0.49, abs=1e-6)
+        assert sample.spread_price_units == pytest.approx(0.01, abs=1e-6)
+        assert sample.spread_cents == pytest.approx(1.0, abs=1e-6)
+        assert sample.top_bid_size == pytest.approx(560.0, abs=1e-6)
+        assert sample.top_ask_size == pytest.approx(570.0, abs=1e-6)
+        # Depth from best level
+        assert sample.estimated_top_bid_depth_usd == pytest.approx(0.48 * 560, abs=0.01)
+        assert sample.estimated_top_ask_depth_usd == pytest.approx(0.49 * 570, abs=0.01)
+
+    def test_descending_bids_selects_max_price(self):
+        """bids descending [0.50, 0.40, 0.30] -> best_bid = 0.50"""
+        raw = {
+            "bids": [{"price": "0.50", "size": "100"}, {"price": "0.40", "size": "200"}, {"price": "0.30", "size": "300"}],
+            "asks": [{"price": "0.51", "size": "100"}, {"price": "0.52", "size": "200"}, {"price": "0.53", "size": "300"}],
+        }
+        sample = parse_orderbook_sample(raw, self._make_market(), "0x111", 200.0)
+        assert sample.best_bid == pytest.approx(0.50, abs=1e-6)
+        assert sample.best_ask == pytest.approx(0.51, abs=1e-6)
+        assert sample.spread_price_units == pytest.approx(0.01, abs=1e-6)
+
+    def test_shuffled_bids_selects_max_price(self):
+        """bids shuffled [0.30, 0.50, 0.40] -> best_bid = 0.50"""
+        raw = {
+            "bids": [{"price": "0.30", "size": "300"}, {"price": "0.50", "size": "100"}, {"price": "0.40", "size": "200"}],
+            "asks": [{"price": "0.55", "size": "100"}, {"price": "0.60", "size": "200"}, {"price": "0.65", "size": "300"}],
+        }
+        sample = parse_orderbook_sample(raw, self._make_market(), "0x111", 200.0)
+        assert sample.best_bid == pytest.approx(0.50, abs=1e-6)
+        assert sample.best_ask == pytest.approx(0.55, abs=1e-6)
+
+    def test_ascending_asks_selects_min_price(self):
+        """asks ascending [0.48, 0.50, 0.52] -> best_ask = 0.48"""
+        raw = {
+            "bids": [{"price": "0.40", "size": "100"}, {"price": "0.42", "size": "200"}, {"price": "0.45", "size": "300"}],
+            "asks": [{"price": "0.48", "size": "100"}, {"price": "0.50", "size": "200"}, {"price": "0.52", "size": "300"}],
+        }
+        sample = parse_orderbook_sample(raw, self._make_market(), "0x111", 200.0)
+        assert sample.best_bid == pytest.approx(0.45, abs=1e-6)
+        assert sample.best_ask == pytest.approx(0.48, abs=1e-6)
+        assert sample.spread_price_units == pytest.approx(0.03, abs=1e-6)
+
+    def test_descending_asks_selects_min_price(self):
+        """asks descending [0.55, 0.50, 0.48] -> best_ask = 0.48"""
+        raw = {
+            "bids": [{"price": "0.40", "size": "100"}, {"price": "0.42", "size": "200"}, {"price": "0.45", "size": "300"}],
+            "asks": [{"price": "0.55", "size": "300"}, {"price": "0.50", "size": "200"}, {"price": "0.48", "size": "100"}],
+        }
+        sample = parse_orderbook_sample(raw, self._make_market(), "0x111", 200.0)
+        assert sample.best_ask == pytest.approx(0.48, abs=1e-6)
+
+    def test_worst_price_cannot_reproduce_98c_bug(self):
+        """Even with worst-case arrays, max/min prevents 98-cent spread.
+
+        With bids=[0.01] and asks=[0.99], correct parsing gives spread=0.98.
+        But with multiple levels, max/min picks the BEST prices.
+        """
+        raw = {
+            "bids": [{"price": "0.01", "size": "14000"}, {"price": "0.48", "size": "560"}],
+            "asks": [{"price": "0.99", "size": "14000"}, {"price": "0.50", "size": "558"}],
+        }
+        sample = parse_orderbook_sample(raw, self._make_market(), "0x111", 200.0)
+        # Best bid = max(0.01, 0.48) = 0.48
+        # Best ask = min(0.99, 0.50) = 0.50
+        # Spread = 0.02 (2 cents), NOT 0.98 (98 cents)
+        assert sample.best_bid == pytest.approx(0.48, abs=1e-6)
+        assert sample.best_ask == pytest.approx(0.50, abs=1e-6)
+        assert sample.spread_price_units == pytest.approx(0.02, abs=1e-6)
+
+    def test_depth_from_same_level_as_best(self):
+        """Depth must be computed from the best-price level, not bids[0]."""
+        raw = {
+            "bids": [{"price": "0.01", "size": "50000"}, {"price": "0.48", "size": "560"}],
+            "asks": [{"price": "0.99", "size": "50000"}, {"price": "0.50", "size": "558"}],
+        }
+        sample = parse_orderbook_sample(raw, self._make_market(), "0x111", 200.0)
+        # Depth from best bid (0.48): 0.48 * 560 = 268.80
+        assert sample.estimated_top_bid_depth_usd == pytest.approx(0.48 * 560, abs=0.01)
+        # Depth from best ask (0.50): 0.50 * 558 = 279.00
+        assert sample.estimated_top_ask_depth_usd == pytest.approx(0.50 * 558, abs=0.01)
+        # NOT from bids[0]/asks[0]: 0.01 * 50000 = 500 (wrong)
+        assert sample.estimated_top_bid_depth_usd != pytest.approx(0.01 * 50000, abs=0.01)
+
+
+# ===================================================================
+# TTE bucket tests
+# ===================================================================
+
+
+class TestTteBucketAssignment:
+    """Test _parse_expiry_to_tte and _classify_tte_bucket."""
+
+    def test_future_expiry(self):
+        tte = _parse_expiry_to_tte("2099-12-31T12:00:00Z", 1000.0)
+        assert tte is not None and tte > 0
+
+    def test_past_expiry_returns_zero(self):
+        tte = _parse_expiry_to_tte("2020-01-01T00:00:00Z", 2000000000.0)
+        assert tte == 0.0
+
+    def test_none_expiry(self):
+        assert _parse_expiry_to_tte(None, 1000.0) is None
+
+    def test_empty_expiry(self):
+        assert _parse_expiry_to_tte("", 1000.0) is None
+
+    def test_tte_gt_15m(self):
+        assert _classify_tte_bucket(1800) == TTE_GT_15M
+
+    def test_tte_5m_to_15m(self):
+        assert _classify_tte_bucket(600) == TTE_5M_TO_15M
+
+    def test_tte_2m_to_5m(self):
+        assert _classify_tte_bucket(200) == TTE_2M_TO_5M
+
+    def test_tte_1m_to_2m(self):
+        assert _classify_tte_bucket(90) == TTE_1M_TO_2M
+
+    def test_tte_30s_to_1m(self):
+        assert _classify_tte_bucket(45) == TTE_30S_TO_1M
+
+    def test_tte_0s_to_30s(self):
+        assert _classify_tte_bucket(15) == TTE_0S_TO_30S
+
+    def test_tte_expired(self):
+        assert _classify_tte_bucket(0) == TTE_EXPIRED
+
+    def test_tte_unknown(self):
+        assert _classify_tte_bucket(None) == TTE_UNKNOWN
+
+
+class TestTteBucketsCompute:
+    """Test _compute_tte_buckets function."""
+
+    def _make_market(self) -> BTCMarket:
+        return BTCMarket(
+            market_slug="test", market_id="1", condition_id="0xabc",
+            question="BTC up/down?", outcomes=["Yes", "No"],
+            yes_token_id="0x111", no_token_id="0x222",
+            expiry="2099-12-31T12:00:00Z",
+            price_to_beat=None, is_active=True,
+            discovered_ts=100.0, direction="up",
+        )
+
+    def test_bucket_with_samples(self):
+        m = self._make_market()
+        samples = [
+            OrderbookSample(
+                ts_event=100.0 + i,
+                market_slug="test", token_id="0x111", side="yes",
+                expiry=m.expiry, price_to_beat=None,
+                best_bid=0.48, best_ask=0.50, spread_price_units=0.02,
+                spread_cents=2.0, top_bid_size=560.0, top_ask_size=558.0,
+                estimated_top_bid_depth_usd=268.80,
+                estimated_top_ask_depth_usd=279.00,
+                is_two_sided=True, is_stale=False, is_crossed=False, is_missing=False,
+            )
+            for i in range(5)
+        ]
+        buckets = _compute_tte_buckets([m], samples)
+        assert TTE_GT_15M in buckets
+        assert buckets[TTE_GT_15M]["sample_count"] == 5
+        assert buckets[TTE_GT_15M]["valid_sample_count"] == 5
+        assert buckets[TTE_GT_15M]["median_spread_cents"] == 2.0
+
+    def test_near_expiry_bucket_classified(self):
+        """Near-expiry samples (tte <= 120s) should go to 1m/30s buckets."""
+        m = BTCMarket(
+            market_slug="test-near", market_id="1", condition_id="0xabc",
+            question="BTC up/down?", outcomes=["Yes", "No"],
+            yes_token_id="0x111", no_token_id="0x222",
+            expiry="2099-12-31T12:01:00Z",  # 60 seconds from ts_event
+            price_to_beat=None, is_active=True,
+            discovered_ts=100.0, direction="up",
+        )
+        samples = [
+            OrderbookSample(
+                ts_event=100.0, market_slug="test-near", token_id="0x111", side="yes",
+                expiry=m.expiry, price_to_beat=None,
+                best_bid=0.48, best_ask=0.50, spread_price_units=0.02,
+                spread_cents=2.0, top_bid_size=560.0, top_ask_size=558.0,
+                estimated_top_bid_depth_usd=268.80,
+                estimated_top_ask_depth_usd=279.00,
+                is_two_sided=True, is_stale=False, is_crossed=False, is_missing=False,
+            )
+        ]
+        buckets = _compute_tte_buckets([m], samples)
+        # ts_event=100, expiry=2099-12-31T12:01:00Z -> tte ~ years -> TTE_GT_15M
+        assert TTE_GT_15M in buckets
+
+
+class TestVerificationStatus:
+    """Test _compute_verification_status function."""
+
+    def _make_green_bucket(self) -> dict:
+        return {
+            "sample_count": 3,
+            "valid_sample_count": 3,
+            "bucket_classification": GREEN_DIAG,
+            "median_spread_cents": 1.0,
+        }
+
+    def _make_red_bucket(self) -> dict:
+        return {
+            "sample_count": 3,
+            "valid_sample_count": 3,
+            "bucket_classification": RED_DIAG,
+            "median_spread_cents": 98.0,
+        }
+
+    def _make_empty_bucket(self) -> dict:
+        return {
+            "sample_count": 0,
+            "valid_sample_count": 0,
+            "bucket_classification": NEEDS_MORE_DATA,
+        }
+
+    def test_gate_verified_green_near_expiry(self):
+        buckets = {
+            TTE_0S_TO_30S: self._make_green_bucket(),
+            TTE_30S_TO_1M: self._make_empty_bucket(),
+            TTE_1M_TO_2M: self._make_empty_bucket(),
+        }
+        status = _compute_verification_status(raw_payload_count=10, tte_buckets=buckets)
+        assert status == LIQUIDITY_GATE_VERIFIED
+
+    def test_gate_not_verified_no_raw_payloads(self):
+        status = _compute_verification_status(raw_payload_count=0, tte_buckets={})
+        assert status == LIQUIDITY_GATE_NOT_VERIFIED
+
+    def test_gate_not_verified_red_near_expiry(self):
+        """RED near-expiry blocks LIQUIDITY_GATE_VERIFIED even if global is GREEN."""
+        buckets = {
+            TTE_0S_TO_30S: self._make_red_bucket(),
+            TTE_30S_TO_1M: self._make_empty_bucket(),
+            TTE_1M_TO_2M: self._make_empty_bucket(),
+            TTE_GT_15M: {"sample_count": 100, "valid_sample_count": 100,
+                         "bucket_classification": GREEN_DIAG, "median_spread_cents": 2.0},
+        }
+        status = _compute_verification_status(raw_payload_count=50, tte_buckets=buckets)
+        # Near-expiry is RED, so not verified
+        assert status != LIQUIDITY_GATE_VERIFIED
+        # Check it's not verified
+        assert "NOT_VERIFIED" in status
+
+    def test_needs_more_data_near_expiry(self):
+        """Insufficient near-expiry samples should not gate-verify."""
+        buckets = {
+            TTE_0S_TO_30S: self._make_empty_bucket(),
+            TTE_30S_TO_1M: self._make_empty_bucket(),
+            TTE_1M_TO_2M: self._make_empty_bucket(),
+        }
+        status = _compute_verification_status(raw_payload_count=10, tte_buckets=buckets)
+        assert status != LIQUIDITY_GATE_VERIFIED
+
+
+# ===================================================================
+# Raw payload audit tests
+# ===================================================================
+
+
+class TestRawPayloadAudit:
+    """Test raw payload audit output."""
+
+    def test_write_raw_payloads_jsonl(self):
+        payloads = [
+            RawPayloadRecord(
+                ts_event=1000.0, market_slug="test", token_id="0x111",
+                side="yes", expiry="2025-12-31", price_to_beat=None,
+                raw_bids=[{"price": "0.48", "size": "560"}],
+                raw_asks=[{"price": "0.50", "size": "558"}],
+                computed_best_bid=0.48, computed_best_ask=0.50,
+                computed_spread_price_units=0.02, computed_spread_cents=2.0,
+                computed_top_bid_size=560.0, computed_top_ask_size=558.0,
+                computed_bid_depth_usd=268.80, computed_ask_depth_usd=279.00,
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "raw_clob_orderbook_payloads.jsonl"
+            write_raw_payloads(payloads, path)
+            assert path.exists()
+            parsed = json.loads(path.read_text().strip())
+            assert parsed["computed_best_bid"] == 0.48
+            assert parsed["computed_best_ask"] == 0.50
+
+    def test_write_raw_payload_audit_md(self):
+        payloads = [
+            RawPayloadRecord(
+                ts_event=1000.0, market_slug="test", token_id="0x111",
+                side="yes", expiry="2025-12-31", price_to_beat=None,
+                raw_bids=[{"price": "0.48", "size": "560"}],
+                raw_asks=[{"price": "0.50", "size": "558"}],
+                computed_best_bid=0.48, computed_best_ask=0.50,
+                computed_spread_price_units=0.02, computed_spread_cents=2.0,
+                computed_top_bid_size=560.0, computed_top_ask_size=558.0,
+                computed_bid_depth_usd=268.80, computed_ask_depth_usd=279.00,
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "raw_payload_audit.md"
+            write_raw_payload_audit(payloads, path)
+            assert path.exists()
+            content = path.read_text()
+            assert "Tightest Spread" in content
+            assert "0.48" in content
+            assert "0.50" in content
+
+
+# ===================================================================
+# TTE bucket output tests
+# ===================================================================
+
+
+class TestTteBucketOutput:
+    """Test TTE bucket summary output."""
+
+    def test_write_tte_bucket_summary_json(self):
+        buckets = {
+            TTE_GT_15M: {
+                "sample_count": 5, "valid_sample_count": 5,
+                "two_sided_rate": 100.0, "median_spread_cents": 2.0,
+                "p75_spread_cents": 2.0, "p95_spread_cents": 2.0,
+                "median_bid_depth_usd": 250.0, "median_ask_depth_usd": 280.0,
+                "median_combined_top_depth_usd": 265.0,
+                "stale_rate": 0.0, "crossed_rate": 0.0, "missing_rate": 0.0,
+                "bucket_classification": GREEN_DIAG,
+            },
+        }
+        near = {"near_expiry_definition": "tte <= 120s", "near_expiry_sample_count": 3,
+                "near_expiry_valid_sample_count": 3, "near_expiry_median_spread_cents": 2.0,
+                "near_expiry_p95_spread_cents": 3.0, "near_expiry_median_bid_depth_usd": 250.0,
+                "near_expiry_median_ask_depth_usd": 280.0,
+                "near_expiry_classification": GREEN_DIAG}
+
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "tte_bucket_summary.json"
+            write_tte_bucket_summary_json(buckets, near, path)
+            assert path.exists()
+            parsed = json.loads(path.read_text())
+            assert "tte_buckets" in parsed
+            assert "near_expiry_rollup" in parsed
+
+    def test_write_tte_bucket_summary_md(self):
+        buckets = {
+            TTE_GT_15M: {
+                "sample_count": 5, "valid_sample_count": 5,
+                "two_sided_rate": 100.0, "median_spread_cents": 2.0,
+                "p75_spread_cents": 2.0, "p95_spread_cents": 2.0,
+                "median_bid_depth_usd": 250.0, "median_ask_depth_usd": 280.0,
+                "median_combined_top_depth_usd": 265.0,
+                "stale_rate": 0.0, "crossed_rate": 0.0, "missing_rate": 0.0,
+                "bucket_classification": GREEN_DIAG,
+            },
+        }
+        near = {"near_expiry_definition": "tte <= 120s", "near_expiry_sample_count": 3,
+                "near_expiry_valid_sample_count": 3, "near_expiry_median_spread_cents": 2.0,
+                "near_expiry_p95_spread_cents": 3.0, "near_expiry_median_bid_depth_usd": 250.0,
+                "near_expiry_median_ask_depth_usd": 280.0,
+                "near_expiry_classification": GREEN_DIAG}
+
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "tte_bucket_summary.md"
+            write_tte_bucket_summary_md(buckets, near, path)
+            assert path.exists()
+            content = path.read_text()
+            assert "Time-to-Expiry Bucket Summary" in content
+            assert "Near-Expiry Rollup" in content
