@@ -161,7 +161,7 @@ async def observe_loop(
                 if diag.maker_gate_pass:
                     maker_gate_passes += 1
                     quote_count += 1
-                    pass_estimates.record_quote(
+                    estimator.record_quote(
                         condition_id=diag.condition_id,
                         market_slug=diag.market_slug,
                         side="YES",
@@ -180,7 +180,7 @@ async def observe_loop(
             await asyncio.sleep(sleep_time)
 
     # Finalize
-    pass_summary = pass_estimates.finalize(quote_count)
+    pass_summary = estimator.finalize(quote_count)
     run_duration = time.time() - start_time
 
     # Generate summary
