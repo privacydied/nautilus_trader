@@ -49,16 +49,7 @@ The `UP ask + DOWN ask + fees + buffers < 1.00` relationship on same-condition P
 - Non-dust opportunities exist
 - Base quote size pessimistic fills = 0 or economically dust
 - Net shadow harvest ≤ 0
-- Size-ladder diagnostic (5/10/25/50/100) confirmed zero fills at all tested sizes
-
-### FROZEN_EDGE_ONLY_AT_DUST_SIZE
-- Trade evidence READY
-- Repeated-window gates met
-- Non-dust opportunities exist at base size
-- Only base quote size pessimistic fills are positive
-- Smaller quote sizes produce zero or negative net harvest
-- Net shadow harvest positive at base size only
-- Edge does not survive the full size range
+- Size-ladder replay blocked by schema (REPLAY_SCHEMA_INSUFFICIENT) — cumulative_fillable_volume not stored in artifacts
 
 ### CANDIDATE_FOR_LONGER_OBSERVATION
 - Base quote size pessimistic paired fills positive

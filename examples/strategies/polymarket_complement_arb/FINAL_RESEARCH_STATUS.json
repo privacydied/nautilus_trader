@@ -1,49 +1,85 @@
 {
   "strategy": "polymarket_complement_arb",
-  "status": "FROZEN_NO_PESSIMISTIC_PAIRED_FILL_EDGE",
-  "status_applies_to": "base 100-share pessimistic maker execution",
+  "base_status": "FROZEN_NO_PESSIMISTIC_PAIRED_FILL_EDGE",
+  "base_status_applies_to": "base 100-share pessimistic maker execution",
   "is_rejected": false,
   "is_candidate": false,
   "can_trade_live": false,
-  "reason": "Repeated public-data crypto Up/Down campaigns found theoretical complement opportunities but zero pessimistic paired fills at base 100-share quote size across 7 separated windows with trade evidence READY. A subsequent size-ladder diagnostic confirmed zero pessimistic paired fills at all tested sizes (5, 10, 25, 50, 100). No active complement-able markets found at diagnostic closeout time — the original campaign markets have expired and no new crypto Up/Down duration markets are currently active.",
   "failure_mode": "queue_position_execution_failure",
+  "base_reason": "Repeated public-data crypto Up/Down campaigns found theoretical complement opportunities but zero pessimistic paired fills at base 100-share quote size across 7 separated windows with trade evidence READY. This is a queue-position/execution failure under current assumptions, not a mathematical rejection of complement arbitrage.",
   "base_quote_size": 100,
   "fee_formula": "shares * feeRate * price * (1 - price)",
   "fee_rate_source": "condition metadata (Gamma API feeSchedule.rate)",
   "maker_fee_assumption": "0 (standard Polymarket maker-rebate structure, treated as zero for conservative assumption)",
   "trade_evidence_status": "READY",
+
+  "size_ladder_status": "SIZE_LADDER_INCONCLUSIVE",
+  "size_ladder_replay_status": "REPLAY_SCHEMA_INSUFFICIENT",
+  "size_ladder_fresh_capture_status": "INSUFFICIENT_FRESH_MARKETS",
+  "size_ladder_sample_status": "BELOW_SUFFICIENCY_GATES",
+  "size_ladder_missing_replay_fields": [
+    "cumulative_fillable_volume"
+  ],
+  "size_ladder_note": "Replay over the original campaign was impossible because raw cumulative fillable-volume evidence was not stored. Fresh capture was insufficient because the original crypto Up/Down markets had expired and no equivalent active duration universe was available. The 60-second fallback run is recorded as a diagnostic stub, not as sufficient ladder evidence. The distinction between no fills at any size and edge only at dust size remains formally open.",
+  "future_replay_schema_required_fields": [
+    "depth_ahead",
+    "cumulative_fillable_volume",
+    "at_or_through_trade_volume",
+    "trade_timestamps",
+    "trade_prices",
+    "trade_sizes",
+    "trade_sides",
+    "quote_timestamp",
+    "quote_price",
+    "quote_size",
+    "token_id",
+    "condition_id"
+  ],
+
   "campaign_phases": [
     {
-      "phase": "original_closeout",
-      "description": "Precommitted repeated-window closeout across 6 windows on BTC/ETH",
+      "phase": "base_closeout",
+      "type": "repeated_window_closeout",
+      "description": "Precommitted repeated-window closeout across 6 separated windows on BTC and ETH crypto Up/Down duration markets (5m, 15m, 4h, daily). Base quote size 100 shares.",
       "windows": 6,
       "detected": 1532,
       "non_dust": 1098,
-      "pess_fills": 0
+      "pess_fills": 0,
+      "trade_evidence": "READY",
+      "result": "FROZEN_NO_PESSIMISTIC_PAIRED_FILL_EDGE"
     },
     {
       "phase": "hourly_addendum",
-      "description": "7th window resolving the 1h slug discovery gap",
+      "type": "confirmatory_addendum",
+      "description": "Post-closeout addendum testing the previously missing 1h slug family. Confirmed the same zero-fill pattern. Confirmatory only — does not change the base verdict.",
       "windows": 1,
       "detected": 24,
       "non_dust": 57,
-      "pess_fills": 0
+      "pess_fills": 0,
+      "trade_evidence": "READY",
+      "result": "SAME_ZERO_FILL_PATTERN"
     },
     {
-      "phase": "size_ladder_diagnostic",
-      "description": "Post-campaign diagnostic: replay schema check (REPLAY_SCHEMA_INSUFFICIENT) followed by fresh bounded capture at ladder sizes [5, 10, 25, 50, 100]. All sizes produced zero pessimistic paired fills. All opportunities classified as dust (net edge below economic thresholds or insufficient notional).",
+      "phase": "schema_check",
+      "type": "replay_schema_assessment",
+      "description": "Inspected existing shadow_opportunities.jsonl for raw queue evidence. Found critical missing field: cumulative_fillable_volume per leg. Replay over original campaign is arithmetically impossible.",
+      "result": "REPLAY_SCHEMA_INSUFFICIENT",
+      "missing_fields": ["cumulative_fillable_volume"],
+      "output_files": ["size_ladder_schema_check.json", "size_ladder_schema_check.md"]
+    },
+    {
+      "phase": "size_ladder_stub",
+      "type": "fresh_diagnostic_capture",
+      "description": "60-second fallback diagnostic capture on the only remaining active market (bitcoin-up-or-down-on-may-17-2026). 6 opportunities, all classified dust at every ladder size [5, 10, 25, 50, 100]. Sample is below the campaign's own sufficiency gates. Original crypto Up/Down duration universe had expired.",
       "windows": 1,
       "detected": 6,
       "non_dust": 0,
       "pess_fills": 0,
-      "replay_verdict": "REPLAY_SCHEMA_INSUFFICIENT",
-      "schema_diagnostic": "size_ladder_schema_check.json",
-      "diagnostic_md": "size_ladder_schema_check.md",
-      "diagnostic_script": "run_size_ladder_diagnostic.py",
-      "diagnostic_result_dir": "reports/polymarket_complement_arb_size_ladder_closeout/run_20260516_191925_938667",
-      "ladder_summary_path": "reports/polymarket_complement_arb_size_ladder_closeout/run_20260516_191925_938667/ladder_summary.json"
+      "result": "BELOW_SUFFICIENCY_GATES",
+      "note": "Does not settle the size-ladder question. Insufficient sample from an expired-universe fallback market."
     }
   ],
+
   "total_separated_windows": 7,
   "total_detected_opportunities": 1565,
   "total_non_dust_opportunities": 1155,
@@ -67,12 +103,10 @@
   "durations_tested": ["5m", "15m", "1h", "4h", "daily"],
   "durations_not_found": [],
   "limitations": [
-    "Size ladder (5/10/25/50 shares) was implemented as a fresh diagnostic capture, not replay — existing artifacts lack cumulative_fillable_volume per leg",
-    "Resolution truncation fields exist in ShadowOpportunity but runner does not fully populate them",
     "Frozen status applies to base 100-share pessimistic maker execution only",
-    "Size ladder diagnostic found zero pessimistic paired fills at all tested sizes (5/10/25/50/100) — the freeze deepens across the size spectrum",
-    "All ladder-size opportunities were classified as dust — no quote size produced economic non-dust opportunities at the time of the diagnostic",
-    "No active complement-able crypto Up/Down duration markets existed at diagnostic closeout time — the original campaign markets have expired and no replacements are available",
+    "Size-ladder replay was blocked by missing cumulative_fillable_volume in original artifacts",
+    "Size-ladder fresh capture was blocked by expired original markets — insufficient equivalent active market availability",
+    "The distinction between no fills at any size and edge only at dust size remains formally open",
     "This does not prove complement arbitrage is mathematically impossible",
     "This does not justify live trading",
     "Public data-api trade feed does not support per-asset server-side filtering (uses market=<conditionId>)",
@@ -86,6 +120,7 @@
     "size_ladder_schema_check.json",
     "size_ladder_schema_check.md",
     "config.py",
-    "run_size_ladder_diagnostic.py"
+    "run_size_ladder_diagnostic.py",
+    "shadow_execution.py"
   ]
 }
