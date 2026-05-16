@@ -51,12 +51,21 @@ GAMMA_API_BASE = "https://gamma-api.polymarket.com"
 CLOB_API_BASE = "https://clob.polymarket.com"
 DATA_API_BASE = "https://data-api.polymarket.com"
 USER_AGENT = "nautilus-complement-shadow-observer/1.0"
+TRADE_FETCH_LIMIT = 1000  # data-api max is 1000 trades per call (ignores asset filter—global feed)
+
+TRADE_EVIDENCE_READY = "TRADE_EVIDENCE_READY"
+TRADE_EVIDENCE_EMPTY = "TRADE_EVIDENCE_EMPTY"
+TRADE_EVIDENCE_JOIN_FAILED = "TRADE_EVIDENCE_JOIN_FAILED"
+TRADE_EVIDENCE_ENDPOINT_ERROR = "TRADE_EVIDENCE_ENDPOINT_ERROR"
+TRADE_EVIDENCE_TIME_WINDOW_MISMATCH = "TRADE_EVIDENCE_TIME_WINDOW_MISMATCH"
+TRADE_EVIDENCE_IDENTIFIER_MISMATCH = "TRADE_EVIDENCE_IDENTIFIER_MISMATCH"
+PUBLIC_TRADE_EVIDENCE_INSUFFICIENT = "PUBLIC_TRADE_EVIDENCE_INSUFFICIENT"
 
 
 class PublicDataClient(Protocol):
     async def discover_markets(self, limit: int) -> list[dict[str, Any]]: ...
     async def fetch_book(self, token_id: str) -> BookSnapshot | None: ...
-    async def fetch_trades(self, token_id: str, after_ts: int | None = None, limit: int = 500) -> list[dict[str, Any]]: ...
+    async def fetch_trades(self, after_ts: int | None = None, limit: int = TRADE_FETCH_LIMIT) -> list[dict[str, Any]]: ...
 
 
 def _get_json(url: str, params: dict[str, Any] | None = None, timeout: float = 15.0) -> Any:
@@ -106,19 +115,30 @@ class UrlPublicDataClient:
             timestamp_ms=time.time() * 1000,
         )
 
-    async def fetch_trades(self, token_id: str, after_ts: int | None = None, limit: int = 500) -> list[dict[str, Any]]:
+    async def fetch_trades(self, after_ts: int | None = None, limit: int = TRADE_FETCH_LIMIT) -> list[dict[str, Any]]:
+        """
+        Fetch latest trades from the public data-api global trade feed.
+
+        NOTE: The data-api ``/trades`` endpoint does NOT support per-asset or
+        per-market server-side filtering. The ``asset``, ``token_id``,
+        ``conditionId``, and ``slug`` query parameters are all silently ignored.
+        This endpoint returns the latest N global trades (max 1000). Client-side
+        filtering by ``asset`` (CLOB token ID) is required for per-token lookup.
+
+        Use ``after_ts`` (Unix seconds) to fetch only trades newer than a known
+        timestamp for incremental accumulation.
+        """
         params: dict[str, Any] = {"limit": limit}
-        # data-api currently tolerates unknown filters, so filter client-side too.
         if after_ts is not None:
             params["after"] = after_ts
         try:
             data = await asyncio.to_thread(_get_json, f"{DATA_API_BASE}/trades", params, 15.0)
         except Exception as exc:
-            logger.warning("trade fetch failed token=%s error=%s", token_id, exc)
+            logger.warning("trade fetch failed error=%s", exc)
             return []
         if isinstance(data, dict):
             data = data.get("trades") or data.get("data") or []
-        return [row for row in data if str(row.get("asset") or row.get("token_id") or row.get("market") or "") == str(token_id)]
+        return list(data)
 
 
 class InMemoryPublicDataClient:
@@ -140,11 +160,15 @@ class InMemoryPublicDataClient:
             return None
         return values[min(calls, len(values) - 1)]
 
-    async def fetch_trades(self, token_id: str, after_ts: int | None = None, limit: int = 500) -> list[dict[str, Any]]:
-        rows = self._trades.get(token_id, [])
+    async def fetch_trades(self, after_ts: int | None = None, limit: int = 1000) -> list[dict[str, Any]]:
+        """Return all stored trades across all tokens (global feed mock)."""
+        all_rows: list[dict[str, Any]] = []
+        for rows in self._trades.values():
+            all_rows.extend(rows)
         if after_ts is None:
-            return list(rows)
-        return [row for row in rows if _trade_ts_ns(row) >= after_ts * 1_000_000_000]
+            return all_rows
+        after_ns = after_ts * 1_000_000_000
+        return [row for row in all_rows if _trade_ts_ns(row) >= after_ns]
 
 
 def git_sha() -> str:
@@ -265,6 +289,39 @@ def build_shadow_opportunity(
     )
 
 
+def _compute_trade_evidence_status(
+    *,
+    trade_rows_total: int,
+    missing_trade_data_events: int,
+    total_opportunities: int,
+    trade_fetch_success_count: int,
+    trade_fetch_error_count: int,
+    trade_fetch_attempt_count: int,
+    non_dust_opportunity_count: int,
+) -> str:
+    """
+    Determine trade evidence status based on fetch and join diagnostics.
+
+    The data-api /trades endpoint is a global feed without per-asset filtering.
+    Trades for specific tokens only appear if they happen to be among the latest
+    N global trades. Status reflects whether the evidence path worked correctly
+    even if the tokens happen to have no recent trades.
+    """
+    if trade_fetch_attempt_count == 0:
+        return TRADE_EVIDENCE_EMPTY
+    if trade_fetch_error_count > max(1, trade_fetch_attempt_count // 2):
+        return TRADE_EVIDENCE_ENDPOINT_ERROR
+    if trade_fetch_success_count == 0:
+        return TRADE_EVIDENCE_ENDPOINT_ERROR
+    if trade_rows_total == 0 and trade_fetch_success_count > 0:
+        return TRADE_EVIDENCE_EMPTY
+    if missing_trade_data_events >= total_opportunities > 0:
+        return PUBLIC_TRADE_EVIDENCE_INSUFFICIENT
+    if missing_trade_data_events > non_dust_opportunity_count:
+        return TRADE_EVIDENCE_JOIN_FAILED
+    return TRADE_EVIDENCE_READY
+
+
 def _sufficiency_from_config(config: ComplementArbConfig) -> ShadowSufficiencyConfig:
     return ShadowSufficiencyConfig(
         min_observer_windows=config.min_observer_windows,
@@ -304,11 +361,52 @@ async def run_shadow_observe(  # noqa: C901
     book_fetches = 0
     book_errors = 0
     missing_trade_data_events = 0
+    trade_fetch_attempt_count = 0
+    trade_fetch_success_count = 0
+    trade_fetch_empty_count = 0
+    trade_fetch_error_count = 0
+    trade_rows_total = 0
+    last_trade_ts: int | None = None  # Unix secs, for incremental after filter
 
     while True:
         windows += 1
         now_ms = time.time() * 1000
         ts_event_ns = time.time_ns()
+
+        # Fetch trades ONCE per poll — data-api ignores asset/conditionId filters,
+        # returns the latest N global trades. Use after_ts for incremental fetch.
+        trade_fetch_attempt_count += 1
+        try:
+            trade_rows = await client.fetch_trades(after_ts=last_trade_ts, limit=TRADE_FETCH_LIMIT)
+            if isinstance(trade_rows, list):
+                trade_fetch_success_count += 1
+                if not trade_rows:
+                    trade_fetch_empty_count += 1
+                else:
+                    # Track latest timestamp for incremental fetch
+                    max_row_ts = max(
+                        int(r.get("timestamp", 0))
+                        for r in trade_rows
+                        if r.get("timestamp") is not None
+                    )
+                    if max_row_ts > (last_trade_ts or 0):
+                        last_trade_ts = max_row_ts
+                    # Distribute matching trade rows to each observed token
+                    for row in trade_rows:
+                        asset = str(row.get("asset") or "")
+                        if not asset:
+                            continue
+                        existing = {json.dumps(r, sort_keys=True, default=str) for r in trades_by_token.get(asset, [])}
+                        key = json.dumps(row, sort_keys=True, default=str)
+                        if key not in existing:
+                            trades_by_token.setdefault(asset, []).append(row)
+                            trade_rows_total += 1
+            else:
+                trade_fetch_success_count += 1  # non-list ok, just empty
+        except Exception as exc:
+            trade_fetch_error_count += 1
+            logger.warning("trade fetch poll error=%s", exc)
+
         for market in markets:
             yes_book = await client.fetch_book(market.yes_token_id)
             no_book = await client.fetch_book(market.no_token_id)
@@ -316,15 +414,6 @@ async def run_shadow_observe(  # noqa: C901
             if yes_book is None or no_book is None:
                 book_errors += 1
                 continue
-            for token_id in (market.yes_token_id, market.no_token_id):
-                rows = await client.fetch_trades(token_id, limit=500)
-                existing = {json.dumps(row, sort_keys=True, default=str) for row in trades_by_token.get(token_id, [])}
-                merged = trades_by_token.setdefault(token_id, [])
-                for row in rows:
-                    key = json.dumps(row, sort_keys=True, default=str)
-                    if key not in existing:
-                        merged.append(row)
-                        existing.add(key)
             opp = build_shadow_opportunity(
                 market,
                 yes_book,
@@ -358,7 +447,30 @@ async def run_shadow_observe(  # noqa: C901
 
     suff = sufficiency or _sufficiency_from_config(config)
     observer_windows = observer_window_count if observer_window_count is not None else windows
-    paths = write_shadow_reports(output_dir, results, observer_window_count=observer_windows, sufficiency=suff)
+
+    # Compute trade evidence status early (before write_shadow_reports references it)
+    # Use a rough non_dust estimate from results, or default to total opportunities
+    rough_non_dust = sum(1 for r in results if r.opportunity.max_safe_shares >= r.opportunity.min_order_shares)
+    trade_evidence_status = _compute_trade_evidence_status(
+        trade_rows_total=trade_rows_total,
+        missing_trade_data_events=missing_trade_data_events,
+        total_opportunities=len(opportunities),
+        trade_fetch_success_count=trade_fetch_success_count,
+        trade_fetch_error_count=trade_fetch_error_count,
+        trade_fetch_attempt_count=trade_fetch_attempt_count,
+        non_dust_opportunity_count=rough_non_dust or len(opportunities),
+    )
+
+    paths = write_shadow_reports(output_dir, results, observer_window_count=observer_windows, sufficiency=suff, trade_evidence={
+        "status": trade_evidence_status,
+        "fetch_attempts": trade_fetch_attempt_count,
+        "fetch_successes": trade_fetch_success_count,
+        "fetch_empty_responses": trade_fetch_empty_count,
+        "fetch_errors": trade_fetch_error_count,
+        "rows_fetched_total": trade_rows_total,
+        "rows_joined_to_opportunities": len(opportunities) - missing_trade_data_events,
+        "missing_trade_data_events": missing_trade_data_events,
+    })
     summary = build_shadow_summary(results, observer_window_count=observer_windows, sufficiency=suff)
     metadata = {
         "run_id": run_id,
@@ -375,11 +487,28 @@ async def run_shadow_observe(  # noqa: C901
         "book_fetch_errors": book_errors,
         "missing_trade_data_events": missing_trade_data_events,
         "report_paths": {key: str(path) for key, path in paths.items()},
+        "trade_evidence_status": trade_evidence_status,
+        "trade_fetch_attempt_count": trade_fetch_attempt_count,
+        "trade_fetch_success_count": trade_fetch_success_count,
+        "trade_fetch_empty_count": trade_fetch_empty_count,
+        "trade_fetch_error_count": trade_fetch_error_count,
+        "trade_rows_total": trade_rows_total,
+        "trade_rows_joined_to_opportunity_count": len(opportunities) - missing_trade_data_events,
     }
     (output_dir / "run_metadata.json").write_text(json.dumps(metadata, indent=2, sort_keys=True, default=str))
     summary_path = output_dir / "shadow_summary.json"
     enriched = json.loads(summary_path.read_text())
     enriched["metadata"] = metadata
+    enriched["trade_evidence"] = {
+        "status": trade_evidence_status,
+        "fetch_attempts": trade_fetch_attempt_count,
+        "fetch_successes": trade_fetch_success_count,
+        "fetch_empty_responses": trade_fetch_empty_count,
+        "fetch_errors": trade_fetch_error_count,
+        "rows_fetched_total": trade_rows_total,
+        "rows_joined_to_opportunities": len(opportunities) - missing_trade_data_events,
+        "missing_trade_data_events": missing_trade_data_events,
+    }
     summary_path.write_text(json.dumps(enriched, indent=2, sort_keys=True, default=str))
     return {
         "run_id": run_id,
@@ -405,6 +534,149 @@ async def _discover_eligible(config: ComplementArbConfig, client: PublicDataClie
     return eligible
 
 
+async def run_trade_evidence_debug(
+    *,
+    markets: list[ComplementMarket],
+    config: ComplementArbConfig,
+    duration_secs: float,
+    poll_interval_secs: float,
+    client: PublicDataClient,
+    output_root: str | Path = "reports/polymarket_complement_arb_trade_debug",
+) -> dict[str, Any]:
+    """
+    Evidence-only debug mode.
+
+    Fetches book snapshots and public trades, attempts to join trades to
+    YES/NO token IDs, and writes a compact debug report. Does NOT run
+    verdict logic or shadow execution.
+    """
+    run_id = generate_run_id()
+    output_dir = Path(output_root) / run_id
+    output_dir.mkdir(parents=True, exist_ok=False)
+    start = time.time()
+    deadline = start + max(0.0, duration_secs)
+
+    debug_entries: list[dict[str, Any]] = []
+    total_trade_rows = 0
+    total_trade_fetches = 0
+    total_trade_errors = 0
+
+    while True:
+        trade_rows = await client.fetch_trades(after_ts=None, limit=TRADE_FETCH_LIMIT)
+        total_trade_fetches += 1
+        if not isinstance(trade_rows, list):
+            total_trade_errors += 1
+            trade_rows = []
+        total_trade_rows = len(trade_rows)
+
+        for market in markets:
+            yes_book = await client.fetch_book(market.yes_token_id)
+            no_book = await client.fetch_book(market.no_token_id)
+
+            yes_trades_in_feed = [r for r in trade_rows if str(r.get("asset", "")) == market.yes_token_id]
+            no_trades_in_feed = [r for r in trade_rows if str(r.get("asset", "")) == market.no_token_id]
+
+            book_ts = time.time()
+            trade_timestamps = [int(r.get("timestamp", 0)) for r in trade_rows if r.get("timestamp") is not None]
+            trade_ts_min = min(trade_timestamps) if trade_timestamps else None
+            trade_ts_max = max(trade_timestamps) if trade_timestamps else None
+
+            entry = {
+                "market_slug": market.market_slug,
+                "condition_id": market.condition_id,
+                "yes_token_id": market.yes_token_id,
+                "no_token_id": market.no_token_id,
+                "book_yes_exists": yes_book is not None,
+                "book_no_exists": no_book is not None,
+                "book_yes_bid_levels": len(yes_book.bids) if yes_book else 0,
+                "book_no_bid_levels": len(no_book.bids) if no_book else 0,
+                "book_yes_ask_levels": len(yes_book.asks) if yes_book else 0,
+                "book_no_ask_levels": len(no_book.asks) if no_book else 0,
+                "trade_rows_in_feed": len(trade_rows),
+                "trade_rows_matched_yes": len(yes_trades_in_feed),
+                "trade_rows_matched_no": len(no_trades_in_feed),
+                "trade_ts_min": trade_ts_min,
+                "trade_ts_max": trade_ts_max,
+                "book_ts": int(book_ts),
+                "mismatch_reason": None,
+            }
+            if not yes_trades_in_feed and not no_trades_in_feed and len(trade_rows) > 0:
+                entry["mismatch_reason"] = (
+                    "Global trade feed returned rows but none match this market's tokens. "
+                    "Either these tokens are not actively trading (not in latest ~1000 global trades) "
+                    "or there is an identifier mismatch."
+                )
+            elif not yes_trades_in_feed and not no_trades_in_feed:
+                entry["mismatch_reason"] = "Global trade feed returned no rows at all."
+            debug_entries.append(entry)
+
+        if time.time() >= deadline or duration_secs <= 0:
+            break
+        await asyncio.sleep(max(0.0, min(poll_interval_secs, deadline - time.time())))
+
+    debug_report = {
+        "run_id": run_id,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "duration_secs": time.time() - start,
+        "poll_interval_secs": poll_interval_secs,
+        "markets_observed": len(markets),
+        "total_trade_fetches": total_trade_fetches,
+        "total_trade_errors": total_trade_errors,
+        "total_trade_rows_last_fetch": total_trade_rows,
+        "pairs": debug_entries,
+    }
+
+    debug_json_path = output_dir / "trade_evidence_debug.json"
+    debug_json_path.write_text(json.dumps(debug_report, indent=2, sort_keys=True, default=str))
+
+    md_lines = [
+        "# Trade Evidence Debug Report",
+        "",
+        f"- run_id: {run_id}",
+        f"- duration: {time.time() - start:.1f}s",
+        f"- markets observed: {len(markets)}",
+        f"- total trade fetches: {total_trade_fetches}",
+        f"- total trade errors: {total_trade_errors}",
+        f"- trade rows in last fetch: {total_trade_rows}",
+        "",
+        "## Per-Pair Evidence",
+        "",
+        *[
+            "| market | condition_id | YES trades | NO trades | book YES bids | book NO bids | mismatch_reason |"
+        ],
+        *[
+            "|--------|-------------|-----------|---------|--------------|-------------|-----------------|"
+        ],
+        *[
+            (
+                f"| {e['market_slug'][:40]} | {e['condition_id'][:16]}... "
+                f"| {e['trade_rows_matched_yes']} | {e['trade_rows_matched_no']} "
+                f"| {e['book_yes_bid_levels']} | {e['book_no_bid_levels']} "
+                f"| {str(e['mismatch_reason'] or '')[:60]} |"
+            )
+            for e in debug_entries
+        ],
+        "",
+        "## Notes",
+        "",
+        "- The data-api /trades endpoint is a global feed (latest ~1000 trades, no per-asset filtering).",
+        "- YES/NO trades are matched by `asset` field (CLOB token ID).",
+        "- Zero matched trades means the tokens are absent from the latest global trade window.",
+        "- This is not necessarily a join failure — it may be a genuine lack of recent trading activity.",
+    ]
+    debug_md_path = output_dir / "trade_evidence_debug.md"
+    debug_md_path.write_text("\n".join(md_lines))
+
+    logger.info("trade evidence debug written to %s", output_dir)
+    return {
+        "run_id": run_id,
+        "output_dir": str(output_dir),
+        "json_path": str(debug_json_path),
+        "md_path": str(debug_md_path),
+        "markets_observed": len(markets),
+    }
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Run observer-only complement arb shadow validation.")
     parser.add_argument("--duration", type=float, default=300.0)
@@ -413,6 +685,7 @@ async def main() -> None:
     parser.add_argument("--market-slug", type=str)
     parser.add_argument("--event-slug", type=str)
     parser.add_argument("--output-root", type=Path, default=Path("reports/polymarket_complement_arb_shadow"))
+    parser.add_argument("--debug-trade-evidence", action="store_true", help="Run evidence-only debug mode")
     args = parser.parse_args()
 
     config = ComplementArbConfig(
@@ -426,6 +699,20 @@ async def main() -> None:
     markets = await _discover_eligible(config, client, limit=max(args.max_markets * 20, 200))
     if not markets:
         raise SystemExit("No eligible same-condition YES/NO complement markets discovered")
+
+    if args.debug_trade_evidence:
+        result = await run_trade_evidence_debug(
+            markets=markets,
+            config=config,
+            duration_secs=args.duration,
+            poll_interval_secs=args.poll_interval,
+            client=client,
+            output_root=args.output_root,
+        )
+        logger.info("trade evidence debug complete: %s", result)
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        return
+
     result = await run_shadow_observe(
         markets=markets,
         config=config,

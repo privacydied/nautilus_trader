@@ -629,6 +629,7 @@ def write_shadow_reports(
     *,
     observer_window_count: int,
     sufficiency: ShadowSufficiencyConfig | None = None,
+    trade_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
     """Write shadow_opportunities.jsonl, shadow_summary.json, and shadow_report.md."""
     base = Path(output_dir)
@@ -643,12 +644,12 @@ def write_shadow_reports(
 
     summary = build_shadow_summary(results, observer_window_count=observer_window_count, sufficiency=sufficiency)
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True, default=str))
-    report_path.write_text(_render_shadow_report(summary))
+    report_path.write_text(_render_shadow_report(summary, trade_evidence=trade_evidence))
     return {"opportunities": opportunities_path, "summary": summary_path, "report": report_path}
 
 
-def _render_shadow_report(summary: dict[str, Any]) -> str:
-    return "\n".join([
+def _render_shadow_report(summary: dict[str, Any], trade_evidence: dict[str, Any] | None = None) -> str:
+    lines = [
         "# Polymarket Complement Arb Shadow Report",
         "",
         f"- verdict: {summary['verdict']}",
@@ -662,5 +663,36 @@ def _render_shadow_report(summary: dict[str, Any]) -> str:
         "## Raw rates",
         json.dumps(summary["rates"], indent=2, sort_keys=True),
         "",
-        "Theoretical edge is not treated as tradeable edge. Only pessimistic paired fills with positive realized shadow net edge can support CANDIDATE_FOR_LONGER_OBSERVATION.",
-    ])
+    ]
+    if trade_evidence:
+        te = trade_evidence
+        lines.append("## Trade Evidence")
+        lines.append("")
+        lines.append(f"- status: {te.get('status', 'UNKNOWN')}")
+        lines.append(f"- fetch attempts: {te.get('fetch_attempts', 0)}")
+        lines.append(f"- fetch successes: {te.get('fetch_successes', 0)}")
+        lines.append(f"- fetch empty responses: {te.get('fetch_empty_responses', 0)}")
+        lines.append(f"- fetch errors: {te.get('fetch_errors', 0)}")
+        lines.append(f"- rows fetched (total across all tokens): {te.get('rows_fetched_total', 0)}")
+        lines.append(f"- rows joined to detected opportunities: {te.get('rows_joined_to_opportunities', 0)}")
+        lines.append(f"- opportunities missing trade data: {te.get('missing_trade_data_events', 0)}")
+        lines.append("")
+        status = te.get("status", "")
+        if status == "PUBLIC_TRADE_EVIDENCE_INSUFFICIENT":
+            lines.append("**Interpretation**: The data-api /trades endpoint (global feed, no per-asset filtering)")
+            lines.append("did return some trade rows, but they could not be joined to any detected opportunity's")
+            lines.append("YES/NO token IDs. This means the tokens with detected opportunities do not appear in")
+            lines.append("the most recent ~1000 global trades — the evidence path works but the tokens are")
+            lines.append("not actively trading near the top of the global feed.")
+        elif status == "TRADE_EVIDENCE_EMPTY":
+            lines.append("**Interpretation**: The global trade feed returned zero rows across all fetch attempts.")
+            lines.append("This may indicate the data-api endpoint was unreachable or returning no data.")
+        elif status == "TRADE_EVIDENCE_JOIN_FAILED":
+            lines.append("**Interpretation**: Trades were fetched, but fewer-than-expected joined to")
+            lines.append("detected opportunity tokens. Token ID mismatch or identifier format issue suspected.")
+        elif status == "TRADE_EVIDENCE_READY":
+            lines.append("**Interpretation**: Trade data was fetched and successfully joined to detected")
+            lines.append("opportunity tokens. Trade evidence path is operational.")
+        lines.append("")
+    lines.append("Theoretical edge is not treated as tradeable edge. Only pessimistic paired fills with positive realized shadow net edge can support CANDIDATE_FOR_LONGER_OBSERVATION.")
+    return "\n".join(lines)
