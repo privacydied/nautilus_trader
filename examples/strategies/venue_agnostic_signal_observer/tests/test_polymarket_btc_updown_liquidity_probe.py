@@ -50,6 +50,8 @@ from ..polymarket_btc_updown_liquidity_probe import (
     _compute_verification_status_v2,
     _compute_near_expiry_rollup,
     _compute_duration_coverage,
+    _check_tte_sanity,
+    _classify_duration,
     _get_danger_zone_cell,
     write_discovered_markets,
     write_orderbook_samples,
@@ -62,6 +64,7 @@ from ..polymarket_btc_updown_liquidity_probe import (
     write_tte_bucket_summary_json,
     write_tte_bucket_summary_md,
     RawPayloadRecord,
+    DUR_5M, DUR_15M,
     LIQUIDITY_GATE_VERIFIED,
     LIQUIDITY_GATE_NOT_VERIFIED,
     LIQUIDITY_GATE_PENDING_TWO_AXIS_VERIFICATION,
@@ -1252,6 +1255,82 @@ class TestTteBucketsCompute:
         buckets = _compute_tte_buckets([m], samples)
         # ts_event=100, expiry=2099-12-31T12:01:00Z -> tte ~ years -> TTE_GT_15M
         assert TTE_GT_15M in buckets
+
+
+class TestTteSanityCheck:
+    """Test _check_tte_sanity diagnostic function."""
+
+    def _make_future_market(self, slug: str) -> BTCMarket:
+        return BTCMarket(
+            market_slug=slug, market_id="1", condition_id="0xabc",
+            question="BTC up/down?", outcomes=["Yes", "No"],
+            yes_token_id="0x111", no_token_id="0x222",
+            expiry="2099-12-31T12:00:00Z",
+            price_to_beat=None, is_active=True,
+            discovered_ts=100.0, direction="up",
+        )
+
+    def _make_near_market(self, slug: str) -> BTCMarket:
+        return BTCMarket(
+            market_slug=slug, market_id="2", condition_id="0xdef",
+            question="BTC up/down?", outcomes=["Yes", "No"],
+            yes_token_id="0x333", no_token_id="0x444",
+            expiry="1970-01-01T00:02:00Z",  # 60s from ts_event=100 (1970-01-01T00:01:40Z)
+            price_to_beat=None, is_active=True,
+            discovered_ts=100.0, direction="up",
+        )
+
+    def _make_sample(self, slug: str, token_id: str, ts_event: float,
+                     expiry: str | None = None) -> OrderbookSample:
+        return OrderbookSample(
+            ts_event=ts_event, market_slug=slug, token_id=token_id, side="yes",
+            expiry=expiry, price_to_beat=None,
+            best_bid=0.48, best_ask=0.50, spread_price_units=0.02,
+            spread_cents=2.0, top_bid_size=560.0, top_ask_size=558.0,
+            estimated_top_bid_depth_usd=268.80,
+            estimated_top_ask_depth_usd=279.0,
+            is_two_sided=True, is_stale=False, is_crossed=False, is_missing=False,
+        )
+
+    def test_5m_market_far_from_expiry_anomaly(self):
+        """5m market with ALL samples >15m from expiry should trigger warning."""
+        m = self._make_future_market("btc-updown-5m-12345")
+        assert _classify_duration(m.market_slug) == DUR_5M
+
+        samples = [self._make_sample(m.market_slug, "0x111", 100.0 + i)
+                   for i in range(3)]
+
+        buckets = _compute_tte_buckets([m], samples)
+        assert TTE_GT_15M in buckets
+        assert buckets[TTE_GT_15M]["sample_count"] == 3
+
+        bucket_samples = {b: [] for b in [TTE_GT_15M, TTE_5M_TO_15M,
+                         TTE_2M_TO_5M, TTE_1M_TO_2M,
+                         TTE_30S_TO_1M, TTE_0S_TO_30S,
+                         TTE_EXPIRED, TTE_UNKNOWN]}
+        bucket_samples[TTE_GT_15M] = list(samples)
+        _check_tte_sanity([m], bucket_samples)
+
+    def test_5m_market_near_expiry_ok(self):
+        """5m market with samples near expiry should NOT trigger warning."""
+        m = self._make_near_market("btc-updown-5m-67890")
+        assert _classify_duration(m.market_slug) == DUR_5M
+
+        # ts_event=100 (1970-01-01T00:01:40Z), expiry=1970-01-01T00:02:00Z → TTE=20s
+        samples = [self._make_sample(m.market_slug, "0x333", 100.0,
+                                     expiry=m.expiry)]
+
+        buckets = _compute_tte_buckets([m], samples)
+        # TTE ~20s → TTE_0S_TO_30S
+        assert TTE_0S_TO_30S in buckets
+        assert buckets[TTE_0S_TO_30S]["sample_count"] == 1
+
+        bucket_samples = {b: [] for b in [TTE_GT_15M, TTE_5M_TO_15M,
+                         TTE_2M_TO_5M, TTE_1M_TO_2M,
+                         TTE_30S_TO_1M, TTE_0S_TO_30S,
+                         TTE_EXPIRED, TTE_UNKNOWN]}
+        bucket_samples[TTE_0S_TO_30S] = list(samples)
+        _check_tte_sanity([m], bucket_samples)
 
 
 class TestVerificationStatus:

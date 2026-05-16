@@ -1598,6 +1598,73 @@ def _classify_tte_bucket(tte_s: float | None) -> str:
     return TTE_GT_15M
 
 
+def _check_tte_sanity(
+    markets: list[BTCMarket],
+    bucket_samples: dict[str, list[OrderbookSample]],
+) -> None:
+    """Check if short-duration markets have anomalous TTE distributions.
+
+    If a 5m-duration market has ALL its samples in TTE_GT_15M, that means
+    the market was far from expiry during the capture window — the samples
+    were collected while the market's expiry was still >15 minutes away.
+    This is a capture-timing diagnostic, not a TTE computation error.
+
+    A legitimate 5m market near its expiry (<5m remaining) should produce
+    samples in TTE_2M_TO_5M, TTE_1M_TO_2M, or tighter buckets.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Map market slugs to their durations
+    market_durations: dict[str, str] = {}
+    for m in markets:
+        dur = _classify_duration(m.market_slug)
+        market_durations[m.market_slug] = dur
+
+    # Find 5m markets and count how many of their samples are in TTE_GT_15M
+    five_min_markets: set[str] = set()
+    for slug, dur in market_durations.items():
+        if dur in (DUR_5M,):
+            five_min_markets.add(slug)
+
+    if not five_min_markets:
+        return
+
+    tte_gt_15m_count: dict[str, int] = {}
+    total_count: dict[str, int] = {}
+    for s in bucket_samples.get(TTE_GT_15M, []):
+        if s.market_slug in five_min_markets:
+            tte_gt_15m_count[s.market_slug] = tte_gt_15m_count.get(s.market_slug, 0) + 1
+
+    for slug in five_min_markets:
+        total_count[slug] = 0
+        for bucket_label in TTE_BUCKET_LABELS:
+            for s in bucket_samples.get(bucket_label, []):
+                if s.market_slug == slug:
+                    total_count[slug] = total_count.get(slug, 0) + 1
+
+    warned_any = False
+    for slug in sorted(five_min_markets):
+        tte_gt = tte_gt_15m_count.get(slug, 0)
+        total = total_count.get(slug, 0)
+        if total > 0 and tte_gt == total:
+            logger.warning(
+                "TTE SANITY: 5m market '%s' has ALL %d samples in TTE_GT_15M. "
+                "Market was likely far from expiry during capture. "
+                "Expected near-expiry samples (<300s TTE) for a properly-timed capture.",
+                slug, total,
+            )
+            warned_any = True
+
+    if warned_any:
+        logger.info(
+            "TTE SANITY: This does not indicate a TTE computation bug. "
+            "The code computes TTE as (expiry_timestamp - sample_timestamp) "
+            "using real clock values. The >15m result is correct for markets "
+            "that are genuinely >15 minutes from expiry."
+        )
+
+
 def _compute_tte_buckets(
     markets: list[BTCMarket],
     samples: list[OrderbookSample],
@@ -1619,6 +1686,9 @@ def _compute_tte_buckets(
         tte = _parse_expiry_to_tte(expiry, s.ts_event)
         bucket = _classify_tte_bucket(tte)
         bucket_samples[bucket].append(s)
+
+    # Sanity check: warn if 5m-duration markets have all samples in TTE_GT_15M
+    _check_tte_sanity(markets, bucket_samples)
 
     # Compute stats per bucket
     def _percentile(data, p):
