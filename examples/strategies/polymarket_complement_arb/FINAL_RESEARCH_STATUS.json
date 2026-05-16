@@ -1,0 +1,51 @@
+{
+  "strategy": "polymarket_complement_arb",
+  "status": "FROZEN_NO_PESSIMISTIC_PAIRED_FILL_EDGE",
+  "is_rejected": false,
+  "is_candidate": false,
+  "can_trade_live": false,
+  "reason": "Repeated public-data crypto Up/Down campaigns found theoretical complement opportunities but zero pessimistic paired fills at base 100-share quote size across 6 separated windows with trade evidence READY.",
+  "failure_mode": "queue_position_execution_failure",
+  "base_quote_size": 100,
+  "fee_formula": "shares * feeRate * price * (1 - price)",
+  "fee_rate_source": "condition metadata (Gamma API feeSchedule.rate)",
+  "maker_fee_assumption": "0 (standard Polymarket maker-rebate structure, treated as zero for conservative assumption)",
+  "trade_evidence_status": "READY",
+  "total_separated_windows": 6,
+  "total_detected_opportunities": 1541,
+  "total_non_dust_opportunities": 1098,
+  "pessimistic_paired_fill_count": 0,
+  "one_leg_fill_count": 0,
+  "paired_gain": 0.0,
+  "unwind_loss": 0.0,
+  "net_shadow_harvest": 0.0,
+  "expected_edge_per_detected_opportunity": 0.0,
+  "markets_tested": [
+    "btc-updown-5m-1778954700",
+    "btc-updown-15m-1778954400",
+    "btc-updown-15m-1778956200",
+    "eth-updown-5m-1778954700",
+    "eth-updown-15m-1778954400",
+    "btc-updown-4h-1778947200",
+    "bitcoin-up-or-down-on-may-17-2026"
+  ],
+  "assets_tested": ["BTC", "ETH"],
+  "durations_tested": ["5m", "15m", "4h", "daily"],
+  "durations_not_found": ["1h"],
+  "limitations": [
+    "Size ladder (5/10/25/50 shares) was not implemented as a separate diagnostic run",
+    "Resolution truncation fields exist in ShadowOpportunity but runner does not fully populate them",
+    "1h slug pattern did not resolve for BTC or ETH — duration may not exist or uses different naming",
+    "Frozen status applies to base 100-share pessimistic maker execution only",
+    "This does not prove complement arbitrage is mathematically impossible",
+    "This does not justify live trading",
+    "Public data-api trade feed does not support per-asset server-side filtering (uses market=<conditionId>)",
+    "Short-duration 5m markets expire during a 60s observation window"
+  ],
+  "files_updated": [
+    "FINAL_RESEARCH_STATUS.json",
+    "FINAL_RESEARCH_STATUS.md",
+    "README.md",
+    "POLYMARKET_COMPLEMENT_ARB_PRECOMMITMENT.md"
+  ]
+}
