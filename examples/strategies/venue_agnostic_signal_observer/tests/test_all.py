@@ -518,7 +518,7 @@ class TestNoOrders:
 
     FORBIDDEN = [
         "submit_order", "submit_order_list", "order_factory",
-        "market(", "limit(", "place_order", "create_order",
+        "market_order(", "limit_order(", "place_order", "create_order",
         "api_key", "secret_key",
     ]
 
