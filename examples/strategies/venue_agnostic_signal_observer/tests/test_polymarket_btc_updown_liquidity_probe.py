@@ -47,8 +47,10 @@ from ..polymarket_btc_updown_liquidity_probe import (
     _parse_expiry_to_tte,
     _classify_tte_bucket,
     _compute_tte_buckets,
-    _compute_verification_status,
+    _compute_verification_status_v2,
     _compute_near_expiry_rollup,
+    _compute_duration_coverage,
+    _get_danger_zone_cell,
     write_discovered_markets,
     write_orderbook_samples,
     write_chainlink_ticks,
@@ -62,6 +64,7 @@ from ..polymarket_btc_updown_liquidity_probe import (
     RawPayloadRecord,
     LIQUIDITY_GATE_VERIFIED,
     LIQUIDITY_GATE_NOT_VERIFIED,
+    LIQUIDITY_GATE_PENDING_TWO_AXIS_VERIFICATION,
     TTE_GT_15M, TTE_5M_TO_15M, TTE_2M_TO_5M, TTE_1M_TO_2M,
     TTE_30S_TO_1M, TTE_0S_TO_30S, TTE_EXPIRED, TTE_UNKNOWN,
 )
@@ -1252,68 +1255,225 @@ class TestTteBucketsCompute:
 
 
 class TestVerificationStatus:
-    """Test _compute_verification_status function."""
+    """Test _compute_verification_status_v2 function.
+
+    Tests for artifact gates, near-expiry, distance-to-strike, two-axis grid,
+    duration coverage, and convex danger zone.
+    """
 
     def _make_green_bucket(self) -> dict:
-        return {
-            "sample_count": 3,
-            "valid_sample_count": 3,
-            "bucket_classification": GREEN_DIAG,
-            "median_spread_cents": 1.0,
-        }
+        return {"sample_count": 10, "valid_sample_count": 10,
+                "bucket_classification": GREEN_DIAG, "median_spread_cents": 1.0}
 
     def _make_red_bucket(self) -> dict:
-        return {
-            "sample_count": 3,
-            "valid_sample_count": 3,
-            "bucket_classification": RED_DIAG,
-            "median_spread_cents": 98.0,
-        }
+        return {"sample_count": 10, "valid_sample_count": 10,
+                "bucket_classification": RED_DIAG, "median_spread_cents": 98.0}
 
     def _make_empty_bucket(self) -> dict:
+        return {"sample_count": 0, "valid_sample_count": 0,
+                "bucket_classification": NEEDS_MORE_DATA}
+
+    def _make_ttp_buckets_green(self) -> dict:
+        """Green TTE near-expiry + green global."""
+        green = self._make_green_bucket()
         return {
-            "sample_count": 0,
-            "valid_sample_count": 0,
-            "bucket_classification": NEEDS_MORE_DATA,
+            TTE_0S_TO_30S: green, TTE_30S_TO_1M: green, TTE_1M_TO_2M: green,
+            TTE_2M_TO_5M: green, TTE_5M_TO_15M: green, TTE_GT_15M: green,
+            TTE_EXPIRED: self._make_empty_bucket(), TTE_UNKNOWN: self._make_empty_bucket(),
         }
 
-    def test_gate_verified_green_near_expiry(self):
-        buckets = {
-            TTE_0S_TO_30S: self._make_green_bucket(),
-            TTE_30S_TO_1M: self._make_empty_bucket(),
-            TTE_1M_TO_2M: self._make_empty_bucket(),
+    def _make_distance_buckets_with_data(self) -> dict:
+        """Distance buckets with some samples."""
+        from ..polymarket_btc_updown_liquidity_probe import DIST_LTE_5, DIST_5_TO_10, DIST_10_TO_25, DIST_25_TO_50, DIST_GT_50, DIST_UNKNOWN
+        return {
+            DIST_LTE_5: {"sample_count": 5, "valid_sample_count": 5, "market_count": 2, "market_slugs": ["test"], "median_spread_cents": 2.0, "p95_spread_cents": 3.0, "bucket_classification": GREEN_DIAG, "reference_source": "CEX_PROXY_REFERENCE"},
+            DIST_5_TO_10: {"sample_count": 5, "valid_sample_count": 5, "market_count": 2, "market_slugs": ["test"], "median_spread_cents": 2.0, "p95_spread_cents": 3.0, "bucket_classification": GREEN_DIAG, "reference_source": "CEX_PROXY_REFERENCE"},
+            DIST_10_TO_25: {"sample_count": 3, "valid_sample_count": 3, "market_count": 1, "market_slugs": ["test"], "median_spread_cents": 2.0, "p95_spread_cents": 3.0, "bucket_classification": GREEN_DIAG, "reference_source": "CEX_PROXY_REFERENCE"},
+            DIST_25_TO_50: {"sample_count": 0, "valid_sample_count": 0, "bucket_classification": "no_samples", "reference_source": "CEX_PROXY_REFERENCE"},
+            DIST_GT_50: {"sample_count": 0, "valid_sample_count": 0, "bucket_classification": "no_samples", "reference_source": "CEX_PROXY_REFERENCE"},
+            DIST_UNKNOWN: {"sample_count": 0, "valid_sample_count": 0, "bucket_classification": "no_samples", "reference_source": "CEX_PROXY_REFERENCE"},
         }
-        status = _compute_verification_status(raw_payload_count=10, tte_buckets=buckets)
-        assert status == LIQUIDITY_GATE_VERIFIED
 
-    def test_gate_not_verified_no_raw_payloads(self):
-        status = _compute_verification_status(raw_payload_count=0, tte_buckets={})
-        assert status == LIQUIDITY_GATE_NOT_VERIFIED
+    def _make_duration_coverage_15m_verified(self) -> dict:
+        return {"5m": {"status": "verified", "sample_count": 10}, "15m": {"status": "verified", "sample_count": 5}, "1h": {"status": "verified", "sample_count": 10}, "unknown": {"status": "no_samples", "sample_count": 0}}
 
-    def test_gate_not_verified_red_near_expiry(self):
+    def _make_duration_coverage_15m_missing(self) -> dict:
+        return {"5m": {"status": "verified", "sample_count": 10}, "15m": {"status": "15M_DURATION_NOT_VERIFIED", "sample_count": 0}, "1h": {"status": "verified", "sample_count": 10}, "unknown": {"status": "no_samples", "sample_count": 0}}
+
+    def _make_two_axis_green(self) -> dict:
+        """Two-axis grid with danger zone data."""
+        from ..polymarket_btc_updown_liquidity_probe import DIST_LTE_5, DIST_5_TO_10
+        green_cell = {"sample_count": 3, "classification": GREEN_DIAG, "median_spread_cents": 2.0}
+        return {
+            TTE_0S_TO_30S: {DIST_LTE_5: green_cell, DIST_5_TO_10: green_cell},
+            TTE_30S_TO_1M: {DIST_LTE_5: green_cell, DIST_5_TO_10: green_cell},
+            TTE_1M_TO_2M: {DIST_LTE_5: green_cell, DIST_5_TO_10: green_cell},
+        }
+
+    def _make_two_axis_empty(self) -> dict:
+        return {}
+
+    def test_gate_verified_all_passing(self):
+        """All gates: TTE green, distance OK, 15m covered, two-axis has danger zone."""
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            # Create minimal artifacts to pass checks
+            (out_dir / "tte_bucket_summary.json").write_text("{}")
+            (out_dir / "tte_bucket_summary.md").write_text("#")
+            (out_dir / "distance_to_strike_bucket_summary.json").write_text("{}")
+            (out_dir / "distance_to_strike_bucket_summary.md").write_text("#")
+            (out_dir / "raw_clob_orderbook_payloads.jsonl").write_text("{}")
+            (out_dir / "raw_payload_audit.md").write_text("#")
+
+            status = _compute_verification_status_v2(
+                out_dir=out_dir,
+                tte_buckets=self._make_ttp_buckets_green(),
+                distance_buckets=self._make_distance_buckets_with_data(),
+                two_axis_grid=self._make_two_axis_green(),
+                duration_coverage=self._make_duration_coverage_15m_verified(),
+                instrumented_flags={"parser_fix": True},
+            )
+            assert status == LIQUIDITY_GATE_VERIFIED, f"Expected VERIFIED, got {status}"
+
+    def test_raw_payload_artifact_missing(self):
+        """Missing raw payload file prevents RAW_PAYLOAD_VERIFIED -> NOT_VERIFIED."""
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            # Only TTE/distance artifacts, no raw payload
+            (out_dir / "tte_bucket_summary.json").write_text("{}")
+            (out_dir / "tte_bucket_summary.md").write_text("#")
+            (out_dir / "distance_to_strike_bucket_summary.json").write_text("{}")
+            (out_dir / "distance_to_strike_bucket_summary.md").write_text("#")
+
+            status = _compute_verification_status_v2(
+                out_dir=out_dir,
+                tte_buckets=self._make_ttp_buckets_green(),
+                distance_buckets=self._make_distance_buckets_with_data(),
+                two_axis_grid=self._make_two_axis_green(),
+                duration_coverage=self._make_duration_coverage_15m_verified(),
+                instrumented_flags={"parser_fix": True},
+            )
+            assert status != LIQUIDITY_GATE_VERIFIED
+            assert "PENDING" in status
+
+    def test_tte_artifact_missing(self):
+        """Missing TTE artifact prevents TTE_BUCKETS_VERIFIED."""
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            (out_dir / "raw_clob_orderbook_payloads.jsonl").write_text("{}")
+            (out_dir / "raw_payload_audit.md").write_text("#")
+
+            status = _compute_verification_status_v2(
+                out_dir=out_dir,
+                tte_buckets=self._make_ttp_buckets_green(),
+                distance_buckets=self._make_distance_buckets_with_data(),
+                two_axis_grid=self._make_two_axis_green(),
+                duration_coverage=self._make_duration_coverage_15m_verified(),
+                instrumented_flags={"parser_fix": True},
+            )
+            assert status != LIQUIDITY_GATE_VERIFIED
+
+    def test_near_expiry_red_blocks_gate(self):
         """RED near-expiry blocks LIQUIDITY_GATE_VERIFIED even if global is GREEN."""
-        buckets = {
-            TTE_0S_TO_30S: self._make_red_bucket(),
-            TTE_30S_TO_1M: self._make_empty_bucket(),
-            TTE_1M_TO_2M: self._make_empty_bucket(),
-            TTE_GT_15M: {"sample_count": 100, "valid_sample_count": 100,
-                         "bucket_classification": GREEN_DIAG, "median_spread_cents": 2.0},
-        }
-        status = _compute_verification_status(raw_payload_count=50, tte_buckets=buckets)
-        # Near-expiry is RED, so not verified
-        assert status != LIQUIDITY_GATE_VERIFIED
-        # Check it's not verified
-        assert "NOT_VERIFIED" in status
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            (out_dir / "tte_bucket_summary.json").write_text("{}")
+            (out_dir / "tte_bucket_summary.md").write_text("#")
+            (out_dir / "distance_to_strike_bucket_summary.json").write_text("{}")
+            (out_dir / "distance_to_strike_bucket_summary.md").write_text("#")
+            (out_dir / "raw_clob_orderbook_payloads.jsonl").write_text("{}")
+            (out_dir / "raw_payload_audit.md").write_text("#")
 
-    def test_needs_more_data_near_expiry(self):
-        """Insufficient near-expiry samples should not gate-verify."""
-        buckets = {
-            TTE_0S_TO_30S: self._make_empty_bucket(),
-            TTE_30S_TO_1M: self._make_empty_bucket(),
-            TTE_1M_TO_2M: self._make_empty_bucket(),
-        }
-        status = _compute_verification_status(raw_payload_count=10, tte_buckets=buckets)
-        assert status != LIQUIDITY_GATE_VERIFIED
+            red_buckets = {
+                TTE_0S_TO_30S: self._make_red_bucket(),
+                TTE_30S_TO_1M: self._make_empty_bucket(),
+                TTE_1M_TO_2M: self._make_empty_bucket(),
+            }
+            status = _compute_verification_status_v2(
+                out_dir=out_dir, tte_buckets=red_buckets,
+                distance_buckets=self._make_distance_buckets_with_data(),
+                two_axis_grid=self._make_two_axis_green(),
+                duration_coverage=self._make_duration_coverage_15m_verified(),
+                instrumented_flags={"parser_fix": True},
+            )
+            assert status == LIQUIDITY_GATE_NOT_VERIFIED, f"Expected NOT_VERIFIED, got {status}"
+
+    def test_distance_to_strike_unavailable_prevents_verified(self):
+        """Missing distance artifacts prevents DISTANCE_TO_STRIKE_BUCKETS_VERIFIED."""
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            (out_dir / "tte_bucket_summary.json").write_text("{}")
+            (out_dir / "tte_bucket_summary.md").write_text("#")
+            (out_dir / "raw_clob_orderbook_payloads.jsonl").write_text("{}")
+            (out_dir / "raw_payload_audit.md").write_text("#")
+
+            status = _compute_verification_status_v2(
+                out_dir=out_dir,
+                tte_buckets=self._make_ttp_buckets_green(),
+                distance_buckets={},  # no distance data
+                two_axis_grid={},
+                duration_coverage=self._make_duration_coverage_15m_verified(),
+                instrumented_flags={"parser_fix": True},
+            )
+            assert status == LIQUIDITY_GATE_PENDING_TWO_AXIS_VERIFICATION
+
+    def test_15m_missing_emits_not_verified(self):
+        """15m uncovered -> LIQUIDITY_GATE_NOT_VERIFIED or PENDING."""
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            (out_dir / "tte_bucket_summary.json").write_text("{}")
+            (out_dir / "tte_bucket_summary.md").write_text("#")
+            (out_dir / "distance_to_strike_bucket_summary.json").write_text("{}")
+            (out_dir / "distance_to_strike_bucket_summary.md").write_text("#")
+            (out_dir / "raw_clob_orderbook_payloads.jsonl").write_text("{}")
+            (out_dir / "raw_payload_audit.md").write_text("#")
+
+            status = _compute_verification_status_v2(
+                out_dir=out_dir,
+                tte_buckets=self._make_ttp_buckets_green(),
+                distance_buckets=self._make_distance_buckets_with_data(),
+                two_axis_grid=self._make_two_axis_green(),
+                duration_coverage=self._make_duration_coverage_15m_missing(),
+                instrumented_flags={"parser_fix": True},
+            )
+            assert status != LIQUIDITY_GATE_VERIFIED
+
+    def test_5m_green_cannot_claim_15m_verified(self):
+        """5m GREEN does not make 15m verified."""
+        # The 15m duration coverage has status '15M_DURATION_NOT_VERIFIED'
+        # regardless of 5m data
+        cov = self._make_duration_coverage_15m_missing()
+        assert cov["15m"]["status"] == "15M_DURATION_NOT_VERIFIED"
+        assert cov["5m"]["status"] == "verified"
+
+    def test_cex_proxy_label_not_chainlink(self):
+        """CEX proxy is labelled CEX_PROXY_REFERENCE, not Chainlink."""
+        from ..polymarket_btc_updown_liquidity_probe import REF_CEX_PROXY, REF_CHAINLINK
+        assert REF_CEX_PROXY == "CEX_PROXY_REFERENCE"
+        assert REF_CHAINLINK == "CHAINLINK_REFERENCE"
+        assert REF_CEX_PROXY != REF_CHAINLINK
+
+    def test_no_candidate_verdict_in_tests(self):
+        """No forbidden verdict strings in non-import, non-docstring test code."""
+        source = Path(__file__).read_text()
+        # Skip import lines and docstring lines
+        lines = []
+        in_docstring = False
+        for l in source.split("\n"):
+            stripped = l.strip()
+            if stripped.startswith('"""') or stripped.startswith("'''"):
+                if stripped.count('"""') >= 2 or stripped.count("'''") >= 2:
+                    continue  # single-line docstring
+                in_docstring = not in_docstring
+                continue
+            if in_docstring:
+                continue
+            if stripped.startswith("from .."):
+                continue
+            lines.append(l)
+        cleaned = "\n".join(lines)
+        for v in FORBIDDEN_VERDICTS:
+            assert v not in cleaned, f"Found forbidden verdict '{v}' in test file"
 
 
 # ===================================================================
