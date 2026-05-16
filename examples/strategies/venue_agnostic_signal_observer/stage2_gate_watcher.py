@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# ruff: noqa: C901,D202,D213,D401,FURB162,PLW1510,S603,S607,SIM105,UP017,UP024
+# ruff: noqa: C901,D202,D213,D401,FURB162,PLW1510,S310,S603,S607,SIM105,UP017,UP024
 """
 Stage 2 Gate Watcher — cross_asset_beta_lag_v1 stress polling.
 
@@ -21,7 +21,12 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timezone
@@ -132,6 +137,10 @@ _STRESS_V2_TARGET_ASSETS = ("SOL", "LINK", "DOGE", "AVAX", "ADA")
 _STRESS_V2_TRIGGER_THRESHOLD_BPS = 30.0
 _STRESS_V2_METADATA_THRESHOLD_BPS = 150.0
 _STRESS_V2_TRIGGER_WINDOW_SECONDS = 30
+_STRESS_V2_TRIGGER_POLL_SECONDS = 2.0
+_STRESS_V2_TRIGGER_STALE_SECONDS = 8.0
+_STRESS_V2_TRIGGER_HISTORY_SECONDS = 45.0
+_STRESS_V2_TRIGGER_PRICE_SOURCE = "binance_spot_rest_ticker"
 _STRESS_V2_DEFAULT_CAPTURE_SECONDS = 900
 
 # Gate verdict constants
@@ -169,6 +178,9 @@ class StressTriggerResult:
             "source_move_bps_30s": self.source_move_bps_30s,
             "stress_confirmation_status": self.stress_confirmation_status,
             "contains_150bps_impulse": self.contains_150bps_impulse,
+            "trigger_price_source": _STRESS_V2_TRIGGER_PRICE_SOURCE,
+            "trigger_poll_seconds": _STRESS_V2_TRIGGER_POLL_SECONDS,
+            "trigger_stale_after_seconds": _STRESS_V2_TRIGGER_STALE_SECONDS,
             "reason": self.reason,
         }
 
@@ -263,11 +275,13 @@ def evaluate_cross_asset_beta_lag_stress_trigger(
     triggered = bool(impulse_met and stress_confirmation_active)
     contains_150 = best_move is not None and best_move >= _STRESS_V2_METADATA_THRESHOLD_BPS
     if triggered:
-        reason = "TRIGGER_PASSED"
-    elif not impulse_met:
-        reason = "IMPULSE_BELOW_THRESHOLD"
+        reason = "STRESS_V2_GATE_PASSED"
+    elif not impulse_met and stress_confirmation_active:
+        reason = "STRESS_V2_STRESS_TRUE_IMPULSE_FALSE"
+    elif impulse_met and not stress_confirmation_active:
+        reason = "STRESS_V2_IMPULSE_TRUE_STRESS_FALSE"
     else:
-        reason = "STRESS_CONFIRMATION_INACTIVE"
+        reason = "STRESS_V2_WAITING_FOR_TRIGGER"
 
     return StressTriggerResult(
         triggered=triggered,
@@ -282,6 +296,128 @@ def evaluate_cross_asset_beta_lag_stress_trigger(
         metadata_threshold_bps=_STRESS_V2_METADATA_THRESHOLD_BPS,
         reason=reason,
     )
+
+class StressV2TriggerFeed:
+    """Tiny BTC/ETH public-price trigger feed for capture admission only.
+
+    Uses Binance spot's unauthenticated REST ticker endpoint at a bounded poll
+    interval.  It keeps only recent in-memory observations and emits simple
+    timestamped price dicts for the pure stress-v2 trigger evaluator.
+    """
+
+    _SYMBOLS = {"BTC": "BTCUSDT", "ETH": "ETHUSDT"}
+
+    def __init__(
+        self,
+        *,
+        poll_seconds: float = _STRESS_V2_TRIGGER_POLL_SECONDS,
+        stale_after_seconds: float = _STRESS_V2_TRIGGER_STALE_SECONDS,
+        history_seconds: float = _STRESS_V2_TRIGGER_HISTORY_SECONDS,
+        start_background: bool = True,
+    ) -> None:
+        self.poll_seconds = poll_seconds
+        self.stale_after_seconds = stale_after_seconds
+        self.history_seconds = history_seconds
+        self._lock = threading.Lock()
+        self._observations: dict[str, deque[dict[str, float | str]]] = {
+            asset: deque() for asset in _STRESS_V2_SOURCE_ASSETS
+        }
+        self._last_error: str | None = None
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        if start_background:
+            self.start()
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(
+            target=self._run_loop,
+            name="stress-v2-trigger-feed",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+    def _run_loop(self) -> None:
+        while not self._stop.is_set():
+            self.poll_once()
+            self._stop.wait(self.poll_seconds)
+
+    def poll_once(self) -> None:
+        now = time.time()
+        try:
+            prices = self._fetch_binance_spot_prices()
+        except (OSError, ValueError, urllib.error.URLError, TimeoutError) as exc:
+            with self._lock:
+                self._last_error = f"STRESS_V2_TRIGGER_FEED_ERROR: {exc}"
+            return
+        for asset, price in prices.items():
+            self.record_price(asset, price, ts_seconds=now)
+        with self._lock:
+            self._last_error = None
+
+    @classmethod
+    def _fetch_binance_spot_prices(cls) -> dict[str, float]:
+        symbols = ",".join(f'"{symbol}"' for symbol in cls._SYMBOLS.values())
+        url = "https://api.binance.com/api/v3/ticker/price?symbols=" + urllib.parse.quote(f"[{symbols}]")
+        request = urllib.request.Request(url, headers={"User-Agent": "nautilus-stage2-stress-v2/1.0"})
+        with urllib.request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        price_by_symbol = {str(row.get("symbol")): float(row["price"]) for row in payload}
+        return {
+            asset: price_by_symbol[symbol]
+            for asset, symbol in cls._SYMBOLS.items()
+            if symbol in price_by_symbol
+        }
+
+    def record_price(self, asset: str, price: float, *, ts_seconds: float) -> None:
+        normalized_asset = _tick_asset({"asset": asset})
+        if normalized_asset not in _STRESS_V2_SOURCE_ASSETS or price <= 0:
+            return
+        row: dict[str, float | str] = {
+            "asset": normalized_asset,
+            "symbol": f"{normalized_asset}/USDT",
+            "venue": _STRESS_V2_TRIGGER_PRICE_SOURCE,
+            "ts_seconds": float(ts_seconds),
+            "price": float(price),
+        }
+        with self._lock:
+            series = self._observations[normalized_asset]
+            series.append(row)
+            cutoff = float(ts_seconds) - self.history_seconds
+            while series and float(series[0]["ts_seconds"]) < cutoff:
+                series.popleft()
+
+    def snapshot_ticks(self, *, now_seconds: float | None = None) -> tuple[list[dict[str, float | str]], str | None]:
+        now = time.time() if now_seconds is None else now_seconds
+        with self._lock:
+            rows = [dict(row) for series in self._observations.values() for row in series]
+            last_error = self._last_error
+        if not rows:
+            return [], last_error or "STRESS_V2_WAITING_FOR_TRIGGER"
+        newest_ts = max(float(row["ts_seconds"]) for row in rows)
+        if now - newest_ts > self.stale_after_seconds:
+            return [], "STRESS_V2_TRIGGER_FEED_STALE"
+        if not any(newest_ts - float(row["ts_seconds"]) >= _STRESS_V2_TRIGGER_WINDOW_SECONDS for row in rows):
+            return [], "STRESS_V2_WAITING_FOR_TRIGGER"
+        cutoff = now - self.history_seconds
+        return [row for row in rows if float(row["ts_seconds"]) >= cutoff], last_error
+
+
+_STRESS_V2_TRIGGER_FEED: StressV2TriggerFeed | None = None
+
+
+def _get_stress_v2_trigger_feed() -> StressV2TriggerFeed:
+    global _STRESS_V2_TRIGGER_FEED
+    if _STRESS_V2_TRIGGER_FEED is None:
+        _STRESS_V2_TRIGGER_FEED = StressV2TriggerFeed()
+    return _STRESS_V2_TRIGGER_FEED
+
 
 # ---------------------------------------------------------------------------
 # Concurrency lock
@@ -531,14 +667,8 @@ def _run_gate() -> dict[str, Any]:
 
 
 def _fetch_stress_v2_trigger_ticks() -> tuple[list[Any], str | None]:
-    """Return BTC/ETH sub-minute trigger ticks for stress-v2 admission.
-
-    Path B is intentionally fail-safe: no reusable live rolling 30s BTC/ETH
-    trigger feed is exposed in this watcher yet, so the real service must not
-    pretend it can detect the primary impulse.  Tests may patch this function
-    with supplied public tick records to exercise the decision path.
-    """
-    return [], "STRESS_V2_TRIGGER_FEED_NOT_WIRED"
+    """Return BTC/ETH rolling 30s trigger observations for stress-v2 admission."""
+    return _get_stress_v2_trigger_feed().snapshot_ticks()
 
 
 def _stress_confirmation_active(gate_result: dict[str, Any]) -> bool:
@@ -784,6 +914,9 @@ def _write_status(**kw: Any) -> None:
         "source_move_bps_30s": None,
         "stress_confirmation_status": None,
         "contains_150bps_impulse": False,
+        "trigger_price_source": _STRESS_V2_TRIGGER_PRICE_SOURCE,
+        "trigger_poll_seconds": _STRESS_V2_TRIGGER_POLL_SECONDS,
+        "trigger_stale_after_seconds": _STRESS_V2_TRIGGER_STALE_SECONDS,
         "cooldown_status": None,
         "next_allowed_capture_utc": None,
         "reason": None,
@@ -977,8 +1110,16 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
         print(f"  Gate passed: {gate_passed}")
 
         status_fields = trigger_status.as_status_fields() if trigger_status is not None else {}
-        if trigger_status is not None and trigger_status.reason == "STRESS_V2_TRIGGER_FEED_NOT_WIRED":
-            status_fields["capture_status"] = "DISABLED"
+        if trigger_status is not None:
+            if trigger_status.reason in {
+                "STRESS_V2_TRIGGER_FEED_STALE",
+                "STRESS_V2_WAITING_FOR_TRIGGER",
+                "STRESS_V2_IMPULSE_TRUE_STRESS_FALSE",
+                "STRESS_V2_STRESS_TRUE_IMPULSE_FALSE",
+            }:
+                status_fields["capture_status"] = trigger_status.reason
+            elif trigger_status.triggered:
+                status_fields["capture_status"] = "STRESS_V2_GATE_PASSED"
 
         if not gate_passed:
             # Diagnostic only — do NOT create collection lock
