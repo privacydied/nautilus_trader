@@ -31,6 +31,7 @@ from .event_study import evaluate_tick_signal, generate_random_baseline, evaluat
 from .forward_returns_gpu import (
     check_cuda_available as _frgpu_check_cuda,
     batch_evaluate_signals_gpu as _frgpu_batch,
+    batch_evaluate_signals_multi_gpu as _frgpu_multi,
 )
 from .artifact_metadata import build_metadata
 
@@ -633,17 +634,30 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
                         ALL_SIGNALS.extend(events)
 
                         if forward_engine == "gpu" and events:
-                            gpu_frs = _frgpu_batch(
-                                signals=events,
-                                target_ticks=tgt_clipped,
-                                horizons_ms=horizons_ms,
-                                fee_bps=args.fee_bps,
-                                slippage_bps=adj_slippage,
-                                quote_mismatch=has_qm,
-                                quote_mismatch_buffer_bps=args.quote_mismatch_buffer_bps if has_qm else 0.0,
-                                chunk_size=forward_batch_size,
-                                device=_pair_device,
-                            )
+                            if len(devices) > 1:
+                                gpu_frs = _frgpu_multi(
+                                    signals=events,
+                                    target_ticks=tgt_clipped,
+                                    horizons_ms=horizons_ms,
+                                    fee_bps=args.fee_bps,
+                                    slippage_bps=adj_slippage,
+                                    quote_mismatch=has_qm,
+                                    quote_mismatch_buffer_bps=args.quote_mismatch_buffer_bps if has_qm else 0.0,
+                                    chunk_size=forward_batch_size,
+                                    devices=devices,
+                                )
+                            else:
+                                gpu_frs = _frgpu_batch(
+                                    signals=events,
+                                    target_ticks=tgt_clipped,
+                                    horizons_ms=horizons_ms,
+                                    fee_bps=args.fee_bps,
+                                    slippage_bps=adj_slippage,
+                                    quote_mismatch=has_qm,
+                                    quote_mismatch_buffer_bps=args.quote_mismatch_buffer_bps if has_qm else 0.0,
+                                    chunk_size=forward_batch_size,
+                                    device=_pair_device,
+                                )
                             ALL_FWD.extend(gpu_frs)
                         else:
                             for evt in events:

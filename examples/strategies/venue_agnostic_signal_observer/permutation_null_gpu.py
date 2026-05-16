@@ -290,6 +290,121 @@ def compute_null_distribution_gpu(
 
 
 # ---------------------------------------------------------------------------
+# Multi-GPU wrapper (opt-in, iteration sharding)
+# ---------------------------------------------------------------------------
+
+
+def compute_null_distribution_multi_gpu(
+    source_event_timestamps: list[int],
+    target_timestamps: list[int],
+    target_prices: list[float],
+    direction: str,
+    horizons_ms: list[int],
+    fee_bps: float,
+    slippage_bps: float,
+    quote_mismatch_buffer_bps: float = 0.0,
+    quote_mismatch: bool = False,
+    iterations: int = 1000,
+    seed: int = 42,
+    shift_mode: str = "circular_time_shift",
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    devices: list[str] | None = None,
+) -> dict[str, Any]:
+    """Multi-GPU wrapper around :func:`compute_null_distribution_gpu`.
+
+    Shards permutation iterations across ``devices`` and concatenates the
+    per-device null distributions in device order. Each device receives a
+    deterministic seed derived from the global ``seed`` via BLAKE2b, so the
+    full multi-GPU run is reproducible across hosts.
+
+    Sharding scheme:
+      device i gets iterations [shard_i.start, shard_i.stop), seeded with
+      ``derive_per_device_seeds(seed, num_devices)[i]``.
+
+    With ``len(devices) == 1`` this reduces to a single-device call seeded
+    with ``derive_per_device_seeds(seed, 1)[0]`` — i.e. NOT bit-exact with
+    the legacy ``compute_null_distribution_gpu(seed=seed)`` path, but the
+    overall p-value statistics agree within the usual permutation-null
+    tolerance (per the spec).
+
+    Output schema matches :func:`compute_null_distribution_gpu`. Adds
+    ``num_devices`` and ``devices`` fields plus a ``per_device_iterations``
+    field for diagnostics.
+    """
+    from .gpu_devices import (  # noqa: PLC0415
+        derive_per_device_seeds,
+        split_work_evenly,
+    )
+
+    if not devices:
+        raise ValueError("multi-GPU permutation path requires at least one device")
+    if shift_mode != "circular_time_shift":
+        raise ValueError(
+            f"GPU engine only supports shift_mode='circular_time_shift', got '{shift_mode}'."
+        )
+
+    n_dev = len(devices)
+    shards = split_work_evenly(iterations, n_dev)
+    per_seed = derive_per_device_seeds(seed, n_dev)
+
+    # Accumulators (concatenated in device order)
+    null_means: list[float] = []
+    null_medians: list[float] = []
+    null_win_rates: list[float] = []
+    per_device_iterations: list[int] = []
+
+    for dev_str, shard, dev_seed in zip(devices, shards, per_seed):
+        iters_here = len(shard)
+        per_device_iterations.append(iters_here)
+        if iters_here == 0:
+            continue
+        sub = compute_null_distribution_gpu(
+            source_event_timestamps=source_event_timestamps,
+            target_timestamps=target_timestamps,
+            target_prices=target_prices,
+            direction=direction,
+            horizons_ms=horizons_ms,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            quote_mismatch_buffer_bps=quote_mismatch_buffer_bps,
+            quote_mismatch=quote_mismatch,
+            iterations=iters_here,
+            seed=dev_seed,
+            shift_mode=shift_mode,
+            chunk_size=chunk_size,
+            device=dev_str,
+        )
+        # Per-horizon: existing function emits len(horizons_ms) * iters_here
+        # entries appended into null_means / null_medians / null_win_rates;
+        # we preserve that flat ordering exactly.
+        null_means.extend(sub["null_mean_net_bps"])
+        null_medians.extend(sub["null_median_net_bps"])
+        null_win_rates.extend(sub["null_win_rates"])
+
+    # Verify the concatenated shard counts sum to the requested total.
+    assert sum(per_device_iterations) == iterations
+
+    percentiles = _compute_percentiles(null_means, null_win_rates)
+
+    return {
+        "null_mean_net_bps": null_means,
+        "null_win_rates": null_win_rates,
+        "null_median_net_bps": null_medians,
+        "percentiles": percentiles,
+        "iterations": iterations,
+        "seed": seed,
+        "shift_mode": shift_mode,
+        "engine": "gpu",
+        "device": ",".join(devices),
+        "devices": list(devices),
+        "num_devices": n_dev,
+        "per_device_iterations": per_device_iterations,
+        "chunk_size": chunk_size,
+        "safety_mode": SAFETY_MODE,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

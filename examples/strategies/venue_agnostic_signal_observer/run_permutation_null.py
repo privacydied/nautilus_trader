@@ -32,8 +32,10 @@ from .permutation_null import (
 from .permutation_null_gpu import (
     check_cuda_available,
     compute_null_distribution_gpu,
+    compute_null_distribution_multi_gpu,
     gpu_unavailable_diagnostic,
 )
+from .gpu_devices import parse_cuda_devices, validate_cuda_devices
 from .mcpt_export import _load_jsonl, _load_summary_json, _slugify
 from .artifact_metadata import build_metadata, get_metadata, get_metadata_field
 from .run_derivatives_spot_lead_lag import load_capture_data
@@ -123,6 +125,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="CUDA device for --engine gpu. E.g. 'cuda:0' or 'cuda:1'. Default: cuda:0.",
     )
     p.add_argument(
+        "--devices",
+        type=str,
+        default="",
+        help="Multi-GPU: comma-separated CUDA devices, e.g. cuda:0,cuda:1. "
+             "Takes precedence over --device. Iterations are sharded round-robin. "
+             "If any device is unavailable, emits GPU_UNAVAILABLE_DIAGNOSTIC and exits.",
+    )
+    p.add_argument(
         "--batch-size",
         type=int,
         default=512,
@@ -197,16 +207,39 @@ def main() -> None:
     capture_dir = Path(args.capture_dir)
 
     # ---- 0. GPU availability check (fail-fast, no silent fallback) --------
+    # Parse --devices (overrides --device when present).
+    gpu_devices: list[str] = []
     if args.engine == "gpu":
-        cuda_ok, cuda_reason = check_cuda_available(args.device)
-        if not cuda_ok:
-            diag = gpu_unavailable_diagnostic(args.device, cuda_reason)
-            print(json.dumps(diag, indent=2))
-            out_dir = Path(args.out) if args.out else report_dir / "null_test"
-            out_dir.mkdir(parents=True, exist_ok=True)
-            with open(out_dir / "null_test_summary.json", "w") as jf:
-                json.dump(diag, jf, indent=2)
-            sys.exit(1)
+        raw_devices = getattr(args, "devices", "")
+        if raw_devices and raw_devices.strip():
+            # --devices supplied: parse and validate all of them.
+            try:
+                gpu_devices = parse_cuda_devices(raw_devices, fallback_device=args.device, engine="gpu")
+            except ValueError as exc:
+                print(f"ERROR: invalid --devices: {exc}", file=sys.stderr)
+                sys.exit(1)
+            ok, reason = validate_cuda_devices(gpu_devices)
+            if not ok:
+                diag = gpu_unavailable_diagnostic(str(gpu_devices), reason)
+                print(json.dumps(diag, indent=2))
+                out_dir = Path(args.out) if args.out else report_dir / "null_test"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                with open(out_dir / "null_test_summary.json", "w") as jf:
+                    json.dump(diag, jf, indent=2)
+                sys.exit(1)
+            print(f"  [GPU] Multi-GPU enabled: {gpu_devices}")
+        else:
+            # Legacy single --device path.
+            cuda_ok, cuda_reason = check_cuda_available(args.device)
+            if not cuda_ok:
+                diag = gpu_unavailable_diagnostic(args.device, cuda_reason)
+                print(json.dumps(diag, indent=2))
+                out_dir = Path(args.out) if args.out else report_dir / "null_test"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                with open(out_dir / "null_test_summary.json", "w") as jf:
+                    json.dump(diag, jf, indent=2)
+                sys.exit(1)
+            gpu_devices = [args.device]
 
     if not report_dir.exists():
         print(f"ERROR: report directory not found: {report_dir}", file=sys.stderr)
@@ -474,24 +507,45 @@ def main() -> None:
             real_win_rate = float("nan")
 
         # 7f. Run null distribution
-        print(f"    Running {args.iterations} iterations (shift_mode={args.shift_mode}, engine={args.engine})...")
+        n_gpu_devs = len(gpu_devices)
+        print(f"    Running {args.iterations} iterations "
+              f"(shift_mode={args.shift_mode}, engine={args.engine}"
+              f"{', devices=' + str(gpu_devices) if args.engine == 'gpu' else ''})...")
         if args.engine == "gpu":
-            null_dist = compute_null_distribution_gpu(
-                source_event_timestamps=source_event_timestamps,
-                target_timestamps=target_timestamps,
-                target_prices=target_prices,
-                direction=direction,
-                horizons_ms=[horizon_ms],
-                fee_bps=fee_bps,
-                slippage_bps=slippage_bps,
-                quote_mismatch_buffer_bps=quote_mismatch_buffer_bps,
-                quote_mismatch=has_qm,
-                iterations=args.iterations,
-                seed=args.seed,
-                shift_mode=args.shift_mode,
-                chunk_size=args.batch_size,
-                device=args.device,
-            )
+            if n_gpu_devs > 1:
+                null_dist = compute_null_distribution_multi_gpu(
+                    source_event_timestamps=source_event_timestamps,
+                    target_timestamps=target_timestamps,
+                    target_prices=target_prices,
+                    direction=direction,
+                    horizons_ms=[horizon_ms],
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                    quote_mismatch_buffer_bps=quote_mismatch_buffer_bps,
+                    quote_mismatch=has_qm,
+                    iterations=args.iterations,
+                    seed=args.seed,
+                    shift_mode=args.shift_mode,
+                    chunk_size=args.batch_size,
+                    devices=gpu_devices,
+                )
+            else:
+                null_dist = compute_null_distribution_gpu(
+                    source_event_timestamps=source_event_timestamps,
+                    target_timestamps=target_timestamps,
+                    target_prices=target_prices,
+                    direction=direction,
+                    horizons_ms=[horizon_ms],
+                    fee_bps=fee_bps,
+                    slippage_bps=slippage_bps,
+                    quote_mismatch_buffer_bps=quote_mismatch_buffer_bps,
+                    quote_mismatch=has_qm,
+                    iterations=args.iterations,
+                    seed=args.seed,
+                    shift_mode=args.shift_mode,
+                    chunk_size=args.batch_size,
+                    device=gpu_devices[0],
+                )
         else:
             null_dist = compute_null_distribution(
                 source_event_timestamps=source_event_timestamps,
@@ -611,7 +665,8 @@ def main() -> None:
             "source_timestamp_count": len(source_event_timestamps),
             "target_tick_count": len(target_ticks),
             "engine": args.engine,
-            "device": args.device if args.engine == "gpu" else None,
+            "devices": gpu_devices if args.engine == "gpu" else None,
+            "device": gpu_devices[0] if args.engine == "gpu" else None,
             "batch_size": args.batch_size if args.engine == "gpu" else None,
         }
 
@@ -652,7 +707,8 @@ def main() -> None:
         "cost_floor_bps": args.cost_floor_bps,
         "min_events": args.min_events,
         "engine": args.engine,
-        "device": args.device if args.engine == "gpu" else None,
+        "devices": gpu_devices if args.engine == "gpu" else None,
+        "device": gpu_devices[0] if args.engine == "gpu" else None,
         "batch_size": args.batch_size if args.engine == "gpu" else None,
         "results": group_results,
     }

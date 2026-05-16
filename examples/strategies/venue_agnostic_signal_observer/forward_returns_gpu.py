@@ -344,6 +344,82 @@ def batch_evaluate_signals_gpu(
 
 
 # ---------------------------------------------------------------------------
+# Multi-GPU wrapper (opt-in, event sharding)
+# ---------------------------------------------------------------------------
+
+
+def batch_evaluate_signals_multi_gpu(
+    signals: list[TickSignalEvent],
+    target_ticks: list[TradeTickLite] | list[QuoteTickLite],
+    horizons_ms: list[int],
+    fee_bps: float,
+    slippage_bps: float,
+    quote_mismatch_buffer_bps: float = 0.0,
+    quote_mismatch: bool = False,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    devices: list[str] | None = None,
+) -> list[TickForwardReturn]:
+    """Multi-GPU wrapper around :func:`batch_evaluate_signals_gpu`.
+
+    Coarse-shards the event list contiguously across ``devices`` (preserving
+    signal-major ordering), runs the existing per-device kernel on each
+    shard, and concatenates the per-device results in shard order.
+
+    Mathematical behaviour, result schema, and ordering are identical to the
+    single-device path — when ``len(devices) == 1`` the output matches
+    ``batch_evaluate_signals_gpu`` bit-for-bit because the shard equals the
+    full event list.
+
+    No silent CPU fallback. Caller must validate device availability
+    upfront (see :func:`gpu_devices.validate_cuda_devices`).
+    """
+    from .gpu_devices import split_work_evenly  # noqa: PLC0415
+
+    if not signals or not target_ticks or not horizons_ms:
+        return []
+    if not devices:
+        raise ValueError("multi-GPU path requires at least one device")
+
+    if len(devices) == 1:
+        return batch_evaluate_signals_gpu(
+            signals=signals,
+            target_ticks=target_ticks,
+            horizons_ms=horizons_ms,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            quote_mismatch_buffer_bps=quote_mismatch_buffer_bps,
+            quote_mismatch=quote_mismatch,
+            chunk_size=chunk_size,
+            device=devices[0],
+        )
+
+    H = len(horizons_ms)
+    shards = split_work_evenly(len(signals), len(devices))
+    out: list[TickForwardReturn] = []
+    for dev_str, shard in zip(devices, shards):
+        if len(shard) == 0:
+            continue
+        shard_signals = signals[shard.start:shard.stop]
+        shard_results = batch_evaluate_signals_gpu(
+            signals=shard_signals,
+            target_ticks=target_ticks,
+            horizons_ms=horizons_ms,
+            fee_bps=fee_bps,
+            slippage_bps=slippage_bps,
+            quote_mismatch_buffer_bps=quote_mismatch_buffer_bps,
+            quote_mismatch=quote_mismatch,
+            chunk_size=chunk_size,
+            device=dev_str,
+        )
+        # Length per shard = len(shard_signals) * H — appended in shard order
+        # which is the same as original signal order because shards are
+        # contiguous and ordered.
+        assert len(shard_results) == len(shard_signals) * H
+        out.extend(shard_results)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

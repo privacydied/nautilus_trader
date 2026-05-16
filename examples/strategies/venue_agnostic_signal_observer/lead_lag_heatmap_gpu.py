@@ -259,6 +259,7 @@ def compute_lead_lag_heatmap(
     target_venue: str = "unknown",
     symbol: str = "unknown",
     signal_type: str = "unknown",
+    devices: list[str] | None = None,
 ) -> LeadLagHeatmapSummary:
     """Compute lead/lag heatmap diagnostics between source and target series.
 
@@ -307,8 +308,16 @@ def compute_lead_lag_heatmap(
 
     # --- GPU availability check when engine=gpu ---
     use_gpu = engine == "gpu"
+    # Resolve effective device list: multi-GPU only when ``devices`` is given
+    # AND contains more than one entry. Single-element ``devices`` falls
+    # through to the legacy single-device path to keep behaviour identical.
+    multi_devices: list[str] = list(devices) if devices else []
     if use_gpu:
-        ok, reason = check_cuda_available(device)
+        if multi_devices:
+            from .gpu_devices import validate_cuda_devices  # noqa: PLC0415
+            ok, reason = validate_cuda_devices(multi_devices)
+        else:
+            ok, reason = check_cuda_available(device)
         if not ok:
             summary.verdict = _GPU_UNAVAILABLE
             summary.reason_counts = {"GPU_UNAVAILABLE_DIAGNOSTIC": 1, "reason": reason}
@@ -317,15 +326,35 @@ def compute_lead_lag_heatmap(
     rows: list[dict] = []
 
     if use_gpu:
-        # GPU path: batch all lags
-        gpu_results = _gpu_correlation_batch(
-            source_bucket=src_bucket,
-            target_bucket=tgt_bucket,
-            lags_ms=lags_ms,
-            bucket_ms=bucket_ms,
-            device=device,
-            batch_size=batch_size,
-        )
+        # GPU path: batch all lags. Multi-GPU shards lag buckets across
+        # devices and concatenates in lag order to preserve determinism.
+        if len(multi_devices) > 1:
+            from .gpu_devices import split_work_evenly  # noqa: PLC0415
+            shards = split_work_evenly(len(lags_ms), len(multi_devices))
+            gpu_results = []
+            for dev_str, shard in zip(multi_devices, shards):
+                if len(shard) == 0:
+                    continue
+                shard_lags = lags_ms[shard.start:shard.stop]
+                gpu_results.extend(_gpu_correlation_batch(
+                    source_bucket=src_bucket,
+                    target_bucket=tgt_bucket,
+                    lags_ms=shard_lags,
+                    bucket_ms=bucket_ms,
+                    device=dev_str,
+                    batch_size=batch_size,
+                ))
+            assert len(gpu_results) == len(lags_ms)
+        else:
+            effective_device = multi_devices[0] if multi_devices else device
+            gpu_results = _gpu_correlation_batch(
+                source_bucket=src_bucket,
+                target_bucket=tgt_bucket,
+                lags_ms=lags_ms,
+                bucket_ms=bucket_ms,
+                device=effective_device,
+                batch_size=batch_size,
+            )
         for (corr, align, sample_count), lag_ms in zip(gpu_results, lags_ms):
             verdict = _DIAGNOSTIC_READY if sample_count >= min_samples else _INSUFFICIENT_SAMPLES
             row = asdict(LeadLagHeatmapRow(

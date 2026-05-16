@@ -13,6 +13,7 @@ from .lead_lag_heatmap_gpu import (
     write_heatmap_reports,
     check_cuda_available,
 )
+from .gpu_devices import parse_cuda_devices, validate_cuda_devices
 from .run_derivatives_spot_lead_lag import load_capture_data, _split_strings
 
 
@@ -28,6 +29,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Computation engine: 'cpu' (default) or 'gpu'. No fallback.")
     p.add_argument("--device", type=str, default="cuda:0",
                    help="CUDA device for --engine gpu. Default: cuda:0.")
+    p.add_argument("--devices", type=str, default="",
+                   help="Multi-GPU: comma-separated CUDA devices, e.g. cuda:0,cuda:1. "
+                        "Takes precedence over --device. Lag pairs are sharded across devices. "
+                        "If any device is unavailable, emits GPU_UNAVAILABLE_DIAGNOSTIC and exits.")
     p.add_argument("--batch-size", type=int, default=8192,
                    help="GPU batch size. Default: 8192.")
     p.add_argument("--lags-ms", type=str, default="100,250,500,1000,2000,5000,10000,30000",
@@ -47,20 +52,42 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
 
-    # GPU availability check — fail fast, no silent fallback
+    # GPU availability check — fail fast, no silent fallback.
+    # --devices overrides --device; validate all requested devices up front.
+    import sys as _sys
+    heatmap_devices: list[str] | None = None
     if args.engine == "gpu":
-        import sys as _sys
-        ok, reason = check_cuda_available(args.device)
-        if not ok:
-            print(
-                f"ERROR: --engine gpu requested but CUDA unavailable: {reason}",
-                file=_sys.stderr,
-            )
-            print(
-                f'{{"verdict": "GPU_UNAVAILABLE_DIAGNOSTIC", "reason": "{reason}"}}',
-                file=_sys.stderr,
-            )
-            _sys.exit(1)
+        raw_devices = getattr(args, "devices", "")
+        if raw_devices and raw_devices.strip():
+            try:
+                heatmap_devices = parse_cuda_devices(raw_devices, fallback_device=args.device, engine="gpu")
+            except ValueError as exc:
+                print(f"ERROR: invalid --devices: {exc}", file=_sys.stderr)
+                _sys.exit(1)
+            ok, reason = validate_cuda_devices(heatmap_devices)
+            if not ok:
+                print(
+                    f"ERROR: --devices unavailable: {reason}",
+                    file=_sys.stderr,
+                )
+                print(
+                    f'{{"verdict": "GPU_UNAVAILABLE_DIAGNOSTIC", "reason": "{reason}"}}',
+                    file=_sys.stderr,
+                )
+                _sys.exit(1)
+            print(f"  [GPU] Multi-GPU enabled: {heatmap_devices}")
+        else:
+            ok, reason = check_cuda_available(args.device)
+            if not ok:
+                print(
+                    f"ERROR: --engine gpu requested but CUDA unavailable: {reason}",
+                    file=_sys.stderr,
+                )
+                print(
+                    f'{{"verdict": "GPU_UNAVAILABLE_DIAGNOSTIC", "reason": "{reason}"}}',
+                    file=_sys.stderr,
+                )
+                _sys.exit(1)
 
     capture_dir = Path(args.capture_dir)
     if not capture_dir.exists():
@@ -125,6 +152,7 @@ def main() -> int:
                     target_venue=target_venue,
                     symbol=f"{asset}/USD",
                     signal_type=args.signal_type,
+                    devices=heatmap_devices,
                 )
                 summaries.append(summary)
 
