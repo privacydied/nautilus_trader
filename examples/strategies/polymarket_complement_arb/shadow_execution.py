@@ -42,6 +42,9 @@ VerdictValue = Literal[
     "NEEDS_MORE_DATA",
     "REJECTED_FOR_CURRENT_LIVE_CONDITIONS",
     "CANDIDATE_FOR_LONGER_OBSERVATION",
+    "FROZEN_NO_PESSIMISTIC_PAIRED_FILL_EDGE",
+    "FROZEN_EDGE_ONLY_AT_DUST_SIZE",
+    "FROZEN_NO_ECONOMIC_SIZE",
 ]
 
 
@@ -117,6 +120,9 @@ class ShadowOpportunity:
     max_safe_shares: float
     one_leg_timeout_ms: float
     min_order_shares: float
+    window_id: str = ""
+    time_to_resolution_seconds: float | None = None
+    is_resolution_truncated: bool = False
     same_condition: bool = True
     stale: bool = False
     resolution_danger: bool = False
@@ -154,6 +160,11 @@ class ShadowSufficiencyConfig:
     min_pessimistic_paired_fills: int = 20
     min_same_condition_valid_opportunities: int = 30
     min_non_dust_opportunities: int = 30
+    min_repeated_windows_per_market: int = 3
+    min_total_repeated_windows: int = 6
+    min_trade_evidence_ready_windows_per_market_family: int = 3
+    min_pessimistic_paired_fills_for_candidate: int = 20
+    min_base_size_paired_fills_for_candidate: int = 10
 
 
 @dataclass(frozen=True)
