@@ -968,8 +968,8 @@ async def capture_loop(
                     p_price, p_source, p_err = fetch_cex_proxy_price(client, reference_proxy)
                     if p_price and p_price > 0:
                         all_proxy_prices.append((time.time(), p_price))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Proxy price fetch failed: %s", exc)
 
             # Persist first N raw CLOB responses for audit (sample every 10th)
             if len(all_raw_payloads) < 100 and len(all_samples) % 2 == 0:
@@ -1982,6 +1982,8 @@ def _classify_duration(market_slug: str) -> str:
 
 def _classify_duration_from_expiry(expiry: str | None, end_ns: float | None = None) -> str:
     """Fallback: classify duration from expiry timestamp range if available."""
+    _ = expiry  # unused — API data is unreliable for this
+    _ = end_ns
     return DUR_UNKNOWN  # not reliably available from Gamma API data
 
 

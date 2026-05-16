@@ -326,10 +326,7 @@ def _run_verification(
         write_two_axis_grid_json,
         write_two_axis_grid_md,
         write_duration_coverage_md,
-        REF_CEX_PROXY,
         REF_UNAVAILABLE,
-        GREEN_DIAG,
-        _fmt as _fmt_v,
     )
 
     # Collect reference prices
