@@ -1,0 +1,41 @@
+{
+  "reference_source": "REFERENCE_UNAVAILABLE",
+  "distance_buckets": {
+    "distance_lte_5_bps": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "unavailable",
+      "reference_source": "REFERENCE_UNAVAILABLE"
+    },
+    "distance_5_to_10_bps": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "unavailable",
+      "reference_source": "REFERENCE_UNAVAILABLE"
+    },
+    "distance_10_to_25_bps": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "unavailable",
+      "reference_source": "REFERENCE_UNAVAILABLE"
+    },
+    "distance_25_to_50_bps": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "unavailable",
+      "reference_source": "REFERENCE_UNAVAILABLE"
+    },
+    "distance_gt_50_bps": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "unavailable",
+      "reference_source": "REFERENCE_UNAVAILABLE"
+    },
+    "unknown": {
+      "sample_count": 0,
+      "valid_sample_count": 0,
+      "bucket_classification": "unavailable",
+      "reference_source": "REFERENCE_UNAVAILABLE"
+    }
+  }
+}

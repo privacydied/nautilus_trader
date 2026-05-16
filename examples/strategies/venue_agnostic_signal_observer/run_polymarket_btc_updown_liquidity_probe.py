@@ -326,6 +326,8 @@ def _run_verification(
         write_two_axis_grid_json,
         write_two_axis_grid_md,
         write_duration_coverage_md,
+        write_raw_payloads,
+        write_raw_payload_audit,
         REF_UNAVAILABLE,
     )
 
