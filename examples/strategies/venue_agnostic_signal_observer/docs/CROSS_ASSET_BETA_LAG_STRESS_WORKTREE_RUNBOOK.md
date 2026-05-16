@@ -108,6 +108,8 @@ cp /mnt/nasirjones/py/nautilus_trader/examples/strategies/venue_agnostic_signal_
   ~/.config/systemd/user/nautilus-stage2-gate-watcher.service
 ```
 
+Important systemd path rule: user systemd rejected `WorkingDirectory=${NAUTILUS_STAGE2_WORKTREE}` as "path is not absolute" during activation. The installed unit must use a literal absolute `WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress`, or be rendered from a template into that literal value before `daemon-reload`. Keep `NAUTILUS_STAGE2_WORKTREE` in the environment for provenance/status/config, but do not rely on it being expanded in `WorkingDirectory`.
+
 Inspect what systemd will run:
 
 ```bash
