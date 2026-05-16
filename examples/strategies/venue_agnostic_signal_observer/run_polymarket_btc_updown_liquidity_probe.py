@@ -124,6 +124,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Enable DEBUG logging",
     )
+    parser.add_argument(
+        "--reference-proxy",
+        type=str,
+        default=None,
+        choices=["binance", "kraken", "coinbase"],
+        help="CEX proxy price source for distance-to-strike bucketing (default: disabled)",
+    )
+    parser.add_argument(
+        "--proxy-poll-interval",
+        type=float,
+        default=30.0,
+        help="CEX proxy price poll interval in seconds (default: 30)",
+    )
     return parser
 
 
@@ -198,7 +211,7 @@ async def main() -> int:
         args.discovery_poll_interval_seconds,
     )
 
-    markets_out, samples, cl_ticks, manifest = await capture_loop(
+    markets_out, samples, cl_ticks, manifest, _proxy_prices, _raw_payloads, _raw_resp = await capture_loop(
         markets=markets,
         duration_seconds=args.duration_seconds,
         poll_interval=args.discovery_poll_interval_seconds,

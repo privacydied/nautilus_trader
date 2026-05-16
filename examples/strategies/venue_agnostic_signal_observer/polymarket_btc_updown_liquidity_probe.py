@@ -86,14 +86,63 @@ ALLOWED_DIAGNOSTICS = {
 }
 
 # ---------------------------------------------------------------------------
-# Verification statuses (post-parser-fix audit)
+# Verification statuses (separate instrumentation from evidence)
 # ---------------------------------------------------------------------------
 
-PARSER_FIX_UNVERIFIED = "PARSER_FIX_UNVERIFIED"
+# Instrumentation (built, not yet run)
+PARSER_FIX_VERIFIED = "PARSER_FIX_VERIFIED"
+RAW_PAYLOAD_AUDIT_IMPLEMENTED = "RAW_PAYLOAD_AUDIT_IMPLEMENTED"
+TTE_BUCKETING_IMPLEMENTED = "TTE_BUCKETING_IMPLEMENTED"
+DISTANCE_TO_STRIKE_BUCKETING_IMPLEMENTED = "DISTANCE_TO_STRIKE_BUCKETING_IMPLEMENTED"
+REFERENCE_PROXY_IMPLEMENTED = "REFERENCE_PROXY_IMPLEMENTED"
+
+# Evidence (requires real artifact files on disk)
 RAW_PAYLOAD_VERIFIED = "RAW_PAYLOAD_VERIFIED"
-NEAR_EXPIRY_LIQUIDITY_VERIFIED = "NEAR_EXPIRY_LIQUIDITY_VERIFIED"
+TTE_BUCKETS_VERIFIED = "TTE_BUCKETS_VERIFIED"
+NEAR_EXPIRY_BUCKET_VERIFIED = "NEAR_EXPIRY_BUCKET_VERIFIED"
+DISTANCE_TO_STRIKE_BUCKETS_VERIFIED = "DISTANCE_TO_STRIKE_BUCKETS_VERIFIED"
+TWO_AXIS_LIQUIDITY_VERIFIED = "TWO_AXIS_LIQUIDITY_VERIFIED"
+
+# Gate states
 LIQUIDITY_GATE_VERIFIED = "LIQUIDITY_GATE_VERIFIED"
+LIQUIDITY_GATE_PENDING_TWO_AXIS_VERIFICATION = "LIQUIDITY_GATE_PENDING_TWO_AXIS_VERIFICATION"
 LIQUIDITY_GATE_NOT_VERIFIED = "LIQUIDITY_GATE_NOT_VERIFIED"
+INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+
+# Duration labels
+DUR_5M = "5m"
+DUR_15M = "15m"
+DUR_1H = "1h"
+DUR_UNKNOWN = "unknown"
+DURATION_LABELS = [DUR_5M, DUR_15M, DUR_1H, DUR_UNKNOWN]
+
+# Reference source labels
+REF_CHAINLINK = "CHAINLINK_REFERENCE"
+REF_CEX_PROXY = "CEX_PROXY_REFERENCE"
+REF_UNAVAILABLE = "REFERENCE_UNAVAILABLE"
+
+# Distance-to-strike bucket labels
+DIST_LTE_5 = "distance_lte_5_bps"
+DIST_5_TO_10 = "distance_5_to_10_bps"
+DIST_10_TO_25 = "distance_10_to_25_bps"
+DIST_25_TO_50 = "distance_25_to_50_bps"
+DIST_GT_50 = "distance_gt_50_bps"
+DIST_UNKNOWN = "unknown"
+DIST_BUCKET_LABELS = [DIST_LTE_5, DIST_5_TO_10, DIST_10_TO_25, DIST_25_TO_50, DIST_GT_50, DIST_UNKNOWN]
+
+# Required artifact files for each verification gate
+REQUIRED_ARTIFACTS_RAW_PAYLOAD = [
+    "raw_clob_orderbook_payloads.jsonl",
+    "raw_payload_audit.md",
+]
+REQUIRED_ARTIFACTS_TTE = [
+    "tte_bucket_summary.json",
+    "tte_bucket_summary.md",
+]
+REQUIRED_ARTIFACTS_DISTANCE = [
+    "distance_to_strike_bucket_summary.json",
+    "distance_to_strike_bucket_summary.md",
+]
 
 # TTE bucket labels
 TTE_GT_15M = "tte_gt_15m"
@@ -314,7 +363,7 @@ class ProbeSummary:
     verdict_statement: str
     spread_list_sample_count: int
     # Verification fields
-    verification_status: str = PARSER_FIX_UNVERIFIED
+    verification_status: str = "PARSER_FIX_UNVERIFIED"
     tte_buckets: dict[str, dict[str, Any]] | None = None
     near_expiry_definition: str = "tte <= 120s"
     near_expiry_sample_count: int = 0
@@ -825,18 +874,21 @@ async def capture_loop(
     poll_interval: float = DEFAULT_POLL_INTERVAL,
     enable_chainlink: bool = False,
     chainlink_poll_interval: float = 60.0,
+    reference_proxy: str | None = None,
+    proxy_poll_interval: float = 30.0,
 ) -> tuple[
     list[BTCMarket],
     list[OrderbookSample],
     list[ChainlinkTick],
     CaptureManifest,
+    list[tuple[float, float]],  # proxy prices [(ts, price), ...]
+    list[RawPayloadRecord],
+    list[str | None],  # raw CLOB response dicts per sample
 ]:
     """Run the capture loop: poll orderbooks and optionally Chainlink prices.
 
-    Returns (markets, samples, chainlink_ticks, manifest).
-
-    This is an async function but uses synchronous httpx for REST polling
-    inside a thread executor since each poll is independent.
+    Returns (markets, samples, chainlink_ticks, manifest, proxy_prices,
+             raw_payloads, raw_responses).
     """
     started_at = datetime.now(timezone.utc).isoformat()
     started_ts = time.time()
@@ -940,7 +992,7 @@ async def capture_loop(
         ),
     )
 
-    return markets, all_samples, all_cl_ticks, manifest
+    return markets, all_samples, all_cl_ticks, manifest, all_proxy_prices, all_raw_payloads, raw_responses
 
 
 # ---------------------------------------------------------------------------
@@ -1050,7 +1102,7 @@ def compute_summary(
     # Compute TTE buckets and verification status if raw payloads available
     tte_buckets = None
     near_expiry_rollup = {}
-    verification_status = PARSER_FIX_UNVERIFIED
+    verification_status = "PARSER_FIX_UNVERIFIED"
     raw_payload_count = len(raw_payloads) if raw_payloads else 0
 
     if raw_payloads is not None and markets and samples:
@@ -1778,6 +1830,637 @@ def write_tte_bucket_summary_md(
     lines.append("")
     lines.append("*TTE bucket analysis — observer-only, no trading signal.*")
 
+    path.write_text("\n".join(lines) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# CEX proxy reference price
+# ---------------------------------------------------------------------------
+
+
+def fetch_cex_proxy_price(
+    client: httpx.Client,
+    proxy: str = "binance",
+) -> tuple[float | None, str, str]:
+    """Fetch a BTC price from a public CEX as a settlement proxy.
+
+    This is NOT Chainlink settlement truth. It is labelled CEX_PROXY_REFERENCE.
+
+    Supported proxies: "binance" (default), "kraken", "coinbase".
+
+    Returns (price, source_label, error_or_empty).
+    """
+    endpoints = {
+        "binance": ("https://api.binance.com/api/v3/ticker/price", {"symbol": "BTCUSDT"}),
+        "kraken": ("https://api.kraken.com/0/public/Ticker", {"pair": "XBTUSD"}),
+        "coinbase": ("https://api.coinbase.com/v2/prices/BTC-USD/spot", {}),
+    }
+    url, params = endpoints.get(proxy, endpoints["binance"])
+    try:
+        resp = client.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        if proxy == "binance":
+            price = float(data.get("price", 0))
+        elif proxy == "kraken":
+            result = data.get("result", {})
+            ticker = result.get(next(iter(result)), {}) if result else {}
+            price = (float(ticker.get("b", [0])[0]) + float(ticker.get("a", [0])[0])) / 2 if ticker else None
+        elif proxy == "coinbase":
+            price = float(data.get("data", {}).get("amount", 0))
+        else:
+            return None, REF_CEX_PROXY, f"unsupported_proxy:{proxy}"
+        if price and price > 0:
+            return price, REF_CEX_PROXY, ""
+        return None, REF_CEX_PROXY, "zero_or_missing_price"
+    except Exception as exc:
+        return None, REF_CEX_PROXY, str(exc)[:100]
+
+
+# ---------------------------------------------------------------------------
+# Duration classification from slug
+# ---------------------------------------------------------------------------
+
+
+def _classify_duration(market_slug: str) -> str:
+    """Classify a market's duration from its slug pattern.
+
+    E.g. 'btc-updown-5m-12345' -> '5m'
+         'btc-updown-15m-12345' -> '15m'
+         'bitcoin-up-or-down-may-17-2026-10pm-et' -> '1h' (assumed hourly)
+         otherwise -> 'unknown'
+    """
+    import re
+    slug_lower = market_slug.lower()
+    m = re.search(r"updown[_-](\d+)([mh])", slug_lower)
+    if m:
+        count = int(m.group(1))
+        unit = m.group(2)
+        if unit == "m":
+            if count == 5:
+                return DUR_5M
+            if count == 15:
+                return DUR_15M
+            return f"{count}m"
+        if unit == "h":
+            if count == 1:
+                return DUR_1H
+            return f"{count}h"
+    if "up-or-down" in slug_lower:
+        return DUR_1H  # hourly family
+    return DUR_UNKNOWN
+
+
+def _classify_duration_from_expiry(expiry: str | None, end_ns: float | None = None) -> str:
+    """Fallback: classify duration from expiry timestamp range if available."""
+    return DUR_UNKNOWN  # not reliably available from Gamma API data
+
+
+# ---------------------------------------------------------------------------
+# Distance-to-strike bucket computation
+# ---------------------------------------------------------------------------
+
+
+def _classify_distance_bucket(
+    distance_bps: float | None,
+) -> str:
+    """Classify a distance-to-strike value into a bucket label."""
+    if distance_bps is None:
+        return DIST_UNKNOWN
+    if distance_bps <= 5:
+        return DIST_LTE_5
+    if distance_bps <= 10:
+        return DIST_5_TO_10
+    if distance_bps <= 25:
+        return DIST_10_TO_25
+    if distance_bps <= 50:
+        return DIST_25_TO_50
+    return DIST_GT_50
+
+
+def compute_distance_to_strike(
+    reference_price: float | None,
+    price_to_beat: float | None,
+    token_mid: float | None,
+    token_side: str | None,
+) -> float | None:
+    """Compute distance from current token price to binary strike in bps.
+
+    For a YES token: distance = |strike_price - cex_price| / cex_price * 10000
+    This requires both the CEX reference price and the token's implied price.
+
+    For binary options, the 'distance to strike' measures how far the
+    underlying price is from the strike (price_to_beat).
+    """
+    if reference_price is None or price_to_beat is None:
+        return None
+    if reference_price <= 0:
+        return None
+    distance = abs(price_to_beat - reference_price) / reference_price * 10000
+    return distance
+
+
+def _compute_distance_to_strike_buckets(
+    markets: list[BTCMarket],
+    samples: list[OrderbookSample],
+    reference_prices: list[tuple[float, float]],  # [(ts, price), ...]
+    reference_source: str,
+) -> dict[str, dict[str, Any]]:
+    """Compute distance-to-strike buckets.
+
+    reference_prices: list of (timestamp, cex_price) pairs captured during run.
+    """
+    if not reference_prices:
+        return {b: {"sample_count": 0, "valid_sample_count": 0, "bucket_classification": "unavailable",
+                    "reference_source": reference_source} for b in DIST_BUCKET_LABELS}
+
+    # Build market price-to-beat lookup
+    strike_map: dict[str, float | None] = {m.market_slug: m.price_to_beat for m in markets}
+
+    # For each sample, find nearest reference price and compute distance
+    ref_ts_sorted = sorted(reference_prices, key=lambda x: x[0])
+
+    bucket_samples: dict[str, list[OrderbookSample]] = {b: [] for b in DIST_BUCKET_LABELS}
+
+    for s in samples:
+        if s.price_to_beat is None:
+            bucket_samples[DIST_UNKNOWN].append(s)
+            continue
+        # Find nearest reference price
+        nearest = None
+        for ts, price in ref_ts_sorted:
+            if nearest is None or abs(ts - s.ts_event) < abs(nearest[0] - s.ts_event):
+                nearest = (ts, price)
+        if nearest is None or nearest[1] is None:
+            bucket_samples[DIST_UNKNOWN].append(s)
+            continue
+
+        ref_price = nearest[1]
+        distance = compute_distance_to_strike(ref_price, s.price_to_beat, s.best_bid, s.side)
+        bucket = _classify_distance_bucket(distance)
+        bucket_samples[bucket].append(s)
+
+    # Compute stats per bucket (simplified)
+    buckets_out = {}
+    for label in DIST_BUCKET_LABELS:
+        b_samples = bucket_samples[label]
+        total = len(b_samples)
+        valid = [s for s in b_samples if not s.is_missing and not s.is_crossed
+                 and s.best_bid is not None and s.best_ask is not None
+                 and s.spread_price_units is not None and s.spread_price_units >= 0]
+        valid_count = len(valid)
+        if total == 0:
+            buckets_out[label] = {"sample_count": 0, "valid_sample_count": 0,
+                                  "bucket_classification": "no_samples",
+                                  "reference_source": reference_source}
+            continue
+        spreads = sorted([s.spread_cents for s in valid if s.spread_cents is not None])
+        bid_depths = sorted([s.estimated_top_bid_depth_usd for s in valid
+                             if s.estimated_top_bid_depth_usd is not None])
+        ask_depths = sorted([s.estimated_top_ask_depth_usd for s in valid
+                             if s.estimated_top_ask_depth_usd is not None])
+        combined = sorted(bid_depths + ask_depths)
+        market_slugs = list({s.market_slug for s in b_samples})
+
+        def _pct(data, p):
+            if not data: return None
+            idx = max(0, int(len(data) * p / 100))
+            return data[min(idx, len(data) - 1)]
+
+        diag = _classify_liquidity(
+            [s.spread_price_units for s in valid if s.spread_price_units is not None],
+            bid_depths, ask_depths, valid_count,
+        )
+
+        buckets_out[label] = {
+            "sample_count": total,
+            "valid_sample_count": valid_count,
+            "market_count": len(market_slugs),
+            "market_slugs": market_slugs,
+            "median_spread_cents": _pct(spreads, 50),
+            "p75_spread_cents": _pct(spreads, 75),
+            "p95_spread_cents": _pct(spreads, 95),
+            "median_bid_depth_usd": _pct(bid_depths, 50),
+            "median_ask_depth_usd": _pct(ask_depths, 50),
+            "median_combined_top_depth_usd": _pct(combined, 50),
+            "two_sided_rate": round(sum(1 for s in b_samples if s.is_two_sided) / total * 100, 2) if total > 0 else 0.0,
+            "bucket_classification": diag,
+            "reference_source": reference_source,
+        }
+    return buckets_out
+
+
+# ---------------------------------------------------------------------------
+# Two-axis liquidity grid
+# ---------------------------------------------------------------------------
+
+
+def _compute_two_axis_grid(
+    tte_buckets: dict[str, dict[str, Any]],
+    distance_buckets: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """Compute a two-axis liquidity grid: TTE rows x distance columns.
+
+    For now, computes a simplified grid from bucket-level aggregates.
+    A full per-sample cross-bucketing requires both TTE and distance
+    assigned per sample, which requires the full capture pipeline.
+    """
+    grid: dict[str, dict[str, Any]] = {}
+    for tte_label in TTE_BUCKET_LABELS:
+        tte_data = tte_buckets.get(tte_label, {})
+        grid[tte_label] = {}
+        for dist_label in DIST_BUCKET_LABELS:
+            dist_data = distance_buckets.get(dist_label, {})
+            combined_count = min(
+                tte_data.get("sample_count", 0),
+                dist_data.get("sample_count", 0),
+            )
+            grid[tte_label][dist_label] = {
+                "sample_count": combined_count,
+                "market_count": 0,
+                "median_spread_cents": tte_data.get("median_spread_cents"),
+                "p95_spread_cents": tte_data.get("p95_spread_cents"),
+                "classification": dist_data.get("bucket_classification", "unavailable"),
+            }
+
+    return grid
+
+
+def _get_danger_zone_cell(grid: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Extract the convex danger zone cell: tte <= 120s AND distance <= 10 bps."""
+    near_labels = [TTE_0S_TO_30S, TTE_30S_TO_1M, TTE_1M_TO_2M]
+    close_labels = [DIST_LTE_5, DIST_5_TO_10]
+
+    combined: list[dict] = []
+    for tte_lbl in near_labels:
+        for dist_lbl in close_labels:
+            cell = grid.get(tte_lbl, {}).get(dist_lbl, {})
+            if cell.get("sample_count", 0) > 0:
+                combined.append(cell)
+
+    if not combined:
+        return {
+            "tte_range": "<= 120s",
+            "distance_range": "<= 10 bps",
+            "sample_count": 0,
+            "classification": "no_data",
+        }
+
+    total = sum(c.get("sample_count", 0) for c in combined)
+    best = min(
+        (c for c in combined if c.get("classification") and "GREEN" in str(c.get("classification"))),
+        key=lambda c: c.get("median_spread_cents", 999) if c.get("median_spread_cents") is not None else 999,
+        default=None,
+    )
+    worst = max(
+        (c for c in combined if c.get("classification")),
+        key=lambda c: c.get("median_spread_cents", 0) if c.get("median_spread_cents") is not None else 0,
+        default=combined[0],
+    )
+
+    return {
+        "tte_range": "<= 120s",
+        "distance_range": "<= 10 bps",
+        "sample_count": total,
+        "median_spread_cents": best.get("median_spread_cents") if best else worst.get("median_spread_cents"),
+        "classification": worst.get("classification", "no_data"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Duration coverage computation
+# ---------------------------------------------------------------------------
+
+
+def _compute_duration_coverage(
+    markets: list[BTCMarket],
+    samples: list[OrderbookSample],
+) -> dict[str, dict[str, Any]]:
+    """Compute liquidity breakdown by market duration."""
+    # Assign each market a duration label
+    market_durations: dict[str, str] = {}
+    for m in markets:
+        market_durations[m.market_slug] = _classify_duration(m.market_slug)
+
+    duration_samples: dict[str, list[OrderbookSample]] = {d: [] for d in DURATION_LABELS}
+    for s in samples:
+        dur = market_durations.get(s.market_slug, DUR_UNKNOWN)
+        duration_samples[dur].append(s)
+
+    coverage = {}
+    for dur in DURATION_LABELS:
+        d_samples = duration_samples[dur]
+        total = len(d_samples)
+        valid = [s for s in d_samples if not s.is_missing and not s.is_crossed
+                 and s.best_bid is not None and s.best_ask is not None
+                 and s.spread_price_units is not None and s.spread_price_units >= 0]
+
+        near_expiry = [s for s in d_samples if (
+            _parse_expiry_to_tte(s.expiry or None, s.ts_event) or 9999
+        ) <= NEAR_EXPIRY_MAX_TTE_S]
+        valid_count = len(valid)
+
+        if total == 0:
+            if dur == DUR_15M:
+                coverage[dur] = {"status": "15M_DURATION_NOT_VERIFIED", "sample_count": 0}
+            else:
+                coverage[dur] = {"status": "no_samples", "sample_count": 0}
+            continue
+
+        spreads = sorted([s.spread_cents for s in valid if s.spread_cents is not None])
+        bid_depths = sorted([s.estimated_top_bid_depth_usd for s in valid
+                             if s.estimated_top_bid_depth_usd is not None])
+        ask_depths = sorted([s.estimated_top_ask_depth_usd for s in valid
+                             if s.estimated_top_ask_depth_usd is not None])
+        market_slugs = list({s.market_slug for s in d_samples})
+
+        def _pct(data, p):
+            if not data: return None
+            idx = max(0, int(len(data) * p / 100))
+            return data[min(idx, len(data) - 1)]
+
+        diag = _classify_liquidity(
+            [s.spread_price_units for s in valid if s.spread_price_units is not None],
+            bid_depths, ask_depths, valid_count,
+        )
+
+        coverage[dur] = {
+            "status": "verified",
+            "market_count": len(market_slugs),
+            "market_slugs": market_slugs,
+            "sample_count": total,
+            "valid_sample_count": valid_count,
+            "near_expiry_sample_count": len(near_expiry),
+            "median_spread_cents": _pct(spreads, 50),
+            "p95_spread_cents": _pct(spreads, 95),
+            "median_bid_depth_usd": _pct(bid_depths, 50),
+            "median_ask_depth_usd": _pct(ask_depths, 50),
+            "classification": diag,
+        }
+
+    return coverage
+
+
+# ---------------------------------------------------------------------------
+# Artifact existence validation
+# ---------------------------------------------------------------------------
+
+
+def _check_artifact_file(path: Path, filename: str) -> tuple[bool, int]:
+    """Check that an artifact file exists and has content."""
+    full = path / filename
+    if not full.exists():
+        return False, 0
+    try:
+        content = full.read_text().strip()
+        row_count = content.count("\n") + 1 if content else 0
+        return row_count > 0, row_count
+    except Exception:
+        return False, 0
+
+
+def _validate_artifact_set(
+    out_dir: Path,
+    required_files: list[str],
+) -> tuple[bool, dict[str, int]]:
+    """Validate that all required artifact files exist and have rows.
+
+    Returns (all_exist_and_nonempty, {filename: row_count}).
+    """
+    results = {}
+    all_ok = True
+    for fname in required_files:
+        ok, rows = _check_artifact_file(out_dir, fname)
+        results[fname] = rows
+        if not ok:
+            all_ok = False
+    return all_ok, results
+
+
+# ---------------------------------------------------------------------------
+# Updated verification status computation
+# ---------------------------------------------------------------------------
+
+
+def _compute_verification_status_v2(
+    out_dir: Path,
+    tte_buckets: dict[str, dict[str, Any]],
+    distance_buckets: dict[str, dict[str, Any]],
+    two_axis_grid: dict[str, dict[str, Any]],
+    duration_coverage: dict[str, dict[str, Any]],
+    instrumented_flags: dict[str, bool],
+) -> str:
+    """Compute verification gate status based on real artifact evidence.
+
+    Rules:
+    - LIQUIDITY_GATE_VERIFIED requires:
+      1) RAW_PAYLOAD_VERIFIED: raw payload artifacts exist
+      2) NEAR_EXPIRY_BUCKET_VERIFIED: tte<=120s bucket is GREEN or YELLOW
+      3) DISTANCE_TO_STRIKE_BUCKETS_VERIFIED: distance artifacts exist
+      4) TWO_AXIS_LIQUIDITY_VERIFIED: two-axis grid has data
+      5) Convex danger-zone cell is GREEN or defensibly YELLOW
+    - LIQUIDITY_GATE_PENDING_TWO_AXIS_VERIFICATION if parser is fixed but
+      two-axis evidence is incomplete
+    """
+    # Check raw payload artifacts
+    raw_ok, raw_results = _validate_artifact_set(out_dir, REQUIRED_ARTIFACTS_RAW_PAYLOAD)
+    tte_ok, tte_results = _validate_artifact_set(out_dir, REQUIRED_ARTIFACTS_TTE)
+    dist_ok, dist_results = _validate_artifact_set(out_dir, REQUIRED_ARTIFACTS_DISTANCE)
+
+    # Check TTE near-expiry
+    near_buckets = [TTE_0S_TO_30S, TTE_30S_TO_1M, TTE_1M_TO_2M]
+    near_expiry_green = False
+    for b in near_buckets:
+        bucket = tte_buckets.get(b, {})
+        diag = bucket.get("bucket_classification", "")
+        count = bucket.get("valid_sample_count", 0)
+        if count > 0 and diag in (GREEN_DIAG, YELLOW_DIAG):
+            near_expiry_green = True
+            break
+
+    # Check danger zone cell
+    danger = _get_danger_zone_cell(two_axis_grid)
+    danger_ok = (
+        danger.get("sample_count", 0) > 0
+        and danger.get("classification") in (GREEN_DIAG, YELLOW_DIAG)
+    )
+
+    # Check duration coverage for 15m
+    dur_15m = duration_coverage.get(DUR_15M, {})
+    dur_15m_ok = dur_15m.get("status") == "verified" and dur_15m.get("sample_count", 0) > 0
+
+    if not instrumented_flags.get("parser_fix", False):
+        return "PARSER_FIX_UNVERIFIED"
+
+    if raw_ok and tte_ok and dist_ok and near_expiry_green and danger_ok and dur_15m_ok:
+        return LIQUIDITY_GATE_VERIFIED
+
+    if raw_ok and tte_ok:
+        if not near_expiry_green:
+            return LIQUIDITY_GATE_NOT_VERIFIED
+        if not dist_ok:
+            return LIQUIDITY_GATE_PENDING_TWO_AXIS_VERIFICATION
+        if not danger_ok:
+            return LIQUIDITY_GATE_NOT_VERIFIED
+
+    return LIQUIDITY_GATE_PENDING_TWO_AXIS_VERIFICATION
+
+
+# ---------------------------------------------------------------------------
+# Distance-to-strike output writer
+# ---------------------------------------------------------------------------
+
+
+def write_distance_bucket_summary_json(
+    distance_buckets: dict[str, dict[str, Any]],
+    reference_source: str,
+    path: Path,
+) -> None:
+    """Write distance-to-strike bucket summary to JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "reference_source": reference_source,
+        "distance_buckets": distance_buckets,
+    }
+    with open(path, "w") as f:
+        json.dump(payload, f, indent=2, default=str)
+        f.write("\n")
+
+
+def write_distance_bucket_summary_md(
+    distance_buckets: dict[str, dict[str, Any]],
+    reference_source: str,
+    path: Path,
+) -> None:
+    """Write distance-to-strike bucket summary to Markdown."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Distance-to-Strike Bucket Summary",
+        "",
+        f"**Reference source:** {reference_source}",
+        "",
+        "| Bucket | Samples | Valid | Median Spread (c) | P95 Spread (c) | Med Bid $ | Med Ask $ | Class. |",
+        "|--------|---------|-------|--------------------|----------------|-----------|-----------|--------|",
+    ]
+    for label in DIST_BUCKET_LABELS:
+        bucket = distance_buckets.get(label, {})
+        count = bucket.get("sample_count", 0)
+        lines.append(
+            f"| {label} | {count} | {bucket.get('valid_sample_count', 0)} | "
+            f"{_fmt(bucket.get('median_spread_cents'))} | "
+            f"{_fmt(bucket.get('p95_spread_cents'))} | "
+            f"{_fmt(bucket.get('median_bid_depth_usd'))} | "
+            f"{_fmt(bucket.get('median_ask_depth_usd'))} | "
+            f"{bucket.get('bucket_classification', 'N/A')} |"
+        )
+    lines.append("")
+    lines.append("---")
+    lines.append("*Distance-to-strike analysis — CEX proxy, not Chainlink truth.*")
+    path.write_text("\n".join(lines) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Two-axis grid output writer
+# ---------------------------------------------------------------------------
+
+
+def write_two_axis_grid_json(
+    grid: dict[str, dict[str, Any]],
+    danger_zone_cell: dict[str, Any],
+    path: Path,
+) -> None:
+    """Write two-axis liquidity grid to JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "two_axis_liquidity_grid": grid,
+        "convex_danger_zone_cell": danger_zone_cell,
+    }
+    with open(path, "w") as f:
+        json.dump(payload, f, indent=2, default=str)
+        f.write("\n")
+
+
+def write_two_axis_grid_md(
+    grid: dict[str, dict[str, Any]],
+    danger_zone_cell: dict[str, Any],
+    path: Path,
+) -> None:
+    """Write two-axis liquidity grid to Markdown."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Two-Axis Liquidity Grid",
+        "",
+        "Rows: time-to-expiry. Columns: distance-to-strike.",
+        "",
+    ]
+    # Grid header
+    dist_labels = [DIST_LTE_5, DIST_5_TO_10, DIST_10_TO_25, DIST_25_TO_50, DIST_GT_50, DIST_UNKNOWN]
+    header = "| TTE \\ Distance | " + " | ".join(l.replace("distance_", "") for l in dist_labels) + " |"
+    sep = "|---" + "|---" * len(dist_labels) + "|"
+    lines.append(header)
+    lines.append(sep)
+    for tte_label in TTE_BUCKET_LABELS:
+        row = f"| {tte_label} "
+        tte_data = grid.get(tte_label, {})
+        for dist_label in dist_labels:
+            cell = tte_data.get(dist_label, {})
+            sample_count = cell.get("sample_count", 0)
+            diag = cell.get("classification", "")
+            cell_str = f"{sample_count}" if sample_count > 0 else "-"
+            if "GREEN" in str(diag):
+                cell_str = f"**{sample_count}**"
+            row += f"| {cell_str} "
+        row += "|"
+        lines.append(row)
+
+    lines.append("")
+    lines.append("## Convex Danger Zone Cell")
+    lines.append("")
+    lines.append(f"**Definition:** tte <= 120s AND distance <= 10 bps")
+    lines.append("")
+    lines.append(f"| Metric | Value |")
+    lines.append(f"|--------|-------|")
+    lines.append(f"| Sample count | {danger_zone_cell.get('sample_count', 0)} |")
+    lines.append(f"| Median spread (cents) | {_fmt(danger_zone_cell.get('median_spread_cents'))} |")
+    lines.append(f"| Classification | {danger_zone_cell.get('classification', 'N/A')} |")
+    lines.append("")
+    lines.append("---")
+    lines.append("*Two-axis liquidity grid — observer-only, no trading signal.*")
+    path.write_text("\n".join(lines) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Duration coverage output writer
+# ---------------------------------------------------------------------------
+
+
+def write_duration_coverage_md(
+    coverage: dict[str, dict[str, Any]],
+    path: Path,
+) -> None:
+    """Write duration coverage breakdown to Markdown."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Duration Coverage Breakdown",
+        "",
+        "| Duration | Markets | Samples | Valid | Near-Expiry | Median Spread (c) | P95 Spread (c) | Bid $ | Ask $ | Class. |",
+        "|----------|---------|---------|-------|-------------|--------------------|----------------|-------|-------|--------|",
+    ]
+    for dur in DURATION_LABELS:
+        c = coverage.get(dur, {})
+        status = c.get("status", "no_data")
+        if status == "15M_DURATION_NOT_VERIFIED" or c.get("sample_count", 0) == 0:
+            lines.append(f"| {dur} | 0 | 0 | 0 | 0 | N/A | N/A | N/A | N/A | **{status}** |")
+            continue
+        lines.append(
+            f"| {dur} | {c.get('market_count', 0)} | {c.get('sample_count', 0)} | "
+            f"{c.get('valid_sample_count', 0)} | {c.get('near_expiry_sample_count', 0)} | "
+            f"{_fmt(c.get('median_spread_cents'))} | {_fmt(c.get('p95_spread_cents'))} | "
+            f"{_fmt(c.get('median_bid_depth_usd'))} | {_fmt(c.get('median_ask_depth_usd'))} | "
+            f"{c.get('classification', 'N/A')} |"
+        )
+    lines.append("")
+    lines.append("---")
     path.write_text("\n".join(lines) + "\n")
 
 
