@@ -907,10 +907,16 @@ async def capture_loop(
 
     all_samples: list[OrderbookSample] = []
     all_cl_ticks: list[ChainlinkTick] = []
+    all_proxy_prices: list[tuple[float, float]] = []
+    all_raw_payloads: list[RawPayloadRecord] = []
+    raw_responses: list[dict[str, Any] | None] = []
     errors: list[str] = []
 
     actionable_markets = [m for m in markets if m.has_tokens]
     token_ids_captured: set[str] = set()
+
+    proxy_last_poll = 0.0
+    proxy_counter = 0
 
     deadline = time.time() + duration_seconds
 
@@ -953,6 +959,48 @@ async def capture_loop(
                     fs.last_sample_ts = cl_tick.ts_event
                 if cl_tick.error:
                     errors.append(f"chainlink:btcusd: {cl_tick.error}")
+
+            # Optional proxy price capture
+            if reference_proxy and time.time() - proxy_last_poll >= proxy_poll_interval:
+                proxy_last_poll = time.time()
+                proxy_counter += 1
+                try:
+                    p_price, p_source, p_err = fetch_cex_proxy_price(client, reference_proxy)
+                    if p_price and p_price > 0:
+                        all_proxy_prices.append((time.time(), p_price))
+                except Exception:
+                    pass
+
+            # Persist first N raw CLOB responses for audit (sample every 10th)
+            if len(all_raw_payloads) < 100 and len(all_samples) % 2 == 0:
+                for market in actionable_markets:
+                    for tid in market.token_ids:
+                        raw = fetch_orderbook(tid, client)
+                        if raw is not None:
+                            sample = parse_orderbook_sample(raw, market, tid, time.time())
+                            rr = RawPayloadRecord(
+                                ts_event=sample.ts_event,
+                                market_slug=market.market_slug,
+                                token_id=tid,
+                                side=_token_side(market, tid),
+                                expiry=market.expiry,
+                                price_to_beat=market.price_to_beat,
+                                raw_bids=raw.get("bids", []),
+                                raw_asks=raw.get("asks", []),
+                                computed_best_bid=sample.best_bid,
+                                computed_best_ask=sample.best_ask,
+                                computed_spread_price_units=sample.spread_price_units,
+                                computed_spread_cents=sample.spread_cents,
+                                computed_top_bid_size=sample.top_bid_size,
+                                computed_top_ask_size=sample.top_ask_size,
+                                computed_bid_depth_usd=sample.estimated_top_bid_depth_usd,
+                                computed_ask_depth_usd=sample.estimated_top_ask_depth_usd,
+                            )
+                            all_raw_payloads.append(rr)
+                            if len(all_raw_payloads) >= 100:
+                                break
+                    if len(all_raw_payloads) >= 100:
+                        break
 
             elapsed = time.time() - loop_start
             sleep_needed = max(0, poll_interval - elapsed)

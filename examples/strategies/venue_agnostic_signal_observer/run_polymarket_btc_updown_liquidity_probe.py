@@ -218,6 +218,8 @@ async def main() -> int:
         poll_interval=args.discovery_poll_interval_seconds,
         enable_chainlink=args.chainlink,
         chainlink_poll_interval=args.chainlink_poll_interval,
+        reference_proxy=args.reference_proxy,
+        proxy_poll_interval=args.proxy_poll_interval,
     )
 
     logger.info(
@@ -277,7 +279,9 @@ async def main() -> int:
     verification_status = None
     if markets and samples:
         verification_status = _run_verification(out_dir, markets, samples, args.reference_proxy,
-                                                summary, manifest)
+                                                summary, manifest,
+                                                _proxy_prices=_proxy_prices,
+                                                _raw_payloads=_raw_payloads)
 
     # Re-write summary JSON and MD with updated verification status
     if verification_status:
@@ -300,6 +304,8 @@ def _run_verification(
     reference_proxy: str | None,
     summary: ProbeSummary,
     manifest: CaptureManifest,
+    _proxy_prices: list | None = None,
+    _raw_payloads: list | None = None,
 ) -> str | None:
     """Run post-capture verification: TTE, distance, two-axis grid, duration.
 
@@ -391,6 +397,16 @@ def _run_verification(
     dur_md = out_dir / "duration_coverage.md"
     write_duration_coverage_md(duration_coverage, dur_md)
     logger.info("Wrote duration coverage to %s", dur_md)
+
+    # Raw payload artifacts (captured inline if capture_loop had raw payloads)
+    if _raw_payloads:
+        raw_json = out_dir / "raw_clob_orderbook_payloads.jsonl"
+        write_raw_payloads(_raw_payloads, raw_json)
+        logger.info("Wrote %d raw payloads to %s", len(_raw_payloads), raw_json)
+
+        raw_md = out_dir / "raw_payload_audit.md"
+        write_raw_payload_audit(_raw_payloads, raw_md)
+        logger.info("Wrote raw payload audit to %s", raw_md)
 
     # Check artifact existence for raw payload
     raw_payload_files_exist = (
