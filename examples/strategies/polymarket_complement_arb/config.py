@@ -6,7 +6,7 @@ All config fields are documented with their purpose and default values.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 
@@ -60,6 +60,13 @@ class ComplementArbConfig:
 
     # --- Rebates (reporting only, not in gate) ---
     maker_rebates_enabled_for_reporting: bool = False
+
+    # --- Shadow validation sufficiency gates ---
+    min_observer_windows: int = 5
+    min_detected_opportunities: int = 50
+    min_pessimistic_paired_fills: int = 20
+    min_same_condition_valid_opportunities: int = 30
+    min_non_dust_opportunities: int = 30
 
     # --- Live guards ---
     live_acknowledgement: bool = False
