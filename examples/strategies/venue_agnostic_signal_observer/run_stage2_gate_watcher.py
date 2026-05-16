@@ -526,7 +526,7 @@ def run_post_evaluation_diagnostics(python_exe: str, log: WatcherLogger,
 
     # 2. Lead/lag heatmap
     heatmap_engine = "gpu" if cuda_ok else "cpu"
-    heatmap_device = gpu_device if heatmap_engine == "gpu" else "cuda:0"
+    heatmap_device = gpu_device if heatmap_engine == "gpu" else ""
     heatmap_out = f"{report_dir}/lead_lag_heatmap_{heatmap_engine}"
     heatmap_args = [
         "--capture-dir", capture_dir,
@@ -554,7 +554,7 @@ def run_post_evaluation_diagnostics(python_exe: str, log: WatcherLogger,
         "--seed", "42",
         "--shift-mode", "circular_time_shift",
         "--engine", perm_engine,
-        "--device", gpu_device if perm_engine == "gpu" else "cuda:0",
+        "--device", gpu_device if perm_engine == "gpu" else "",
         "--batch-size", "512",
         "--min-events", "50",
         "--cost-floor-bps", "50",

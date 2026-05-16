@@ -110,7 +110,7 @@ def run_discovery_check(
 
     # Process evaluator summaries
     survivors: list[dict[str, Any]] = []
-    rejected_by_bh: list[dict[str, Any]] = []
+    bh_failed_configs: list[dict[str, Any]] = []
 
     # Check FDR result
     fdr_status = fdr_result.get("status", "")
@@ -144,7 +144,7 @@ def run_discovery_check(
                 "source_venue", "target_venue", "symbol",
                 "signal_type", "lookback_ms", "horizon_ms",
             ):
-                val = group.get(key) or summary.get(key)
+                val = group.get(key) if group.get(key) is not None else summary.get(key)
                 if val is not None:
                     dims[key] = val
 
@@ -152,6 +152,10 @@ def run_discovery_check(
 
             # Minimum events — always apply
             if event_count < min_events:
+                continue
+
+            # Skip groups without a computable mean net bps — cannot evaluate criteria
+            if mean_bps is None:
                 continue
 
             all_capture_data.append({
@@ -249,7 +253,11 @@ def run_discovery_check(
                 if found_bh_survivor:
                     break
             if not found_bh_survivor:
-                rejected_by_bh.append(cfg_data)
+                # This config failed BH survival — no capture was significant at FDR q threshold.
+                # Variable named `bh_failed_configs` (not `rejected_by_bh`) to avoid the semantic
+                # pitfall: in BH/FDR terminology "rejected" means the null WAS rejected and the
+                # finding IS significant; this list contains configs that did NOT survive BH.
+                bh_failed_configs.append(cfg_data)
                 continue
 
         frozen_configs.append({
@@ -262,7 +270,6 @@ def run_discovery_check(
             "survived_discovery": True,
         })
 
-    survivors.append([])
     burn_record: dict[str, Any] | None = None
 
     if not frozen_configs:
@@ -309,7 +316,7 @@ def run_discovery_check(
         "survivors": survivors,
         "frozen_configs": frozen_configs,
         "frozen_config_count": len(frozen_configs),
-        "rejected_by_bh": len(rejected_by_bh),
+        "bh_failed_configs": len(bh_failed_configs),
         "required_same_sign": required_same_sign,
         "n_discovery_captures": n_discovery,
         "errors": errors,
@@ -383,7 +390,7 @@ def run_holdout_check(
                 "source_venue", "target_venue", "symbol",
                 "signal_type", "lookback_ms", "horizon_ms",
             ):
-                val = group.get(key) or summary.get(key)
+                val = group.get(key) if group.get(key) is not None else summary.get(key)
                 if val is not None:
                     dims[key] = val
 

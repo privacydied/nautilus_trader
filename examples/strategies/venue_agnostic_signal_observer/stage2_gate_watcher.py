@@ -599,8 +599,8 @@ class WatcherLogger:
 
 
 def _ts_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + \
-        f"{datetime.now(timezone.utc).microsecond:06d}"[:3] + "Z"
+    now = datetime.now(timezone.utc)
+    return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond:06d}"[:3] + "Z"
 
 
 # ---------------------------------------------------------------------------
