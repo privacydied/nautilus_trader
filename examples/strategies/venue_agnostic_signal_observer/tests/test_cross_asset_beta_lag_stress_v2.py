@@ -424,3 +424,177 @@ def test_no_live_order_secret_imports_in_new_trigger_code() -> None:
     ]
     for token in forbidden:
         assert token not in content
+
+
+# ---------------------------------------------------------------------------
+# Synthetic stress injection: spike-and-revert
+# ---------------------------------------------------------------------------
+
+
+def test_spike_and_revert_35bps_fires_trigger() -> None:
+    """35 bps spike + full revert within 25s must fire the trigger.
+
+    BTC rises 35 bps at t=10, then returns to start price at t=25.
+    Endpoint-to-endpoint (t=0 vs t=30) scores ~0 bps.
+    Max-excursion (t=0 vs t=10) scores 35 bps — the correct semantic.
+    """
+    base = 50_000.0
+    spike = base * (1 + 35 / 10_000)
+    ticks = _ticks("BTC", [
+        (0.0, base),
+        (10.0, spike),   # 35 bps up
+        (25.0, base),    # fully reverted
+        (30.0, base),    # still at base
+    ])
+    result = watcher.evaluate_cross_asset_beta_lag_stress_trigger(
+        ticks=ticks,
+        stress_confirmation_active=True,
+    )
+    assert result.triggered is True, (
+        f"spike-and-revert should fire; got triggered={result.triggered}, "
+        f"move_30s={result.source_move_bps_30s}"
+    )
+    assert result.source_move_bps_30s is not None
+    assert result.source_move_bps_30s >= 34.9
+
+
+def test_spike_outside_30s_window_does_not_fire() -> None:
+    """A move that starts before t=0 of the 30s window must not fire.
+
+    Only pairs within [start_ts, start_ts + 30s] are evaluated.
+    A spike from t=-5 to t=10 spans 15s but the t=-5 observation is
+    outside the 45s history window in this fabricated series — verify
+    the evaluator doesn't cross the window boundary.
+    """
+    base = 50_000.0
+    spike = base * (1 + 35 / 10_000)
+    # Only two ticks, 35s apart — outside the 30s window
+    ticks = _ticks("BTC", [(0.0, base), (35.0, spike)])
+    result = watcher.evaluate_cross_asset_beta_lag_stress_trigger(
+        ticks=ticks,
+        stress_confirmation_active=True,
+    )
+    assert result.triggered is False, (
+        "pair spanning >30s must not trigger; "
+        f"move_30s={result.source_move_bps_30s}"
+    )
+
+
+def test_staleness_gap_voids_cycle_not_cross_gap_score() -> None:
+    """snapshot_ticks returns empty when newest observation is stale.
+
+    Simulates a 10s REST outage: newest tick is 10s old, stale_after=8s.
+    The evaluator must receive no ticks and return impulse_met=False,
+    not compute a cross-gap move.
+    """
+    feed = watcher.StressV2TriggerFeed(
+        poll_seconds=999,
+        stale_after_seconds=8.0,
+        history_seconds=45.0,
+        start_background=False,
+    )
+    now = 1_000_000.0
+    # Inject observations that are 10s stale
+    for i in range(5):
+        feed.record_price("BTC", 50_000.0 + i * 20, ts_seconds=now - 35 + i * 2)
+    feed.record_price("BTC", 51_800.0, ts_seconds=now - 10)  # newest is 10s old
+
+    ticks, reason = feed.snapshot_ticks(now_seconds=now)
+    assert ticks == [], f"stale feed must return no ticks; got {len(ticks)}"
+    assert reason == "STRESS_V2_TRIGGER_FEED_STALE"
+
+    # Evaluator with no ticks must not trigger
+    result = watcher.evaluate_cross_asset_beta_lag_stress_trigger(
+        ticks=[],
+        stress_confirmation_active=True,
+    )
+    assert result.triggered is False
+    assert result.source_move_bps_30s is None
+
+
+def test_insufficient_window_width_returns_waiting() -> None:
+    """snapshot_ticks returns empty when history covers <30s.
+
+    Feed has 5 recent observations but all within the last 25s —
+    not enough history to compute a 30s move.
+    """
+    feed = watcher.StressV2TriggerFeed(
+        poll_seconds=999,
+        stale_after_seconds=8.0,
+        history_seconds=45.0,
+        start_background=False,
+    )
+    now = 1_000_000.0
+    for i in range(5):
+        feed.record_price("BTC", 50_000.0 + i * 50, ts_seconds=now - 20 + i * 5)
+
+    ticks, reason = feed.snapshot_ticks(now_seconds=now)
+    assert ticks == []
+    assert reason == "STRESS_V2_WAITING_FOR_TRIGGER"
+
+
+# ---------------------------------------------------------------------------
+# _count_validated_full_active: overlap quality gate
+# ---------------------------------------------------------------------------
+
+
+def test_count_validated_rejects_zero_overlap_capture(tmp_path: Path) -> None:
+    """A FULL_ACTIVE capture with global_overlap=0 must not count toward corpus.
+
+    A triggered capture that collected no ticks (zero overlap) inflates
+    usable_window_count if the counter only checks mode and quarantine status.
+    Verify it is excluded.
+    """
+    data = tmp_path / "data"
+    data.mkdir()
+    cap = data / "cross_asset_beta_lag_v1_FULL_ACTIVE_zero_overlap"
+    cap.mkdir()
+    import json as _json
+    (cap / "capture_manifest.json").write_text(_json.dumps({
+        "run_id": "cap_zero_overlap",
+        "capture_mode": "FULL_ACTIVE",
+        "_metadata": {"capture_mode": "FULL_ACTIVE"},
+        "overlap": {"global_overlap_duration_seconds": 0},
+    }))
+
+    from examples.strategies.venue_agnostic_signal_observer import stage2_gate_watcher as w
+    saved_data = w._DATA_ROOT
+    saved_signal = w._SIGNAL_FAMILY
+    try:
+        w._DATA_ROOT = data
+        w._SIGNAL_FAMILY = "cross_asset_beta_lag_v1"
+        count = w._count_validated_full_active()
+        assert count == 0, (
+            f"zero-overlap capture must not count; got {count}. "
+            "Add overlap check to _count_validated_full_active."
+        )
+    finally:
+        w._DATA_ROOT = saved_data
+        w._SIGNAL_FAMILY = saved_signal
+
+
+def test_count_validated_accepts_positive_overlap_capture(tmp_path: Path) -> None:
+    """A FULL_ACTIVE capture with positive overlap counts toward corpus."""
+    data = tmp_path / "data"
+    data.mkdir()
+    cap = data / "cross_asset_beta_lag_v1_FULL_ACTIVE_good"
+    cap.mkdir()
+    import json as _json
+    (cap / "capture_manifest.json").write_text(_json.dumps({
+        "run_id": "cap_good",
+        "capture_mode": "FULL_ACTIVE",
+        "_metadata": {"capture_mode": "FULL_ACTIVE"},
+        "overlap": {"global_overlap_duration_seconds": 120.5},
+    }))
+
+    from examples.strategies.venue_agnostic_signal_observer import stage2_gate_watcher as w
+    saved_data = w._DATA_ROOT
+    saved_signal = w._SIGNAL_FAMILY
+    try:
+        w._DATA_ROOT = data
+        w._SIGNAL_FAMILY = "cross_asset_beta_lag_v1"
+        count = w._count_validated_full_active()
+        assert count == 1
+    finally:
+        w._DATA_ROOT = saved_data
+        w._SIGNAL_FAMILY = saved_signal

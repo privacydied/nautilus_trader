@@ -870,6 +870,14 @@ def _count_validated_full_active() -> int:
             continue
         if run_id in burned:
             continue
+        # Require positive global overlap — a zero-overlap capture has no
+        # usable tick data and must not count toward the rerun gate.
+        overlap = m.get("overlap", {})
+        if not isinstance(overlap, dict):
+            continue
+        global_overlap = overlap.get("global_overlap_duration_seconds") or 0
+        if not (global_overlap > 0):
+            continue
         count += 1
 
     return count

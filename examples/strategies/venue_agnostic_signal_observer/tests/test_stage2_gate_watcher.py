@@ -1019,6 +1019,7 @@ class TestCompletedWithErrorsNotFatal:
                 "capture_status": "completed_with_errors",
                 "capture_mode": "FULL_ACTIVE",
                 "streams": {},
+                "overlap": {"global_overlap_duration_seconds": 120.0},
             }
             (capture_dir / "capture_manifest.json").write_text(
                 json.dumps(manifest)
@@ -1187,6 +1188,7 @@ class TestCorpusReadinessBoundary:
                 "capture_mode": "FULL_ACTIVE",
                 "capture_status": "completed",
                 "_metadata": {"capture_mode": "FULL_ACTIVE"},
+                "overlap": {"global_overlap_duration_seconds": 300.0},
             }))
 
         w._DATA_ROOT = data
