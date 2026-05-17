@@ -30,6 +30,8 @@ class ValidatorSummary:
     dsr_result: DSRResult | None
     cpcv_result: CPCVResult | None
     pbo_result: PBOResult | None
+    fdr_result: dict[str, Any] | None
+    mcpt_result: dict[str, Any] | None
     cost_floor: float | None
     economic_viability_status: str
     statistical_validity_status: str
@@ -53,6 +55,8 @@ class ValidatorSummary:
             "dsr_result": self.dsr_result.to_dict() if self.dsr_result else None,
             "cpcv_result": self.cpcv_result.to_dict() if self.cpcv_result else None,
             "pbo_result": self.pbo_result.to_dict() if self.pbo_result else None,
+            "fdr_result": self.fdr_result,
+            "mcpt_result": self.mcpt_result,
         }
         return d
 
@@ -125,6 +129,8 @@ def run_validator(
     dsr_result: DSRResult | None = None,
     cpcv_result: CPCVResult | None = None,
     pbo_result: PBOResult | None = None,
+    fdr_result: dict[str, Any] | None = None,
+    mcpt_result: dict[str, Any] | None = None,
     cost_floor: float | None = None,
     candidate_hash: str | None = None,
     parent_grid_hash: str | None = None,
@@ -167,6 +173,13 @@ def run_validator(
     nonstat = _nonstat_status(cpcv_result)
     final = _final_status(econ, stat, nonstat)
 
+    if fdr_result is not None:
+        versions["fdr"] = fdr_result.get("primary_fdr_method", "unknown")
+        config_hashes["fdr"] = str(fdr_result.get("primary_fdr_q", ""))
+    if mcpt_result is not None:
+        versions["mcpt"] = mcpt_result.get("mcpt_version", "native_permutation")
+        config_hashes["mcpt"] = str(mcpt_result.get("n_permutations", ""))
+
     return ValidatorSummary(
         candidate_hash=candidate_hash,
         parent_grid_hash=parent_grid_hash,
@@ -176,6 +189,8 @@ def run_validator(
         dsr_result=dsr_result,
         cpcv_result=cpcv_result,
         pbo_result=pbo_result,
+        fdr_result=fdr_result,
+        mcpt_result=mcpt_result,
         cost_floor=cost_floor,
         economic_viability_status=econ,
         statistical_validity_status=stat,
