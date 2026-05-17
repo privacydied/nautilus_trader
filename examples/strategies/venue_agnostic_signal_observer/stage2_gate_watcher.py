@@ -995,6 +995,128 @@ def _write_status(**kw: Any) -> None:
 # ---------------------------------------------------------------------------
 # Main polling loop
 # ---------------------------------------------------------------------------
+# Startup reconciliation
+# ---------------------------------------------------------------------------
+
+
+def _startup_reconciliation(log: WatcherLogger) -> dict[str, Any]:
+    """Detect and clean up state left by a previous crash.
+
+    Runs unconditionally on every startup, before the concurrency lock.
+    Never raises — all errors are logged and the watcher continues.
+
+    Returns a dict summarising what was found and what was done, written
+    into the status JSON as ``startup_recovery``.
+
+    Checks:
+    1. Stale CaptureGuard flag (cross_asset_beta_lag_capturing.flag).
+       If the PID in the flag is not alive, the flag is from a crashed
+       process.  Clear it so the next stress event can trigger a capture.
+
+    2. Partial capture dirs (dirs with capture_manifest.partial.json but
+       no capture_manifest.json).  These are incomplete — the capture
+       process was killed before it could finalise.  They are quarantined
+       so _count_validated_full_active never counts them.
+    """
+    recovery: dict[str, Any] = {
+        "stale_capture_flag_cleared": False,
+        "stale_capture_flag_pid": None,
+        "partial_dirs_quarantined": [],
+        "startup_status": "CLEAN",
+    }
+
+    # --- 1. Stale CaptureGuard flag ---
+    flag_path = _get_in_capture_flag_path()
+    if flag_path.exists():
+        stale = False
+        pid_in_flag: int | None = None
+        try:
+            pid_text = flag_path.read_text().strip()
+            pid_in_flag = int(pid_text) if pid_text.isdigit() else None
+        except OSError:
+            pid_in_flag = None
+
+        if pid_in_flag is None:
+            stale = True
+            log.log("startup_reconciliation", detail="capture_flag_unreadable_pid_treating_as_stale")
+        else:
+            # Check liveness: sending signal 0 to a non-existent PID raises ProcessLookupError
+            try:
+                os.kill(pid_in_flag, 0)
+                # PID is alive — flag is legitimate (concurrent watcher or active capture)
+                log.log("startup_reconciliation",
+                        detail=f"capture_flag_pid_{pid_in_flag}_alive_leaving_intact")
+            except ProcessLookupError:
+                stale = True
+                log.log("startup_reconciliation",
+                        detail=f"capture_flag_pid_{pid_in_flag}_dead_clearing_stale_flag")
+            except PermissionError:
+                # PID exists but we can't signal it — treat as alive
+                log.log("startup_reconciliation",
+                        detail=f"capture_flag_pid_{pid_in_flag}_permission_denied_leaving_intact")
+
+        if stale:
+            try:
+                flag_path.unlink(missing_ok=True)
+                recovery["stale_capture_flag_cleared"] = True
+                recovery["stale_capture_flag_pid"] = pid_in_flag
+                recovery["startup_status"] = "RECOVERED"
+                log.log("startup_reconciliation",
+                        detail="stale_capture_flag_cleared",
+                        pid=pid_in_flag)
+            except OSError as e:
+                log.log("startup_reconciliation",
+                        detail=f"failed_to_clear_stale_flag: {e}")
+
+    # --- 2. Partial capture dirs ---
+    data_root = _get_data_root()
+    if data_root.exists():
+        try:
+            from .quarantine import quarantine_run
+            for d in data_root.iterdir():
+                if not d.is_dir():
+                    continue
+                if not d.name.startswith(f"{_SIGNAL_FAMILY}_"):
+                    continue
+                partial = d / "capture_manifest.partial.json"
+                canonical = d / "capture_manifest.json"
+                if partial.exists() and not canonical.exists():
+                    # Incomplete capture — quarantine it
+                    run_id = "unknown"
+                    try:
+                        m = json.loads(partial.read_text())
+                        run_id = m.get("run_id", "unknown")
+                    except (json.JSONDecodeError, OSError):
+                        pass
+                    try:
+                        quarantine_run(
+                            run_id=run_id,
+                            reason="partial_capture_on_startup_incomplete",
+                            quarantined_by="stage2_gate_watcher_startup_reconciliation",
+                        )
+                        recovery["partial_dirs_quarantined"].append(
+                            {"dir": d.name, "run_id": run_id}
+                        )
+                        recovery["startup_status"] = "RECOVERED"
+                        log.log("startup_reconciliation",
+                                detail="partial_capture_quarantined",
+                                dir=d.name, run_id=run_id)
+                    except Exception as e:
+                        log.log("startup_reconciliation",
+                                detail=f"quarantine_failed: {e}",
+                                dir=d.name)
+        except Exception as e:
+            log.log("startup_reconciliation", detail=f"partial_scan_error: {e}")
+
+    log.log("startup_reconciliation_complete",
+            status=recovery["startup_status"],
+            flag_cleared=recovery["stale_capture_flag_cleared"],
+            partial_quarantined=len(recovery["partial_dirs_quarantined"]))
+
+    return recovery
+
+
+# ---------------------------------------------------------------------------
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1085,6 +1207,10 @@ def main() -> None:
     state = WatcherState(min_gap_seconds=args.min_gap_seconds)
     lock = ConcurrencyLock()
 
+    # Startup reconciliation — runs before the concurrency lock so that a
+    # previous crash does not permanently block the watcher.
+    recovery = _startup_reconciliation(log)
+
     # Acquire watcher concurrency lock
     acquired, reason = lock.acquire()
     if not acquired:
@@ -1093,7 +1219,7 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        _run_watcher_cycle(log, args, state)
+        _run_watcher_cycle(log, args, state, recovery=recovery)
     finally:
         lock.release()
         CaptureGuard.release()
@@ -1104,7 +1230,8 @@ def main() -> None:
 
 
 def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
-                       state: WatcherState | None = None) -> None:
+                       state: WatcherState | None = None,
+                       recovery: dict[str, Any] | None = None) -> None:
     """Main polling cycle."""
 
     log.log("startup", poll_seconds=args.poll_seconds,
@@ -1132,6 +1259,11 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
         sys.exit(1)
 
     log.log("readiness_passed")
+
+    # Surface startup recovery result in the first status write
+    recovery_fields: dict[str, Any] = {}
+    if recovery:
+        recovery_fields["startup_recovery"] = recovery
 
     # --- Polling loop ---
     iteration = 0
@@ -1202,7 +1334,9 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 last_capture_status="SKIPPED_LOW_STRESS",
                 stress_condition="INSUFFICIENT",
                 **status_fields,
+                **recovery_fields,
             )
+            recovery_fields = {}  # only surface recovery on first poll
 
             if args.once:
                 print("\n  --once mode: exiting after one poll cycle")

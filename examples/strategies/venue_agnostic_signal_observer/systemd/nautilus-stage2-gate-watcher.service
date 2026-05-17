@@ -24,7 +24,8 @@ WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress
 
 ExecStart=uv run python -m examples.strategies.venue_agnostic_signal_observer.stage2_gate_watcher --poll-seconds 60 --stress-bps 30 --require-acceleration --signal-family ${NAUTILUS_STAGE2_SIGNAL_FAMILY}
 
-Restart=no
+Restart=on-failure
+RestartSec=10s
 KillSignal=SIGINT
 TimeoutStopSec=30
 

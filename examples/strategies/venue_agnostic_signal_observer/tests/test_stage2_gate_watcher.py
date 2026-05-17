@@ -669,9 +669,10 @@ class TestServiceTemplate:
         assert "EnvironmentFile=-%h/.config/nautilus/stage2-gate-watcher.env" in content
 
     def test_service_uses_restart_no(self):
-        """Service template uses Restart=no."""
+        """Service template uses Restart=on-failure with a backoff delay."""
         content = SERVICE_PATH.read_text()
-        assert "Restart=no" in content
+        assert "Restart=on-failure" in content
+        assert "RestartSec=" in content
 
     def test_service_is_user_template(self):
         """Service template targets user-level systemd (no system install script)."""
@@ -1292,3 +1293,127 @@ class TestCorpusReadinessBoundary:
         """_CORPUS_DIAGNOSTIC_WINDOWS must be 10 (canary, does not unlock rerun)."""
         from examples.strategies.venue_agnostic_signal_observer import stage2_gate_watcher as w
         assert w._CORPUS_DIAGNOSTIC_WINDOWS == 10
+
+
+# ---------------------------------------------------------------------------
+# Startup reconciliation tests
+# ---------------------------------------------------------------------------
+
+
+class TestStartupReconciliation:
+    """_startup_reconciliation clears stale flags and quarantines partial dirs."""
+
+    def _setup(self, tmp_path):
+        from examples.strategies.venue_agnostic_signal_observer import stage2_gate_watcher as w
+        w._REPORTS_ROOT = tmp_path / "reports"
+        w._DATA_ROOT = tmp_path / "data"
+        w._REPO_ROOT = tmp_path
+        w._STATUS_PATH_OVERRIDE = tmp_path / "reports" / "status.json"
+        w._SIGNAL_FAMILY = "cross_asset_beta_lag_v1"
+        (tmp_path / "reports").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+        return w
+
+    def _teardown(self, w):
+        w._REPORTS_ROOT = None
+        w._DATA_ROOT = None
+        w._REPO_ROOT = None
+        w._STATUS_PATH_OVERRIDE = None
+        w._SIGNAL_FAMILY = "cross_asset_beta_lag_v1"
+
+    def test_clean_start_no_action(self, tmp_path):
+        """No flag, no partial dirs: startup_status=CLEAN."""
+        w = self._setup(tmp_path)
+        try:
+            log = w.WatcherLogger()
+            result = w._startup_reconciliation(log)
+            assert result["startup_status"] == "CLEAN"
+            assert result["stale_capture_flag_cleared"] is False
+            assert result["partial_dirs_quarantined"] == []
+        finally:
+            self._teardown(w)
+
+    def test_stale_flag_dead_pid_cleared(self, tmp_path):
+        """Flag with a dead PID is cleared; startup_status=RECOVERED."""
+        w = self._setup(tmp_path)
+        try:
+            flag = tmp_path / "reports" / "cross_asset_beta_lag_capturing.flag"
+            flag.write_text("999999999")  # PID that cannot exist
+            log = w.WatcherLogger()
+            result = w._startup_reconciliation(log)
+            assert result["startup_status"] == "RECOVERED"
+            assert result["stale_capture_flag_cleared"] is True
+            assert not flag.exists()
+        finally:
+            self._teardown(w)
+
+    def test_live_pid_flag_left_intact(self, tmp_path):
+        """Flag with the current process PID is left intact (process is alive)."""
+        import os as _os
+        w = self._setup(tmp_path)
+        try:
+            flag = tmp_path / "reports" / "cross_asset_beta_lag_capturing.flag"
+            flag.write_text(str(_os.getpid()))
+            log = w.WatcherLogger()
+            result = w._startup_reconciliation(log)
+            assert result["stale_capture_flag_cleared"] is False
+            assert flag.exists()
+        finally:
+            self._teardown(w)
+
+    def test_partial_capture_dir_quarantined(self, tmp_path):
+        """A dir with .partial.json but no canonical manifest is quarantined."""
+        from unittest.mock import patch, MagicMock
+        w = self._setup(tmp_path)
+        try:
+            cap = tmp_path / "data" / "cross_asset_beta_lag_v1_FULL_ACTIVE_partial"
+            cap.mkdir()
+            (cap / "capture_manifest.partial.json").write_text(
+                json.dumps({"run_id": "cap_partial_001", "capture_status": "interrupted"})
+            )
+            log = w.WatcherLogger()
+            quarantined_calls = []
+            with patch(
+                "examples.strategies.venue_agnostic_signal_observer.stage2_gate_watcher.quarantine_run"
+                if hasattr(w, "quarantine_run") else
+                "examples.strategies.venue_agnostic_signal_observer.quarantine.quarantine_run"
+            ) as mock_q:
+                # Patch the import inside the function
+                import examples.strategies.venue_agnostic_signal_observer.quarantine as qmod
+                original = qmod.quarantine_run
+                def capturing_quarantine(*a, **kw):
+                    quarantined_calls.append(kw)
+                    return original(*a, **kw)
+                qmod.quarantine_run = capturing_quarantine
+                try:
+                    result = w._startup_reconciliation(log)
+                finally:
+                    qmod.quarantine_run = original
+
+            assert result["startup_status"] == "RECOVERED"
+            assert any(
+                "cap_partial_001" in str(e.get("run_id", ""))
+                or "partial" in str(e.get("reason", ""))
+                for e in result["partial_dirs_quarantined"]
+            ), f"Expected partial capture in quarantined list: {result['partial_dirs_quarantined']}"
+        finally:
+            self._teardown(w)
+
+    def test_complete_capture_dir_not_quarantined(self, tmp_path):
+        """A dir with a canonical manifest is left alone."""
+        w = self._setup(tmp_path)
+        try:
+            cap = tmp_path / "data" / "cross_asset_beta_lag_v1_FULL_ACTIVE_complete"
+            cap.mkdir()
+            (cap / "capture_manifest.json").write_text(
+                json.dumps({
+                    "run_id": "cap_complete_001",
+                    "capture_mode": "FULL_ACTIVE",
+                    "overlap": {"global_overlap_duration_seconds": 300.0},
+                })
+            )
+            log = w.WatcherLogger()
+            result = w._startup_reconciliation(log)
+            assert result["partial_dirs_quarantined"] == []
+        finally:
+            self._teardown(w)
