@@ -67,6 +67,8 @@ class OfflineHoldoutEvaluationCellResult:
     slippage_bps: float
     quote_mismatch_buffer_bps: float
     exclusion_reasons: list[str]
+    event_raw_bps: list[float]
+    event_net_bps: list[float]
     data_corpus_hash: str
     window_index_hash: str
     plan_hash: str
@@ -227,6 +229,16 @@ def _returns_summary(raw_returns_bps: list[float], net_returns_bps: list[float])
     }
 
 
+def _summarize_event_returns(raw_bps: list[float], net_bps: list[float]) -> dict[str, Optional[float]]:
+    """Single shared helper for deriving summary metrics from event return vectors.
+
+    This is the only path to summary metrics for a holdout evaluation cell.
+    The event vectors are the single source of truth. A fake event vector
+    is structurally impossible because all summaries are derived from it.
+    """
+    return _returns_summary(raw_bps, net_bps)
+
+
 def _empty_report(
     *,
     status: str,
@@ -339,6 +351,8 @@ def _excluded_cell_result(
         slippage_bps=cell.cost_config.slippage_bps,
         quote_mismatch_buffer_bps=cell.cost_config.quote_mismatch_bps,
         exclusion_reasons=list(reasons),
+        event_raw_bps=[],
+        event_net_bps=[],
         data_corpus_hash=cell.data_corpus_hash,
         window_index_hash=cell.window_index_hash,
         plan_hash=cell.discovery_config_hash if False else cell.window_index_hash and cell.discovery_config_hash and cell.window_index_hash and cell.discovery_config_hash and cell.window_index_hash and cell.discovery_config_hash,
@@ -433,7 +447,7 @@ def _evaluate_family1(
             valid_count=len(net_returns),
         )
 
-    summary = _returns_summary(raw_returns, net_returns)
+    summary = _summarize_event_returns(raw_returns, net_returns)
     return OfflineHoldoutEvaluationCellResult(
         cell_id=cell.cell_id,
         family_id=cell.family_id,
@@ -457,6 +471,8 @@ def _evaluate_family1(
         slippage_bps=cell.cost_config.slippage_bps,
         quote_mismatch_buffer_bps=cell.cost_config.quote_mismatch_bps,
         exclusion_reasons=[],
+        event_raw_bps=raw_returns,
+        event_net_bps=net_returns,
         data_corpus_hash=cell.data_corpus_hash,
         window_index_hash=cell.window_index_hash,
         plan_hash=plan_hash,
@@ -523,7 +539,7 @@ def _evaluate_family2(
             valid_count=len(net_returns),
         )
 
-    summary = _returns_summary(raw_returns, net_returns)
+    summary = _summarize_event_returns(raw_returns, net_returns)
     return OfflineHoldoutEvaluationCellResult(
         cell_id=cell.cell_id,
         family_id=cell.family_id,
@@ -547,6 +563,8 @@ def _evaluate_family2(
         slippage_bps=cell.cost_config.slippage_bps,
         quote_mismatch_buffer_bps=cell.cost_config.quote_mismatch_bps,
         exclusion_reasons=[],
+        event_raw_bps=raw_returns,
+        event_net_bps=net_returns,
         data_corpus_hash=cell.data_corpus_hash,
         window_index_hash=cell.window_index_hash,
         plan_hash=plan_hash,

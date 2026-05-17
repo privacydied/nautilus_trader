@@ -1121,3 +1121,166 @@ class TestFamilyHelpers:
         assert _is_conditioning_family("family_4_conditioning") is True
         assert _is_conditioning_family("conditioning_family") is True
         assert _is_conditioning_family("family_1_edge") is False
+
+
+class TestNativeNullIntegrationWithEventVectors:
+    """Tests 18-20: Native null consumes event_net_bps when present."""
+
+    def test_consumes_event_net_bps(self) -> None:
+        """Test 18: Native null uses event_net_bps from holdout cell results."""
+        cells = [_comp_cell("cell_a", comparison_passed=True)]
+        comp_payload = _comp_payload(cells=cells)
+        comp_manifest = _comp_manifest(comp_payload)
+        holdout_cells = [_holdout_cell("cell_a", event_net_bps=[2.0, 1.0])]
+        holdout_payload = _holdout_payload(cells=holdout_cells)
+        holdout_manifest = _holdout_manifest(holdout_payload)
+
+        report = build_offline_native_null_report(
+            comparison_manifest=comp_manifest,
+            comparison_payload=comp_payload,
+            holdout_evaluation_manifest=holdout_manifest,
+            holdout_evaluation_payload=holdout_payload,
+        )
+
+        assert report.status == STATUS_OFFLINE_NATIVE_NULL_READY
+        assert len(report.tested_cell_ids) == 1
+
+    def test_ready_status_with_event_vectors(self) -> None:
+        """Test 19: Status is OFFLINE_NATIVE_NULL_READY when eligible cells have event vectors."""
+        cells = [_comp_cell("cell_a", comparison_passed=True)]
+        comp_payload = _comp_payload(cells=cells)
+        comp_manifest = _comp_manifest(comp_payload)
+        holdout_cells = [_holdout_cell("cell_a", event_net_bps=[2.0, 1.0, 3.0])]
+        holdout_payload = _holdout_payload(cells=holdout_cells)
+        holdout_manifest = _holdout_manifest(holdout_payload)
+
+        report = build_offline_native_null_report(
+            comparison_manifest=comp_manifest,
+            comparison_payload=comp_payload,
+            holdout_evaluation_manifest=holdout_manifest,
+            holdout_evaluation_payload=holdout_payload,
+        )
+
+        assert report.status == STATUS_OFFLINE_NATIVE_NULL_READY
+
+    def test_generates_fdr_pvalue_input(self) -> None:
+        """Test 20: Native null writes FDR p-value input with correct schema."""
+        cells = [_comp_cell("cell_a", comparison_passed=True)]
+        comp_payload = _comp_payload(cells=cells)
+        comp_manifest = _comp_manifest(comp_payload)
+        holdout_cells = [_holdout_cell("cell_a", event_net_bps=[2.0, 1.0])]
+        holdout_payload = _holdout_payload(cells=holdout_cells)
+        holdout_manifest = _holdout_manifest(holdout_payload)
+
+        report = build_offline_native_null_report(
+            comparison_manifest=comp_manifest,
+            comparison_payload=comp_payload,
+            holdout_evaluation_manifest=holdout_manifest,
+            holdout_evaluation_payload=holdout_payload,
+        )
+
+        assert report.pvalue_input is not None
+        assert report.pvalue_input["schema_version"] == FDR_PVALUE_SCHEMA_VERSION
+        assert report.pvalue_input["source"] == "offline_native_null_v1"
+        pv = report.pvalue_input["pvalues"][0]["p_value"]
+        assert 0.0 <= pv <= 1.0
+
+
+class TestNativeNullRefusalWithoutEventVectors:
+    """Tests 21-23: Native null refuses to generate p-values without real event vectors."""
+
+    def test_still_emits_null_event_returns_missing(self) -> None:
+        """Test 21: Native null still emits NULL_EVENT_RETURNS_MISSING when vectors absent."""
+        cells = [_comp_cell("cell_a", comparison_passed=True)]
+        comp_payload = _comp_payload(cells=cells)
+        comp_manifest = _comp_manifest(comp_payload)
+        # Holdout cell with NO event_net_bps
+        holdout_cells = [_holdout_cell("cell_a")]  # no event_net_bps
+        holdout_payload = _holdout_payload(cells=holdout_cells)
+        holdout_manifest = _holdout_manifest(holdout_payload)
+
+        report = build_offline_native_null_report(
+            comparison_manifest=comp_manifest,
+            comparison_payload=comp_payload,
+            holdout_evaluation_manifest=holdout_manifest,
+            holdout_evaluation_payload=holdout_payload,
+        )
+
+        assert report.status == STATUS_NULL_EVENT_RETURNS_MISSING
+        assert report.pvalue_input is None
+
+    def test_refuses_pvalues_from_summaries_alone(self) -> None:
+        """Test 22: Native null refuses p-values from summary metrics (net_mean_bps, etc.)."""
+        cells = [_comp_cell("cell_a", comparison_passed=True)]
+        comp_payload = _comp_payload(cells=cells)
+        comp_manifest = _comp_manifest(comp_payload)
+        # Holdout cell with only summary metrics, no event_net_bps
+        holdout_cells = [_holdout_cell("cell_a", event_net_bps=None)]
+        holdout_payload = _holdout_payload(cells=holdout_cells)
+        holdout_manifest = _holdout_manifest(holdout_payload)
+
+        report = build_offline_native_null_report(
+            comparison_manifest=comp_manifest,
+            comparison_payload=comp_payload,
+            holdout_evaluation_manifest=holdout_manifest,
+            holdout_evaluation_payload=holdout_payload,
+        )
+
+        assert report.status == STATUS_NULL_EVENT_RETURNS_MISSING
+        assert report.tested_cell_ids == []
+        assert report.pvalue_input is None
+
+    def test_does_not_infer_vectors_from_summaries(self) -> None:
+        """Test 23: Native null does not infer event vectors from net_mean_bps, win_rate, etc.
+
+        This is the core safety property: even if summary stats exist, native null
+        must NOT fabricate event vectors from them.
+        """
+        cells = [_comp_cell("cell_a", comparison_passed=True)]
+        comp_payload = _comp_payload(cells=cells)
+        comp_manifest = _comp_manifest(comp_payload)
+        # Holdout cell with only net_mean_bps, win_rate — no event_net_bps
+        holdout_cells = [{
+            "cell_id": "cell_a",
+            "family_id": "family_1_same_venue_quote_basis",
+            "family_name": "Family 1",
+            "signal_variant": None,
+            "status": "OFFLINE_HOLDOUT_EVALUATION_READY",
+            "holdout_window_ids": ["w3"],
+            "evaluated_event_count": 3,
+            "valid_event_count": 3,
+            "lookback_ms": 60_000,
+            "horizon_ms": 60_000,
+            "required_resolution": "bar",
+            "latency_gate_required": False,
+            "raw_mean_bps": 7.0,
+            "raw_median_bps": 7.0,
+            "net_mean_bps": 1.0,
+            "net_median_bps": 1.0,
+            "win_rate": 0.666,
+            "worst_net_bps": -1.0,
+            "fee_bps": 1.0,
+            "slippage_bps": 2.0,
+            "quote_mismatch_buffer_bps": 3.0,
+            "exclusion_reasons": [],
+            "data_corpus_hash": "corpus_hash",
+            "window_index_hash": "window_hash",
+            "plan_hash": "plan_hash",
+            "evaluation_hash": "evaluation_hash",
+            "survivor_freeze_hash": "survivor_freeze_hash",
+            # NO event_net_bps field
+        }]
+        holdout_payload = _holdout_payload(cells=holdout_cells)
+        holdout_manifest = _holdout_manifest(holdout_payload)
+
+        report = build_offline_native_null_report(
+            comparison_manifest=comp_manifest,
+            comparison_payload=comp_payload,
+            holdout_evaluation_manifest=holdout_manifest,
+            holdout_evaluation_payload=holdout_payload,
+        )
+
+        # Must NOT generate p-values from summary metrics alone
+        assert report.status == STATUS_NULL_EVENT_RETURNS_MISSING
+        assert report.tested_cell_ids == []
+        assert report.pvalue_input is None

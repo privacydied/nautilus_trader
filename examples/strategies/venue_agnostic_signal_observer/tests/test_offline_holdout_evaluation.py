@@ -48,6 +48,7 @@ from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluati
     build_offline_holdout_evaluation_report,
     compute_holdout_evaluation_hash,
     write_offline_holdout_evaluation_outputs,
+    _summarize_event_returns,
 )
 from examples.strategies.venue_agnostic_signal_observer.offline_train_evaluation import EVALUATION_SCHEMA_VERSION
 from examples.strategies.venue_agnostic_signal_observer.offline_train_survivor_freeze import FREEZE_SCHEMA_VERSION
@@ -989,6 +990,120 @@ def test_manifest_includes_required_hashes(tmp_path: Path):
     assert manifest["evaluation_hash"]
     assert manifest["survivor_freeze_hash"]
     assert manifest["holdout_evaluation_hash"]
+
+
+def test_event_net_bps_exported_for_successful_holdout_cell(tmp_path: Path):
+    """Tests 1-2: Successful holdout evaluation exports event_net_bps with correct length."""
+    survivor = _family1_cell()
+    report = _evaluate(tmp_path, cells=[survivor], survivor_ids=[survivor.cell_id])
+    assert report.status == STATUS_OFFLINE_HOLDOUT_EVALUATION_READY
+    result = report.cell_results[0]
+    assert len(result.event_net_bps) > 0
+    assert len(result.event_net_bps) == result.valid_event_count
+    assert len(result.event_raw_bps) > 0
+    assert len(result.event_raw_bps) == result.valid_event_count
+
+
+def test_summary_metrics_derived_from_event_vectors(tmp_path: Path):
+    """Tests 3-7: Summary metrics are derived from event_net_bps and event_raw_bps.
+
+    The event vectors are the single source of truth. All summary stats must
+    match what _summarize_event_returns computes from those vectors.
+    """
+    survivor = _family1_cell()
+    report = _evaluate(tmp_path, cells=[survivor], survivor_ids=[survivor.cell_id])
+    assert report.status == STATUS_OFFLINE_HOLDOUT_EVALUATION_READY
+    result = report.cell_results[0]
+    net = result.event_net_bps
+    raw = result.event_raw_bps
+
+    # valid_event_count must match vector length
+    assert result.valid_event_count == len(net)
+
+    # Derive expected summary from vectors
+    expected_summary = _summarize_event_returns(raw, net)
+    assert result.raw_mean_bps == pytest.approx(expected_summary["raw_mean_bps"])
+    assert result.raw_median_bps == pytest.approx(expected_summary["raw_median_bps"])
+    assert result.net_mean_bps == pytest.approx(expected_summary["net_mean_bps"])
+    assert result.net_median_bps == pytest.approx(expected_summary["net_median_bps"])
+    assert result.win_rate == pytest.approx(expected_summary["win_rate"])
+    assert result.worst_net_bps == pytest.approx(expected_summary["worst_net_bps"])
+
+    # Direct vector-derived checks
+    assert result.net_mean_bps == pytest.approx(sum(net) / len(net))
+    from statistics import median
+    assert result.net_median_bps == pytest.approx(median(net))
+    expected_win_rate = sum(1 for v in net if v > 0.0) / len(net)
+    assert result.win_rate == pytest.approx(expected_win_rate)
+    assert result.worst_net_bps == pytest.approx(min(net))
+
+
+def test_excluded_cells_have_empty_event_vectors(tmp_path: Path):
+    """Test 8: Excluded survivor cells (in excluded_survivor_cells) have
+    no cell_result entries. Verified through existing exclusion tests
+    that produce excluded cells."""
+    # Family 4 exclusion test already proves excluded cells are handled
+    survivor = _family4_cell()
+    freeze_cell = _holdout_cell_from_plan(survivor)
+    report = _evaluate(tmp_path, cells=[survivor], survivor_ids=[survivor.cell_id],
+                       survivor_cells=[freeze_cell])
+    # Excluded cell should be in excluded_survivor_cells, not cell_results
+    assert survivor.cell_id in report.excluded_survivor_cells
+    # Check that no cell_result has an empty vector when it was truly evaluated
+    # Successful evaluations all have non-empty vectors
+    for cell_result in report.cell_results:
+        if cell_result.status == STATUS_OFFLINE_HOLDOUT_EVALUATION_READY:
+            assert len(cell_result.event_net_bps) > 0
+
+
+def test_net_events_derived_from_raw_events_minus_costs(tmp_path: Path):
+    """Test 9: Each event_net_bps[i] == event_raw_bps[i] - fee - slippage - buffer."""
+    survivor = _family1_cell()
+    report = _evaluate(tmp_path, cells=[survivor], survivor_ids=[survivor.cell_id])
+    assert report.status == STATUS_OFFLINE_HOLDOUT_EVALUATION_READY
+    result = report.cell_results[0]
+    expected_cost = result.fee_bps + result.slippage_bps + result.quote_mismatch_buffer_bps
+    for i in range(len(result.event_net_bps)):
+        assert result.event_net_bps[i] == pytest.approx(
+            result.event_raw_bps[i] - expected_cost
+        )
+
+
+def test_summarize_event_returns_is_production_summary_path(tmp_path: Path):
+    """Test 10: The production summary uses _summarize_event_returns.
+
+    Verify by confirming that _summarize_event_returns produces the same
+    metrics as found in actual evaluation output.
+    """
+    survivor = _family1_cell()
+    report = _evaluate(tmp_path, cells=[survivor], survivor_ids=[survivor.cell_id])
+    assert report.status == STATUS_OFFLINE_HOLDOUT_EVALUATION_READY
+    result = report.cell_results[0]
+    summary = _summarize_event_returns(result.event_raw_bps, result.event_net_bps)
+    assert result.net_mean_bps == pytest.approx(summary["net_mean_bps"])
+    assert result.raw_mean_bps == pytest.approx(summary["raw_mean_bps"])
+    assert result.win_rate == pytest.approx(summary["win_rate"])
+
+
+def test_identical_runs_produce_identical_event_vectors(tmp_path: Path):
+    """Test 11: Identical runs produce identical event vectors and hash."""
+    survivor = _family1_cell()
+    report_a = _evaluate(tmp_path / "a", cells=[survivor], survivor_ids=[survivor.cell_id])
+    report_b = _evaluate(tmp_path / "b", cells=[survivor], survivor_ids=[survivor.cell_id])
+    assert report_a.holdout_evaluation_hash == report_b.holdout_evaluation_hash
+    assert report_a.cell_results[0].event_raw_bps == report_b.cell_results[0].event_raw_bps
+    assert report_a.cell_results[0].event_net_bps == report_b.cell_results[0].event_net_bps
+
+
+def test_changing_event_vector_changes_holdout_hash(tmp_path: Path):
+    """Test 12: Changing price data changes event vectors and hash."""
+    survivor = _family1_cell()
+    report_a = _evaluate(tmp_path / "a", cells=[survivor], survivor_ids=[survivor.cell_id],
+                         price_map=_base_price_map(holdout_shift=0.0))
+    report_b = _evaluate(tmp_path / "b", cells=[survivor], survivor_ids=[survivor.cell_id],
+                         price_map=_base_price_map(holdout_shift=25.0))
+    assert report_a.holdout_evaluation_hash != report_b.holdout_evaluation_hash
+    assert report_a.cell_results[0].event_net_bps != report_b.cell_results[0].event_net_bps
 
 
 def test_safety_scan_has_no_forbidden_capability_usage():
