@@ -814,6 +814,11 @@ def _run_validation(capture_dir: str, log: WatcherLogger) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+# Target number of corpus-eligible FULL_ACTIVE stress windows required
+# before reruning frozen-grid discovery.
+_CORPUS_TARGET_WINDOWS = 10
+
+
 def _count_validated_full_active() -> int:
     """Count validated FULL_ACTIVE captures for cross_asset_beta_lag_v1.
 
@@ -862,6 +867,26 @@ def _count_validated_full_active() -> int:
     return count
 
 
+def _corpus_readiness() -> dict[str, Any]:
+    """Return corpus readiness status dict for the status JSON."""
+    count = _count_validated_full_active()
+    ready = count >= _CORPUS_TARGET_WINDOWS
+    return {
+        "usable_window_count": count,
+        "minimum_ready_usable_windows": _CORPUS_TARGET_WINDOWS,
+        "ready_for_rerun": ready,
+        "corpus_status": "CORPUS_READY_FOR_RERUN" if ready else "ACCUMULATING",
+        "captures_remaining_before_stage2_eval": max(0, _CORPUS_TARGET_WINDOWS - count),
+        "next_action": (
+            "ACCUMULATING — {} more stress windows needed before frozen-grid rerun".format(
+                max(0, _CORPUS_TARGET_WINDOWS - count)
+            )
+            if not ready
+            else "CORPUS_READY — frozen-grid discovery can run manually"
+        ),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Status writer
 # ---------------------------------------------------------------------------
@@ -892,6 +917,10 @@ def _write_status(**kw: Any) -> None:
     """Write the watcher status JSON."""
     repo_root = (_REPO_ROOT or Path.cwd()).resolve()
     git_sha, git_dirty = _get_git_status(repo_root)
+
+    # Corpus readiness (computed once; caller overrides may add to **kw)
+    corpus_rdy = _corpus_readiness()
+
     data: dict[str, Any] = {
         "updated_utc": _ts_now_iso(),
         "git_sha": git_sha,
@@ -920,6 +949,13 @@ def _write_status(**kw: Any) -> None:
         "cooldown_status": None,
         "next_allowed_capture_utc": None,
         "reason": None,
+        # Corpus readiness defaults
+        "usable_window_count": corpus_rdy["usable_window_count"],
+        "minimum_ready_usable_windows": corpus_rdy["minimum_ready_usable_windows"],
+        "ready_for_rerun": corpus_rdy["ready_for_rerun"],
+        "corpus_status": corpus_rdy["corpus_status"],
+        "captures_remaining_before_stage2_eval": corpus_rdy["captures_remaining_before_stage2_eval"],
+        "next_action": corpus_rdy["next_action"],
     }
     data.update(kw)
     status_path = _get_status_path()
@@ -1132,9 +1168,6 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 acceleration_status=accel_v,
                 last_capture_status="SKIPPED_LOW_STRESS",
                 stress_condition="INSUFFICIENT",
-                validated_full_active_capture_count=_count_validated_full_active(),
-                captures_remaining_before_stage2_eval=max(
-                    0, 10 - _count_validated_full_active()),
                 **status_fields,
             )
 
@@ -1170,9 +1203,6 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 last_capture_status="SKIPPED_COOLDOWN",
                 cooldown_remaining_seconds=cooldown_remaining,
                 stress_condition="FULL_ACTIVE_STRESS",
-                validated_full_active_capture_count=_count_validated_full_active(),
-                captures_remaining_before_stage2_eval=max(
-                    0, 10 - _count_validated_full_active()),
                 **status_fields,
             )
             if args.once:
@@ -1189,9 +1219,6 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 acceleration_status=accel_v,
                 last_capture_status="SKIPPED_NO_CAPTURE_MODE",
                 stress_condition="FULL_ACTIVE_STRESS",
-                validated_full_active_capture_count=_count_validated_full_active(),
-                captures_remaining_before_stage2_eval=max(
-                    0, 10 - _count_validated_full_active()),
                 **status_fields,
             )
             if args.once:
@@ -1278,9 +1305,23 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 log.log("capture_recorded_in_state", run_id=run_id,
                         capture_dir=capture_dir)
 
+            # --- Resolve actual capture status from manifest (may be completed_with_errors) ---
+            last_capture_status = "COMPLETED"
+            manifest_path = Path(capture_dir) / "capture_manifest.json"
+            if manifest_path.exists():
+                try:
+                    with open(manifest_path) as _mf:
+                        _manifest = json.load(_mf)
+                    if _manifest.get("capture_status") == "completed_with_errors":
+                        last_capture_status = "COMPLETED_WITH_ERRORS"
+                        log.log("capture_completed_with_errors",
+                                capture_dir=capture_dir)
+                except (json.JSONDecodeError, OSError):
+                    pass
+
             # --- Count corpus ---
             validated_count = _count_validated_full_active()
-            remaining = max(0, 10 - validated_count)
+            remaining = max(0, _CORPUS_TARGET_WINDOWS - validated_count)
 
             log.log("corpus_update",
                      validated_full_active=validated_count,
@@ -1291,7 +1332,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
             if remaining > 0:
                 print(f"  Stage 2 evaluation BLOCKED — {remaining} more captures required")
             else:
-                print("  Stage 2 evaluation READY — 10+ validated FULL_ACTIVE captures")
+                print(f"  Stage 2 evaluation READY — {_CORPUS_TARGET_WINDOWS}+ validated FULL_ACTIVE captures")
                 print("  (Evaluation is not run by the watcher; run manually)")
 
             _write_status(
@@ -1299,11 +1340,9 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 gate_status="PASSED",
                 current_btc_1h_move_bps=btc_1h,
                 acceleration_status=accel_v,
-                last_capture_status="COMPLETED",
+                last_capture_status=last_capture_status,
                 last_capture_dir=capture_dir,
                 last_validation_status=verdict,
-                validated_full_active_capture_count=validated_count,
-                captures_remaining_before_stage2_eval=remaining,
                 stress_condition="FULL_ACTIVE_STRESS",
                 **status_fields,
             )

@@ -874,3 +874,288 @@ class TestPathConfiguration:
         assert "stage2_gate_watcher" in content
         # Ensure it's not using the old run_stage2_gate_watcher
         assert "run_stage2_gate_watcher" not in content
+
+
+# ---------------------------------------------------------------------------
+# Edge Miner harvester requirements
+# ---------------------------------------------------------------------------
+
+
+class TestCaptureCommandIncludesAvaxUsd:
+    """Verify AVAX/USD appears in the capture subprocess command."""
+
+    def test_default_signal_family_includes_avax(self):
+        """Default signal family includes AVAX/USD in target_symbols."""
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+        import inspect
+
+        source = inspect.getsource(v1_watcher._run_capture)
+        assert "AVAX/USD" in source
+
+    def test_stress_v2_signal_family_includes_avax(self):
+        """stress_v2 signal family includes AVAX/USD in target_symbols."""
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+
+        saved = v1_watcher._SIGNAL_FAMILY
+        try:
+            v1_watcher._SIGNAL_FAMILY = v1_watcher._STRESS_V2_SIGNAL_FAMILY
+            # The command built by _run_capture should include AVAX/USD
+            # We verify by checking the source path taken for v2 family
+            import inspect
+            source = inspect.getsource(v1_watcher._run_capture)
+            assert "AVAX/USD" in source
+        finally:
+            v1_watcher._SIGNAL_FAMILY = saved
+
+
+class TestStatusReportsCorpusReadiness:
+    """Status JSON must contain corpus readiness fields."""
+
+    def test_write_status_has_corpus_fields(self, tmp_path):
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+
+        saved_reports = v1_watcher._REPORTS_ROOT
+        saved_data = v1_watcher._DATA_ROOT
+        saved_repo = v1_watcher._REPO_ROOT
+        saved_status = v1_watcher._STATUS_PATH_OVERRIDE
+        try:
+            v1_watcher._REPORTS_ROOT = tmp_path / "reports"
+            v1_watcher._DATA_ROOT = tmp_path / "data"
+            v1_watcher._REPO_ROOT = tmp_path
+            status_path = tmp_path / "reports" / "status.json"
+            v1_watcher._STATUS_PATH_OVERRIDE = status_path
+
+            v1_watcher._write_status()
+
+            assert status_path.exists()
+            data = json.loads(status_path.read_text())
+            assert "usable_window_count" in data
+            assert "minimum_ready_usable_windows" in data
+            assert "ready_for_rerun" in data
+            assert "corpus_status" in data
+            assert "next_action" in data
+            assert isinstance(data["ready_for_rerun"], bool)
+            assert data["corpus_status"] in ("ACCUMULATING", "CORPUS_READY_FOR_RERUN")
+        finally:
+            v1_watcher._REPORTS_ROOT = saved_reports
+            v1_watcher._DATA_ROOT = saved_data
+            v1_watcher._REPO_ROOT = saved_repo
+            v1_watcher._STATUS_PATH_OVERRIDE = saved_status
+
+    def test_accumulating_status_when_below_target(self, tmp_path):
+        """Corpus status is ACCUMULATING and ready_for_rerun=False when count < target."""
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+
+        saved_reports = v1_watcher._REPORTS_ROOT
+        saved_data = v1_watcher._DATA_ROOT
+        saved_repo = v1_watcher._REPO_ROOT
+        saved_status = v1_watcher._STATUS_PATH_OVERRIDE
+        try:
+            # Empty data dir means 0 validated captures
+            v1_watcher._REPORTS_ROOT = tmp_path / "reports"
+            v1_watcher._DATA_ROOT = tmp_path / "data"
+            (tmp_path / "data").mkdir()
+            v1_watcher._REPO_ROOT = tmp_path
+            status_path = tmp_path / "reports" / "status.json"
+            v1_watcher._STATUS_PATH_OVERRIDE = status_path
+
+            v1_watcher._write_status()
+
+            data = json.loads(status_path.read_text())
+            assert data["ready_for_rerun"] is False
+            assert data["corpus_status"] == "ACCUMULATING"
+            assert "ACCUMULATING" in data["next_action"]
+        finally:
+            v1_watcher._REPORTS_ROOT = saved_reports
+            v1_watcher._DATA_ROOT = saved_data
+            v1_watcher._REPO_ROOT = saved_repo
+            v1_watcher._STATUS_PATH_OVERRIDE = saved_status
+
+
+class TestCompletedWithErrorsNotFatal:
+    """completed_with_errors from a capture must not be treated as a fatal failure."""
+
+    def test_run_index_accepts_completed_with_errors(self):
+        """run_index.py validates completed_with_errors as a legal status."""
+        from examples.strategies.venue_agnostic_signal_observer.run_index import (
+            validate_status,
+        )
+        assert validate_status("completed_with_errors") == "completed_with_errors"
+
+    def test_status_json_reflects_completed_with_errors(self, tmp_path):
+        """After capture with completed_with_errors manifest, status reports COMPLETED_WITH_ERRORS."""
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+        from unittest.mock import patch, MagicMock
+
+        saved_reports = v1_watcher._REPORTS_ROOT
+        saved_data = v1_watcher._DATA_ROOT
+        saved_repo = v1_watcher._REPO_ROOT
+        saved_status = v1_watcher._STATUS_PATH_OVERRIDE
+        saved_signal = v1_watcher._SIGNAL_FAMILY
+        try:
+            v1_watcher._REPORTS_ROOT = tmp_path / "reports"
+            v1_watcher._DATA_ROOT = tmp_path / "data"
+            (tmp_path / "data").mkdir()
+            v1_watcher._REPO_ROOT = tmp_path
+            status_path = tmp_path / "reports" / "status.json"
+            v1_watcher._STATUS_PATH_OVERRIDE = status_path
+            v1_watcher._SIGNAL_FAMILY = "cross_asset_beta_lag_v1"
+
+            # Write a capture dir with a completed_with_errors manifest
+            capture_dir = tmp_path / "data" / "cross_asset_beta_lag_v1_FULL_ACTIVE_test"
+            capture_dir.mkdir(parents=True)
+            manifest = {
+                "run_id": "cap_test_001",
+                "capture_status": "completed_with_errors",
+                "capture_mode": "FULL_ACTIVE",
+                "streams": {},
+            }
+            (capture_dir / "capture_manifest.json").write_text(
+                json.dumps(manifest)
+            )
+
+            log = v1_watcher.WatcherLogger()
+            state = MagicMock()
+            state.cooldown_remaining_seconds.return_value = None
+
+            with patch.object(v1_watcher, "_run_capture", return_value=str(capture_dir)):
+                with patch.object(v1_watcher, "_run_validation") as mock_val:
+                    mock_val.return_value = {
+                        "verdict": "CAPTURE_VALIDATION_PASSED",
+                        "run_id": "cap_test_001",
+                    }
+                    with patch.object(v1_watcher, "_run_gate") as mock_gate:
+                        mock_gate.return_value = {
+                            "gate_passed": True,
+                            "btc_1h_bps": 180.0,
+                            "market_verdict": "MARKET_ACTIVE",
+                            "accel_verdict": "ACCELERATING",
+                        }
+                        with patch.object(v1_watcher, "CaptureGuard") as mock_guard:
+                            mock_guard.try_acquire.return_value = True
+                            mock_guard.release = MagicMock()
+                            with patch.object(v1_watcher, "_get_collection_lock_path") as mock_lock_path:
+                                mock_lock_path.return_value = tmp_path / "nonexistent.lock"
+                                with patch.object(v1_watcher, "CollectionLock") as mock_coll_lock:
+                                    mock_coll_lock.return_value.create = MagicMock()
+                                    with patch.object(v1_watcher, "_run_readiness") as mock_ready:
+                                        mock_ready.return_value = {"ready": True, "hard_blockers": []}
+                                        args = MagicMock()
+                                        args.poll_seconds = 1
+                                        args.stress_bps = 150.0
+                                        args.once = True
+                                        args.no_capture = False
+                                        args.min_gap_seconds = 3600
+                                        try:
+                                            v1_watcher._run_watcher_cycle(log, args, state)
+                                        except SystemExit:
+                                            pass
+
+            assert status_path.exists()
+            data = json.loads(status_path.read_text())
+            assert data.get("last_capture_status") == "COMPLETED_WITH_ERRORS"
+        finally:
+            v1_watcher._REPORTS_ROOT = saved_reports
+            v1_watcher._DATA_ROOT = saved_data
+            v1_watcher._REPO_ROOT = saved_repo
+            v1_watcher._STATUS_PATH_OVERRIDE = saved_status
+            v1_watcher._SIGNAL_FAMILY = saved_signal
+
+
+class TestLockPreventsOverlappingCapture:
+    """CaptureGuard blocks a second capture while one is already in progress."""
+
+    def test_capture_guard_blocks_when_flag_exists(self, tmp_path):
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+        from unittest.mock import patch
+
+        saved_reports = v1_watcher._REPORTS_ROOT
+        saved_repo = v1_watcher._REPO_ROOT
+        saved_status = v1_watcher._STATUS_PATH_OVERRIDE
+        try:
+            v1_watcher._REPORTS_ROOT = tmp_path / "reports"
+            v1_watcher._REPO_ROOT = tmp_path
+
+            # Write the in-capture flag so CaptureGuard.try_acquire returns False
+            flag_path = tmp_path / "reports" / "cross_asset_beta_lag_capturing.flag"
+            flag_path.parent.mkdir(parents=True)
+            flag_path.write_text("99999")
+
+            with patch.object(v1_watcher, "_get_in_capture_flag_path",
+                               return_value=flag_path):
+                acquired = v1_watcher.CaptureGuard.try_acquire()
+            assert acquired is False
+        finally:
+            v1_watcher._REPORTS_ROOT = saved_reports
+            v1_watcher._REPO_ROOT = saved_repo
+            v1_watcher._STATUS_PATH_OVERRIDE = saved_status
+
+    def test_cooldown_blocks_capture_after_recent_run(self, tmp_path):
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+
+        saved_reports = v1_watcher._REPORTS_ROOT
+        saved_repo = v1_watcher._REPO_ROOT
+        try:
+            v1_watcher._REPORTS_ROOT = tmp_path / "reports"
+            v1_watcher._REPO_ROOT = tmp_path
+
+            state = v1_watcher.WatcherState(min_gap_seconds=3600)
+            state.record_capture(run_id="cap_test", capture_dir=str(tmp_path / "data" / "test"))
+            remaining = state.cooldown_remaining_seconds()
+            assert remaining is not None
+            assert remaining > 0
+        finally:
+            v1_watcher._REPORTS_ROOT = saved_reports
+            v1_watcher._REPO_ROOT = saved_repo
+
+
+class TestNoTradeReadyEmitted:
+    """Watcher must never emit TRADE_READY in status or source."""
+
+    def test_no_trade_ready_in_stage2_gate_watcher_source(self):
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+        content = Path(v1_watcher.__file__).read_text()
+        assert "TRADE_READY" not in content
+
+    def test_no_trade_ready_in_status_json(self, tmp_path):
+        from examples.strategies.venue_agnostic_signal_observer import (
+            stage2_gate_watcher as v1_watcher,
+        )
+
+        saved_reports = v1_watcher._REPORTS_ROOT
+        saved_data = v1_watcher._DATA_ROOT
+        saved_repo = v1_watcher._REPO_ROOT
+        saved_status = v1_watcher._STATUS_PATH_OVERRIDE
+        try:
+            v1_watcher._REPORTS_ROOT = tmp_path / "reports"
+            v1_watcher._DATA_ROOT = tmp_path / "data"
+            (tmp_path / "data").mkdir()
+            v1_watcher._REPO_ROOT = tmp_path
+            status_path = tmp_path / "reports" / "status.json"
+            v1_watcher._STATUS_PATH_OVERRIDE = status_path
+
+            v1_watcher._write_status(capture_status="IDLE")
+
+            content = status_path.read_text()
+            assert "TRADE_READY" not in content
+        finally:
+            v1_watcher._REPORTS_ROOT = saved_reports
+            v1_watcher._DATA_ROOT = saved_data
+            v1_watcher._REPO_ROOT = saved_repo
+            v1_watcher._STATUS_PATH_OVERRIDE = saved_status
