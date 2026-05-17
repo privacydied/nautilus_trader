@@ -940,6 +940,42 @@ def _get_git_status(repo_root: Path | None = None) -> tuple[str, bool]:
         return _get_git_sha(), False
 
 
+# ---------------------------------------------------------------------------
+# Desktop notification + audio helpers
+# ---------------------------------------------------------------------------
+
+_NOTIFY_CMD = "notify-send"
+_SOUND_CMD = "pw-play"
+_SOUND_CAPTURE_START = "/usr/share/sounds/freedesktop/stereo/bell.oga"
+_SOUND_CAPTURE_COMPLETE = "/usr/share/sounds/freedesktop/stereo/complete.oga"
+_SOUND_CAPTURE_FAILED = "/usr/share/sounds/freedesktop/stereo/dialog-error.oga"
+
+
+def _notify(title: str, body: str, urgency: str = "normal") -> None:
+    """Send a Wayland desktop notification via notify-send. Best-effort."""
+    try:
+        subprocess.run(
+            [_NOTIFY_CMD, "--app-name", "Nautilus Edge Miner",
+             "--urgency", urgency, "--expire-time", "15000", title, body],
+            capture_output=True, timeout=5,
+        )
+    except Exception:
+        pass
+
+
+def _play(sound_file: str) -> None:
+    """Play a sound via pw-play. Best-effort."""
+    try:
+        if not Path(sound_file).exists():
+            return
+        subprocess.run([_SOUND_CMD, sound_file], capture_output=True, timeout=8)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+
+
 def _write_status(**kw: Any) -> None:
     """Write the watcher status JSON."""
     repo_root = (_REPO_ROOT or Path.cwd()).resolve()
@@ -1433,11 +1469,27 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 log.log("collection_lock_verified")
 
             # --- Run capture ---
+            _notify(
+                "Edge Miner: stress capture started",
+                f"Signal: {_SIGNAL_FAMILY}\n"
+                f"Trigger: {btc_1h:.1f} bps / 30s impulse\n"
+                f"Market: {market_v} + {accel_v}\n"
+                f"Duration: {_STRESS_V2_DEFAULT_CAPTURE_SECONDS}s",
+                urgency="normal",
+            )
+            _play(_SOUND_CAPTURE_START)
+
             capture_dir = _run_capture(log)
 
             if capture_dir is None:
                 log.log("capture_attempt_failed")
                 print("  Capture failed — see logs for details")
+                _notify(
+                    "Edge Miner: capture FAILED",
+                    f"Signal: {_SIGNAL_FAMILY}\nCheck logs for details.",
+                    urgency="critical",
+                )
+                _play(_SOUND_CAPTURE_FAILED)
                 _write_status(
                     readiness_status="PASSED",
                     gate_status="PASSED",
@@ -1498,9 +1550,25 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
 
             if remaining > 0:
                 print(f"  Stage 2 evaluation BLOCKED — {remaining} more captures required")
+                _notify(
+                    "Edge Miner: capture complete ✓",
+                    f"Status: {last_capture_status}\n"
+                    f"Dir: {Path(capture_dir).name}\n"
+                    f"Corpus: {validated_count} / {_CORPUS_TARGET_WINDOWS} windows\n"
+                    f"{remaining} more needed before frozen-grid rerun",
+                    urgency="normal",
+                )
             else:
                 print(f"  Stage 2 evaluation READY — {_CORPUS_TARGET_WINDOWS}+ validated FULL_ACTIVE captures")
                 print("  (Evaluation is not run by the watcher; run manually)")
+                _notify(
+                    "Edge Miner: CORPUS_READY_FOR_RERUN",
+                    f"Status: {last_capture_status}\n"
+                    f"Corpus: {validated_count} / {_CORPUS_TARGET_WINDOWS} windows\n"
+                    "Frozen-grid discovery can now run manually.",
+                    urgency="critical",
+                )
+            _play(_SOUND_CAPTURE_COMPLETE)
 
             _write_status(
                 readiness_status="PASSED",
