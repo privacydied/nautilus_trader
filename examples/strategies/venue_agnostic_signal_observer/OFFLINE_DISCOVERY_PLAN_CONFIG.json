@@ -1,0 +1,74 @@
+{
+  "schema_version": "offline_discovery_plan_v1",
+  "train_holdout": {
+    "train_fraction": 0.7,
+    "min_train_windows": 2,
+    "min_holdout_windows": 1
+  },
+  "families": {
+    "family_1_same_venue_quote_basis": {
+      "enabled": true,
+      "source_venue": "kraken",
+      "source_symbols": ["BTC/USD", "BTC/USDT"],
+      "horizons_ms": [60000, 300000],
+      "lookbacks_ms": [60000, 300000],
+      "required_resolution": "bar",
+      "fee_slippage_mismatch_assumptions": {
+        "fees_bps": 40.0,
+        "slippage_bps": 5.0,
+        "quote_mismatch_bps": 5.0
+      },
+      "min_events": 25
+    },
+    "family_2_cross_asset_stress_beta_lag": {
+      "enabled": true,
+      "source_symbols": ["BTC/USDT", "ETH/USDT"],
+      "target_symbols": ["SOL/USDT", "LINK/USDT", "DOGE/USDT", "AVAX/USDT"],
+      "signal_variants": ["signed_imbalance", "notional_burst", "source_move_impulse"],
+      "horizons_ms": [60000, 300000],
+      "lookbacks_ms": [30000, 60000],
+      "required_resolution": "bar",
+      "fee_slippage_mismatch_assumptions": {
+        "fees_bps": 50.0,
+        "slippage_bps": 10.0,
+        "quote_mismatch_bps": 5.0
+      },
+      "min_events": 25
+    },
+    "family_3_usd_reference_translation_lag": {
+      "enabled": true,
+      "usd_reference_venue_symbols": [
+        {"venue": "coinbase", "symbol": "BTC/USD"},
+        {"venue": "kraken", "symbol": "BTC/USD"}
+      ],
+      "usdt_venue_symbols": [
+        {"venue": "binance", "symbol": "BTC/USDT"}
+      ],
+      "horizons_ms": [60000, 300000],
+      "lookbacks_ms": [30000, 60000],
+      "required_resolution": "bar",
+      "latency_gate_required": true,
+      "fee_slippage_mismatch_assumptions": {
+        "fees_bps": 45.0,
+        "slippage_bps": 5.0,
+        "quote_mismatch_bps": 5.0
+      },
+      "min_events": 25
+    },
+    "family_4_stablecoin_quote_regime_conditioning": {
+      "enabled": true,
+      "conditioning_only": true,
+      "basis_source": {
+        "venue": "kraken",
+        "symbols": ["BTC/USD", "BTC/USDT"]
+      },
+      "basis_threshold_bps": 10.0,
+      "target_families": [
+        "family_1_same_venue_quote_basis",
+        "family_2_cross_asset_stress_beta_lag",
+        "family_3_usd_reference_translation_lag"
+      ],
+      "standalone": false
+    }
+  }
+}
