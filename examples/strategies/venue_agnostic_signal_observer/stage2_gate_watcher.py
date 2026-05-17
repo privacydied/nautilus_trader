@@ -1116,7 +1116,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
         # --- Step 2: Run gate ---
         gate_result = _run_gate()
         legacy_gate_passed = gate_result.get("gate_passed", False)
-        btc_1h = gate_result.get("btc_1h_bps", 0)
+        btc_1h = gate_result.get("btc_1h_bps") or 0.0
         market_v = gate_result.get("market_verdict", "?")
         accel_v = gate_result.get("accel_verdict", "?")
         gate_err = gate_result.get("error")
