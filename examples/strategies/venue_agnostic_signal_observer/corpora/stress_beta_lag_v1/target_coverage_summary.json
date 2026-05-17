@@ -1,0 +1,17 @@
+{
+  "coverage_by_target": {
+    "AVAX": 0,
+    "DOGE": 3,
+    "LINK": 3,
+    "SOL": 9
+  },
+  "schema_version": "target_coverage_summary.v1",
+  "stress_window_count": 9,
+  "target_assets": [
+    "SOL",
+    "LINK",
+    "DOGE",
+    "AVAX"
+  ],
+  "usable_window_count": 9
+}

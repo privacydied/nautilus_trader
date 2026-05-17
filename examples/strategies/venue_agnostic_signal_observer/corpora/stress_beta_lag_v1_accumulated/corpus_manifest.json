@@ -1,0 +1,285 @@
+{
+  "accumulator_version": "stress_corpus_accumulator.v1",
+  "corpus_hash": "02a4e332c99febbd0c7443d7",
+  "corpus_id": "stress_beta_lag_v1_accumulated",
+  "corpus_version": "1.0.0",
+  "coverage_rule": {
+    "max_entry_delay_seconds": 30,
+    "max_horizon_seconds": 300,
+    "requires_all_targets": true,
+    "staleness_buffer_seconds": 30,
+    "target_pre_roll_seconds": 60,
+    "target_returns_used_for_selection": false
+  },
+  "created_at_utc": "2026-05-17T05:18:24.159402+00:00",
+  "file_manifest_hash": "abd5af677258812139010076",
+  "independence_rule": {
+    "cooldown_seconds": 1800,
+    "description": "Labels for the same source asset are merged when overlapping or within 30 minutes; one independent stress window is emitted per merged group.",
+    "method": "merge_same_source_labels_within_cooldown"
+  },
+  "label_builder_reason": null,
+  "label_builder_status": "STRESS_LABELS_AVAILABLE",
+  "label_version": "stress_label.v1",
+  "minimum_ready_usable_windows": 20,
+  "ready_for_rerun": false,
+  "rejected_window_count": 6,
+  "source_assets": [
+    "BTC",
+    "ETH"
+  ],
+  "source_files": [
+    "data/cross_asset_impulse_v1/trades_binance_BTC-USDT_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_binance_BTC-USD_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_binance_ETH-USDT_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_coinbase_BTC-USDT_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_coinbase_BTC-USD_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_coinbase_ETH-USDT_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_coinbase_ETH-USD_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_kraken_BTC-USD_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_kraken_ETH-USDT_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_kraken_ETH-USD_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_kraken_UNRESOLVED:XBT-USDT_1778654287.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_coinbase_BTC-USD_1778775519.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_coinbase_ETH-USD_1778775519.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_kraken_BTC-USD_1778775519.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_kraken_ETH-USD_1778775519.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_coinbase_BTC-USD_1778777467.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_coinbase_ETH-USD_1778777467.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_kraken_BTC-USD_1778777467.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_kraken_ETH-USD_1778777467.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_coinbase_BTC-USD_1778770431.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_coinbase_ETH-USD_1778770431.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_kraken_BTC-USD_1778770431.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_kraken_ETH-USD_1778770431.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_coinbase_BTC-USD_1778771608.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_coinbase_ETH-USD_1778771608.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_kraken_BTC-USD_1778771608.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_kraken_ETH-USD_1778771608.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_coinbase_BTC-USD_1778775448.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_coinbase_ETH-USD_1778775448.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_kraken_BTC-USD_1778775448.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_kraken_ETH-USD_1778775448.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_coinbase_BTC-USD_1778777397.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_coinbase_ETH-USD_1778777397.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_kraken_BTC-USD_1778777397.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_kraken_ETH-USD_1778777397.jsonl",
+    "data/signal_observer_ticks/trades_coinbase_BTC-USD_1778616446.jsonl",
+    "data/signal_observer_ticks/trades_kraken_BTC-USD_1778616449.jsonl",
+    "data/signal_observer_ticks/trades_kraken_XBT-USD_1778616449.jsonl",
+    "data/signal_observer_ticks_trade_flow_v1/trades_coinbase_BTC-USD_1778631730.jsonl",
+    "data/signal_observer_ticks_trade_flow_v1/trades_coinbase_ETH-USD_1778631730.jsonl",
+    "data/signal_observer_ticks_trade_flow_v1/trades_kraken_BTC-USD_1778631730.jsonl",
+    "data/signal_observer_ticks_trade_flow_v1/trades_kraken_ETH-USD_1778631730.jsonl",
+    "data/signal_observer_ticks_v2/trades_coinbase_BTC-USD_1778620996.jsonl",
+    "data/signal_observer_ticks_v2/trades_kraken_BTC-USD_1778620996.jsonl",
+    "data/signal_observer_ticks_v3/trades_coinbase_BTC-USD_1778624784.jsonl",
+    "data/signal_observer_ticks_v3/trades_coinbase_BTC-USD_1778625127.jsonl",
+    "data/signal_observer_ticks_v3/trades_coinbase_ETH-USD_1778624784.jsonl",
+    "data/signal_observer_ticks_v3/trades_coinbase_ETH-USD_1778625127.jsonl",
+    "data/signal_observer_ticks_v3/trades_kraken_BTC-USD_1778624784.jsonl",
+    "data/signal_observer_ticks_v3/trades_kraken_BTC-USD_1778625127.jsonl",
+    "data/signal_observer_ticks_v3/trades_kraken_ETH-USD_1778624784.jsonl",
+    "data/signal_observer_ticks_v3/trades_kraken_ETH-USD_1778625127.jsonl"
+  ],
+  "status": "TARGET_COVERAGE_LIMITED",
+  "stress_label_count": 9,
+  "stress_label_hash": "2c8bc19f36a743ab84a9fe1b",
+  "stress_rule_config": {
+    "move_30s_threshold_bps": 30.0,
+    "move_60s_threshold_bps": 50.0,
+    "range_threshold_bps": 75.0
+  },
+  "stress_window_count": 6,
+  "stress_windows": [
+    {
+      "impulse_bps": 48.083857,
+      "range_bps": null,
+      "realized_vol_bps": null,
+      "required_target_end_utc": "2026-05-13T06:43:57.822000+00:00",
+      "required_target_start_utc": "2026-05-13T06:36:27.822000+00:00",
+      "source_asset": "BTC",
+      "source_label_ids": [
+        "b852b3c9bf6b41c5ec09bec4"
+      ],
+      "stress_score": 1.602795,
+      "stress_window_id": "ce2d3c5d1d747e8b5f1f0769",
+      "target_assets_available": [
+        "SOL",
+        "LINK",
+        "DOGE"
+      ],
+      "target_assets_missing": [
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE",
+      "usable_for_edge_miner": false,
+      "window_end_utc": "2026-05-13T06:37:57.822000+00:00",
+      "window_start_utc": "2026-05-13T06:37:27.822000+00:00"
+    },
+    {
+      "impulse_bps": 79.913172,
+      "range_bps": 0.0,
+      "realized_vol_bps": 0.0,
+      "required_target_end_utc": "2026-05-13T06:44:29.328011+00:00",
+      "required_target_start_utc": "2026-05-13T06:36:28.036000+00:00",
+      "source_asset": "ETH",
+      "source_label_ids": [
+        "14e7a3a648fd459c3f55dc0f",
+        "76139925c8ad2aad68b1fafc"
+      ],
+      "stress_score": 2.663772,
+      "stress_window_id": "c953ee697ee9c21a0ff8d51c",
+      "target_assets_available": [
+        "SOL",
+        "LINK",
+        "DOGE"
+      ],
+      "target_assets_missing": [
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE+ABS_60S_MOVE",
+      "usable_for_edge_miner": false,
+      "window_end_utc": "2026-05-13T06:38:29.328011+00:00",
+      "window_start_utc": "2026-05-13T06:37:28.036000+00:00"
+    },
+    {
+      "impulse_bps": -71.303804,
+      "range_bps": null,
+      "realized_vol_bps": null,
+      "required_target_end_utc": "2026-05-14T15:00:00.066904+00:00",
+      "required_target_start_utc": "2026-05-14T14:52:30.066904+00:00",
+      "source_asset": "ETH",
+      "source_label_ids": [
+        "6986fce01b54fd78fb5912b1"
+      ],
+      "stress_score": 2.376793,
+      "stress_window_id": "fe0b2ca716503651ac0e9093",
+      "target_assets_available": [
+        "SOL"
+      ],
+      "target_assets_missing": [
+        "LINK",
+        "DOGE",
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE",
+      "usable_for_edge_miner": false,
+      "window_end_utc": "2026-05-14T14:54:00.066904+00:00",
+      "window_start_utc": "2026-05-14T14:53:30.066904+00:00"
+    },
+    {
+      "impulse_bps": 61.091633,
+      "range_bps": 8.825906,
+      "realized_vol_bps": 0.526495,
+      "required_target_end_utc": "2026-05-14T16:23:59.340191+00:00",
+      "required_target_start_utc": "2026-05-14T16:15:59.273894+00:00",
+      "source_asset": "BTC",
+      "source_label_ids": [
+        "89851323b141766f9638aa03",
+        "91e8e76fe4f19243c48664b5"
+      ],
+      "stress_score": 2.036388,
+      "stress_window_id": "37c12984a962eb82179e9c50",
+      "target_assets_available": [
+        "SOL"
+      ],
+      "target_assets_missing": [
+        "LINK",
+        "DOGE",
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE+ABS_60S_MOVE",
+      "usable_for_edge_miner": false,
+      "window_end_utc": "2026-05-14T16:17:59.340191+00:00",
+      "window_start_utc": "2026-05-14T16:16:59.273894+00:00"
+    },
+    {
+      "impulse_bps": 101.884758,
+      "range_bps": 8.724148,
+      "realized_vol_bps": 0.356458,
+      "required_target_end_utc": "2026-05-14T16:23:59.823079+00:00",
+      "required_target_start_utc": "2026-05-14T16:15:59.814795+00:00",
+      "source_asset": "ETH",
+      "source_label_ids": [
+        "a37650c044731ae38e2288c2",
+        "f080386d6f779991d712b57e"
+      ],
+      "stress_score": 3.396159,
+      "stress_window_id": "64ad3c375f128d3203e08fa0",
+      "target_assets_available": [
+        "SOL"
+      ],
+      "target_assets_missing": [
+        "LINK",
+        "DOGE",
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE+ABS_60S_MOVE",
+      "usable_for_edge_miner": false,
+      "window_end_utc": "2026-05-14T16:17:59.823079+00:00",
+      "window_start_utc": "2026-05-14T16:16:59.814795+00:00"
+    },
+    {
+      "impulse_bps": 30.357096,
+      "range_bps": 47.892762,
+      "realized_vol_bps": 1.299627,
+      "required_target_end_utc": "2026-05-14T17:05:29.942627+00:00",
+      "required_target_start_utc": "2026-05-14T16:57:59.942627+00:00",
+      "source_asset": "ETH",
+      "source_label_ids": [
+        "3deaeed8d4bbc6f569df4bfb"
+      ],
+      "stress_score": 1.011903,
+      "stress_window_id": "ba6b839f719111c29d956fc4",
+      "target_assets_available": [
+        "SOL"
+      ],
+      "target_assets_missing": [
+        "LINK",
+        "DOGE",
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE",
+      "usable_for_edge_miner": false,
+      "window_end_utc": "2026-05-14T16:59:29.942627+00:00",
+      "window_start_utc": "2026-05-14T16:58:59.942627+00:00"
+    }
+  ],
+  "target_assets": [
+    "SOL",
+    "LINK",
+    "DOGE",
+    "AVAX"
+  ],
+  "target_files": [
+    "data/cross_asset_impulse_v1/trades_coinbase_DOGE-USD_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_coinbase_LINK-USD_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_coinbase_SOL-USD_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_kraken_LINK-USD_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_kraken_SOL-USD_1778654273.jsonl",
+    "data/cross_asset_impulse_v1/trades_kraken_UNRESOLVED:XDG-USD_1778654292.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_coinbase_SOL-USD_1778775519.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_kraken_SOL-USD_1778775519.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_coinbase_SOL-USD_1778777467.jsonl",
+    "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_kraken_SOL-USD_1778777467.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_coinbase_SOL-USD_1778770431.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_kraken_SOL-USD_1778770431.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_coinbase_SOL-USD_1778771608.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_kraken_SOL-USD_1778771608.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_coinbase_SOL-USD_1778775448.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_kraken_SOL-USD_1778775448.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_coinbase_SOL-USD_1778777397.jsonl",
+    "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_kraken_SOL-USD_1778777397.jsonl",
+    "data/dex_cex_spot_dislocation_v1/ticks/trades_coinbase_SOL-USD_1778642268.jsonl",
+    "data/dex_cex_spot_dislocation_v1/ticks/trades_coinbase_UNRESOLVED:AVAX-USD_1778642268.jsonl",
+    "data/dex_cex_spot_dislocation_v1/ticks/trades_coinbase_UNRESOLVED:DOGE-USD_1778642268.jsonl",
+    "data/dex_cex_spot_dislocation_v1/ticks/trades_coinbase_UNRESOLVED:LINK-USD_1778642268.jsonl",
+    "data/dex_cex_spot_dislocation_v1/ticks/trades_kraken_SOL-USD_1778642268.jsonl",
+    "data/dex_cex_spot_dislocation_v1/ticks/trades_kraken_UNRESOLVED:AVAX-USD_1778642268.jsonl",
+    "data/dex_cex_spot_dislocation_v1/ticks/trades_kraken_UNRESOLVED:LINK-USD_1778642268.jsonl",
+    "data/dex_cex_spot_dislocation_v1/ticks/trades_kraken_UNRESOLVED:XDG-USD_1778642301.jsonl",
+    "data/dex_cex_spot_dislocation_v1/trades_kraken_SOL-USD_000.jsonl"
+  ],
+  "usable_window_count": 0
+}

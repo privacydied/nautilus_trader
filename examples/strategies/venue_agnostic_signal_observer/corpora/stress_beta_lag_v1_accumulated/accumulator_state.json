@@ -1,0 +1,19 @@
+{
+  "capture_count": 13,
+  "corpus_hash": "02a4e332c99febbd0c7443d7",
+  "input_dirs": [
+    "data",
+    "reports",
+    "examples/strategies/venue_agnostic_signal_observer/data",
+    "examples/strategies/venue_agnostic_signal_observer/reports"
+  ],
+  "last_run_at_utc": "2026-05-17T05:18:24.159402+00:00",
+  "mode": "local_only",
+  "public_capture_mode_implemented": false,
+  "public_capture_next_step": "Add a separate public-market-data capture tool if more local stress windows are needed; do not change stress thresholds or grid dimensions.",
+  "ready_for_rerun": false,
+  "schema_version": "accumulator_state.v1",
+  "status": "TARGET_COVERAGE_LIMITED",
+  "stress_window_count": 6,
+  "usable_window_count": 0
+}

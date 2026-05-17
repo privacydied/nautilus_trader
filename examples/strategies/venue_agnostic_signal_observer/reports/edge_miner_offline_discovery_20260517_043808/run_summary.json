@@ -1,0 +1,40 @@
+{
+  "candidate_counts": {
+    "blocked_by_locked_rejection": 0,
+    "candidate_cards": 232,
+    "cells_tested": 768,
+    "final_candidates": 0,
+    "passing_shadow": 0,
+    "raw_cells": 768,
+    "rejected_by_cpcv_nonstationarity": 0,
+    "rejected_by_dsr": 1,
+    "rejected_by_fdr": 8,
+    "rejected_by_null_mcpt": 26,
+    "rejected_on_cost_floor": 197,
+    "sent_to_shadow": 0,
+    "validator_survivors": 0
+  },
+  "corpus_status": "REAL_CORPUS_AVAILABLE",
+  "grid_hash": "2c5d4a9918050869004fa921",
+  "no_exchange_connections_were_made": true,
+  "no_orders_were_placed": true,
+  "observer_only": true,
+  "report_dir": "examples/strategies/venue_agnostic_signal_observer/reports/edge_miner_offline_discovery_20260517_043808",
+  "schema_version": "offline_discovery_run_summary.v1",
+  "status": "OFFLINE_DISCOVERY_COMPLETE",
+  "stress_corpus_hash": "738bd12891e3ff9dce47701a",
+  "stress_corpus_id": "stress_beta_lag_v1",
+  "stress_label_count": 9,
+  "stress_label_status": "STRESS_LABELS_AVAILABLE",
+  "stress_label_summary": {
+    "label_count": 9,
+    "label_version": "stress_label.v1",
+    "reason": "Validated stress corpus manifest supplied to offline runner.",
+    "schema_version": "stress_label_summary.v1",
+    "source_assets_evaluated": [
+      "BTC",
+      "ETH"
+    ],
+    "status": "STRESS_LABELS_AVAILABLE"
+  }
+}

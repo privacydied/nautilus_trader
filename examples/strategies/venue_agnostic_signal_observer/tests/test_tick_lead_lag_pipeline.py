@@ -739,6 +739,10 @@ class TestNoOrderGuard:
             pkg / "tests" / "test_derivatives_lead_lag.py",
             pkg / "tests" / "test_derivatives_spot_lead_lag.py",
             pkg / "tests" / "test_polymarket_btc_updown_liquidity_probe.py",
+            pkg / "tests" / "test_edge_miner_offline_discovery.py",
+            pkg / "tests" / "test_stress_corpus.py",
+            pkg / "tests" / "test_edge_miner_forensics.py",
+            pkg / "tests" / "test_stress_corpus_accumulator.py",
         ]
         for fpath in pkg.rglob("*.py"):
             if fpath == test_file or fpath in other_tests:

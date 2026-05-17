@@ -1,0 +1,207 @@
+{
+  "rejected_window_count": 0,
+  "schema_version": "stress_window_summary.v1",
+  "status": "STRESS_CORPUS_AVAILABLE",
+  "stress_window_count": 9,
+  "usable_window_count": 9,
+  "windows": [
+    {
+      "impulse_bps": 48.083857,
+      "range_bps": null,
+      "realized_vol_bps": null,
+      "required_target_end_utc": "2026-05-13T06:43:27.822000+00:00",
+      "required_target_start_utc": "2026-05-13T06:37:27.822000+00:00",
+      "source_asset": "BTC",
+      "stress_score": 1.602795,
+      "stress_window_id": "b35e3e313a610c7b1ecd872e",
+      "target_assets_available": [
+        "SOL",
+        "LINK",
+        "DOGE"
+      ],
+      "target_assets_missing": [
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE",
+      "usable_for_edge_miner": true,
+      "window_end_utc": "2026-05-13T06:37:57.822000+00:00",
+      "window_start_utc": "2026-05-13T06:37:27.822000+00:00"
+    },
+    {
+      "impulse_bps": 79.913172,
+      "range_bps": 0.0,
+      "realized_vol_bps": 0.0,
+      "required_target_end_utc": "2026-05-13T06:43:28.036000+00:00",
+      "required_target_start_utc": "2026-05-13T06:37:28.036000+00:00",
+      "source_asset": "ETH",
+      "stress_score": 2.663772,
+      "stress_window_id": "39c167604f201e01ec34e75c",
+      "target_assets_available": [
+        "SOL",
+        "LINK",
+        "DOGE"
+      ],
+      "target_assets_missing": [
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE",
+      "usable_for_edge_miner": true,
+      "window_end_utc": "2026-05-13T06:37:58.036000+00:00",
+      "window_start_utc": "2026-05-13T06:37:28.036000+00:00"
+    },
+    {
+      "impulse_bps": 78.775307,
+      "range_bps": 4.429506,
+      "realized_vol_bps": 0.569298,
+      "required_target_end_utc": "2026-05-13T06:43:59.328011+00:00",
+      "required_target_start_utc": "2026-05-13T06:37:29.328011+00:00",
+      "source_asset": "ETH",
+      "stress_score": 2.625844,
+      "stress_window_id": "e9cb44cdd7ff48b08fe850fd",
+      "target_assets_available": [
+        "SOL",
+        "LINK",
+        "DOGE"
+      ],
+      "target_assets_missing": [
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_60S_MOVE",
+      "usable_for_edge_miner": true,
+      "window_end_utc": "2026-05-13T06:38:29.328011+00:00",
+      "window_start_utc": "2026-05-13T06:37:29.328011+00:00"
+    },
+    {
+      "impulse_bps": -71.303804,
+      "range_bps": null,
+      "realized_vol_bps": null,
+      "required_target_end_utc": "2026-05-14T14:59:30.066904+00:00",
+      "required_target_start_utc": "2026-05-14T14:53:30.066904+00:00",
+      "source_asset": "ETH",
+      "stress_score": 2.376793,
+      "stress_window_id": "3118f5794866de9c581f2875",
+      "target_assets_available": [
+        "SOL"
+      ],
+      "target_assets_missing": [
+        "LINK",
+        "DOGE",
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE",
+      "usable_for_edge_miner": true,
+      "window_end_utc": "2026-05-14T14:54:00.066904+00:00",
+      "window_start_utc": "2026-05-14T14:53:30.066904+00:00"
+    },
+    {
+      "impulse_bps": 60.554333,
+      "range_bps": null,
+      "realized_vol_bps": null,
+      "required_target_end_utc": "2026-05-14T16:22:59.273894+00:00",
+      "required_target_start_utc": "2026-05-14T16:16:59.273894+00:00",
+      "source_asset": "BTC",
+      "stress_score": 2.018478,
+      "stress_window_id": "8cefae7a63071f4942017180",
+      "target_assets_available": [
+        "SOL"
+      ],
+      "target_assets_missing": [
+        "LINK",
+        "DOGE",
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE",
+      "usable_for_edge_miner": true,
+      "window_end_utc": "2026-05-14T16:17:29.273894+00:00",
+      "window_start_utc": "2026-05-14T16:16:59.273894+00:00"
+    },
+    {
+      "impulse_bps": 61.091633,
+      "range_bps": 8.825906,
+      "realized_vol_bps": 0.526495,
+      "required_target_end_utc": "2026-05-14T16:23:29.340191+00:00",
+      "required_target_start_utc": "2026-05-14T16:16:59.340191+00:00",
+      "source_asset": "BTC",
+      "stress_score": 2.036388,
+      "stress_window_id": "24337cd2db33aa506bf110a1",
+      "target_assets_available": [
+        "SOL"
+      ],
+      "target_assets_missing": [
+        "LINK",
+        "DOGE",
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_60S_MOVE",
+      "usable_for_edge_miner": true,
+      "window_end_utc": "2026-05-14T16:17:59.340191+00:00",
+      "window_start_utc": "2026-05-14T16:16:59.340191+00:00"
+    },
+    {
+      "impulse_bps": 100.351009,
+      "range_bps": null,
+      "realized_vol_bps": null,
+      "required_target_end_utc": "2026-05-14T16:22:59.814795+00:00",
+      "required_target_start_utc": "2026-05-14T16:16:59.814795+00:00",
+      "source_asset": "ETH",
+      "stress_score": 3.345034,
+      "stress_window_id": "a5020bb82a8e72ef503c0647",
+      "target_assets_available": [
+        "SOL"
+      ],
+      "target_assets_missing": [
+        "LINK",
+        "DOGE",
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE",
+      "usable_for_edge_miner": true,
+      "window_end_utc": "2026-05-14T16:17:29.814795+00:00",
+      "window_start_utc": "2026-05-14T16:16:59.814795+00:00"
+    },
+    {
+      "impulse_bps": 101.884758,
+      "range_bps": 8.724148,
+      "realized_vol_bps": 0.356458,
+      "required_target_end_utc": "2026-05-14T16:23:29.823079+00:00",
+      "required_target_start_utc": "2026-05-14T16:16:59.823079+00:00",
+      "source_asset": "ETH",
+      "stress_score": 3.396159,
+      "stress_window_id": "64b65226b16d2b35b397b551",
+      "target_assets_available": [
+        "SOL"
+      ],
+      "target_assets_missing": [
+        "LINK",
+        "DOGE",
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_60S_MOVE",
+      "usable_for_edge_miner": true,
+      "window_end_utc": "2026-05-14T16:17:59.823079+00:00",
+      "window_start_utc": "2026-05-14T16:16:59.823079+00:00"
+    },
+    {
+      "impulse_bps": 30.357096,
+      "range_bps": 47.892762,
+      "realized_vol_bps": 1.299627,
+      "required_target_end_utc": "2026-05-14T17:04:59.942627+00:00",
+      "required_target_start_utc": "2026-05-14T16:58:59.942627+00:00",
+      "source_asset": "ETH",
+      "stress_score": 1.011903,
+      "stress_window_id": "b1810b40d1a201000c722e8a",
+      "target_assets_available": [
+        "SOL"
+      ],
+      "target_assets_missing": [
+        "LINK",
+        "DOGE",
+        "AVAX"
+      ],
+      "trigger_reason": "ABS_30S_MOVE",
+      "usable_for_edge_miner": true,
+      "window_end_utc": "2026-05-14T16:59:29.942627+00:00",
+      "window_start_utc": "2026-05-14T16:58:59.942627+00:00"
+    }
+  ]
+}

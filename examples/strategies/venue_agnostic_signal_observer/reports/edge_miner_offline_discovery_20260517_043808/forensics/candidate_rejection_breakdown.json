@@ -1,0 +1,44 @@
+{
+  "by_feature_family": {
+    "large_trade": 57,
+    "notional_burst": 60,
+    "price_impulse": 43,
+    "signed_imbalance": 72
+  },
+  "by_horizon_seconds": {
+    "180": 74,
+    "300": 56,
+    "60": 102
+  },
+  "by_source_asset": {
+    "BTC": 148,
+    "ETH": 84
+  },
+  "by_target_asset": {
+    "DOGE": 91,
+    "LINK": 88,
+    "SOL": 53
+  },
+  "candidate_counts": {
+    "blocked_by_locked_rejection": 0,
+    "candidate_cards": 232,
+    "cells_tested": 768,
+    "final_candidates": 0,
+    "passing_shadow": 0,
+    "raw_cells": 768,
+    "rejected_by_cpcv_nonstationarity": 0,
+    "rejected_by_dsr": 1,
+    "rejected_by_fdr": 8,
+    "rejected_by_null_mcpt": 26,
+    "rejected_on_cost_floor": 197,
+    "sent_to_shadow": 0,
+    "validator_survivors": 0
+  },
+  "rejection_reason_counts": {
+    "BELOW_COST_FLOOR": 197,
+    "DSR_FAIL": 1,
+    "FDR_FAIL": 8,
+    "NULL_MCPT_FAIL": 26
+  },
+  "schema_version": "candidate_rejection_breakdown.v1"
+}

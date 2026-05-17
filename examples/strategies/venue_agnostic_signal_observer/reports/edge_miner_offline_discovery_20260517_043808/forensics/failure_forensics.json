@@ -1,0 +1,736 @@
+{
+  "candidate_rejection_breakdown": {
+    "by_feature_family": {
+      "large_trade": 57,
+      "notional_burst": 60,
+      "price_impulse": 43,
+      "signed_imbalance": 72
+    },
+    "by_horizon_seconds": {
+      "180": 74,
+      "300": 56,
+      "60": 102
+    },
+    "by_source_asset": {
+      "BTC": 148,
+      "ETH": 84
+    },
+    "by_target_asset": {
+      "DOGE": 91,
+      "LINK": 88,
+      "SOL": 53
+    },
+    "candidate_counts": {
+      "blocked_by_locked_rejection": 0,
+      "candidate_cards": 232,
+      "cells_tested": 768,
+      "final_candidates": 0,
+      "passing_shadow": 0,
+      "raw_cells": 768,
+      "rejected_by_cpcv_nonstationarity": 0,
+      "rejected_by_dsr": 1,
+      "rejected_by_fdr": 8,
+      "rejected_by_null_mcpt": 26,
+      "rejected_on_cost_floor": 197,
+      "sent_to_shadow": 0,
+      "validator_survivors": 0
+    },
+    "rejection_reason_counts": {
+      "BELOW_COST_FLOOR": 197,
+      "DSR_FAIL": 1,
+      "FDR_FAIL": 8,
+      "NULL_MCPT_FAIL": 26
+    },
+    "schema_version": "candidate_rejection_breakdown.v1"
+  },
+  "contributing_reasons": [
+    "DATA_INSUFFICIENT_REJECTION",
+    "TARGET_COVERAGE_LIMITED_REJECTION",
+    "COST_FLOOR_DOMINANT_FAILURE",
+    "TIMING_OR_MULTIPLE_TEST_FAILURE",
+    "SHADOW_NOT_REACHED"
+  ],
+  "corpus_adequacy": {
+    "label_version": "stress_label.v1",
+    "source_assets": [
+      "BTC",
+      "ETH"
+    ],
+    "stress_corpus_hash": "738bd12891e3ff9dce47701a",
+    "stress_window_count": 9,
+    "target_assets": [
+      "SOL",
+      "LINK",
+      "DOGE",
+      "AVAX"
+    ],
+    "usable_window_count": 9
+  },
+  "cost_floor_diagnostics": {
+    "distance_to_cost_floor_bps_distribution": {
+      "count": 197,
+      "max_bps": -40.1586,
+      "mean_bps": -48.112306,
+      "min_bps": -49.9994
+    },
+    "gross_expected_bps_distribution": {
+      "count": 197,
+      "max_bps": 9.8414,
+      "mean_bps": 1.887694,
+      "min_bps": 0.0006
+    },
+    "rejected_on_cost_floor": 197,
+    "schema_version": "cost_floor_diagnostics.v1",
+    "top_near_miss_cost_rejections": [
+      {
+        "candidate_hash": "8b2f7034e1e6c526e23a9a86",
+        "cell_id": "BTC_to_DOGE_large_trade_lb60s_h300s_d30s",
+        "cost_floor_bps": 50.0,
+        "distance_to_cost_floor_bps": -40.1586,
+        "entry_delay_seconds": 30,
+        "feature_family": "large_trade",
+        "gross_expected_bps": 9.8414,
+        "horizon_seconds": 300,
+        "lookback_seconds": 60,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "d748a3f6352e245fc93b3246",
+        "cell_id": "BTC_to_DOGE_large_trade_lb60s_h300s_d15s",
+        "cost_floor_bps": 50.0,
+        "distance_to_cost_floor_bps": -41.0977,
+        "entry_delay_seconds": 15,
+        "feature_family": "large_trade",
+        "gross_expected_bps": 8.9023,
+        "horizon_seconds": 300,
+        "lookback_seconds": 60,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "0e4e6f0e30ac5e095fa1f841",
+        "cell_id": "BTC_to_DOGE_signed_imbalance_lb30s_h300s_d30s",
+        "cost_floor_bps": 50.0,
+        "distance_to_cost_floor_bps": -41.4185,
+        "entry_delay_seconds": 30,
+        "feature_family": "signed_imbalance",
+        "gross_expected_bps": 8.5815,
+        "horizon_seconds": 300,
+        "lookback_seconds": 30,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "0d47929ce514aa889d226dca",
+        "cell_id": "BTC_to_DOGE_large_trade_lb60s_h300s_d5s",
+        "cost_floor_bps": 50.0,
+        "distance_to_cost_floor_bps": -41.6439,
+        "entry_delay_seconds": 5,
+        "feature_family": "large_trade",
+        "gross_expected_bps": 8.3561,
+        "horizon_seconds": 300,
+        "lookback_seconds": 60,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "68c6b7f382b5b0869bbf8ad6",
+        "cell_id": "BTC_to_DOGE_signed_imbalance_lb30s_h300s_d5s",
+        "cost_floor_bps": 50.0,
+        "distance_to_cost_floor_bps": -41.7134,
+        "entry_delay_seconds": 5,
+        "feature_family": "signed_imbalance",
+        "gross_expected_bps": 8.2866,
+        "horizon_seconds": 300,
+        "lookback_seconds": 30,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "4748015d59cc23cd4bc85c36",
+        "cell_id": "BTC_to_DOGE_large_trade_lb60s_h300s_d0s",
+        "cost_floor_bps": 50.0,
+        "distance_to_cost_floor_bps": -41.898,
+        "entry_delay_seconds": 0,
+        "feature_family": "large_trade",
+        "gross_expected_bps": 8.102,
+        "horizon_seconds": 300,
+        "lookback_seconds": 60,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "ff925cc68c404605dc0b6be5",
+        "cell_id": "BTC_to_DOGE_signed_imbalance_lb30s_h300s_d15s",
+        "cost_floor_bps": 50.0,
+        "distance_to_cost_floor_bps": -42.1663,
+        "entry_delay_seconds": 15,
+        "feature_family": "signed_imbalance",
+        "gross_expected_bps": 7.8337,
+        "horizon_seconds": 300,
+        "lookback_seconds": 30,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "6f186a3c23eb38fa938ea746",
+        "cell_id": "BTC_to_DOGE_signed_imbalance_lb30s_h300s_d0s",
+        "cost_floor_bps": 50.0,
+        "distance_to_cost_floor_bps": -42.2577,
+        "entry_delay_seconds": 0,
+        "feature_family": "signed_imbalance",
+        "gross_expected_bps": 7.7423,
+        "horizon_seconds": 300,
+        "lookback_seconds": 30,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "d8738fd11ba9d09f82cef522",
+        "cell_id": "BTC_to_DOGE_signed_imbalance_lb30s_h180s_d0s",
+        "cost_floor_bps": 50.0,
+        "distance_to_cost_floor_bps": -43.6113,
+        "entry_delay_seconds": 0,
+        "feature_family": "signed_imbalance",
+        "gross_expected_bps": 6.3887,
+        "horizon_seconds": 180,
+        "lookback_seconds": 30,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "77e0c6fb29e6e47009c3473a",
+        "cell_id": "BTC_to_DOGE_signed_imbalance_lb30s_h180s_d5s",
+        "cost_floor_bps": 50.0,
+        "distance_to_cost_floor_bps": -43.6269,
+        "entry_delay_seconds": 5,
+        "feature_family": "signed_imbalance",
+        "gross_expected_bps": 6.3731,
+        "horizon_seconds": 180,
+        "lookback_seconds": 30,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      }
+    ]
+  },
+  "data_adequacy_summary": {
+    "interpretation": "Useful diagnostic evidence, not a final global rejection.",
+    "is_decisive_global_rejection": false,
+    "minimum_decisive_stress_windows": 20,
+    "missing_target_assets": [
+      "AVAX"
+    ],
+    "partial_target_assets": [
+      "LINK",
+      "DOGE"
+    ],
+    "schema_version": "data_adequacy_summary.v1",
+    "stress_window_count": 9,
+    "usable_window_count": 9
+  },
+  "dsr_diagnostics": {
+    "dsr_rejections": [
+      {
+        "candidate_hash": "416be7c601df3e3f69989396",
+        "cell_id": "BTC_to_LINK_price_impulse_lb60s_h180s_d0s",
+        "diagnostic_status": "INSUFFICIENT_DATA",
+        "dsr_score": null,
+        "dsr_threshold": 0.95,
+        "effective_trial_count": 768,
+        "entry_delay_seconds": 0,
+        "feature_family": "price_impulse",
+        "horizon_seconds": 180,
+        "lookback_seconds": 60,
+        "raw_trial_count": 768,
+        "source_asset": "BTC",
+        "target_asset": "LINK",
+        "volatility_adjustment_method": "none"
+      }
+    ],
+    "rejected_by_dsr": 1,
+    "schema_version": "dsr_diagnostics.v1"
+  },
+  "executive_verdict": "DATA_INSUFFICIENT_REJECTION",
+  "fdr_diagnostics": {
+    "family_size": "FIELD_UNAVAILABLE",
+    "q_value_threshold": 0.1,
+    "rejected_by_fdr": 8,
+    "schema_version": "fdr_diagnostics.v1",
+    "top_near_miss_by_p_value": [
+      {
+        "candidate_hash": "c6e43b07b6b08ce08676858d",
+        "cell_id": "BTC_to_DOGE_price_impulse_lb30s_h180s_d30s",
+        "entry_delay_seconds": 30,
+        "family_size": "FIELD_UNAVAILABLE",
+        "feature_family": "price_impulse",
+        "horizon_seconds": 180,
+        "lookback_seconds": 30,
+        "p_value": 0.01926665,
+        "primary_fdr_method": "benjamini_hochberg_offline_v1",
+        "primary_fdr_q": 0.1,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "006e7ea37dc8c8b5086daaaf",
+        "cell_id": "BTC_to_DOGE_signed_imbalance_lb60s_h300s_d30s",
+        "entry_delay_seconds": 30,
+        "family_size": "FIELD_UNAVAILABLE",
+        "feature_family": "signed_imbalance",
+        "horizon_seconds": 300,
+        "lookback_seconds": 60,
+        "p_value": 0.01971376,
+        "primary_fdr_method": "benjamini_hochberg_offline_v1",
+        "primary_fdr_q": 0.1,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "40430ee76a482e515f8f975a",
+        "cell_id": "BTC_to_LINK_price_impulse_lb60s_h180s_d5s",
+        "entry_delay_seconds": 5,
+        "family_size": "FIELD_UNAVAILABLE",
+        "feature_family": "price_impulse",
+        "horizon_seconds": 180,
+        "lookback_seconds": 60,
+        "p_value": 0.02000285,
+        "primary_fdr_method": "benjamini_hochberg_offline_v1",
+        "primary_fdr_q": 0.1,
+        "source_asset": "BTC",
+        "target_asset": "LINK"
+      },
+      {
+        "candidate_hash": "191605bc2c9ed18f40cf296c",
+        "cell_id": "BTC_to_DOGE_price_impulse_lb60s_h180s_d0s",
+        "entry_delay_seconds": 0,
+        "family_size": "FIELD_UNAVAILABLE",
+        "feature_family": "price_impulse",
+        "horizon_seconds": 180,
+        "lookback_seconds": 60,
+        "p_value": 0.0332811,
+        "primary_fdr_method": "benjamini_hochberg_offline_v1",
+        "primary_fdr_q": 0.1,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "c2fa43d92c0f0d8d68e7b51b",
+        "cell_id": "BTC_to_DOGE_price_impulse_lb30s_h300s_d30s",
+        "entry_delay_seconds": 30,
+        "family_size": "FIELD_UNAVAILABLE",
+        "feature_family": "price_impulse",
+        "horizon_seconds": 300,
+        "lookback_seconds": 30,
+        "p_value": 0.03841818,
+        "primary_fdr_method": "benjamini_hochberg_offline_v1",
+        "primary_fdr_q": 0.1,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "f7142d33b07474c0e5688f90",
+        "cell_id": "BTC_to_DOGE_price_impulse_lb60s_h180s_d5s",
+        "entry_delay_seconds": 5,
+        "family_size": "FIELD_UNAVAILABLE",
+        "feature_family": "price_impulse",
+        "horizon_seconds": 180,
+        "lookback_seconds": 60,
+        "p_value": 0.04312456,
+        "primary_fdr_method": "benjamini_hochberg_offline_v1",
+        "primary_fdr_q": 0.1,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "candidate_hash": "238d657be27e75e76c7fab2a",
+        "cell_id": "BTC_to_LINK_price_impulse_lb60s_h180s_d30s",
+        "entry_delay_seconds": 30,
+        "family_size": "FIELD_UNAVAILABLE",
+        "feature_family": "price_impulse",
+        "horizon_seconds": 180,
+        "lookback_seconds": 60,
+        "p_value": 0.04610266,
+        "primary_fdr_method": "benjamini_hochberg_offline_v1",
+        "primary_fdr_q": 0.1,
+        "source_asset": "BTC",
+        "target_asset": "LINK"
+      },
+      {
+        "candidate_hash": "8894a185dab97257fe6946a9",
+        "cell_id": "BTC_to_LINK_price_impulse_lb60s_h180s_d15s",
+        "entry_delay_seconds": 15,
+        "family_size": "FIELD_UNAVAILABLE",
+        "feature_family": "price_impulse",
+        "horizon_seconds": 180,
+        "lookback_seconds": 60,
+        "p_value": 0.04744291,
+        "primary_fdr_method": "benjamini_hochberg_offline_v1",
+        "primary_fdr_q": 0.1,
+        "source_asset": "BTC",
+        "target_asset": "LINK"
+      }
+    ]
+  },
+  "grid_hash": "2c5d4a9918050869004fa921",
+  "null_mcpt_diagnostics": {
+    "by_feature_family": {
+      "notional_burst": 1,
+      "price_impulse": 19,
+      "signed_imbalance": 6
+    },
+    "by_horizon_seconds": {
+      "180": 9,
+      "300": 17
+    },
+    "by_source_asset": {
+      "BTC": 18,
+      "ETH": 8
+    },
+    "by_target_asset": {
+      "DOGE": 15,
+      "LINK": 5,
+      "SOL": 6
+    },
+    "rejected_by_null_mcpt": 26,
+    "schema_version": "null_mcpt_diagnostics.v1",
+    "top_near_miss_by_p_value": [
+      {
+        "alpha": 0.05,
+        "candidate_hash": "4d4020501c50d75be972fd5d",
+        "cell_id": "BTC_to_DOGE_price_impulse_lb60s_h180s_d15s",
+        "entry_delay_seconds": 15,
+        "feature_family": "price_impulse",
+        "horizon_seconds": 180,
+        "lookback_seconds": 60,
+        "p_value": 0.06610854,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "alpha": 0.05,
+        "candidate_hash": "392cfd31ea4e570e92e05b46",
+        "cell_id": "BTC_to_DOGE_price_impulse_lb60s_h180s_d30s",
+        "entry_delay_seconds": 30,
+        "feature_family": "price_impulse",
+        "horizon_seconds": 180,
+        "lookback_seconds": 60,
+        "p_value": 0.10274446,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "alpha": 0.05,
+        "candidate_hash": "f5aea4ae063aee4954213a27",
+        "cell_id": "ETH_to_LINK_signed_imbalance_lb60s_h300s_d5s",
+        "entry_delay_seconds": 5,
+        "feature_family": "signed_imbalance",
+        "horizon_seconds": 300,
+        "lookback_seconds": 60,
+        "p_value": 0.14049036,
+        "source_asset": "ETH",
+        "target_asset": "LINK"
+      },
+      {
+        "alpha": 0.05,
+        "candidate_hash": "161e22455bad9452def7e965",
+        "cell_id": "ETH_to_SOL_signed_imbalance_lb60s_h300s_d0s",
+        "entry_delay_seconds": 0,
+        "feature_family": "signed_imbalance",
+        "horizon_seconds": 300,
+        "lookback_seconds": 60,
+        "p_value": 0.15999853,
+        "source_asset": "ETH",
+        "target_asset": "SOL"
+      },
+      {
+        "alpha": 0.05,
+        "candidate_hash": "77adc048bac09d96291e940d",
+        "cell_id": "ETH_to_SOL_signed_imbalance_lb60s_h300s_d5s",
+        "entry_delay_seconds": 5,
+        "feature_family": "signed_imbalance",
+        "horizon_seconds": 300,
+        "lookback_seconds": 60,
+        "p_value": 0.17293565,
+        "source_asset": "ETH",
+        "target_asset": "SOL"
+      },
+      {
+        "alpha": 0.05,
+        "candidate_hash": "0f019aefd31e5214bf0b422e",
+        "cell_id": "BTC_to_SOL_price_impulse_lb60s_h180s_d0s",
+        "entry_delay_seconds": 0,
+        "feature_family": "price_impulse",
+        "horizon_seconds": 180,
+        "lookback_seconds": 60,
+        "p_value": 0.19067364,
+        "source_asset": "BTC",
+        "target_asset": "SOL"
+      },
+      {
+        "alpha": 0.05,
+        "candidate_hash": "3d624434c996bc89d5fb1699",
+        "cell_id": "BTC_to_DOGE_price_impulse_lb30s_h300s_d15s",
+        "entry_delay_seconds": 15,
+        "feature_family": "price_impulse",
+        "horizon_seconds": 300,
+        "lookback_seconds": 30,
+        "p_value": 0.19748863,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "alpha": 0.05,
+        "candidate_hash": "02dff077087e96d5873e1444",
+        "cell_id": "ETH_to_LINK_signed_imbalance_lb60s_h300s_d0s",
+        "entry_delay_seconds": 0,
+        "feature_family": "signed_imbalance",
+        "horizon_seconds": 300,
+        "lookback_seconds": 60,
+        "p_value": 0.2010936,
+        "source_asset": "ETH",
+        "target_asset": "LINK"
+      },
+      {
+        "alpha": 0.05,
+        "candidate_hash": "aaae5027a4f56ad7a373487a",
+        "cell_id": "BTC_to_DOGE_price_impulse_lb30s_h300s_d5s",
+        "entry_delay_seconds": 5,
+        "feature_family": "price_impulse",
+        "horizon_seconds": 300,
+        "lookback_seconds": 30,
+        "p_value": 0.22326275,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      },
+      {
+        "alpha": 0.05,
+        "candidate_hash": "e814dda901aaf1f4c937f853",
+        "cell_id": "BTC_to_DOGE_price_impulse_lb60s_h300s_d30s",
+        "entry_delay_seconds": 30,
+        "feature_family": "price_impulse",
+        "horizon_seconds": 300,
+        "lookback_seconds": 60,
+        "p_value": 0.24226703,
+        "source_asset": "BTC",
+        "target_asset": "DOGE"
+      }
+    ]
+  },
+  "recurrence_diagnostics": {
+    "interpretation": "recurrence_not_reached_no_validator_survivors",
+    "n_captures": 1,
+    "status": "NO_VALIDATOR_SURVIVORS"
+  },
+  "rejection_funnel": {
+    "blocked_by_locked_rejection": 0,
+    "candidate_cards": 232,
+    "cells_tested": 768,
+    "final_candidates": 0,
+    "passing_shadow": 0,
+    "raw_cells": 768,
+    "rejected_by_cpcv_nonstationarity": 0,
+    "rejected_by_dsr": 1,
+    "rejected_by_fdr": 8,
+    "rejected_by_null_mcpt": 26,
+    "rejected_on_cost_floor": 197,
+    "sent_to_shadow": 0,
+    "validator_survivors": 0
+  },
+  "report_dir": "examples/strategies/venue_agnostic_signal_observer/reports/edge_miner_offline_discovery_20260517_043808",
+  "safety_statement": {
+    "no_exchange_connection": true,
+    "no_live_capture": true,
+    "no_orders_placed": true,
+    "no_private_key_flow": true,
+    "observer_only_offline_analysis": true
+  },
+  "schema_version": "edge_miner_failure_forensics.v1",
+  "shadow_diagnostics": {
+    "interpretation": "SHADOW_NOT_REACHED",
+    "passing_shadow": 0,
+    "sent_to_shadow": 0,
+    "status": "NO_VALIDATOR_SURVIVORS"
+  },
+  "stress_corpus_hash": "738bd12891e3ff9dce47701a",
+  "target_coverage_breakdown": {
+    "coverage_by_target": {
+      "AVAX": 0,
+      "DOGE": 3,
+      "LINK": 3,
+      "SOL": 9
+    },
+    "missing_target_assets": [
+      "AVAX"
+    ],
+    "notes": {
+      "AVAX": "not covered at 0 windows; no conclusion should be drawn",
+      "DOGE": "partial coverage at 3 windows",
+      "LINK": "partial coverage at 3 windows",
+      "SOL": "covered across 9 windows"
+    },
+    "partial_target_assets": [
+      "LINK",
+      "DOGE"
+    ],
+    "schema_version": "target_coverage_breakdown.v1",
+    "target_assets": [
+      "SOL",
+      "LINK",
+      "DOGE",
+      "AVAX"
+    ]
+  },
+  "top_rejected_candidates": [
+    {
+      "candidate_hash": "8b2f7034e1e6c526e23a9a86",
+      "cell_id": "BTC_to_DOGE_large_trade_lb60s_h300s_d30s",
+      "entry_delay_seconds": 30,
+      "feature_family": "large_trade",
+      "hit_rate": 0.9,
+      "horizon_seconds": 300,
+      "lookback_seconds": 60,
+      "mean_return_bps": 9.8414,
+      "n_observations": 10,
+      "rejection_reason": "BELOW_COST_FLOOR",
+      "sharpe_like": 1.556651,
+      "source_asset": "BTC",
+      "target_asset": "DOGE"
+    },
+    {
+      "candidate_hash": "d748a3f6352e245fc93b3246",
+      "cell_id": "BTC_to_DOGE_large_trade_lb60s_h300s_d15s",
+      "entry_delay_seconds": 15,
+      "feature_family": "large_trade",
+      "hit_rate": 0.9,
+      "horizon_seconds": 300,
+      "lookback_seconds": 60,
+      "mean_return_bps": 8.9023,
+      "n_observations": 10,
+      "rejection_reason": "BELOW_COST_FLOOR",
+      "sharpe_like": 1.085306,
+      "source_asset": "BTC",
+      "target_asset": "DOGE"
+    },
+    {
+      "candidate_hash": "0e4e6f0e30ac5e095fa1f841",
+      "cell_id": "BTC_to_DOGE_signed_imbalance_lb30s_h300s_d30s",
+      "entry_delay_seconds": 30,
+      "feature_family": "signed_imbalance",
+      "hit_rate": 0.888889,
+      "horizon_seconds": 300,
+      "lookback_seconds": 30,
+      "mean_return_bps": 8.5815,
+      "n_observations": 18,
+      "rejection_reason": "BELOW_COST_FLOOR",
+      "sharpe_like": 1.21717,
+      "source_asset": "BTC",
+      "target_asset": "DOGE"
+    },
+    {
+      "candidate_hash": "0d47929ce514aa889d226dca",
+      "cell_id": "BTC_to_DOGE_large_trade_lb60s_h300s_d5s",
+      "entry_delay_seconds": 5,
+      "feature_family": "large_trade",
+      "hit_rate": 0.9,
+      "horizon_seconds": 300,
+      "lookback_seconds": 60,
+      "mean_return_bps": 8.3561,
+      "n_observations": 10,
+      "rejection_reason": "BELOW_COST_FLOOR",
+      "sharpe_like": 0.946759,
+      "source_asset": "BTC",
+      "target_asset": "DOGE"
+    },
+    {
+      "candidate_hash": "68c6b7f382b5b0869bbf8ad6",
+      "cell_id": "BTC_to_DOGE_signed_imbalance_lb30s_h300s_d5s",
+      "entry_delay_seconds": 5,
+      "feature_family": "signed_imbalance",
+      "hit_rate": 0.842105,
+      "horizon_seconds": 300,
+      "lookback_seconds": 30,
+      "mean_return_bps": 8.2866,
+      "n_observations": 19,
+      "rejection_reason": "BELOW_COST_FLOOR",
+      "sharpe_like": 0.984959,
+      "source_asset": "BTC",
+      "target_asset": "DOGE"
+    },
+    {
+      "candidate_hash": "4748015d59cc23cd4bc85c36",
+      "cell_id": "BTC_to_DOGE_large_trade_lb60s_h300s_d0s",
+      "entry_delay_seconds": 0,
+      "feature_family": "large_trade",
+      "hit_rate": 0.9,
+      "horizon_seconds": 300,
+      "lookback_seconds": 60,
+      "mean_return_bps": 8.102,
+      "n_observations": 10,
+      "rejection_reason": "BELOW_COST_FLOOR",
+      "sharpe_like": 0.909177,
+      "source_asset": "BTC",
+      "target_asset": "DOGE"
+    },
+    {
+      "candidate_hash": "ff925cc68c404605dc0b6be5",
+      "cell_id": "BTC_to_DOGE_signed_imbalance_lb30s_h300s_d15s",
+      "entry_delay_seconds": 15,
+      "feature_family": "signed_imbalance",
+      "hit_rate": 0.894737,
+      "horizon_seconds": 300,
+      "lookback_seconds": 30,
+      "mean_return_bps": 7.8337,
+      "n_observations": 19,
+      "rejection_reason": "BELOW_COST_FLOOR",
+      "sharpe_like": 0.858254,
+      "source_asset": "BTC",
+      "target_asset": "DOGE"
+    },
+    {
+      "candidate_hash": "6f186a3c23eb38fa938ea746",
+      "cell_id": "BTC_to_DOGE_signed_imbalance_lb30s_h300s_d0s",
+      "entry_delay_seconds": 0,
+      "feature_family": "signed_imbalance",
+      "hit_rate": 0.842105,
+      "horizon_seconds": 300,
+      "lookback_seconds": 30,
+      "mean_return_bps": 7.7423,
+      "n_observations": 19,
+      "rejection_reason": "BELOW_COST_FLOOR",
+      "sharpe_like": 0.857791,
+      "source_asset": "BTC",
+      "target_asset": "DOGE"
+    },
+    {
+      "candidate_hash": "006e7ea37dc8c8b5086daaaf",
+      "cell_id": "BTC_to_DOGE_signed_imbalance_lb60s_h300s_d30s",
+      "entry_delay_seconds": 30,
+      "feature_family": "signed_imbalance",
+      "hit_rate": 0.888889,
+      "horizon_seconds": 300,
+      "lookback_seconds": 60,
+      "mean_return_bps": 6.7075,
+      "n_observations": 9,
+      "rejection_reason": "FDR_FAIL",
+      "sharpe_like": 0.686566,
+      "source_asset": "BTC",
+      "target_asset": "DOGE"
+    },
+    {
+      "candidate_hash": "c2fa43d92c0f0d8d68e7b51b",
+      "cell_id": "BTC_to_DOGE_price_impulse_lb30s_h300s_d30s",
+      "entry_delay_seconds": 30,
+      "feature_family": "price_impulse",
+      "hit_rate": 0.714286,
+      "horizon_seconds": 300,
+      "lookback_seconds": 30,
+      "mean_return_bps": 6.6506,
+      "n_observations": 7,
+      "rejection_reason": "FDR_FAIL",
+      "sharpe_like": 0.668749,
+      "source_asset": "BTC",
+      "target_asset": "DOGE"
+    }
+  ]
+}

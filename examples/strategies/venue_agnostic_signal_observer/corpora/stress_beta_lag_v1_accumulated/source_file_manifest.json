@@ -1,0 +1,476 @@
+[
+  {
+    "asset": "BTC",
+    "path": "data/cross_asset_impulse_v1/trades_binance_BTC-USDT_1778654273.jsonl",
+    "sha256": "dce3943a9223f6865a1a0143c330003523ad99f9865c7175722147b08c3e7383",
+    "size": 6044681
+  },
+  {
+    "asset": "BTC",
+    "path": "data/cross_asset_impulse_v1/trades_binance_BTC-USD_1778654273.jsonl",
+    "sha256": "e5ac2d877668b92762abcf96984f2a78fd8f9ad3e962d0aa3cd7430d3b74d478",
+    "size": 1824
+  },
+  {
+    "asset": "ETH",
+    "path": "data/cross_asset_impulse_v1/trades_binance_ETH-USDT_1778654273.jsonl",
+    "sha256": "5c7d7c5354e9cafd5aef606213764546ac7421e6f668fbc1dfa158355b266f54",
+    "size": 3634021
+  },
+  {
+    "asset": "BTC",
+    "path": "data/cross_asset_impulse_v1/trades_coinbase_BTC-USDT_1778654273.jsonl",
+    "sha256": "b8cff195da8d5dc7ce27ccee7d8a2731604df7f9153a20ba831a55ff92eb6d2f",
+    "size": 53470
+  },
+  {
+    "asset": "BTC",
+    "path": "data/cross_asset_impulse_v1/trades_coinbase_BTC-USD_1778654273.jsonl",
+    "sha256": "73de4c27b52d83fa883a7d1449485aa3a9ff65b1335b687151bd268a0f1accea",
+    "size": 668040
+  },
+  {
+    "asset": "DOGE",
+    "path": "data/cross_asset_impulse_v1/trades_coinbase_DOGE-USD_1778654273.jsonl",
+    "sha256": "e10a809c61e4c3c4856633d46e568c658c42a27f9004fc147df7b223de147bf7",
+    "size": 98081
+  },
+  {
+    "asset": "ETH",
+    "path": "data/cross_asset_impulse_v1/trades_coinbase_ETH-USDT_1778654273.jsonl",
+    "sha256": "b20d75bc829e3cb7445d4e959a752e48cb07dae653b462b44486d11da66898be",
+    "size": 4552
+  },
+  {
+    "asset": "ETH",
+    "path": "data/cross_asset_impulse_v1/trades_coinbase_ETH-USD_1778654273.jsonl",
+    "sha256": "fbe32db55d606a6e52b2affc0526409497fee6e9931bb3267125122bf3e65aac",
+    "size": 403914
+  },
+  {
+    "asset": "LINK",
+    "path": "data/cross_asset_impulse_v1/trades_coinbase_LINK-USD_1778654273.jsonl",
+    "sha256": "a776ec0641a87faca76dc5a17a52051a44d2f885d95df9cab2857d7956ac4dbd",
+    "size": 216425
+  },
+  {
+    "asset": "SOL",
+    "path": "data/cross_asset_impulse_v1/trades_coinbase_SOL-USD_1778654273.jsonl",
+    "sha256": "dca68d9ee4c39cf605a8baff1a18bc7ed2b6aee20adba8f56f52627a7992a1df",
+    "size": 205350
+  },
+  {
+    "asset": "BTC",
+    "path": "data/cross_asset_impulse_v1/trades_kraken_BTC-USD_1778654273.jsonl",
+    "sha256": "1e93fbd9667929638f16877bf1c71deed6619820f0a2cffbd84ac034c06a32dd",
+    "size": 57720
+  },
+  {
+    "asset": "ETH",
+    "path": "data/cross_asset_impulse_v1/trades_kraken_ETH-USDT_1778654273.jsonl",
+    "sha256": "66cb6fb13c3b6b7c6e6ef944542cf8f5065b032293fb60d25262626af4091cb4",
+    "size": 4624
+  },
+  {
+    "asset": "ETH",
+    "path": "data/cross_asset_impulse_v1/trades_kraken_ETH-USD_1778654273.jsonl",
+    "sha256": "849b3131f7aab013b7baddf64e4ce9358f48b27f0e11db776703e8a33608c6f3",
+    "size": 18452
+  },
+  {
+    "asset": "LINK",
+    "path": "data/cross_asset_impulse_v1/trades_kraken_LINK-USD_1778654273.jsonl",
+    "sha256": "a87d1c6d3b9b9d399eee1a4878244eb9d7b2f8faf873142d267d86ca3083da83",
+    "size": 17352
+  },
+  {
+    "asset": "SOL",
+    "path": "data/cross_asset_impulse_v1/trades_kraken_SOL-USD_1778654273.jsonl",
+    "sha256": "99758cfbf0b9c16f800fd93d3e26394f07a2b48f00388b8e0cb06ef8a67263b1",
+    "size": 44460
+  },
+  {
+    "asset": "BTC",
+    "path": "data/cross_asset_impulse_v1/trades_kraken_UNRESOLVED:XBT-USDT_1778654287.jsonl",
+    "sha256": "3828e948ae05733450bac037586f122656317ce622e39f95098c2f9ef507e799",
+    "size": 3581
+  },
+  {
+    "asset": "DOGE",
+    "path": "data/cross_asset_impulse_v1/trades_kraken_UNRESOLVED:XDG-USD_1778654292.jsonl",
+    "sha256": "e7b5553494a09d28436c91f16c5f251a8e37276b5e7f018a6ac79997c4b5bf71",
+    "size": 18475
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_coinbase_BTC-USD_1778775519.jsonl",
+    "sha256": "9f94b823366ed57589761fde672ec4298fba5ec620b6a864d2333cea9d4526de",
+    "size": 2690469
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_coinbase_ETH-USD_1778775519.jsonl",
+    "sha256": "2d6aa052ad35350c83da293dc037017b8f1ead452ccdf929e6493c0b85ce59fc",
+    "size": 759533
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_coinbase_SOL-USD_1778775519.jsonl",
+    "sha256": "d72fd700d85eede57f995e4c83b52d42c323100a8d1ff15f4481505bdd361513",
+    "size": 373834
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_kraken_BTC-USD_1778775519.jsonl",
+    "sha256": "d92920bcb093f7e74e2f351e091d3f05c5f5d5d05d3d48518bb2686ebbea5278",
+    "size": 129506
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_kraken_ETH-USD_1778775519.jsonl",
+    "sha256": "a5e538c6a8c3b199e41b194389ef709c260cff95feb644058f5fc01fa7caba65",
+    "size": 47775
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_161839/trades_kraken_SOL-USD_1778775519.jsonl",
+    "sha256": "a0ab2a40c7768ad0741142c2a35f6c16fd43a129601188c3dea63e7f67ad2d00",
+    "size": 51551
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_coinbase_BTC-USD_1778777467.jsonl",
+    "sha256": "13779d9d6404b3f846aeb5964c088f5d96f9271d611d99d08314774094cd541b",
+    "size": 2901889
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_coinbase_ETH-USD_1778777467.jsonl",
+    "sha256": "7cd2d19272bb7b9a16acbfc610eeac4373d62592199a9136bbed87f8b1cf43c2",
+    "size": 2246861
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_coinbase_SOL-USD_1778777467.jsonl",
+    "sha256": "8a0aa78704146a8fe1dbbe6b8c6a74e235b402654cf26ba72843d835cc0493dc",
+    "size": 806124
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_kraken_BTC-USD_1778777467.jsonl",
+    "sha256": "a0975781d5a0c182da53c86a52ae1786fa418f256809a7ca2058b7fb4b4aea3a",
+    "size": 316701
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_kraken_ETH-USD_1778777467.jsonl",
+    "sha256": "eaeeeb8aedceb0d6c8149e1ce7b205af504f88df0be3f6491da14243ca6afa95",
+    "size": 98620
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_FAST_DIAGNOSTIC_20260514_165106/trades_kraken_SOL-USD_1778777467.jsonl",
+    "sha256": "b90b64404945e6b850441a6fd3c4d052bbe27663d8e080d29cad3f6ef22d0dfb",
+    "size": 100487
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_coinbase_BTC-USD_1778770431.jsonl",
+    "sha256": "828016ebcf6bc111c56151167d85bd54d22c7348d6fe68e9e490ff289f5c4054",
+    "size": 56906
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_coinbase_ETH-USD_1778770431.jsonl",
+    "sha256": "433dc8285cfa575545d78a4ea5e2265f4a081fb6d39e5592d9f20afd4ee36e54",
+    "size": 56573
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_coinbase_SOL-USD_1778770431.jsonl",
+    "sha256": "e29882b136c1059c5c00e7ad241f2260b169f3f25c50fa293d66ccd6d8c21708",
+    "size": 4752
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_kraken_BTC-USD_1778770431.jsonl",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_kraken_ETH-USD_1778770431.jsonl",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_145310/trades_kraken_SOL-USD_1778770431.jsonl",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_coinbase_BTC-USD_1778771608.jsonl",
+    "sha256": "058f644daf2cbaa40ed0e7d571d17631065ca8610d2d3bc3e7805236a1492251",
+    "size": 89309
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_coinbase_ETH-USD_1778771608.jsonl",
+    "sha256": "fe0efb45b46ff8bb5aa176a2a9f74f5b37084aa513eba64fa8431467d9ca1c63",
+    "size": 52152
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_coinbase_SOL-USD_1778771608.jsonl",
+    "sha256": "88574de98bb93975594cc1e84d89285acd3823d936a2b1d411f1741ad3219796",
+    "size": 12962
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_kraken_BTC-USD_1778771608.jsonl",
+    "sha256": "9c30a82ca00d8ff42fb7967296d657fdcb21438daa86b08b38b4bc144f8f170e",
+    "size": 7194
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_kraken_ETH-USD_1778771608.jsonl",
+    "sha256": "7f6dd0c7dad309dfb9a32c29c9320fe6d6b2ccf5f7773e6a822a979b634af953",
+    "size": 2615
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_151328/trades_kraken_SOL-USD_1778771608.jsonl",
+    "sha256": "f718846fb94e8a74eeb9a2459204070fc83bea5e091705e1c1eb915eab8cd3d0",
+    "size": 1772
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_coinbase_BTC-USD_1778775448.jsonl",
+    "sha256": "4f7d035f69d61d15f5232b7b3d561a1c207cf460dbf693fcbb085e8492b6055d",
+    "size": 283791
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_coinbase_ETH-USD_1778775448.jsonl",
+    "sha256": "d87e2bc84ba0a28f65d6f10ccc24141e984f1c0b7d2ab2118c7c21a871ac2ca0",
+    "size": 121770
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_coinbase_SOL-USD_1778775448.jsonl",
+    "sha256": "d81c1c9a275ae0cd8c474ff68a69e965d85389ad6e24d3d838c2acb24825844a",
+    "size": 45209
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_kraken_BTC-USD_1778775448.jsonl",
+    "sha256": "51b5f85ef59fa72cd524b1cb0a8409f1fb2c5b22d54ad1a84dcf4ba7614cf5ec",
+    "size": 21354
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_kraken_ETH-USD_1778775448.jsonl",
+    "sha256": "d846b026faf87aede37787ff93b1caeb91d2d67dc443b79bad403962ecb5665e",
+    "size": 2135
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_161728/trades_kraken_SOL-USD_1778775448.jsonl",
+    "sha256": "7856bb79ae4fcb5ae0b12b57ed45bd39cbe29177ade0322098bd2f1456856048",
+    "size": 2592
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_coinbase_BTC-USD_1778777397.jsonl",
+    "sha256": "e6ea04571e9875bc21218ab4fca6728125e5fa318943978d1768f28495edcf4f",
+    "size": 118625
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_coinbase_ETH-USD_1778777397.jsonl",
+    "sha256": "f8084e7f76f11502bdbea9ef0c5d4493e5fb9736afffdf5c09bf5ca3ddbeb4e1",
+    "size": 194519
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_coinbase_SOL-USD_1778777397.jsonl",
+    "sha256": "411d07a3ef489800c76cdd4361fbc7c5a5c09452b90e58d9e8c926525c059453",
+    "size": 25795
+  },
+  {
+    "asset": "BTC",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_kraken_BTC-USD_1778777397.jsonl",
+    "sha256": "dc707fd8b4d057e469f63731e4e963ea465f86366075538942bfe98b0c093af5",
+    "size": 3948
+  },
+  {
+    "asset": "ETH",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_kraken_ETH-USD_1778777397.jsonl",
+    "sha256": "7cab26d92356974edb8fcf84289af15ce301d23d3dc043fca1a69d0bdac7a1dd",
+    "size": 2131
+  },
+  {
+    "asset": "SOL",
+    "path": "data/derivatives_spot_capture_v2_PREFLIGHT_20260514_164957/trades_kraken_SOL-USD_1778777397.jsonl",
+    "sha256": "4da2bc46c058cc69dc2ea4584ca7c1a35052d2a9f4cdcd5faeadfae13610751e",
+    "size": 2262
+  },
+  {
+    "asset": "SOL",
+    "path": "data/dex_cex_spot_dislocation_v1/ticks/trades_coinbase_SOL-USD_1778642268.jsonl",
+    "sha256": "505c456968eea5aeb4026519db0c032ece8747feb8e792d942b63c7bd8c9aef7",
+    "size": 223445
+  },
+  {
+    "asset": "AVAX",
+    "path": "data/dex_cex_spot_dislocation_v1/ticks/trades_coinbase_UNRESOLVED:AVAX-USD_1778642268.jsonl",
+    "sha256": "b1560e30888e3488cad6cf5ba6f239f116567e9952ca8075459332c5954bd215",
+    "size": 61351
+  },
+  {
+    "asset": "DOGE",
+    "path": "data/dex_cex_spot_dislocation_v1/ticks/trades_coinbase_UNRESOLVED:DOGE-USD_1778642268.jsonl",
+    "sha256": "73879f5160f7aa79856b6ec69e0560fe4cd0da521ab9e93a1cc9a40d9651038c",
+    "size": 114908
+  },
+  {
+    "asset": "LINK",
+    "path": "data/dex_cex_spot_dislocation_v1/ticks/trades_coinbase_UNRESOLVED:LINK-USD_1778642268.jsonl",
+    "sha256": "6dceafb80c0521980bca8dec76e6268dc182ffc2fa754f5d7102b3df9bda1d51",
+    "size": 113535
+  },
+  {
+    "asset": "SOL",
+    "path": "data/dex_cex_spot_dislocation_v1/ticks/trades_kraken_SOL-USD_1778642268.jsonl",
+    "sha256": "a55edfe75c2b8650e591f5f2a995959d6cbfa92083a415edc3699807375cd286",
+    "size": 17312
+  },
+  {
+    "asset": "AVAX",
+    "path": "data/dex_cex_spot_dislocation_v1/ticks/trades_kraken_UNRESOLVED:AVAX-USD_1778642268.jsonl",
+    "sha256": "1112edd4c85a0db2df75afc28b120579672c7e7244e1298975c4ce35aa3ad91e",
+    "size": 5904
+  },
+  {
+    "asset": "LINK",
+    "path": "data/dex_cex_spot_dislocation_v1/ticks/trades_kraken_UNRESOLVED:LINK-USD_1778642268.jsonl",
+    "sha256": "67278ce66dca0ec33331fcfe726de6c803854a2e574b73bbf5d8398c87b774d4",
+    "size": 4036
+  },
+  {
+    "asset": "DOGE",
+    "path": "data/dex_cex_spot_dislocation_v1/ticks/trades_kraken_UNRESOLVED:XDG-USD_1778642301.jsonl",
+    "sha256": "59f962cea41d766d8a320f11c0a3be71975ca22977b8c727266dce371e642447",
+    "size": 10037
+  },
+  {
+    "asset": "SOL",
+    "path": "data/dex_cex_spot_dislocation_v1/trades_kraken_SOL-USD_000.jsonl",
+    "sha256": "104755c780563d76226cc804a398ffff7c5a45ead627fa2faf4f97b119ab175e",
+    "size": 14039
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks/trades_coinbase_BTC-USD_1778616446.jsonl",
+    "sha256": "64f476c8cabb962b4d0f54ede2f79aacc6c06bb572727e10f42dc86130e0432e",
+    "size": 52937
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks/trades_kraken_BTC-USD_1778616449.jsonl",
+    "sha256": "37cabe13375284aae6d4a37a89d10926b35355ce25dbf75fea323162ec090229",
+    "size": 3164
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks/trades_kraken_XBT-USD_1778616449.jsonl",
+    "sha256": "37cabe13375284aae6d4a37a89d10926b35355ce25dbf75fea323162ec090229",
+    "size": 3164
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks_trade_flow_v1/trades_coinbase_BTC-USD_1778631730.jsonl",
+    "sha256": "eabf2337ca89d5c6c5aec5a88765c381b0dfbc258c04701a4ceb0b89abef91e7",
+    "size": 565090
+  },
+  {
+    "asset": "ETH",
+    "path": "data/signal_observer_ticks_trade_flow_v1/trades_coinbase_ETH-USD_1778631730.jsonl",
+    "sha256": "7248e83af7be329c9d95d23be95f75ae84158fa6aae40f7aa41e78da424a0902",
+    "size": 365302
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks_trade_flow_v1/trades_kraken_BTC-USD_1778631730.jsonl",
+    "sha256": "6852ea089c0ccb24cc9b05efb1d1f51732b4d3d762025abe75e3c0e4dbf0d83e",
+    "size": 30627
+  },
+  {
+    "asset": "ETH",
+    "path": "data/signal_observer_ticks_trade_flow_v1/trades_kraken_ETH-USD_1778631730.jsonl",
+    "sha256": "29b687e0c4297541fa3c1f23d2f0d2c53fd06c8047c0416bf3c35ddf4b8c2062",
+    "size": 9218
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks_v2/trades_coinbase_BTC-USD_1778620996.jsonl",
+    "sha256": "fa1b96a742f6289724104bd4474871af82a0447baf2fc5ef40a298dd0ff76edd",
+    "size": 473178
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks_v2/trades_kraken_BTC-USD_1778620996.jsonl",
+    "sha256": "bac75fc20f1e54b23c8b9e5da4605f26d4baf9425fdc42aec4225f52e0909d26",
+    "size": 38465
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks_v3/trades_coinbase_BTC-USD_1778624784.jsonl",
+    "sha256": "fdad570e4d58cdff76a42e4257956b312f05f72b727e14ef88d7a6ef926a0083",
+    "size": 328901
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks_v3/trades_coinbase_BTC-USD_1778625127.jsonl",
+    "sha256": "2299665332630bb4494d55ccfb9ac54ac4910900e8991bbede38c954fd57ecf7",
+    "size": 805781
+  },
+  {
+    "asset": "ETH",
+    "path": "data/signal_observer_ticks_v3/trades_coinbase_ETH-USD_1778624784.jsonl",
+    "sha256": "4801ed635fc216c6dce101b8c82d5304a455213a66dd8a64b44f736ab8f46637",
+    "size": 175236
+  },
+  {
+    "asset": "ETH",
+    "path": "data/signal_observer_ticks_v3/trades_coinbase_ETH-USD_1778625127.jsonl",
+    "sha256": "738e22649281338e712e81cf66678e09b8f38fbe07b1026ff4dec424259d7b91",
+    "size": 344098
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks_v3/trades_kraken_BTC-USD_1778624784.jsonl",
+    "sha256": "d16ab3cfe85f94f50743e3d1e2aef4bab3ab720cebc221db590d3299b7980bb9",
+    "size": 28977
+  },
+  {
+    "asset": "BTC",
+    "path": "data/signal_observer_ticks_v3/trades_kraken_BTC-USD_1778625127.jsonl",
+    "sha256": "7f5f613585ff4ed8a0b56ac5bd47580dac6e0eef23cd4d5354182c43cbd9f362",
+    "size": 43846
+  },
+  {
+    "asset": "ETH",
+    "path": "data/signal_observer_ticks_v3/trades_kraken_ETH-USD_1778624784.jsonl",
+    "sha256": "91dd91a26f7fd8b4a55614e6e60caefe798388ead2beaf0508b205f15621361c",
+    "size": 7520
+  },
+  {
+    "asset": "ETH",
+    "path": "data/signal_observer_ticks_v3/trades_kraken_ETH-USD_1778625127.jsonl",
+    "sha256": "6c69e96f0703f16e29439342bdb344ba1e29c452f4904ff8885666029cc3ffe4",
+    "size": 20651
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "interpretation": "Useful diagnostic evidence, not a final global rejection.",
+  "is_decisive_global_rejection": false,
+  "minimum_decisive_stress_windows": 20,
+  "missing_target_assets": [
+    "AVAX"
+  ],
+  "partial_target_assets": [
+    "LINK",
+    "DOGE"
+  ],
+  "schema_version": "data_adequacy_summary.v1",
+  "stress_window_count": 9,
+  "usable_window_count": 9
+}

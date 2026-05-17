@@ -1,0 +1,28 @@
+{
+  "coverage_by_target": {
+    "AVAX": 0,
+    "DOGE": 3,
+    "LINK": 3,
+    "SOL": 9
+  },
+  "missing_target_assets": [
+    "AVAX"
+  ],
+  "notes": {
+    "AVAX": "not covered at 0 windows; no conclusion should be drawn",
+    "DOGE": "partial coverage at 3 windows",
+    "LINK": "partial coverage at 3 windows",
+    "SOL": "covered across 9 windows"
+  },
+  "partial_target_assets": [
+    "LINK",
+    "DOGE"
+  ],
+  "schema_version": "target_coverage_breakdown.v1",
+  "target_assets": [
+    "SOL",
+    "LINK",
+    "DOGE",
+    "AVAX"
+  ]
+}

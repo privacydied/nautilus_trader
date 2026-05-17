@@ -1,0 +1,11 @@
+{
+  "label_count": 9,
+  "label_version": "stress_label.v1",
+  "reason": "Validated stress corpus manifest supplied to offline runner.",
+  "schema_version": "stress_label_summary.v1",
+  "source_assets_evaluated": [
+    "BTC",
+    "ETH"
+  ],
+  "status": "STRESS_LABELS_AVAILABLE"
+}
