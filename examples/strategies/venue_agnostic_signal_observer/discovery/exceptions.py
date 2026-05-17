@@ -1,8 +1,7 @@
-# Copyright (C) 2026. All rights reserved.
-"""Exception hierarchy for the discovery freeze/precommitment subsystem.
+"""Exception hierarchy for the discovery freeze system.
 
-All discovery-specific exceptions inherit from DiscoveryFreezeError,
-which itself inherits from Exception.
+All discovery-specific exceptions inherit from DiscoveryFreezeError
+so callers can catch the base type or specific subtypes.
 """
 
 
@@ -15,19 +14,19 @@ class GridSpecValidationError(DiscoveryFreezeError):
 
 
 class GridLockValidationError(DiscoveryFreezeError):
-    """Raised when a grid lock fails validation against its grid spec."""
+    """Raised when a grid lock fails validation against a grid spec."""
 
 
 class GridHashMismatchError(GridLockValidationError):
-    """Raised when the computed grid hash does not match the stored lock hash."""
+    """Raised when the grid hash does not match the lock's stored hash."""
 
 
 class GridCellCountMismatchError(GridLockValidationError):
-    """Raised when the computed cell count does not match the stored lock count."""
+    """Raised when primary or cost-sensitivity cell count does not match."""
 
 
 class DiscoverySafetyError(DiscoveryFreezeError):
-    """Raised when a safety scan finds violations."""
+    """Raised by the AST safety scanner when violations are found."""
 
 
 class CandidateLockValidationError(DiscoveryFreezeError):
@@ -35,8 +34,8 @@ class CandidateLockValidationError(DiscoveryFreezeError):
 
 
 class CandidateHashMismatchError(CandidateLockValidationError):
-    """Raised when the recomputed candidate hash does not match the stored hash."""
+    """Raised when the candidate hash does not match expectations."""
 
 
 class CaptureFingerprintError(DiscoveryFreezeError):
-    """Raised when a capture manifest cannot be read, parsed, or fingerprinted."""
+    """Raised when a capture manifest cannot be fingerprinted."""

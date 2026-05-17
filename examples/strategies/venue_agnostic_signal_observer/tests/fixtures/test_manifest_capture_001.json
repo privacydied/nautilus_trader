@@ -1,0 +1,10 @@
+{
+  "run_id": "capture_001",
+  "schema_version": "1.0.0",
+  "created_at_utc": "2026-05-16T12:00:00Z",
+  "git_sha": "abc1234",
+  "data_window_start_utc": "2026-05-15T00:00:00Z",
+  "data_window_end_utc": "2026-05-16T00:00:00Z",
+  "stream_count": 5,
+  "safety_mode": "public_data_observer_only"
+}
