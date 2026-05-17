@@ -1,13 +1,14 @@
 {
   "coverage_by_target": {
     "AVAX": 0,
-    "DOGE": 0,
-    "LINK": 0,
-    "SOL": 0
+    "DOGE": 2,
+    "LINK": 2,
+    "SOL": 6
   },
   "rejected_window_count": 6,
   "requires_all_targets": true,
   "schema_version": "accumulated_target_coverage_summary.v1",
+  "status": "TARGET_COVERAGE_LIMITED",
   "stress_window_count": 6,
   "target_assets": [
     "SOL",

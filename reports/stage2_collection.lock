@@ -1,8 +1,8 @@
 {
-  "created_at_utc": "2026-05-16T03:03:08Z",
-  "pid": 640391,
+  "created_at_utc": "2026-05-17T16:39:58Z",
+  "pid": 591787,
   "capture_permission": "FAST_DIAGNOSTIC_CAPTURE_ONLY",
   "fast_capture_reason": "test",
-  "git_sha": "1024f9329b77d8532cd40c3f68712e2b63420627",
+  "git_sha": "3b5d2d550e73157130e8b85d345ec6bb8dea025e",
   "mode": "FAST_DIAGNOSTIC"
 }

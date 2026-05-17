@@ -23,6 +23,7 @@ from .synthetic import (
     make_decaying_signal_population,
     SyntheticObservation,
 )
+from .fdr import compute_fdr, FDRResult
 from .summary import run_validator, ValidatorSummary
 
 __all__ = [
@@ -46,4 +47,6 @@ __all__ = [
     "make_decaying_signal_population",
     "ValidatorSummary",
     "run_validator",
+    "FDRResult",
+    "compute_fdr",
 ]

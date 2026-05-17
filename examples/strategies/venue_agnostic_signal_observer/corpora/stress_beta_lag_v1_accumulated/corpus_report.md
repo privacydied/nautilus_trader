@@ -9,7 +9,7 @@
 - independent_stress_window_count: 6
 - usable_window_count: 0
 - rejected_window_count: 6
-- target_coverage: {'SOL': 0, 'LINK': 0, 'DOGE': 0, 'AVAX': 0}
+- target_coverage: {'SOL': 6, 'LINK': 2, 'DOGE': 2, 'AVAX': 0}
 - independence_rule: merge same-source labels that overlap or occur within 30 minutes
 - target_coverage_rule: require all targets from 60s before stress start through 360s after stress end
 - target_returns_used_for_selection: false

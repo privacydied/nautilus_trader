@@ -1,0 +1,20 @@
+{
+  "/tmp/pytest-of-pry/pytest-110/test_reload_path_rejects_chang0/source.csv|49|1779042616481963445": {
+    "computed_at_utc": "2026-05-17T18:30:16.482628+00:00",
+    "file_sha256": "5c91b2b4f6951a2a6ca6750aa3ee4327158070b2dfc441deea68f370188836f2",
+    "file_size_bytes": 49,
+    "mtime_ns": 1779042616481963445
+  },
+  "/tmp/pytest-of-pry/pytest-111/test_reload_path_rejects_chang0/source.csv|68|1779042645641992196": {
+    "computed_at_utc": "2026-05-17T18:30:45.642969+00:00",
+    "file_sha256": "834f6ed68f7fcecdeabdab5da5af225093ce3820d6d6a01d6d796123d0e953ea",
+    "file_size_bytes": 68,
+    "mtime_ns": 1779042645641992196
+  },
+  "/tmp/pytest-of-pry/pytest-112/test_reload_path_rejects_chang0/source.csv|68|1779042656570595020": {
+    "computed_at_utc": "2026-05-17T18:30:56.571701+00:00",
+    "file_sha256": "834f6ed68f7fcecdeabdab5da5af225093ce3820d6d6a01d6d796123d0e953ea",
+    "file_size_bytes": 68,
+    "mtime_ns": 1779042656570595020
+  }
+}

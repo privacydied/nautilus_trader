@@ -11,7 +11,7 @@
     "target_pre_roll_seconds": 60,
     "target_returns_used_for_selection": false
   },
-  "created_at_utc": "2026-05-17T05:18:24.159402+00:00",
+  "created_at_utc": "2026-05-17T16:00:52.867921+00:00",
   "file_manifest_hash": "abd5af677258812139010076",
   "independence_rule": {
     "cooldown_seconds": 1800,
