@@ -1,0 +1,32 @@
+[Unit]
+Description=NautilusTrader Stage 2 cross-asset beta-lag stress gate watcher
+Documentation=https://github.com/privacydied/nautilus_trader
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+
+# Defaults are deliberately overridable by the EnvironmentFile below.
+# The watcher runs from a dedicated worktree for runtime hygiene/provenance;
+# immutability still comes from git_sha, dirty status, precommitment locks,
+# readiness checks, and append-only artifacts.
+Environment=NAUTILUS_STAGE2_WORKTREE=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress
+Environment=NAUTILUS_STAGE2_REPO_ROOT=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress
+Environment=NAUTILUS_STAGE2_SIGNAL_FAMILY=cross_asset_beta_lag_stress_v2
+Environment=NAUTILUS_STAGE2_STATUS_PATH=/mnt/nasirjones/py/nautilus_trader/reports/stage2_gate_watcher_status.json
+Environment=NAUTILUS_STAGE2_REPORTS_ROOT=/mnt/nasirjones/py/nautilus_trader/reports
+Environment=NAUTILUS_STAGE2_DATA_ROOT=/mnt/nasirjones/py/nautilus_trader/data
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-%h/.config/nautilus/stage2-gate-watcher.env
+
+WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress
+
+ExecStart=uv run python -m examples.strategies.venue_agnostic_signal_observer.stage2_gate_watcher --poll-seconds 60 --stress-bps 30 --require-acceleration --signal-family ${NAUTILUS_STAGE2_SIGNAL_FAMILY}
+
+Restart=no
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

@@ -210,3 +210,10 @@ tests/test_data/**/backtest/**
 !tests/test_data/nautilus/*/**.parquet
 !tests/integration_tests/adapters/betfair/responses/*.log
 !/nautilus_core/adapters/src/databento/test_data/*
+data/
+reports/*watcher*.lock
+reports/*watcher*_state.json
+reports/derivatives_spot_lead_lag_v2_*/
+reports/stage2_gate_watcher_status.json
+reports/cross_asset_beta_lag_watcher.lock
+reports/cross_asset_beta_lag_watcher_state.json

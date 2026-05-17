@@ -1,0 +1,22 @@
+{
+  "grid_id": "edge_miner_cross_asset_beta_lag_v1",
+  "schema_version": "discovery-grid-v1",
+  "signal_family": "cross_asset_beta_lag",
+  "source_venues": ["binance_perp"],
+  "source_symbols": ["BTC/USDT", "ETH/USDT"],
+  "target_venues": ["kraken", "coinbase"],
+  "target_symbols": ["SOL/USD", "DOGE/USD", "LINK/USD", "AVAX/USD"],
+  "feature_types": ["price_impulse", "signed_imbalance", "notional_burst", "large_trade"],
+  "lookbacks_ms": [1000, 5000, 10000, 30000, 60000],
+  "thresholds_centibps": [1000, 2000, 3000, 5000],
+  "horizons_ms": [10000, 30000, 60000, 180000, 300000],
+  "entry_delays_ms": [0, 5000, 15000],
+  "cooldown_ms": 60000,
+  "regime_filters": ["market_active", "market_stress", "btc_1m_vol_p95"],
+  "cost_models_centibps": [1000, 2500, 5000],
+  "min_events": 30,
+  "clustering_keys": ["feature_types", "lookbacks_ms", "horizons_ms", "target_symbols"],
+  "fdr_family_dimensions": ["source_symbols", "target_symbols", "feature_types", "lookbacks_ms", "thresholds_centibps", "horizons_ms", "entry_delays_ms", "regime_filters"],
+  "created_at_utc": "2026-05-17T00:00:00Z",
+  "notes": "Golden example grid for deterministic freeze tests. created_at_utc and notes must not affect grid_hash."
+}
