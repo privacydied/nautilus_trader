@@ -467,7 +467,12 @@ def _run_validation(capture_dir: str, log: WatcherLogger) -> dict[str, Any]:
 # Corpus counter
 # ---------------------------------------------------------------------------
 
-_CORPUS_TARGET_WINDOWS = 10
+# Minimum usable independent stress windows required before frozen-grid rerun.
+# Must match MIN_READY_USABLE_WINDOWS in stress_corpus_accumulator.py (= 20).
+_CORPUS_TARGET_WINDOWS = 20
+
+# Diagnostic/canary: does NOT unlock frozen-grid discovery.
+_CORPUS_DIAGNOSTIC_WINDOWS = 10
 
 
 def _count_validated_full_active() -> int:
