@@ -467,6 +467,8 @@ def _run_validation(capture_dir: str, log: WatcherLogger) -> dict[str, Any]:
 # Corpus counter
 # ---------------------------------------------------------------------------
 
+_CORPUS_TARGET_WINDOWS = 10
+
 
 def _count_validated_full_active() -> int:
     """Count validated FULL_ACTIVE captures for cross_asset_beta_lag_v1.
@@ -844,9 +846,23 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 log.log("capture_recorded_in_state", run_id=run_id,
                         capture_dir=capture_dir)
 
+            # --- Resolve actual capture status from manifest (may be completed_with_errors) ---
+            last_capture_status = "COMPLETED"
+            manifest_path = Path(capture_dir) / "capture_manifest.json"
+            if manifest_path.exists():
+                try:
+                    with open(manifest_path) as _mf:
+                        _manifest = json.load(_mf)
+                    if _manifest.get("capture_status") == "completed_with_errors":
+                        last_capture_status = "COMPLETED_WITH_ERRORS"
+                        log.log("capture_completed_with_errors",
+                                capture_dir=capture_dir)
+                except (json.JSONDecodeError, OSError):
+                    pass
+
             # --- Count corpus ---
             validated_count = _count_validated_full_active()
-            remaining = max(0, 10 - validated_count)
+            remaining = max(0, _CORPUS_TARGET_WINDOWS - validated_count)
 
             log.log("corpus_update",
                      validated_full_active=validated_count,
@@ -857,7 +873,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
             if remaining > 0:
                 print(f"  Stage 2 evaluation BLOCKED — {remaining} more captures required")
             else:
-                print("  Stage 2 evaluation READY — 10+ validated FULL_ACTIVE captures")
+                print(f"  Stage 2 evaluation READY — {_CORPUS_TARGET_WINDOWS}+ validated FULL_ACTIVE captures")
                 print("  (Evaluation is not run by the watcher; run manually)")
 
             _write_status(
@@ -865,7 +881,7 @@ def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
                 gate_status="PASSED",
                 current_btc_1h_move_bps=btc_1h,
                 acceleration_status=accel_v,
-                last_capture_status="COMPLETED",
+                last_capture_status=last_capture_status,
                 last_capture_dir=capture_dir,
                 last_validation_status=verdict,
                 validated_full_active_capture_count=validated_count,
