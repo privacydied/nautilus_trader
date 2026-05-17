@@ -654,9 +654,9 @@ class TestServiceTemplate:
     def test_service_uses_correct_working_directory(self):
         """Service template uses WorkingDirectory pointing to the configured worktree."""
         content = SERVICE_PATH.read_text()
-        assert "WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress" in content
+        assert "WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_runtime" in content
         assert "WorkingDirectory=${NAUTILUS_STAGE2_WORKTREE}" not in content
-        assert "NAUTILUS_STAGE2_WORKTREE=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress" in content
+        assert "NAUTILUS_STAGE2_WORKTREE=/mnt/nasirjones/py/nautilus_trader_stage2_runtime" in content
 
     def test_service_includes_env_vars(self):
         """Service template includes NAUTILUS_STAGE2_* env vars."""
@@ -844,9 +844,9 @@ class TestPathConfiguration:
         service_path = Path(
             __file__).resolve().parents[1] / "systemd" / "nautilus-stage2-gate-watcher.service"
         content = service_path.read_text()
-        assert "WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress" in content
+        assert "WorkingDirectory=/mnt/nasirjones/py/nautilus_trader_stage2_runtime" in content
         assert "WorkingDirectory=${NAUTILUS_STAGE2_WORKTREE}" not in content
-        assert "NAUTILUS_STAGE2_WORKTREE=/mnt/nasirjones/py/nautilus_trader_stage2_cross_asset_stress" in content
+        assert "NAUTILUS_STAGE2_WORKTREE=/mnt/nasirjones/py/nautilus_trader_stage2_runtime" in content
 
     def test_service_file_uses_uv_not_hardcoded_venv(self):
         """systemd service uses uv from the worktree instead of a hardcoded venv path."""
