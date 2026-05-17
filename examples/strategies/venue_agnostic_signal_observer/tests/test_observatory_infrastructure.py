@@ -207,6 +207,21 @@ class TestBuildRunIndexRow:
         with pytest.raises(ValueError):
             build_run_index_row(run_id="x", run_type="invalid_type", status="started")
 
+    def test_completed_with_errors_status_is_valid_terminal_status(self):
+        row = build_run_index_row(
+            run_id="partial_capture",
+            run_type="capture",
+            status="completed_with_errors",
+            manifest_path="/tmp/capture_manifest.json",
+            errors="capture_status=completed_with_errors",
+            extra={"diagnostic_reason": "zero_tick_stream"},
+        )
+
+        assert row["status"] == "completed_with_errors"
+        assert row["manifest_path"] == str(Path("/tmp/capture_manifest.json").resolve())
+        assert row["diagnostic_reason"] == "zero_tick_stream"
+        assert row["errors"] == "capture_status=completed_with_errors"
+
     def test_invalid_status_raises(self):
         with pytest.raises(ValueError):
             build_run_index_row(run_id="x", run_type="capture", status="invalid_status")
@@ -487,6 +502,56 @@ class TestCaptureManifestHardening:
         atomic_write_json(path, manifest)
         content2 = path.read_text()
         assert content1 == content2
+
+    def test_completed_with_errors_manifest_can_be_indexed_without_failure(self, tmp_path):
+        """A completed capture with stream diagnostics remains indexable."""
+        out_dir = tmp_path / "diagnostic_cap"
+        out_dir.mkdir()
+        manifest = {
+            "run_id": "test_diagnostic",
+            "capture_status": "completed_with_errors",
+            "streams": {
+                "kraken_AVAX/USD": {
+                    "status": "ok",
+                    "tick_count": 0,
+                    "diagnostics": ["subscribe_ack: AVAX/USD success=True", "zero_ticks_no_ws_data"],
+                    "error_summary": None,
+                    "reconnect_count": 0,
+                },
+                "coinbase_AVAX/USD": {
+                    "status": "ok",
+                    "tick_count": 4,
+                    "diagnostics": ["ticks_received_no_ws_diag_marker"],
+                    "error_summary": None,
+                    "reconnect_count": 0,
+                },
+            },
+            "missing_streams": [],
+            "failed_streams": [],
+            "error_summaries": [],
+            "_metadata": {"schema_version": "1.0.0", "safety_mode": "public_data_observer_only"},
+        }
+
+        from venue_agnostic_signal_observer.run_artifacts import atomic_write_json
+        canonical_path = out_dir / "capture_manifest.json"
+        atomic_write_json(canonical_path, manifest)
+        row = build_run_index_row(
+            run_id=manifest["run_id"],
+            run_type="capture",
+            status=manifest["capture_status"],
+            output_dir=str(out_dir),
+            manifest_path=str(canonical_path),
+            errors="capture_status=completed_with_errors",
+        )
+
+        assert canonical_path.exists()
+        assert row["status"] == "completed_with_errors"
+        assert row["status"] not in {"failed", "skipped"}
+        assert row["manifest_path"] == str(canonical_path.resolve())
+        assert manifest["streams"]["kraken_AVAX/USD"]["diagnostics"] == [
+            "subscribe_ack: AVAX/USD success=True",
+            "zero_ticks_no_ws_data",
+        ]
 
 
 # ===========================================================================

@@ -28,7 +28,14 @@ _RESERVED_RUN_TYPES = frozenset({
     "latency", "corpus", "falsification", "campaign", "validation",
 })
 
-_RUN_STATUSES = frozenset({"started", "completed", "failed", "interrupted", "skipped"})
+_RUN_STATUSES = frozenset({
+    "started",
+    "completed",
+    "completed_with_errors",
+    "failed",
+    "interrupted",
+    "skipped",
+})
 
 
 def _get_git_sha_dirty() -> str:
@@ -123,8 +130,11 @@ def build_run_index_row(
     run_type : str
         One of the reserved run types.
     status : str
-        One of ``started``, ``completed``, ``failed``, ``interrupted``,
-        ``skipped``.
+        One of ``started``, ``completed``, ``completed_with_errors``,
+        ``failed``, ``interrupted``, ``skipped``. ``completed_with_errors``
+        means final artifacts were written, but stream-level diagnostics or
+        task exceptions were recorded and downstream consumers should inspect
+        the manifest before treating the run as clean.
     command_args : str, optional
         CLI command string used to launch the run.
     capture_dir : str, optional
