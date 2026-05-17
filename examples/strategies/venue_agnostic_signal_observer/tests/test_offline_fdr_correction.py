@@ -442,18 +442,18 @@ class TestMissingPValue:
     """Test 10: Missing p-value for eligible cell."""
 
     def test_missing_pvalue_recorded(self) -> None:
-        """P-value for eligible cell is missing. Unknown cell p-values
-        are accepted by the parser but silently handled by the builder.
-        This test verifies the missing_pvalue exclusion for the eligible cell."""
+        """P-value for eligible cell is missing. Only supply p-values for
+        known comparison cells. This test verifies the missing_pvalue
+        exclusion for the eligible cell."""
         cells = [
             _comparison_cell("cell_a", comparison_passed=True),
+            _comparison_cell("cell_b", comparison_passed=True),
         ]
         payload = _default_comp_payload(cells)
         manifest = _comparison_manifest(payload)
-        # Provide p-value for cell_b (unknown to comparison) and cell_a
+        # Provide p-value for cell_b only; cell_a has no p-value
         pv = _pvalue_input([
-            _pvalue_entry("nonexistent", 0.05),
-            _pvalue_entry("cell_a", 0.01),
+            _pvalue_entry("cell_b", 0.01),
         ])
         parsed = parse_pvalue_input(pv)
 
@@ -463,11 +463,12 @@ class TestMissingPValue:
             pvalue_input=parsed,
         )
 
-        # cell_a should be eligible with p-value 0.01
+        # cell_a should be missing p-value, cell_b should be eligible
         assert report.status == STATUS_OFFLINE_FDR_CORRECTION_READY
-        assert "cell_a" in report.eligible_cell_ids
-        # nonexistent p-value is just ignored by the builder
-        # (no exclusion to record since it's not in comparison cells)
+        assert "cell_b" in report.eligible_cell_ids
+        assert "cell_a" not in report.eligible_cell_ids
+        reasons_a = report.exclusion_reasons_by_cell.get("cell_a", [])
+        assert EXCL_MISSING_PVALUE in reasons_a
 
     def test_missing_pvalue_for_eligible_cell(self) -> None:
         """Cell exists but no p-value supplied for it."""
@@ -505,18 +506,15 @@ class TestDuplicatePValueRejected:
             parse_pvalue_input(pv)
 
 
-class TestUnknownCellPValueHandled:
-    """Test 12: P-value for unknown cell is handled gracefully."""
+class TestUnknownCellPValueRejected:
+    """Test 12: P-value for unknown cell is rejected loudly."""
 
-    def test_unknown_cell_pvalue_handled(self) -> None:
-        """P-value for cell not in comparison payload is accepted by parser
-        but ignored by the builder (no exclusion recorded since the cell
-        doesn't appear in the comparison artifact)."""
+    def test_unknown_cell_pvalue_rejected(self) -> None:
+        """P-value for cell not in comparison payload returns INVALID_PVALUE_INPUT."""
         pv = _pvalue_input([_pvalue_entry("unknown_cell", 0.05)])
         parsed = parse_pvalue_input(pv)
         assert "unknown_cell" in parsed
 
-        # Run report with only cell_a in comparison
         cells = [_comparison_cell("cell_a")]
         payload = _default_comp_payload(cells)
         manifest = _comparison_manifest(payload)
@@ -527,10 +525,72 @@ class TestUnknownCellPValueHandled:
             pvalue_input=parsed,
         )
 
-        # cell_a has no p-value -> missing_pvalue
-        # unknown_cell p-value is just ignored
-        assert report.status == STATUS_NO_FDR_ELIGIBLE_CELLS
+        assert report.status == STATUS_INVALID_PVALUE_INPUT
+
+    def test_unknown_cell_reason_recorded(self) -> None:
+        """Unknown p-value cell records reason unknown_pvalue_cell:<cell_id>."""
+        pv = _pvalue_input([_pvalue_entry("ghost_cell", 0.05)])
+        parsed = parse_pvalue_input(pv)
+
+        cells = [_comparison_cell("cell_a")]
+        payload = _default_comp_payload(cells)
+        manifest = _comparison_manifest(payload)
+
+        report = build_offline_fdr_correction_report(
+            comparison_manifest=manifest,
+            comparison_payload=payload,
+            pvalue_input=parsed,
+        )
+
+        assert report.status == STATUS_INVALID_PVALUE_INPUT
+        reasons = report.metadata.get("unknown_pvalue_reasons", [])
+        assert "unknown_pvalue_cell:ghost_cell" in reasons
+
+    def test_unknown_cell_prevents_fdr_application(self) -> None:
+        """Unknown p-value cell prevents any FDR correction."""
+        pv = _pvalue_input([_pvalue_entry("cell_a", 0.001), _pvalue_entry("ghost", 0.05)])
+        parsed = parse_pvalue_input(pv)
+
+        cells = [_comparison_cell("cell_a")]
+        payload = _default_comp_payload(cells)
+        manifest = _comparison_manifest(payload)
+
+        report = build_offline_fdr_correction_report(
+            comparison_manifest=manifest,
+            comparison_payload=payload,
+            pvalue_input=parsed,
+        )
+
+        assert report.status == STATUS_INVALID_PVALUE_INPUT
+        # No cells should be in FDR pass/fail lists
+        assert len(report.fdr_passed_cell_ids) == 0
+        assert len(report.fdr_failed_cell_ids) == 0
+        assert len(report.eligible_cell_ids) == 0
+
+    def test_unknown_cell_mixed_with_known_still_rejected(self) -> None:
+        """Even with both valid and unknown p-values, the whole request is rejected."""
+        pv = _pvalue_input([
+            _pvalue_entry("cell_a", 0.001),
+            _pvalue_entry("ghost", 0.05),
+        ])
+        parsed = parse_pvalue_input(pv)
+
+        cells = [
+            _comparison_cell("cell_a", comparison_passed=True),
+            _comparison_cell("cell_b", comparison_passed=True),
+        ]
+        payload = _default_comp_payload(cells)
+        manifest = _comparison_manifest(payload)
+
+        report = build_offline_fdr_correction_report(
+            comparison_manifest=manifest,
+            comparison_payload=payload,
+            pvalue_input=parsed,
+        )
+
+        assert report.status == STATUS_INVALID_PVALUE_INPUT
         assert "cell_a" not in report.eligible_cell_ids
+        assert len(report.eligible_cell_ids) == 0
 
 
 class TestInvalidPValueRange:

@@ -667,6 +667,37 @@ def build_offline_fdr_correction_report(
 
     # ---- Extract comparison cells ----
     comparison_cells = list(comparison_payload.get("comparison_cells", []))
+    comparison_cell_ids: set[str] = {str(c.get("cell_id", "")) for c in comparison_cells}
+
+    # ---- Validate p-value input against known comparison cells ----
+    # Unknown p-value cell_ids must reject loudly — no silent ignoring.
+    if pv_in_use and pvalue_input is not None:
+        unknown_cells: list[str] = []
+        for pv_cell_id in pvalue_input:
+            if pv_cell_id not in comparison_cell_ids:
+                unknown_cells.append(pv_cell_id)
+        if unknown_cells:
+            unknown_cells.sort()
+            metadata["unknown_pvalue_cells"] = unknown_cells
+            metadata["unknown_pvalue_reasons"] = [
+                f"unknown_pvalue_cell:{cid}" for cid in unknown_cells
+            ]
+            return _empty_fdr_result(
+                status=STATUS_INVALID_PVALUE_INPUT,
+                fdr_config_hash=fdr_config_hash,
+                pvalue_input_hash=pv_input_hash,
+                metadata=metadata,
+                data_corpus_hash=data_corpus_hash,
+                window_index_hash=window_index_hash,
+                discovery_config_hash=discovery_config_hash,
+                plan_hash=plan_hash,
+                evaluation_hash=evaluation_hash,
+                survivor_freeze_hash=survivor_freeze_hash,
+                holdout_evaluation_hash=holdout_evaluation_hash,
+                comparison_config_hash=comparison_config_hash,
+                comparison_hash=comparison_hash,
+                comparison_manifest_path=comparison_manifest_path,
+            )
 
     if not comparison_cells:
         return _empty_fdr_result(
