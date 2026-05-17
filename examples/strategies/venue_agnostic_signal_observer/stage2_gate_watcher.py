@@ -971,6 +971,8 @@ def _write_status(**kw: Any) -> None:
         # Corpus readiness defaults
         "usable_window_count": corpus_rdy["usable_window_count"],
         "minimum_ready_usable_windows": corpus_rdy["minimum_ready_usable_windows"],
+        "diagnostic_minimum_windows": corpus_rdy["diagnostic_minimum_windows"],
+        "diagnostic_ready": corpus_rdy["diagnostic_ready"],
         "ready_for_rerun": corpus_rdy["ready_for_rerun"],
         "corpus_status": corpus_rdy["corpus_status"],
         "captures_remaining_before_stage2_eval": corpus_rdy["captures_remaining_before_stage2_eval"],
