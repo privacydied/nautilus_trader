@@ -1068,6 +1068,10 @@ def main() -> None:
     finally:
         lock.release()
         CaptureGuard.release()
+        # Stop the SSL/urllib trigger feed thread cleanly before interpreter
+        # shutdown to avoid SIGSEGV in OpenSSL cleanup (Python 3.13 issue).
+        if _STRESS_V2_TRIGGER_FEED is not None:
+            _STRESS_V2_TRIGGER_FEED.stop()
 
 
 def _run_watcher_cycle(log: WatcherLogger, args: argparse.Namespace,
