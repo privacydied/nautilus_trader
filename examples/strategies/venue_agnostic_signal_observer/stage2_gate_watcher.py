@@ -816,7 +816,15 @@ def _run_validation(capture_dir: str, log: WatcherLogger) -> dict[str, Any]:
 
 # Target number of corpus-eligible FULL_ACTIVE stress windows required
 # before reruning frozen-grid discovery.
-_CORPUS_TARGET_WINDOWS = 10
+# Minimum usable independent stress windows required before frozen-grid
+# discovery can run.  Must match MIN_READY_USABLE_WINDOWS in
+# stress_corpus_accumulator.py (= 20).  Do NOT lower this without a
+# human-authored precommitment change — it is the rerun gate.
+_CORPUS_TARGET_WINDOWS = 20
+
+# Diagnostic/canary threshold: enough windows to sanity-check the pipeline
+# end-to-end, but does NOT unlock frozen-grid discovery.
+_CORPUS_DIAGNOSTIC_WINDOWS = 10
 
 
 def _count_validated_full_active() -> int:
@@ -868,21 +876,32 @@ def _count_validated_full_active() -> int:
 
 
 def _corpus_readiness() -> dict[str, Any]:
-    """Return corpus readiness status dict for the status JSON."""
+    """Return corpus readiness status dict for the status JSON.
+
+    Two thresholds:
+    - diagnostic_ready (>= _CORPUS_DIAGNOSTIC_WINDOWS=10): pipeline is
+      functioning end-to-end; does NOT unlock frozen-grid discovery.
+    - ready_for_rerun (>= _CORPUS_TARGET_WINDOWS=20): rerun gate; the only
+      threshold that may unlock frozen-grid discovery (manually).
+    """
     count = _count_validated_full_active()
     ready = count >= _CORPUS_TARGET_WINDOWS
+    diagnostic_ready = count >= _CORPUS_DIAGNOSTIC_WINDOWS
+    remaining = max(0, _CORPUS_TARGET_WINDOWS - count)
     return {
         "usable_window_count": count,
         "minimum_ready_usable_windows": _CORPUS_TARGET_WINDOWS,
+        "diagnostic_minimum_windows": _CORPUS_DIAGNOSTIC_WINDOWS,
+        "diagnostic_ready": diagnostic_ready,
         "ready_for_rerun": ready,
         "corpus_status": "CORPUS_READY_FOR_RERUN" if ready else "ACCUMULATING",
-        "captures_remaining_before_stage2_eval": max(0, _CORPUS_TARGET_WINDOWS - count),
+        "captures_remaining_before_stage2_eval": remaining,
         "next_action": (
-            "ACCUMULATING — {} more stress windows needed before frozen-grid rerun".format(
-                max(0, _CORPUS_TARGET_WINDOWS - count)
+            "CORPUS_READY — frozen-grid discovery can run manually"
+            if ready
+            else "ACCUMULATING — {} more stress windows needed before frozen-grid rerun".format(
+                remaining
             )
-            if not ready
-            else "CORPUS_READY — frozen-grid discovery can run manually"
         ),
     }
 

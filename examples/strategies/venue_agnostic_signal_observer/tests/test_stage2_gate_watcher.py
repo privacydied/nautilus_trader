@@ -1159,3 +1159,134 @@ class TestNoTradeReadyEmitted:
             v1_watcher._DATA_ROOT = saved_data
             v1_watcher._REPO_ROOT = saved_repo
             v1_watcher._STATUS_PATH_OVERRIDE = saved_status
+
+
+# ---------------------------------------------------------------------------
+# Corpus rerun gate boundary tests (must require 20, not 10)
+# ---------------------------------------------------------------------------
+
+
+class TestCorpusReadinessBoundary:
+    """_corpus_readiness() must gate ready_for_rerun at 20, not 10."""
+
+    def _make_env(self, tmp_path, n_captures: int, signal_family: str = "cross_asset_beta_lag_v1"):
+        """Create n validated FULL_ACTIVE capture dirs and return the watcher module with overrides set."""
+        from examples.strategies.venue_agnostic_signal_observer import stage2_gate_watcher as w
+
+        data = tmp_path / "data"
+        data.mkdir()
+        reports = tmp_path / "reports"
+        reports.mkdir()
+
+        for i in range(n_captures):
+            cap_dir = data / f"{signal_family}_FULL_ACTIVE_{i:04d}"
+            cap_dir.mkdir()
+            import json as _json
+            (cap_dir / "capture_manifest.json").write_text(_json.dumps({
+                "run_id": f"cap_{i:04d}",
+                "capture_mode": "FULL_ACTIVE",
+                "capture_status": "completed",
+                "_metadata": {"capture_mode": "FULL_ACTIVE"},
+            }))
+
+        w._DATA_ROOT = data
+        w._REPORTS_ROOT = reports
+        w._REPO_ROOT = tmp_path
+        w._STATUS_PATH_OVERRIDE = reports / "status.json"
+        w._SIGNAL_FAMILY = signal_family
+        return w
+
+    def _restore(self, w):
+        w._DATA_ROOT = None
+        w._REPORTS_ROOT = None
+        w._REPO_ROOT = None
+        w._STATUS_PATH_OVERRIDE = None
+        w._SIGNAL_FAMILY = "cross_asset_beta_lag_v1"
+
+    def test_9_windows_not_ready(self, tmp_path):
+        """9 usable captures: ready_for_rerun=False, diagnostic_ready=False."""
+        w = self._make_env(tmp_path, 9)
+        try:
+            r = w._corpus_readiness()
+            assert r["ready_for_rerun"] is False
+            assert r["diagnostic_ready"] is False
+            assert r["corpus_status"] == "ACCUMULATING"
+            assert r["minimum_ready_usable_windows"] == 20
+        finally:
+            self._restore(w)
+
+    def test_10_windows_diagnostic_only(self, tmp_path):
+        """10 captures: diagnostic_ready=True but ready_for_rerun=False."""
+        w = self._make_env(tmp_path, 10)
+        try:
+            r = w._corpus_readiness()
+            assert r["ready_for_rerun"] is False, "10 windows must NOT unlock frozen-grid rerun"
+            assert r["diagnostic_ready"] is True
+            assert r["corpus_status"] == "ACCUMULATING"
+            assert r["minimum_ready_usable_windows"] == 20
+        finally:
+            self._restore(w)
+
+    def test_19_windows_not_ready(self, tmp_path):
+        """19 captures: still not ready for rerun."""
+        w = self._make_env(tmp_path, 19)
+        try:
+            r = w._corpus_readiness()
+            assert r["ready_for_rerun"] is False
+            assert r["diagnostic_ready"] is True
+            assert r["corpus_status"] == "ACCUMULATING"
+            assert r["captures_remaining_before_stage2_eval"] == 1
+        finally:
+            self._restore(w)
+
+    def test_20_windows_ready_for_rerun(self, tmp_path):
+        """20 captures: ready_for_rerun=True, corpus_status=CORPUS_READY_FOR_RERUN."""
+        w = self._make_env(tmp_path, 20)
+        try:
+            r = w._corpus_readiness()
+            assert r["ready_for_rerun"] is True
+            assert r["corpus_status"] == "CORPUS_READY_FOR_RERUN"
+            assert r["captures_remaining_before_stage2_eval"] == 0
+            assert r["minimum_ready_usable_windows"] == 20
+        finally:
+            self._restore(w)
+
+    def test_status_json_reports_20_as_threshold(self, tmp_path):
+        """Status JSON always reports 20 as minimum_ready_usable_windows."""
+        from examples.strategies.venue_agnostic_signal_observer import stage2_gate_watcher as w
+        import json as _json
+
+        saved_reports = w._REPORTS_ROOT
+        saved_data = w._DATA_ROOT
+        saved_repo = w._REPO_ROOT
+        saved_status = w._STATUS_PATH_OVERRIDE
+        try:
+            w._REPORTS_ROOT = tmp_path / "reports"
+            w._DATA_ROOT = tmp_path / "data"
+            (tmp_path / "data").mkdir()
+            w._REPO_ROOT = tmp_path
+            status_path = tmp_path / "reports" / "status.json"
+            w._STATUS_PATH_OVERRIDE = status_path
+            w._write_status()
+            data = _json.loads(status_path.read_text())
+            assert data["minimum_ready_usable_windows"] == 20
+            assert data["ready_for_rerun"] is False
+            assert "TRADE_READY" not in _json.dumps(data)
+        finally:
+            w._REPORTS_ROOT = saved_reports
+            w._DATA_ROOT = saved_data
+            w._REPO_ROOT = saved_repo
+            w._STATUS_PATH_OVERRIDE = saved_status
+
+    def test_corpus_target_constant_is_20(self):
+        """_CORPUS_TARGET_WINDOWS must be 20."""
+        from examples.strategies.venue_agnostic_signal_observer import stage2_gate_watcher as w
+        assert w._CORPUS_TARGET_WINDOWS == 20, (
+            f"Expected 20, got {w._CORPUS_TARGET_WINDOWS}. "
+            "This constant is the frozen-grid rerun gate — do not lower without a precommitment change."
+        )
+
+    def test_corpus_diagnostic_constant_is_10(self):
+        """_CORPUS_DIAGNOSTIC_WINDOWS must be 10 (canary, does not unlock rerun)."""
+        from examples.strategies.venue_agnostic_signal_observer import stage2_gate_watcher as w
+        assert w._CORPUS_DIAGNOSTIC_WINDOWS == 10
