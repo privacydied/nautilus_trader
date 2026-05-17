@@ -397,6 +397,17 @@ def _build_comparison_cell(
     failure_reasons = _check_holdout_cell_thresholds(holdout_cell, config)
     comparison_passed = len(failure_reasons) == 0
 
+    # Decay ratio threshold check — uses both train and holdout metrics
+    if config.max_train_to_holdout_net_mean_decay_ratio is not None:
+        if decay_ratio is None:
+            failure_reasons.append("train_to_holdout_decay_ratio_unavailable")
+            comparison_passed = False
+        elif decay_ratio > config.max_train_to_holdout_net_mean_decay_ratio:
+            failure_reasons.append(
+                f"train_to_holdout_decay_ratio_above_threshold:{decay_ratio}>{config.max_train_to_holdout_net_mean_decay_ratio}"
+            )
+            comparison_passed = False
+
     return OfflineTrainHoldoutComparisonCell(
         cell_id=cell_id,
         family_id=family_id,

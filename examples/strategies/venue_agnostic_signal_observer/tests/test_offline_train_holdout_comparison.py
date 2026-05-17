@@ -1044,5 +1044,175 @@ def test_safety_scan_has_no_forbidden_capability_usage():
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Decay ratio threshold enforcement
+# ---------------------------------------------------------------------------
+
+
+def test_fails_when_decay_ratio_exceeds_configured_threshold():
+    """Cell fails when decay ratio > max_train_to_holdout_net_mean_decay_ratio."""
+    config = OfflineTrainHoldoutComparisonConfig(max_train_to_holdout_net_mean_decay_ratio=0.5)
+    report = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=3.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=3.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=1.0, win_rate=0.7)],
+        config=config,
+    )
+    cell = report.comparison_cells[0]
+    assert not cell.comparison_passed
+    # decay_bps = 3.0 - 1.0 = 2.0, decay_ratio = 2.0 / 3.0 ≈ 0.667 > 0.5
+    assert cell.net_mean_decay_bps == 2.0
+    assert cell.net_mean_decay_ratio == pytest.approx(2.0 / 3.0)
+    assert any("train_to_holdout_decay_ratio_above_threshold" in r for r in cell.failure_reasons)
+
+
+def test_passes_decay_ratio_check_when_ratio_equals_threshold():
+    """Cell passes decay ratio check when ratio == threshold."""
+    config = OfflineTrainHoldoutComparisonConfig(max_train_to_holdout_net_mean_decay_ratio=0.5)
+    report = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=2.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=2.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=1.0, win_rate=0.7)],
+        config=config,
+    )
+    cell = report.comparison_cells[0]
+    # decay_bps = 2.0 - 1.0 = 1.0, decay_ratio = 1.0 / 2.0 = 0.5 == 0.5
+    assert cell.comparison_passed
+    assert not any("train_to_holdout_decay_ratio" in r for r in cell.failure_reasons)
+
+
+def test_passes_decay_ratio_check_when_ratio_below_threshold():
+    """Cell passes decay ratio check when ratio < threshold."""
+    config = OfflineTrainHoldoutComparisonConfig(max_train_to_holdout_net_mean_decay_ratio=1.0)
+    report = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=3.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=3.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=1.0, win_rate=0.7)],
+        config=config,
+    )
+    cell = report.comparison_cells[0]
+    # decay_bps = 3.0 - 1.0 = 2.0, decay_ratio = 2.0 / 3.0 ≈ 0.667 < 1.0
+    assert cell.comparison_passed
+    assert not any("train_to_holdout_decay_ratio" in r for r in cell.failure_reasons)
+
+
+def test_fails_decay_ratio_check_when_ratio_unavailable_and_threshold_configured():
+    """When threshold is configured but train net mean is zero, decay ratio is unavailable."""
+    config = OfflineTrainHoldoutComparisonConfig(max_train_to_holdout_net_mean_decay_ratio=0.5)
+    report = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=0.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=0.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=1.0, win_rate=0.7)],
+        config=config,
+    )
+    cell = report.comparison_cells[0]
+    assert not cell.comparison_passed
+    assert cell.net_mean_decay_ratio is None
+    assert any("train_to_holdout_decay_ratio_unavailable" in r for r in cell.failure_reasons)
+
+
+def test_decay_ratio_not_checked_when_threshold_is_null():
+    """When max_train_to_holdout_net_mean_decay_ratio is null, check is not applied."""
+    config = OfflineTrainHoldoutComparisonConfig(max_train_to_holdout_net_mean_decay_ratio=None)
+    report = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=3.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=3.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=1.0, win_rate=0.7)],
+        config=config,
+    )
+    cell = report.comparison_cells[0]
+    assert cell.comparison_passed
+    assert not any("train_to_holdout_decay_ratio" in r for r in cell.failure_reasons)
+
+
+def test_comparison_hash_changes_when_decay_ratio_threshold_changes():
+    """Changing decay ratio threshold changes comparison_config_hash and comparison_hash."""
+    config_a = OfflineTrainHoldoutComparisonConfig(max_train_to_holdout_net_mean_decay_ratio=None)
+    config_b = OfflineTrainHoldoutComparisonConfig(max_train_to_holdout_net_mean_decay_ratio=0.5)
+
+    hash_a = compute_comparison_config_hash(config_a)
+    hash_b = compute_comparison_config_hash(config_b)
+    assert hash_a != hash_b
+
+    report_a = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=3.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=3.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=1.0, win_rate=0.7)],
+        config=config_a,
+    )
+    report_b = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=3.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=3.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=1.0, win_rate=0.7)],
+        config=config_b,
+    )
+    assert report_a.comparison_config_hash != report_b.comparison_config_hash
+    assert report_a.comparison_hash != report_b.comparison_hash
+
+
+def test_existing_threshold_behavior_unchanged_for_valid_events():
+    """Existing holdout valid events threshold still works after decay ratio patch."""
+    config = OfflineTrainHoldoutComparisonConfig(min_holdout_valid_events=5, max_train_to_holdout_net_mean_decay_ratio=0.5)
+    report = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=3.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=3.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=2.0, valid_event_count=2, win_rate=0.7)],
+        config=config,
+    )
+    cell = report.comparison_cells[0]
+    assert not cell.comparison_passed
+    assert any("below_min_holdout_valid_events" in r for r in cell.failure_reasons)
+
+
+def test_existing_threshold_unchanged_for_net_mean():
+    """Existing holdout net mean threshold still works after decay ratio patch."""
+    report = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=3.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=3.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=-0.5, win_rate=0.7)],
+    )
+    cell = report.comparison_cells[0]
+    assert not cell.comparison_passed
+    assert any("below_min_holdout_net_mean_bps" in r for r in cell.failure_reasons)
+
+
+def test_existing_threshold_unchanged_for_net_median():
+    """Existing holdout net median threshold still works after decay ratio patch."""
+    report = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=3.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=3.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=3.0, net_median_bps=-0.5, win_rate=0.7)],
+    )
+    cell = report.comparison_cells[0]
+    assert not cell.comparison_passed
+    assert any("below_min_holdout_net_median_bps" in r for r in cell.failure_reasons)
+
+
+def test_existing_threshold_unchanged_for_win_rate():
+    """Existing holdout win rate threshold still works after decay ratio patch."""
+    report = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=3.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=3.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=3.0, net_median_bps=2.0, win_rate=0.3)],
+    )
+    cell = report.comparison_cells[0]
+    assert not cell.comparison_passed
+    assert any("below_min_holdout_win_rate" in r for r in cell.failure_reasons)
+
+
+def test_existing_threshold_unchanged_for_worst_net():
+    """Existing optional worst-net threshold still works after decay ratio patch."""
+    config = OfflineTrainHoldoutComparisonConfig(min_holdout_worst_net_bps=0.0)
+    report = _compare(
+        train_cells=[_eval_cell("cell_a", net_mean_bps=3.0)],
+        survivor_cells=[_freeze_survivor_cell("cell_a", net_mean_bps=3.0)],
+        holdout_cells=[_holdout_cell("cell_a", net_mean_bps=3.0, net_median_bps=2.0, win_rate=0.7, worst_net_bps=-1.0)],
+        config=config,
+    )
+    cell = report.comparison_cells[0]
+    assert not cell.comparison_passed
+    assert any("below_min_holdout_worst_net_bps" in r for r in cell.failure_reasons)
+
+
 def test_schema_version_constant_present():
     assert COMPARISON_SCHEMA_VERSION == "offline_train_holdout_comparison_v1"
