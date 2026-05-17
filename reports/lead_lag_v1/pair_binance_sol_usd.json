@@ -1,0 +1,177 @@
+{
+  "label": "BINANCE(SOL/USDT) \u2192 KRAKEN(SOL/USD)",
+  "source_venue": "BINANCE",
+  "source_asset": "SOL/USDT",
+  "target_venue": "KRAKEN",
+  "target_asset": "SOL/USD",
+  "shared_bars": 720,
+  "sweep": [
+    {
+      "lookback_s": 120.0,
+      "threshold_bps": 5.0,
+      "signal_count": 275,
+      "valid_evaluations": 1072,
+      "net_return_stats": {
+        "count": 1072,
+        "mean": -12.5792,
+        "median": -12.0,
+        "p25": -22.6826,
+        "p75": -2.4347,
+        "win_rate": 0.2201,
+        "best": 144.6772,
+        "worst": -159.0897
+      },
+      "verdict": "FAIL"
+    },
+    {
+      "lookback_s": 120.0,
+      "threshold_bps": 10.0,
+      "signal_count": 164,
+      "valid_evaluations": 641,
+      "net_return_stats": {
+        "count": 641,
+        "mean": -12.6521,
+        "median": -12.0,
+        "p25": -25.5121,
+        "p75": -1.3674,
+        "win_rate": 0.2324,
+        "best": 124.7845,
+        "worst": -159.0897
+      },
+      "verdict": "FAIL"
+    },
+    {
+      "lookback_s": 120.0,
+      "threshold_bps": 20.0,
+      "signal_count": 58,
+      "valid_evaluations": 230,
+      "net_return_stats": {
+        "count": 230,
+        "mean": -13.1782,
+        "median": -12.0,
+        "p25": -25.7247,
+        "p75": -0.4997,
+        "win_rate": 0.2391,
+        "best": 91.4519,
+        "worst": -116.8285
+      },
+      "verdict": "FAIL"
+    },
+    {
+      "lookback_s": 300.0,
+      "threshold_bps": 5.0,
+      "signal_count": 301,
+      "valid_evaluations": 1177,
+      "net_return_stats": {
+        "count": 1177,
+        "mean": -12.178,
+        "median": -12.0,
+        "p25": -22.445,
+        "p75": -1.5638,
+        "win_rate": 0.2243,
+        "best": 114.3158,
+        "worst": -165.4903
+      },
+      "verdict": "FAIL"
+    },
+    {
+      "lookback_s": 300.0,
+      "threshold_bps": 10.0,
+      "signal_count": 215,
+      "valid_evaluations": 844,
+      "net_return_stats": {
+        "count": 844,
+        "mean": -13.3437,
+        "median": -12.0,
+        "p25": -24.6596,
+        "p75": -2.3959,
+        "win_rate": 0.2204,
+        "best": 114.3158,
+        "worst": -165.4903
+      },
+      "verdict": "FAIL"
+    },
+    {
+      "lookback_s": 300.0,
+      "threshold_bps": 20.0,
+      "signal_count": 96,
+      "valid_evaluations": 379,
+      "net_return_stats": {
+        "count": 379,
+        "mean": -14.2088,
+        "median": -12.0,
+        "p25": -26.6751,
+        "p75": -0.3659,
+        "win_rate": 0.248,
+        "best": 91.4519,
+        "worst": -159.0897
+      },
+      "verdict": "FAIL"
+    },
+    {
+      "lookback_s": 600.0,
+      "threshold_bps": 5.0,
+      "signal_count": 300,
+      "valid_evaluations": 1174,
+      "net_return_stats": {
+        "count": 1174,
+        "mean": -13.7767,
+        "median": -12.0,
+        "p25": -23.7408,
+        "p75": -2.5013,
+        "win_rate": 0.2121,
+        "best": 114.3158,
+        "worst": -168.6772
+      },
+      "verdict": "FAIL"
+    },
+    {
+      "lookback_s": 600.0,
+      "threshold_bps": 10.0,
+      "signal_count": 240,
+      "valid_evaluations": 947,
+      "net_return_stats": {
+        "count": 947,
+        "mean": -14.5148,
+        "median": -13.0397,
+        "p25": -25.6929,
+        "p75": -2.4883,
+        "win_rate": 0.2218,
+        "best": 91.4519,
+        "worst": -168.6772
+      },
+      "verdict": "FAIL"
+    },
+    {
+      "lookback_s": 600.0,
+      "threshold_bps": 20.0,
+      "signal_count": 134,
+      "valid_evaluations": 531,
+      "net_return_stats": {
+        "count": 531,
+        "mean": -16.1933,
+        "median": -14.079,
+        "p25": -27.9236,
+        "p75": -2.5043,
+        "win_rate": 0.2241,
+        "best": 91.4519,
+        "worst": -159.0897
+      },
+      "verdict": "FAIL"
+    }
+  ],
+  "baseline": {
+    "signal_count": 1783,
+    "valid_evaluations": 6934,
+    "net_return_stats": {
+      "count": 6934,
+      "mean": -11.9914,
+      "median": -12.0,
+      "p25": -22.4548,
+      "p75": -1.4526,
+      "win_rate": 0.229,
+      "best": 141.4903,
+      "worst": -168.6772
+    }
+  }
+}

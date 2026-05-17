@@ -1,0 +1,83 @@
+{
+  "expected_edge_per_detected_opportunity": 0.0,
+  "metadata": {
+    "book_fetch_errors": 0,
+    "config_hash": "b1d3a6ba590e977e",
+    "eligible_same_condition_pairs": 3,
+    "end_timestamp": "2026-05-16T16:00:25.736479+00:00",
+    "git_sha": "a49962599ac75c7d24aa8ba0d70a6066c0f1f0a0",
+    "markets_scanned": 3,
+    "missing_trade_data_events": 1,
+    "observer_duration_secs": 0.47258591651916504,
+    "observer_window_count": 1,
+    "report_paths": {
+      "opportunities": "reports/polymarket_complement_arb_shadow_smoke/run_20260516_160025_263800/shadow_opportunities.jsonl",
+      "report": "reports/polymarket_complement_arb_shadow_smoke/run_20260516_160025_263800/shadow_report.md",
+      "summary": "reports/polymarket_complement_arb_shadow_smoke/run_20260516_160025_263800/shadow_summary.json"
+    },
+    "run_arguments": {
+      "duration_secs": 0.0,
+      "poll_interval_secs": 5.0
+    },
+    "run_id": "run_20260516_160025_263800",
+    "start_timestamp": "2026-05-16T16:00:25.263895+00:00",
+    "total_book_fetches": 6
+  },
+  "net_shadow_harvest": 0,
+  "paired_gain": 0,
+  "rates": {
+    "non_dust_rate": {
+      "denominator": 3,
+      "numerator": 3,
+      "rate": 1.0
+    },
+    "one_leg_fill_rate": {
+      "denominator": 3,
+      "numerator": 0,
+      "rate": 0.0
+    },
+    "paired_fill_rate": {
+      "denominator": 3,
+      "numerator": 0,
+      "rate": 0.0
+    },
+    "pessimistic_paired_fill_rate": {
+      "denominator": 3,
+      "numerator": 0,
+      "rate": 0.0
+    },
+    "same_condition_valid_rate": {
+      "denominator": 3,
+      "numerator": 3,
+      "rate": 1.0
+    }
+  },
+  "raw": {
+    "detected_opportunity_count": 3,
+    "expected_edge_per_detected_opportunity": 0.0,
+    "net_shadow_harvest": 0,
+    "non_dust_opportunity_count": 3,
+    "observer_window_count": 1,
+    "one_leg_fill_count": 0,
+    "paired_gain": 0,
+    "pessimistic_paired_fill_count": 0,
+    "same_condition_valid_count": 3,
+    "unwind_loss": 0
+  },
+  "sufficiency": {
+    "min_detected_opportunities": 50,
+    "min_non_dust_opportunities": 30,
+    "min_observer_windows": 5,
+    "min_pessimistic_paired_fills": 20,
+    "min_same_condition_valid_opportunities": 30
+  },
+  "unwind_loss": 0,
+  "verdict": "NEEDS_MORE_DATA",
+  "verdict_reasons": [
+    "MIN_OBSERVER_WINDOWS_NOT_MET",
+    "MIN_DETECTED_OPPORTUNITIES_NOT_MET",
+    "MIN_SAME_CONDITION_VALID_OPPORTUNITIES_NOT_MET",
+    "MIN_NON_DUST_OPPORTUNITIES_NOT_MET",
+    "MIN_PESSIMISTIC_PAIRED_FILLS_NOT_MET"
+  ]
+}

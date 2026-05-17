@@ -1,0 +1,26 @@
+[
+  {
+    "signal_id": "cmm_000024",
+    "signal_timestamp": 1700048000.0,
+    "source_venue": "BINANCE",
+    "source_instrument": "BTC/USDT",
+    "target_venue": "KRAKEN",
+    "target_instrument": "BTC/USD",
+    "signal_type": "cross_market_move",
+    "direction": "short",
+    "strength": 51.05243797759479,
+    "horizon": "1h",
+    "entry_reference_price": 52220.2648028673,
+    "forward_price": null,
+    "raw_return_bps": null,
+    "direction_adjusted_return_bps": null,
+    "fee_bps": 5.0,
+    "slippage_bps": 1.0,
+    "quote_mismatch_buffer_bps": 0.0,
+    "net_return_bps": null,
+    "max_favorable_excursion_bps": null,
+    "max_adverse_excursion_bps": null,
+    "valid": false,
+    "rejection_reason": "no_price_at_1h"
+  }
+]

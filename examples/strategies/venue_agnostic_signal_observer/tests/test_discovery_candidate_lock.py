@@ -13,7 +13,6 @@ import pytest
 from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
     DiscoveryGridSpec,
     GRID_SCHEMA_VERSION,
-    CANDIDATE_SCHEMA_VERSION,
     grid_sha256,
     enumerate_primary_cell_count,
     enumerate_cost_sensitivity_cell_count,

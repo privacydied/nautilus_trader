@@ -12,7 +12,6 @@ import pytest
 from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
     DiscoveryGridSpec,
     GRID_SCHEMA_VERSION,
-    CANDIDATE_SCHEMA_VERSION,
 )
 from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import (
     create_grid_lock,

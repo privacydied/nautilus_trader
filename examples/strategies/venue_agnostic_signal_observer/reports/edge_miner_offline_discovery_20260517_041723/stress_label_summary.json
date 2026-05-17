@@ -1,0 +1,11 @@
+{
+  "label_count": 0,
+  "label_version": "stress_label.v1",
+  "reason": "No BTC/ETH windows crossed deterministic stress thresholds.",
+  "schema_version": "stress_label_summary.v1",
+  "source_assets_evaluated": [
+    "BTC",
+    "ETH"
+  ],
+  "status": "NO_STRESS_LABELS_DIAGNOSTIC"
+}

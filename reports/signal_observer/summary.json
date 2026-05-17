@@ -1,0 +1,143 @@
+{
+  "run_start": 1778610755.1328082,
+  "run_end": 1778610755.134885,
+  "source_venues": [
+    "BINANCE"
+  ],
+  "target_venues": [
+    "KRAKEN"
+  ],
+  "instruments": [
+    "BTC/USD"
+  ],
+  "horizons": [
+    "10s",
+    "30s",
+    "60s",
+    "5m",
+    "15m",
+    "1h"
+  ],
+  "total_signals": 24,
+  "valid_evaluations": 143,
+  "rejected_evaluations": 1,
+  "fee_bps": 5.0,
+  "slippage_bps": 1.0,
+  "quote_mismatch_buffer_bps": 0.0,
+  "results_by_horizon": [
+    {
+      "horizon": "10s",
+      "event_count": 24,
+      "valid_count": 24,
+      "rejected_count": 0,
+      "mean_raw_return_bps": 0.5648,
+      "median_raw_return_bps": 0.4933,
+      "mean_net_return_bps": -5.4352,
+      "median_net_return_bps": -5.5067,
+      "win_rate_after_fees": 0.0417,
+      "p25": -7.0912,
+      "p50": -5.5019,
+      "p75": -3.1849,
+      "p90": -2.2509,
+      "best_return": 0.8145,
+      "worst_return": -10.8326
+    },
+    {
+      "horizon": "30s",
+      "event_count": 24,
+      "valid_count": 24,
+      "rejected_count": 0,
+      "mean_raw_return_bps": 35.3875,
+      "median_raw_return_bps": 35.7708,
+      "mean_net_return_bps": 29.3875,
+      "median_net_return_bps": 29.7708,
+      "win_rate_after_fees": 1.0,
+      "p25": 27.7425,
+      "p50": 29.956,
+      "p75": 31.4325,
+      "p90": 32.7324,
+      "best_return": 40.123,
+      "worst_return": 22.0118
+    },
+    {
+      "horizon": "60s",
+      "event_count": 24,
+      "valid_count": 24,
+      "rejected_count": 0,
+      "mean_raw_return_bps": 49.8115,
+      "median_raw_return_bps": 49.9245,
+      "mean_net_return_bps": 43.8115,
+      "median_net_return_bps": 43.9245,
+      "win_rate_after_fees": 1.0,
+      "p25": 40.4704,
+      "p50": 44.2648,
+      "p75": 46.7609,
+      "p90": 49.756,
+      "best_return": 56.6342,
+      "worst_return": 33.0892
+    },
+    {
+      "horizon": "5m",
+      "event_count": 24,
+      "valid_count": 24,
+      "rejected_count": 0,
+      "mean_raw_return_bps": 50.842,
+      "median_raw_return_bps": 47.9992,
+      "mean_net_return_bps": 44.842,
+      "median_net_return_bps": 41.9992,
+      "win_rate_after_fees": 1.0,
+      "p25": 36.3126,
+      "p50": 43.0508,
+      "p75": 53.4848,
+      "p90": 59.2691,
+      "best_return": 83.865,
+      "worst_return": 26.6313
+    },
+    {
+      "horizon": "15m",
+      "event_count": 24,
+      "valid_count": 24,
+      "rejected_count": 0,
+      "mean_raw_return_bps": 52.8813,
+      "median_raw_return_bps": 51.8792,
+      "mean_net_return_bps": 46.8813,
+      "median_net_return_bps": 45.8792,
+      "win_rate_after_fees": 1.0,
+      "p25": 30.4361,
+      "p50": 46.7479,
+      "p75": 60.6655,
+      "p90": 71.8197,
+      "best_return": 85.232,
+      "worst_return": 7.6168
+    },
+    {
+      "horizon": "1h",
+      "event_count": 24,
+      "valid_count": 23,
+      "rejected_count": 1,
+      "mean_raw_return_bps": 56.9104,
+      "median_raw_return_bps": 60.1152,
+      "mean_net_return_bps": 50.9104,
+      "median_net_return_bps": 54.1152,
+      "win_rate_after_fees": 0.7391,
+      "p25": -1.0948,
+      "p50": 54.1152,
+      "p75": 104.2993,
+      "p90": 135.6989,
+      "best_return": 156.5281,
+      "worst_return": -37.6395
+    }
+  ],
+  "results_by_signal_type": [
+    {
+      "signal_type": "cross_market_move",
+      "event_count": 143,
+      "mean_net_return_bps": 34.9554,
+      "win_rate_after_fees": 0.7972
+    }
+  ],
+  "results_by_venue_pair": [],
+  "best_signal_group": "cross_market_move",
+  "worst_signal_group": "cross_market_move",
+  "final_recommendation": "Positive exploratory mean net return (34.96 bps). Requires deeper analysis before considering execution."
+}

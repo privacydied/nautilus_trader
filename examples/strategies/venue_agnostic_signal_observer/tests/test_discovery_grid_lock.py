@@ -19,10 +19,10 @@ from ..discovery.search_space import (
 )
 from ..discovery.grid_lock import (
     create_grid_lock,
-    validate_grid_spec_against_lock,
+    validate_grid_lock,
     load_grid_lock,
     save_grid_lock,
-    locks_are_semantically_identical,
+    locks_are_semantically_equal,
     DiscoveryGridLock,
     GRID_LOCK_TYPE,
 )
@@ -161,7 +161,7 @@ class TestGridLock:
             locked_at_utc=lock.locked_at_utc,
         )
         with pytest.raises(GridCellCountMismatchError, match='primary_cell_count'):
-            validate_grid_spec_against_lock(golden_spec, wrong_count_lock)
+            validate_grid_lock(golden_spec, wrong_count_lock)
 
     # ------------------------------------------------------------------
     # 44. Grid lock validation rejects cost_sensitivity_cell_count mismatch
@@ -181,7 +181,7 @@ class TestGridLock:
             locked_at_utc=lock.locked_at_utc,
         )
         with pytest.raises(GridCellCountMismatchError, match='cost_sensitivity_cell_count'):
-            validate_grid_spec_against_lock(golden_spec, wrong_count_lock)
+            validate_grid_lock(golden_spec, wrong_count_lock)
 
     # ------------------------------------------------------------------
     # 45. Grid lock validates matching grid
@@ -190,7 +190,7 @@ class TestGridLock:
     def test_validation_passes_matching_grid(self, golden_spec):
         lock = create_grid_lock(golden_spec)
         # Should not raise
-        validate_grid_spec_against_lock(golden_spec, lock)
+        validate_grid_lock(golden_spec, lock)
 
     # ------------------------------------------------------------------
     # 46. Grid lock rejects hash mismatch (tampered grid_hash in lock)
@@ -210,7 +210,7 @@ class TestGridLock:
             locked_at_utc=lock.locked_at_utc,
         )
         with pytest.raises(GridHashMismatchError, match='grid_hash mismatch'):
-            validate_grid_spec_against_lock(golden_spec, tampered)
+            validate_grid_lock(golden_spec, tampered)
 
     # ------------------------------------------------------------------
     # 47. Grid lock rejects grid_id mismatch
@@ -220,17 +220,30 @@ class TestGridLock:
         lock = create_grid_lock(golden_spec)
         modified = self._mutate(golden_spec, grid_id='different_grid_id')
         with pytest.raises(GridLockValidationError, match='grid_id mismatch'):
-            validate_grid_spec_against_lock(modified, lock)
+            validate_grid_lock(modified, lock)
 
     # ------------------------------------------------------------------
     # 48. Grid lock rejects schema_version mismatch
     # ------------------------------------------------------------------
 
     def test_validation_rejects_schema_version_mismatch(self, golden_spec):
+        """Lock has different schema_version than spec. validate_grid_lock
+        validates spec first (passes since spec is valid), then checks
+        lock.schema_version == spec.schema_version and fails."""
         lock = create_grid_lock(golden_spec)
-        modified = self._mutate(golden_spec, schema_version='discovery-grid-v0')
+        # Create a manually-modified lock with different schema_version
+        bad_lock = DiscoveryGridLock(
+            lock_type=lock.lock_type,
+            grid_id=lock.grid_id,
+            grid_hash=lock.grid_hash,
+            schema_version="wrong-version",
+            primary_cell_count=lock.primary_cell_count,
+            cost_sensitivity_cell_count=lock.cost_sensitivity_cell_count,
+            git_sha=lock.git_sha,
+            locked_at_utc=lock.locked_at_utc,
+        )
         with pytest.raises(GridLockValidationError, match='schema_version mismatch'):
-            validate_grid_spec_against_lock(modified, lock)
+            validate_grid_lock(golden_spec, bad_lock)
 
     # ------------------------------------------------------------------
     # 49. Grid lock rejects wrong lock_type
@@ -249,7 +262,7 @@ class TestGridLock:
             locked_at_utc=correct_lock.locked_at_utc,
         )
         with pytest.raises(GridLockValidationError, match='lock_type'):
-            validate_grid_spec_against_lock(golden_spec, wrong_type_lock)
+            validate_grid_lock(golden_spec, wrong_type_lock)
 
     # ------------------------------------------------------------------
     # 50. Existing identical lock with reordered keys and different
@@ -295,15 +308,15 @@ class TestGridLock:
             lock_a = load_grid_lock(path_a)
             lock_b = load_grid_lock(path_b)
 
-            assert locks_are_semantically_identical(lock_a, lock_b)
+            assert locks_are_semantically_equal(lock_a, lock_b)
 
     # ------------------------------------------------------------------
     # 51. Existing different lock is rejected by CLI (via raise from
-    #     validate_grid_spec_against_lock)
+    #     validate_grid_lock)
     # ------------------------------------------------------------------
 
     def test_different_lock_rejected(self, golden_spec, base_valid_spec):
-        """Different lock content is rejected via validate_grid_spec_against_lock."""
+        """Different lock content is rejected via validate_grid_lock."""
         golden_lock = create_grid_lock(golden_spec)
 
         # Create a lock from base_valid_spec — this will have different
@@ -311,7 +324,7 @@ class TestGridLock:
         base_lock = create_grid_lock(base_valid_spec)
 
         with pytest.raises(GridLockValidationError):
-            validate_grid_spec_against_lock(golden_spec, base_lock)
+            validate_grid_lock(golden_spec, base_lock)
 
     # ------------------------------------------------------------------
     # 52. No --force option exists
@@ -383,7 +396,7 @@ class TestGridLock:
             assert reloaded.git_sha is None
 
         # Validation should pass with this lock
-        validate_grid_spec_against_lock(golden_spec, lock)
+        validate_grid_lock(golden_spec, lock)
 
     # ------------------------------------------------------------------
     # Edge case: lock with git_sha=None is not the same as missing key

@@ -1,0 +1,40 @@
+{
+  "cost_floor": 0.005,
+  "data_corpus_hash": "a73372c55f79a56993d61d2b",
+  "entry_delays_seconds": [
+    0,
+    5,
+    15,
+    30
+  ],
+  "feature_families": [
+    "price_impulse",
+    "signed_imbalance",
+    "notional_burst",
+    "large_trade"
+  ],
+  "file_manifest_hash": "a949176fc55e938edf0ceb33",
+  "grid_hash": "2b5452f71c364bd471a7c093",
+  "horizons_seconds": [
+    60,
+    180,
+    300
+  ],
+  "lookbacks_seconds": [
+    30,
+    60
+  ],
+  "raw_cell_count": 768,
+  "regime_filter": "NO_STRESS_LABELS_DIAGNOSTIC",
+  "schema_version": "grid_manifest.v1",
+  "source_assets": [
+    "BTC",
+    "ETH"
+  ],
+  "target_assets": [
+    "SOL",
+    "LINK",
+    "DOGE",
+    "AVAX"
+  ]
+}

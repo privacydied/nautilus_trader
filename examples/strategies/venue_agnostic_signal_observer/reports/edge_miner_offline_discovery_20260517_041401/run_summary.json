@@ -1,0 +1,25 @@
+{
+  "candidate_counts": {
+    "blocked_by_locked_rejection": 0,
+    "candidate_cards": 232,
+    "cells_tested": 768,
+    "final_candidates": 0,
+    "passing_shadow": 0,
+    "raw_cells": 768,
+    "rejected_by_cpcv_nonstationarity": 0,
+    "rejected_by_dsr": 1,
+    "rejected_by_fdr": 8,
+    "rejected_by_null_mcpt": 26,
+    "rejected_on_cost_floor": 197,
+    "sent_to_shadow": 0,
+    "validator_survivors": 0
+  },
+  "corpus_status": "REAL_CORPUS_AVAILABLE",
+  "grid_hash": "2b5452f71c364bd471a7c093",
+  "no_exchange_connections_were_made": true,
+  "no_orders_were_placed": true,
+  "observer_only": true,
+  "report_dir": "examples/strategies/venue_agnostic_signal_observer/reports/edge_miner_offline_discovery_20260517_041401",
+  "schema_version": "offline_discovery_run_summary.v1",
+  "status": "OFFLINE_DISCOVERY_COMPLETE"
+}

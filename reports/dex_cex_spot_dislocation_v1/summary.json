@@ -1,0 +1,19 @@
+{
+  "summary": {
+    "total_snapshots": 18,
+    "total_events": 0,
+    "valid_evaluations": 0,
+    "rejected_evaluations": 0,
+    "fee_bps": 40.0,
+    "slippage_bps": 5.0,
+    "stale_data_buffer_bps": 10.0,
+    "quote_mismatch_buffer_bps": 5.0,
+    "total_cost_bps": 60.0,
+    "results_by_group": [],
+    "candidate_groups": [],
+    "run_duration_s": 0.0
+  },
+  "warnings": [
+    "No dislocation events generated"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "run_metadata": {
+    "start_utc": "2026-05-12T19:13:05.798608+00:00",
+    "source_venues": [
+      "BINANCE"
+    ],
+    "source_assets": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "SOL/USDT"
+    ],
+    "target_venues": [
+      "KRAKEN"
+    ],
+    "target_assets": [
+      "BTC/USD",
+      "ETH/USD",
+      "SOL/USD"
+    ],
+    "lookbacks": [
+      120.0,
+      300.0,
+      600.0
+    ],
+    "thresholds": [
+      5.0,
+      10.0,
+      20.0
+    ],
+    "horizons": [
+      "60s",
+      "300s",
+      "600s",
+      "3600s"
+    ],
+    "cooldown_seconds": 120.0,
+    "fee_bps": 10.0,
+    "slippage_bps": 2.0,
+    "grid_seconds": 60.0
+  },
+  "pairs_tested": 3,
+  "overall_summary": [
+    {
+      "label": "BINANCE(BTC/USDT) \u2192 KRAKEN(BTC/USD)",
+      "best_pass": null,
+      "total_signals": 1127,
+      "pass_count": 0
+    },
+    {
+      "label": "BINANCE(ETH/USDT) \u2192 KRAKEN(ETH/USD)",
+      "best_pass": null,
+      "total_signals": 1430,
+      "pass_count": 0
+    },
+    {
+      "label": "BINANCE(SOL/USDT) \u2192 KRAKEN(SOL/USD)",
+      "best_pass": null,
+      "total_signals": 1783,
+      "pass_count": 0
+    }
+  ]
+}

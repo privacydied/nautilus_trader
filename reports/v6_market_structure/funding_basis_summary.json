@@ -1,0 +1,20 @@
+{
+  "polls": 6,
+  "observations": 36,
+  "candidates": 0,
+  "candidates_by_asset": {},
+  "candidates_by_venue_pair": {},
+  "errors_by_venue": {},
+  "rejection_reasons": {
+    "net_edge_too_low": 12,
+    "USD_USDT_mismatch": 12,
+    "funding_rate_not_positive": 12
+  },
+  "stale_quotes": 0,
+  "max_funding_apr": 4.2453,
+  "median_funding_apr": 0.7753,
+  "max_basis_bps": 6.8695,
+  "median_basis_bps": 0.3842,
+  "max_estimated_net_edge_bps": -131.0,
+  "median_estimated_net_edge_bps": -154.6123
+}

@@ -1,0 +1,5 @@
+source_venue,target_venue,symbol,total_signals,valid_events,mean_net_return_bps,median_net_return_bps,win_rate
+coinbase,kraken,BTC-USD,39,192,-14.0364,-14.0,0.0
+coinbase,kraken,ETH-USD,62,306,-14.0554,-14.0,0.0
+kraken,coinbase,BTC-USD,17,82,-14.0105,-14.0,0.0
+kraken,coinbase,ETH-USD,13,59,-13.8509,-13.9563,0.0

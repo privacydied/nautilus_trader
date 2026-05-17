@@ -1,0 +1,43 @@
+{
+  "assertions": {
+    "decaying_caught_by_nonstationarity": true,
+    "null_does_not_promote": true,
+    "planted_scores_better_than_null": true,
+    "untradeable_detectable_but_economically_rejected": true
+  },
+  "populations": [
+    {
+      "dsr_status": "FAIL",
+      "economic_status": "BELOW_COST_FLOOR",
+      "final_status": "DIAGNOSTIC_FAIL",
+      "mean_return": -5.397e-05,
+      "name": "null",
+      "nonstationarity_status": "DECAY_SUSPECTED"
+    },
+    {
+      "dsr_status": "PASS",
+      "economic_status": "VIABLE",
+      "final_status": "DIAGNOSTIC_PASS",
+      "mean_return": 0.00678526,
+      "name": "planted_signal",
+      "nonstationarity_status": "STABLE"
+    },
+    {
+      "dsr_status": "PASS",
+      "economic_status": "BELOW_COST_FLOOR",
+      "final_status": "DIAGNOSTIC_FAIL",
+      "mean_return": 0.00092356,
+      "name": "planted_but_untradeable",
+      "nonstationarity_status": "STABLE"
+    },
+    {
+      "dsr_status": "PASS",
+      "economic_status": "VIABLE",
+      "final_status": "DIAGNOSTIC_FAIL",
+      "mean_return": 0.00510841,
+      "name": "decaying_signal",
+      "nonstationarity_status": "DECAY_SUSPECTED"
+    }
+  ],
+  "schema_version": "synthetic_smoke_summary.v1"
+}

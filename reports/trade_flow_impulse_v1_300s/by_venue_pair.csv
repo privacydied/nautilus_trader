@@ -1,0 +1,3 @@
+venue_pair,symbols,total_signals,valid_events
+coinbase->kraken,"BTC/USD,ETH/USD",475,2559
+kraken->coinbase,"BTC/USD,ETH/USD",249,1398

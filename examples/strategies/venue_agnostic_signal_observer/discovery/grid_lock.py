@@ -1,250 +1,283 @@
-"""Grid-level lock file for discovery freeze.
+# Copyright (C) 2026. All rights reserved.
+"""Grid-level lock file for the discovery freeze.
 
-A DiscoveryGridLock freezes the grid spec at discovery-start time.
-The lock records grid_hash, primary_cell_count, and cost_sensitivity_cell_count
-so that validation can detect any drift in enumeration logic.
+A ``DiscoveryGridLock`` freezes the full search space and the FDR
+denominator before any discovery scan begins.  It records the grid
+spec hash and the exact primary cell count so that a later validator
+can prove the grid has not drifted.
+
+The two-freeze rule
+-------------------
+1. Grid freeze before discovery scan starts.
+   Freezes the full search space and the FDR denominator.
+
+2. Candidate freeze after a cluster surfaces.
+   Freezes the exact discovered rule/cluster and the discovery data
+   it came from.
 """
 
 from __future__ import annotations
 
 import json
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .exceptions import (
+    GridCellCountMismatchError,
     GridHashMismatchError,
     GridLockValidationError,
-    GridCellCountMismatchError,
+    GridSpecValidationError,
 )
 from .search_space import (
     DiscoveryGridSpec,
-    validate_grid_spec,
     canonical_grid_json,
-    grid_sha256,
-    enumerate_primary_cell_count,
     enumerate_cost_sensitivity_cell_count,
-    GRID_SCHEMA_VERSION,
+    enumerate_primary_cell_count,
+    grid_sha256,
+    validate_grid_spec,
 )
-
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 GRID_LOCK_TYPE = "DISCOVERY_GRID_LOCK"
 
 
-# ---------------------------------------------------------------------------
-# Grid Lock
-# ---------------------------------------------------------------------------
+def _get_git_sha() -> str | None:
+    """Return ``git rev-parse HEAD`` or ``None`` if unavailable.
 
-@dataclass(frozen=True)
-class DiscoveryGridLock:
-    """Frozen grid-level lock that records what was searched.
-
-    Attributes:
-        lock_type: Must be "DISCOVERY_GRID_LOCK".
-        grid_id: Matches the grid spec's grid_id.
-        grid_hash: SHA-256 of the grid spec's canonical JSON.
-        schema_version: Grid schema version.
-        primary_cell_count: Computed primary cell count of the grid spec.
-        cost_sensitivity_cell_count: Computed cost-sensitivity cell count.
-        git_sha: Optional git commit SHA from git rev-parse HEAD.
-        locked_at_utc: ISO-8601 UTC timestamp of lock creation.
-    """
-
-    lock_type: str
-    grid_id: str
-    grid_hash: str
-    schema_version: str
-    primary_cell_count: int
-    cost_sensitivity_cell_count: int
-    git_sha: str | None
-    locked_at_utc: str
-
-
-# ---------------------------------------------------------------------------
-# git_sha discovery
-# ---------------------------------------------------------------------------
-
-def _discover_git_sha() -> str | None:
-    """Run git rev-parse HEAD to discover the current commit.
-
-    Returns None if git is unavailable or the command fails.
-    Never raises an exception.
+    Never raises.  Never falls back to any other command.
     """
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=10,
         )
         if result.returncode == 0:
-            sha = result.stdout.strip()
-            return sha if sha else None
-        return None
+            return result.stdout.strip()
     except (FileNotFoundError, subprocess.SubprocessError, OSError):
-        return None
+        pass
+    return None
+
+
+@dataclass(frozen=True)
+class DiscoveryGridLock:
+    """Frozen lock that records a discovery grid hash and cell counts.
+
+    Validated fields
+    ----------------
+    lock_type : ``"DISCOVERY_GRID_LOCK"``
+    grid_id : str
+        Must match the parent ``DiscoveryGridSpec.grid_id``.
+    grid_hash : str
+        SHA-256 hex digest of the canonical grid JSON.
+    schema_version : str
+        Must be ``"discovery-grid-v1"``.
+    primary_cell_count : int
+        The enumerated primary cell count of the parent grid.
+    cost_sensitivity_cell_count : int
+        ``primary_cell_count × len(cost_models_centibps)``.
+    git_sha : str | None
+        Optional git commit SHA at lock time.  ``None`` is valid
+        (CI environments without git).
+    locked_at_utc : str
+        ISO-8601 UTC timestamp.
+    """
+
+    lock_type: str = GRID_LOCK_TYPE
+    grid_id: str = ""
+    grid_hash: str = ""
+    schema_version: str = ""
+    primary_cell_count: int = 0
+    cost_sensitivity_cell_count: int = 0
+    git_sha: str | None = None
+    locked_at_utc: str = ""
 
 
 # ---------------------------------------------------------------------------
-# Create / Validate
+# Create
 # ---------------------------------------------------------------------------
 
-def create_grid_lock(spec: DiscoveryGridSpec) -> DiscoveryGridLock:
-    """Create a DiscoveryGridLock from a validated grid spec.
 
-    Validates the spec first, then computes hash and cell counts.
+def create_grid_lock(
+    spec: DiscoveryGridSpec,
+    *,
+    locked_at_utc: str | None = None,
+) -> DiscoveryGridLock:
+    """Create a grid lock from a validated grid spec.
+
+    Parameters
+    ----------
+    spec : DiscoveryGridSpec
+        The grid spec to freeze.  Must be validated first.
+    locked_at_utc : str | None
+        Optional override timestamp.  Defaults to current UTC ISO-8601.
+
+    Returns
+    -------
+    DiscoveryGridLock
+
+    Raises
+    ------
+    GridSpecValidationError
+        If the spec fails validation.
     """
     validate_grid_spec(spec)
+    if locked_at_utc is None:
+        locked_at_utc = datetime.now(timezone.utc).isoformat()
 
     grid_hash = grid_sha256(spec)
-    primary_cell_count = enumerate_primary_cell_count(spec)
-    cost_sensitivity_cell_count = enumerate_cost_sensitivity_cell_count(spec)
-    git_sha = _discover_git_sha()
-    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    primary = enumerate_primary_cell_count(spec)
+    cost_sens = enumerate_cost_sensitivity_cell_count(spec)
+
+    git_sha = _get_git_sha()
 
     return DiscoveryGridLock(
         lock_type=GRID_LOCK_TYPE,
         grid_id=spec.grid_id,
         grid_hash=grid_hash,
         schema_version=spec.schema_version,
-        primary_cell_count=primary_cell_count,
-        cost_sensitivity_cell_count=cost_sensitivity_cell_count,
+        primary_cell_count=primary,
+        cost_sensitivity_cell_count=cost_sens,
         git_sha=git_sha,
-        locked_at_utc=now_utc,
+        locked_at_utc=locked_at_utc,
     )
 
 
-def validate_grid_spec_against_lock(
+# ---------------------------------------------------------------------------
+# Validate
+# ---------------------------------------------------------------------------
+
+
+def validate_grid_lock(
     spec: DiscoveryGridSpec,
     lock: DiscoveryGridLock,
 ) -> None:
     """Validate that a grid spec matches an existing grid lock.
 
-    Raises GridLockValidationError (or subclass) on any mismatch.
-    Does NOT silently regenerate locks.
+    Raises
+    ------
+    GridSpecValidationError
+        If the spec fails validation.
+    GridLockValidationError
+        If the lock is inconsistent with the spec.
+
+    Does **not** silently regenerate or overwrite locks.
     """
-    # lock_type check
+    validate_grid_spec(spec)
+
     if lock.lock_type != GRID_LOCK_TYPE:
         raise GridLockValidationError(
-            f"Invalid lock_type: expected {GRID_LOCK_TYPE!r}, got {lock.lock_type!r}"
+            f"Invalid lock_type: expected '{GRID_LOCK_TYPE}', "
+            f"got '{lock.lock_type}'"
         )
 
-    # grid_id
-    if spec.grid_id != lock.grid_id:
+    if lock.grid_id != spec.grid_id:
         raise GridLockValidationError(
-            f"grid_id mismatch: spec={spec.grid_id!r}, lock={lock.grid_id!r}"
+            f"grid_id mismatch: lock has '{lock.grid_id}', "
+            f"spec has '{spec.grid_id}'"
         )
 
-    # schema_version
-    if spec.schema_version != lock.schema_version:
+    if lock.schema_version != spec.schema_version:
         raise GridLockValidationError(
-            f"schema_version mismatch: spec={spec.schema_version!r}, lock={lock.schema_version!r}"
+            f"schema_version mismatch: lock has '{lock.schema_version}', "
+            f"spec has '{spec.schema_version}'"
         )
 
-    # grid_hash
-    computed_hash = grid_sha256(spec)
-    if computed_hash != lock.grid_hash:
+    recomputed_hash = grid_sha256(spec)
+    if recomputed_hash != lock.grid_hash:
         raise GridHashMismatchError(
-            f"grid_hash mismatch: computed={computed_hash}, lock={lock.grid_hash}"
+            f"grid_hash mismatch for grid '{spec.grid_id}': "
+            f"lock has {lock.grid_hash}, recomputed {recomputed_hash}"
         )
 
-    # primary_cell_count
-    computed_pcc = enumerate_primary_cell_count(spec)
-    if computed_pcc != lock.primary_cell_count:
+    recomputed_primary = enumerate_primary_cell_count(spec)
+    if recomputed_primary != lock.primary_cell_count:
         raise GridCellCountMismatchError(
-            f"primary_cell_count mismatch: computed={computed_pcc}, lock={lock.primary_cell_count}"
+            f"primary_cell_count mismatch: lock has {lock.primary_cell_count}, "
+            f"recomputed {recomputed_primary}"
         )
 
-    # cost_sensitivity_cell_count
-    computed_csc = enumerate_cost_sensitivity_cell_count(spec)
-    if computed_csc != lock.cost_sensitivity_cell_count:
+    recomputed_cost = enumerate_cost_sensitivity_cell_count(spec)
+    if recomputed_cost != lock.cost_sensitivity_cell_count:
         raise GridCellCountMismatchError(
-            f"cost_sensitivity_cell_count mismatch: computed={computed_csc}, "
-            f"lock={lock.cost_sensitivity_cell_count}"
+            f"cost_sensitivity_cell_count mismatch: "
+            f"lock has {lock.cost_sensitivity_cell_count}, "
+            f"recomputed {recomputed_cost}"
         )
 
 
 # ---------------------------------------------------------------------------
-# Serialization helpers
+# Semantic equality
 # ---------------------------------------------------------------------------
 
-def locks_are_semantically_identical(
-    lock_a: DiscoveryGridLock,
-    lock_b: DiscoveryGridLock,
+
+def _canonical_lock_json(lock: DiscoveryGridLock) -> str:
+    """Canonical JSON for a lock dict (sorted keys, compact separators)."""
+    d = asdict(lock)
+    return json.dumps(d, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _lock_dict_from_file(path: Path) -> dict[str, Any]:
+    """Load a lock file and return the parsed dict."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def locks_are_semantically_equal(lock_a: DiscoveryGridLock,
+                                 lock_b: DiscoveryGridLock) -> bool:
+    """Compare two locks via canonical JSON (ignores whitespace, key order)."""
+    return _canonical_lock_json(lock_a) == _canonical_lock_json(lock_b)
+
+
+def lock_file_is_semantically_identical(
+    lock: DiscoveryGridLock,
+    path: Path,
 ) -> bool:
-    """Compare two locks by canonical JSON of their payloads.
-
-    Whitespace and key order in the original file do not matter.
-    Only semantic equality of all fields matters.
-    """
-    return _lock_canonical(lock_a) == _lock_canonical(lock_b)
-
-
-def _lock_canonical(lock: DiscoveryGridLock) -> str:
-    """Serialize a lock to canonical JSON for comparison."""
-    payload: dict[str, Any] = {
-        "lock_type": lock.lock_type,
-        "grid_id": lock.grid_id,
-        "grid_hash": lock.grid_hash,
-        "schema_version": lock.schema_version,
-        "primary_cell_count": lock.primary_cell_count,
-        "cost_sensitivity_cell_count": lock.cost_sensitivity_cell_count,
-        "git_sha": lock.git_sha,
-        "locked_at_utc": lock.locked_at_utc,
-    }
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    """Check if a lock file on disk is semantically identical to *lock*."""
+    existing_dict = _lock_dict_from_file(path)
+    if not existing_dict:
+        return False
+    # Parse into a DiscoveryGridLock for canonical comparison
+    existing_lock = DiscoveryGridLock(**existing_dict)
+    return locks_are_semantically_equal(lock, existing_lock)
 
 
 # ---------------------------------------------------------------------------
-# Load / Save
+# I/O
 # ---------------------------------------------------------------------------
-
-def _dict_to_lock(data: dict[str, Any]) -> DiscoveryGridLock:
-    """Convert a parsed JSON dict to a DiscoveryGridLock."""
-    return DiscoveryGridLock(
-        lock_type=str(data["lock_type"]),
-        grid_id=str(data["grid_id"]),
-        grid_hash=str(data["grid_hash"]),
-        schema_version=str(data["schema_version"]),
-        primary_cell_count=int(data["primary_cell_count"]),
-        cost_sensitivity_cell_count=int(data["cost_sensitivity_cell_count"]),
-        git_sha=data.get("git_sha"),  # may be None
-        locked_at_utc=str(data["locked_at_utc"]),
-    )
-
-
-def _lock_to_dict(lock: DiscoveryGridLock) -> dict[str, Any]:
-    """Convert a DiscoveryGridLock to a JSON-compatible dict."""
-    return {
-        "lock_type": lock.lock_type,
-        "grid_id": lock.grid_id,
-        "grid_hash": lock.grid_hash,
-        "schema_version": lock.schema_version,
-        "primary_cell_count": lock.primary_cell_count,
-        "cost_sensitivity_cell_count": lock.cost_sensitivity_cell_count,
-        "git_sha": lock.git_sha,
-        "locked_at_utc": lock.locked_at_utc,
-    }
-
-
-def load_grid_lock(path: str | Path) -> DiscoveryGridLock:
-    """Load a DiscoveryGridLock from a JSON file."""
-    path = Path(path)
-    with open(path, "r") as f:
-        data = json.load(f)
-    return _dict_to_lock(data)
 
 
 def save_grid_lock(lock: DiscoveryGridLock, path: str | Path) -> None:
-    """Save a DiscoveryGridLock to a JSON file."""
+    """Write a grid lock to a JSON file.
+
+    Raises
+    ------
+    FileExistsError
+        If the file exists and the content is **not** semantically
+        identical.
+    """
     path = Path(path)
-    data = _lock_to_dict(lock)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=False)
-        f.write("\n")
+    if path.exists():
+        if lock_file_is_semantically_identical(lock, path):
+            return  # Already locked with identical content
+        raise FileExistsError(
+            f"Lock file already exists with different content: {path}. "
+            "Create a new grid_id instead.  No --force option exists."
+        )
+    data = asdict(lock)
+    path.write_text(
+        json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def load_grid_lock(path: str | Path) -> DiscoveryGridLock:
+    """Load a grid lock from a JSON file."""
+    path = Path(path)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return DiscoveryGridLock(**data)

@@ -1,0 +1,3485 @@
+[
+  {
+    "signal_id": "24a388ce-07e1-46fb-a04e-bd8d3385d0bb",
+    "signal_ts": 1778631970099558144,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "7c6f555e-f954-4fc8-8660-bbd840f34bb7",
+    "signal_ts": 1778631982038649088,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "3631d1fb-6b47-4bdc-868f-9c9eda6c8332",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "3631d1fb-6b47-4bdc-868f-9c9eda6c8332",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "1d615809-5643-4bef-91b1-6ae017fccf66",
+    "signal_ts": 1778632009440386048,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "1d615809-5643-4bef-91b1-6ae017fccf66",
+    "signal_ts": 1778632009440386048,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "c2ea69e6-7df0-4b1f-8cfd-92f78d0fdf42",
+    "signal_ts": 1778632021411489024,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "c2ea69e6-7df0-4b1f-8cfd-92f78d0fdf42",
+    "signal_ts": 1778632021411489024,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "c2ea69e6-7df0-4b1f-8cfd-92f78d0fdf42",
+    "signal_ts": 1778632021411489024,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "c2ea69e6-7df0-4b1f-8cfd-92f78d0fdf42",
+    "signal_ts": 1778632021411489024,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "c2ea69e6-7df0-4b1f-8cfd-92f78d0fdf42",
+    "signal_ts": 1778632021411489024,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "c2ea69e6-7df0-4b1f-8cfd-92f78d0fdf42",
+    "signal_ts": 1778632021411489024,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "ada3df5d-a907-43fa-93fe-f5756f49b12c",
+    "signal_ts": 1778631970099558144,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "ddeb2dab-ee3f-436a-bced-fd4e76251181",
+    "signal_ts": 1778631988295731968,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "8437dc00-8f77-42ab-b3aa-6ea7d36b9bed",
+    "signal_ts": 1778631999387849216,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "8437dc00-8f77-42ab-b3aa-6ea7d36b9bed",
+    "signal_ts": 1778631999387849216,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "328e6538-7c93-4a8c-bab3-85574f8cf90e",
+    "signal_ts": 1778632018427956992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "328e6538-7c93-4a8c-bab3-85574f8cf90e",
+    "signal_ts": 1778632018427956992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "328e6538-7c93-4a8c-bab3-85574f8cf90e",
+    "signal_ts": 1778632018427956992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "328e6538-7c93-4a8c-bab3-85574f8cf90e",
+    "signal_ts": 1778632018427956992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "328e6538-7c93-4a8c-bab3-85574f8cf90e",
+    "signal_ts": 1778632018427956992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "328e6538-7c93-4a8c-bab3-85574f8cf90e",
+    "signal_ts": 1778632018427956992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "8eb3e8cf-bdc2-46d2-9ca1-35bc1574bef3",
+    "signal_ts": 1778631970100927232,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "c6492d70-7e92-45b8-a372-57aadf71a499",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "c6492d70-7e92-45b8-a372-57aadf71a499",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "5e8ba463-019c-4ccb-b351-0997829e7804",
+    "signal_ts": 1778631970099558144,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "3b06c08d-195a-447d-aa86-a52d2f187eab",
+    "signal_ts": 1778631982038649088,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "b63a04ff-651a-4f5a-840b-0f57c17fd5e0",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "b63a04ff-651a-4f5a-840b-0f57c17fd5e0",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "35c5387c-adcb-4f3a-aacd-e4cacc8ae782",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "35c5387c-adcb-4f3a-aacd-e4cacc8ae782",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "621a71ae-ad80-4ca6-abdd-0efc74b37fbe",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "621a71ae-ad80-4ca6-abdd-0efc74b37fbe",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "621a71ae-ad80-4ca6-abdd-0efc74b37fbe",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "621a71ae-ad80-4ca6-abdd-0efc74b37fbe",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "621a71ae-ad80-4ca6-abdd-0efc74b37fbe",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "621a71ae-ad80-4ca6-abdd-0efc74b37fbe",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "378aac02-a45d-4938-b6db-0629782fc5dc",
+    "signal_ts": 1778631970099558144,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "5604fcdf-76ed-4c40-91e2-683efe3b2e44",
+    "signal_ts": 1778631982038649088,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "715409c2-1f05-4173-8fac-38ecd5260408",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "715409c2-1f05-4173-8fac-38ecd5260408",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "bb7fda9c-64aa-4d73-bbc1-805173049ff5",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "bb7fda9c-64aa-4d73-bbc1-805173049ff5",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "fb1bd928-cf43-4f57-85ed-0695b7eb56db",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "fb1bd928-cf43-4f57-85ed-0695b7eb56db",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "fb1bd928-cf43-4f57-85ed-0695b7eb56db",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "fb1bd928-cf43-4f57-85ed-0695b7eb56db",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "fb1bd928-cf43-4f57-85ed-0695b7eb56db",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "fb1bd928-cf43-4f57-85ed-0695b7eb56db",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "2d2e3759-4aa7-4093-a3a4-6e38c4173850",
+    "signal_ts": 1778631970099558144,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "751f6978-4655-446c-a87e-8eb827ef4e4c",
+    "signal_ts": 1778631982038649088,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "bce3ebfa-5b44-4ea8-b179-d27131e29544",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "bce3ebfa-5b44-4ea8-b179-d27131e29544",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "b0998935-22b2-4236-9b9a-f2dccfc5055b",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "b0998935-22b2-4236-9b9a-f2dccfc5055b",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "97813f60-2578-4763-86ba-c71f60f5d17d",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "97813f60-2578-4763-86ba-c71f60f5d17d",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "97813f60-2578-4763-86ba-c71f60f5d17d",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "97813f60-2578-4763-86ba-c71f60f5d17d",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "97813f60-2578-4763-86ba-c71f60f5d17d",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "97813f60-2578-4763-86ba-c71f60f5d17d",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "1e799b1e-6b33-45d0-b215-e576e9dd6440",
+    "signal_ts": 1778631970099558144,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "33431f3d-9e6d-4ca3-bb37-da1e9167f434",
+    "signal_ts": 1778631982038649088,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "1597a610-a71c-4fc4-a323-74c374960ef0",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "1597a610-a71c-4fc4-a323-74c374960ef0",
+    "signal_ts": 1778631995704762880,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "37da5e8a-0744-4da5-af15-6733678186f7",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "37da5e8a-0744-4da5-af15-6733678186f7",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "281c7707-9927-47b7-91b7-ef271046def7",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "281c7707-9927-47b7-91b7-ef271046def7",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "281c7707-9927-47b7-91b7-ef271046def7",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "281c7707-9927-47b7-91b7-ef271046def7",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "281c7707-9927-47b7-91b7-ef271046def7",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "281c7707-9927-47b7-91b7-ef271046def7",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "564be971-8926-4624-a992-015c3a097bfa",
+    "signal_ts": 1778631966663822848,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "2a4f8dfb-0146-4d9c-a53c-af2fecba6f10",
+    "signal_ts": 1778631977116563200,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "9a55e18a-6907-48ae-ab20-bc782889c4c4",
+    "signal_ts": 1778631987262212096,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "6fe365ae-861c-4294-aa6c-69dce02885d1",
+    "signal_ts": 1778631997513276928,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "6fe365ae-861c-4294-aa6c-69dce02885d1",
+    "signal_ts": 1778631997513276928,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "9dc742ac-aeed-43bf-872d-905a9de2d1bc",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "9dc742ac-aeed-43bf-872d-905a9de2d1bc",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "0d979b53-c61b-4db0-9848-d349ed9a8dc7",
+    "signal_ts": 1778632021516901888,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "0d979b53-c61b-4db0-9848-d349ed9a8dc7",
+    "signal_ts": 1778632021516901888,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "0d979b53-c61b-4db0-9848-d349ed9a8dc7",
+    "signal_ts": 1778632021516901888,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "0d979b53-c61b-4db0-9848-d349ed9a8dc7",
+    "signal_ts": 1778632021516901888,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "0d979b53-c61b-4db0-9848-d349ed9a8dc7",
+    "signal_ts": 1778632021516901888,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "0d979b53-c61b-4db0-9848-d349ed9a8dc7",
+    "signal_ts": 1778632021516901888,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "32a9ee45-18b8-4383-be64-d6a3166ce591",
+    "signal_ts": 1778631967420948992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "cc20f16a-ee86-403a-b2a4-86335c2d8e61",
+    "signal_ts": 1778631977589804800,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "4683290e-9483-403a-997f-33b16653e25f",
+    "signal_ts": 1778631987824168960,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "f4cac9df-0712-4955-b4db-5a3d6ea92709",
+    "signal_ts": 1778631997922401792,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "f4cac9df-0712-4955-b4db-5a3d6ea92709",
+    "signal_ts": 1778631997922401792,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "c5a76aac-bfd9-4d77-8696-57372ce97450",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "c5a76aac-bfd9-4d77-8696-57372ce97450",
+    "signal_ts": 1778632010021940992,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "47c7e82b-46c2-4b5c-aa81-310c4bda0ea6",
+    "signal_ts": 1778632020559366912,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "47c7e82b-46c2-4b5c-aa81-310c4bda0ea6",
+    "signal_ts": 1778632020559366912,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "47c7e82b-46c2-4b5c-aa81-310c4bda0ea6",
+    "signal_ts": 1778632020559366912,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "47c7e82b-46c2-4b5c-aa81-310c4bda0ea6",
+    "signal_ts": 1778632020559366912,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "47c7e82b-46c2-4b5c-aa81-310c4bda0ea6",
+    "signal_ts": 1778632020559366912,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "47c7e82b-46c2-4b5c-aa81-310c4bda0ea6",
+    "signal_ts": 1778632020559366912,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "792a283d-98f5-4818-8ae1-40dc88f47a10",
+    "signal_ts": 1778631969693573120,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "59eafdff-6352-4a2f-8746-5d981982bda4",
+    "signal_ts": 1778631979900057088,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "0c87681d-b290-4971-9a87-a0dd7857778e",
+    "signal_ts": 1778631990379966976,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "b307c231-1d44-489a-a9cd-3035bf5ce24e",
+    "signal_ts": 1778632002191849984,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "b307c231-1d44-489a-a9cd-3035bf5ce24e",
+    "signal_ts": 1778632002191849984,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "5210b45a-d23e-4aa9-a179-dff9eb0e4953",
+    "signal_ts": 1778632013331991040,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "5210b45a-d23e-4aa9-a179-dff9eb0e4953",
+    "signal_ts": 1778632013331991040,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "5210b45a-d23e-4aa9-a179-dff9eb0e4953",
+    "signal_ts": 1778632013331991040,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "b40fdbce-88b4-4863-9e41-0fb226ce87f1",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "b40fdbce-88b4-4863-9e41-0fb226ce87f1",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "b40fdbce-88b4-4863-9e41-0fb226ce87f1",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "b40fdbce-88b4-4863-9e41-0fb226ce87f1",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "b40fdbce-88b4-4863-9e41-0fb226ce87f1",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "b40fdbce-88b4-4863-9e41-0fb226ce87f1",
+    "signal_ts": 1778632023468598016,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "956f9586-c5df-47ad-b9d0-5deae959cc1d",
+    "signal_ts": 1778631970100927232,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "aee0f267-6117-4c16-9a29-2a0ae9999bb2",
+    "signal_ts": 1778632000957854976,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "aee0f267-6117-4c16-9a29-2a0ae9999bb2",
+    "signal_ts": 1778632000957854976,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "bd598dbd-eac1-4767-a35e-2c205cced635",
+    "signal_ts": 1778632012112549120,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "bd598dbd-eac1-4767-a35e-2c205cced635",
+    "signal_ts": 1778632012112549120,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "6507089b-eec1-4f2e-9971-5eea75b290ab",
+    "signal_ts": 1778632022327567104,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "6507089b-eec1-4f2e-9971-5eea75b290ab",
+    "signal_ts": 1778632022327567104,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "6507089b-eec1-4f2e-9971-5eea75b290ab",
+    "signal_ts": 1778632022327567104,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "6507089b-eec1-4f2e-9971-5eea75b290ab",
+    "signal_ts": 1778632022327567104,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "6507089b-eec1-4f2e-9971-5eea75b290ab",
+    "signal_ts": 1778632022327567104,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "6507089b-eec1-4f2e-9971-5eea75b290ab",
+    "signal_ts": 1778632022327567104,
+    "target_venue": "kraken",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "ebf33dc8-05b5-4f3d-b59e-a9cef8b86302",
+    "signal_ts": 1778631955927687936,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "1de4caf3-7749-4d33-9b35-1798cb916317",
+    "signal_ts": 1778631968321839104,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "3b69d2cb-31be-4220-a79c-183d28e87920",
+    "signal_ts": 1778631988303320832,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "0f5a5471-1845-451b-9493-4813dad99b9f",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "0f5a5471-1845-451b-9493-4813dad99b9f",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "0f5a5471-1845-451b-9493-4813dad99b9f",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "0f5a5471-1845-451b-9493-4813dad99b9f",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "0f5a5471-1845-451b-9493-4813dad99b9f",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "0f5a5471-1845-451b-9493-4813dad99b9f",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "5fe96851-c995-49d0-b1e7-de6c35f05214",
+    "signal_ts": 1778632011125495040,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "5fe96851-c995-49d0-b1e7-de6c35f05214",
+    "signal_ts": 1778632011125495040,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "5fe96851-c995-49d0-b1e7-de6c35f05214",
+    "signal_ts": 1778632011125495040,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "5fe96851-c995-49d0-b1e7-de6c35f05214",
+    "signal_ts": 1778632011125495040,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "5fe96851-c995-49d0-b1e7-de6c35f05214",
+    "signal_ts": 1778632011125495040,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "5fe96851-c995-49d0-b1e7-de6c35f05214",
+    "signal_ts": 1778632011125495040,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "754317a6-4365-4a2e-b108-4f0fe6148d22",
+    "signal_ts": 1778632026131755008,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "754317a6-4365-4a2e-b108-4f0fe6148d22",
+    "signal_ts": 1778632026131755008,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "754317a6-4365-4a2e-b108-4f0fe6148d22",
+    "signal_ts": 1778632026131755008,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "754317a6-4365-4a2e-b108-4f0fe6148d22",
+    "signal_ts": 1778632026131755008,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "754317a6-4365-4a2e-b108-4f0fe6148d22",
+    "signal_ts": 1778632026131755008,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "754317a6-4365-4a2e-b108-4f0fe6148d22",
+    "signal_ts": 1778632026131755008,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "ce4f8825-1ae2-4452-be57-13c43c1d1b01",
+    "signal_ts": 1778631968321839104,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "ec07f998-30b3-428a-aaed-09edcc8fac41",
+    "signal_ts": 1778631993616440064,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "ec07f998-30b3-428a-aaed-09edcc8fac41",
+    "signal_ts": 1778631993616440064,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "ec07f998-30b3-428a-aaed-09edcc8fac41",
+    "signal_ts": 1778631993616440064,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "ec07f998-30b3-428a-aaed-09edcc8fac41",
+    "signal_ts": 1778631993616440064,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "ec07f998-30b3-428a-aaed-09edcc8fac41",
+    "signal_ts": 1778631993616440064,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "ec07f998-30b3-428a-aaed-09edcc8fac41",
+    "signal_ts": 1778631993616440064,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "4ffe1c11-02ba-49eb-b35c-fcd186f786dc",
+    "signal_ts": 1778631968324965120,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "363a060e-eac9-4c52-a642-4386a94ee2cd",
+    "signal_ts": 1778631979625616128,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "14b25e82-c6d5-4a46-9e5c-b4ad0722aa8f",
+    "signal_ts": 1778631962590411776,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "b20d5976-8d22-4f21-8ec0-1fb209e2b873",
+    "signal_ts": 1778631973078109952,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "255a61a3-ca64-4f2a-bbc3-1b934983ca25",
+    "signal_ts": 1778631988303320832,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "b3e5ffdf-0fde-45c6-9097-183a65af4bfd",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "b3e5ffdf-0fde-45c6-9097-183a65af4bfd",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "b3e5ffdf-0fde-45c6-9097-183a65af4bfd",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "b3e5ffdf-0fde-45c6-9097-183a65af4bfd",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "b3e5ffdf-0fde-45c6-9097-183a65af4bfd",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "b3e5ffdf-0fde-45c6-9097-183a65af4bfd",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "853c673c-28d5-42c6-9077-3c9b9d9d957c",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "853c673c-28d5-42c6-9077-3c9b9d9d957c",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "853c673c-28d5-42c6-9077-3c9b9d9d957c",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "853c673c-28d5-42c6-9077-3c9b9d9d957c",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "853c673c-28d5-42c6-9077-3c9b9d9d957c",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "853c673c-28d5-42c6-9077-3c9b9d9d957c",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "e25388c5-f27e-40a4-a458-22f9b107ee52",
+    "signal_ts": 1778631962590411776,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "3b83b61a-03a4-4058-a429-d8d91fac8bf6",
+    "signal_ts": 1778631973078109952,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "f7749236-f443-40bf-9b59-79b08e2478bc",
+    "signal_ts": 1778631988303320832,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "80e3f08d-29e6-4b5d-89be-906bacbf3aca",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "80e3f08d-29e6-4b5d-89be-906bacbf3aca",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "80e3f08d-29e6-4b5d-89be-906bacbf3aca",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "80e3f08d-29e6-4b5d-89be-906bacbf3aca",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "80e3f08d-29e6-4b5d-89be-906bacbf3aca",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "80e3f08d-29e6-4b5d-89be-906bacbf3aca",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "25d782dd-c7b4-41df-b348-afe6d10e4930",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "25d782dd-c7b4-41df-b348-afe6d10e4930",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "25d782dd-c7b4-41df-b348-afe6d10e4930",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "25d782dd-c7b4-41df-b348-afe6d10e4930",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "25d782dd-c7b4-41df-b348-afe6d10e4930",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "25d782dd-c7b4-41df-b348-afe6d10e4930",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "957b8484-8244-48e6-82bf-0dca787f273e",
+    "signal_ts": 1778631962590411776,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "76868917-d015-49c8-a043-c00bd65cb87a",
+    "signal_ts": 1778631973078109952,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "18c9bf58-d506-4e50-8387-045ef3422dd4",
+    "signal_ts": 1778631988303320832,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "3513414a-f0db-4b8c-bad8-072f23b36872",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "3513414a-f0db-4b8c-bad8-072f23b36872",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "3513414a-f0db-4b8c-bad8-072f23b36872",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "3513414a-f0db-4b8c-bad8-072f23b36872",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "3513414a-f0db-4b8c-bad8-072f23b36872",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "3513414a-f0db-4b8c-bad8-072f23b36872",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "11b40afc-1a72-45a4-abc7-132ccaa67d6e",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "11b40afc-1a72-45a4-abc7-132ccaa67d6e",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "11b40afc-1a72-45a4-abc7-132ccaa67d6e",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "11b40afc-1a72-45a4-abc7-132ccaa67d6e",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "11b40afc-1a72-45a4-abc7-132ccaa67d6e",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "11b40afc-1a72-45a4-abc7-132ccaa67d6e",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "74ba3dad-ef39-4f85-8a9d-0a3d1af49712",
+    "signal_ts": 1778631962590411776,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "f32d7abe-2456-44dc-9869-f59855dcc077",
+    "signal_ts": 1778631973078109952,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "8d875b70-e872-452b-9a85-ec2bb24799a0",
+    "signal_ts": 1778631988303320832,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "f0af21c7-a2e0-4bc0-8842-5c1437c7f488",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "f0af21c7-a2e0-4bc0-8842-5c1437c7f488",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "f0af21c7-a2e0-4bc0-8842-5c1437c7f488",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "f0af21c7-a2e0-4bc0-8842-5c1437c7f488",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "f0af21c7-a2e0-4bc0-8842-5c1437c7f488",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "f0af21c7-a2e0-4bc0-8842-5c1437c7f488",
+    "signal_ts": 1778631999316883200,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "6563dcca-eee5-4c60-8007-6ff5bab2c84b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "6563dcca-eee5-4c60-8007-6ff5bab2c84b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "6563dcca-eee5-4c60-8007-6ff5bab2c84b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "6563dcca-eee5-4c60-8007-6ff5bab2c84b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "6563dcca-eee5-4c60-8007-6ff5bab2c84b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "6563dcca-eee5-4c60-8007-6ff5bab2c84b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "3209b1c5-4b1c-4300-a959-ac3d4b42c247",
+    "signal_ts": 1778631962675878912,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "a49bfffd-b320-4755-81e8-462a43db12a5",
+    "signal_ts": 1778631972975747072,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "651a92e4-7e85-48db-a167-edc751236f1c",
+    "signal_ts": 1778631986221345024,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "fbeda9ec-6631-4424-a0fd-6a87dc02246b",
+    "signal_ts": 1778631997924781056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "fbeda9ec-6631-4424-a0fd-6a87dc02246b",
+    "signal_ts": 1778631997924781056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "fbeda9ec-6631-4424-a0fd-6a87dc02246b",
+    "signal_ts": 1778631997924781056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "fbeda9ec-6631-4424-a0fd-6a87dc02246b",
+    "signal_ts": 1778631997924781056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "fbeda9ec-6631-4424-a0fd-6a87dc02246b",
+    "signal_ts": 1778631997924781056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "fbeda9ec-6631-4424-a0fd-6a87dc02246b",
+    "signal_ts": 1778631997924781056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "49921673-5766-4006-b7c8-fd8701c52c86",
+    "signal_ts": 1778632008347887872,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "49921673-5766-4006-b7c8-fd8701c52c86",
+    "signal_ts": 1778632008347887872,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "49921673-5766-4006-b7c8-fd8701c52c86",
+    "signal_ts": 1778632008347887872,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "49921673-5766-4006-b7c8-fd8701c52c86",
+    "signal_ts": 1778632008347887872,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "49921673-5766-4006-b7c8-fd8701c52c86",
+    "signal_ts": 1778632008347887872,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "49921673-5766-4006-b7c8-fd8701c52c86",
+    "signal_ts": 1778632008347887872,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "89d19136-d320-47ee-8d44-6a90428a682e",
+    "signal_ts": 1778632018381542912,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "89d19136-d320-47ee-8d44-6a90428a682e",
+    "signal_ts": 1778632018381542912,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "89d19136-d320-47ee-8d44-6a90428a682e",
+    "signal_ts": 1778632018381542912,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "89d19136-d320-47ee-8d44-6a90428a682e",
+    "signal_ts": 1778632018381542912,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "89d19136-d320-47ee-8d44-6a90428a682e",
+    "signal_ts": 1778632018381542912,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "89d19136-d320-47ee-8d44-6a90428a682e",
+    "signal_ts": 1778632018381542912,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "72974b98-1d61-49a2-99c2-ac0ea47b1aef",
+    "signal_ts": 1778632028684045056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_entry_reference_price"
+  },
+  {
+    "signal_id": "72974b98-1d61-49a2-99c2-ac0ea47b1aef",
+    "signal_ts": 1778632028684045056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_entry_reference_price"
+  },
+  {
+    "signal_id": "72974b98-1d61-49a2-99c2-ac0ea47b1aef",
+    "signal_ts": 1778632028684045056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_entry_reference_price"
+  },
+  {
+    "signal_id": "72974b98-1d61-49a2-99c2-ac0ea47b1aef",
+    "signal_ts": 1778632028684045056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_entry_reference_price"
+  },
+  {
+    "signal_id": "72974b98-1d61-49a2-99c2-ac0ea47b1aef",
+    "signal_ts": 1778632028684045056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_entry_reference_price"
+  },
+  {
+    "signal_id": "72974b98-1d61-49a2-99c2-ac0ea47b1aef",
+    "signal_ts": 1778632028684045056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_entry_reference_price"
+  },
+  {
+    "signal_id": "2a69b6b7-ac07-470f-af6c-58c763853507",
+    "signal_ts": 1778631955927687936,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "7bdfadba-2b45-4160-bdf2-e172ce7ec712",
+    "signal_ts": 1778631968321839104,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "79c0ebad-685c-4f92-851a-a51a8efbe55b",
+    "signal_ts": 1778631980520653056,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "ec86e7b4-ccec-45be-9ddc-28e1010763cc",
+    "signal_ts": 1778631991212560896,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "ec86e7b4-ccec-45be-9ddc-28e1010763cc",
+    "signal_ts": 1778631991212560896,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "ec86e7b4-ccec-45be-9ddc-28e1010763cc",
+    "signal_ts": 1778631991212560896,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "ec86e7b4-ccec-45be-9ddc-28e1010763cc",
+    "signal_ts": 1778631991212560896,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "ec86e7b4-ccec-45be-9ddc-28e1010763cc",
+    "signal_ts": 1778631991212560896,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "ec86e7b4-ccec-45be-9ddc-28e1010763cc",
+    "signal_ts": 1778631991212560896,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "4b6471ef-3953-4ace-8103-698b7a04952e",
+    "signal_ts": 1778632006473313024,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "4b6471ef-3953-4ace-8103-698b7a04952e",
+    "signal_ts": 1778632006473313024,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "4b6471ef-3953-4ace-8103-698b7a04952e",
+    "signal_ts": 1778632006473313024,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "4b6471ef-3953-4ace-8103-698b7a04952e",
+    "signal_ts": 1778632006473313024,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "4b6471ef-3953-4ace-8103-698b7a04952e",
+    "signal_ts": 1778632006473313024,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "4b6471ef-3953-4ace-8103-698b7a04952e",
+    "signal_ts": 1778632006473313024,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "626f4961-611b-419d-aaf1-6239b0c7290c",
+    "signal_ts": 1778632017435084032,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "626f4961-611b-419d-aaf1-6239b0c7290c",
+    "signal_ts": 1778632017435084032,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "626f4961-611b-419d-aaf1-6239b0c7290c",
+    "signal_ts": 1778632017435084032,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "626f4961-611b-419d-aaf1-6239b0c7290c",
+    "signal_ts": 1778632017435084032,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "626f4961-611b-419d-aaf1-6239b0c7290c",
+    "signal_ts": 1778632017435084032,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "626f4961-611b-419d-aaf1-6239b0c7290c",
+    "signal_ts": 1778632017435084032,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "51e8edbf-2ff5-49cc-a1a2-db24d9d6d70b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "51e8edbf-2ff5-49cc-a1a2-db24d9d6d70b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "51e8edbf-2ff5-49cc-a1a2-db24d9d6d70b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "51e8edbf-2ff5-49cc-a1a2-db24d9d6d70b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "51e8edbf-2ff5-49cc-a1a2-db24d9d6d70b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "51e8edbf-2ff5-49cc-a1a2-db24d9d6d70b",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "2556aede-b34b-4758-a529-135e1dc7d63c",
+    "signal_ts": 1778631963811969024,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "79e75b40-0815-4c07-9b48-90255ad2af97",
+    "signal_ts": 1778631977050902016,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "38104b6b-1166-4e7f-b4d0-83240c215518",
+    "signal_ts": 1778631987084570880,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "83e69cfc-d0e6-47a6-8e9a-d754374db1cb",
+    "signal_ts": 1778631997922674944,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "83e69cfc-d0e6-47a6-8e9a-d754374db1cb",
+    "signal_ts": 1778631997922674944,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "83e69cfc-d0e6-47a6-8e9a-d754374db1cb",
+    "signal_ts": 1778631997922674944,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "83e69cfc-d0e6-47a6-8e9a-d754374db1cb",
+    "signal_ts": 1778631997922674944,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "83e69cfc-d0e6-47a6-8e9a-d754374db1cb",
+    "signal_ts": 1778631997922674944,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "83e69cfc-d0e6-47a6-8e9a-d754374db1cb",
+    "signal_ts": 1778631997922674944,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "6ebe5218-4bc0-45cb-af81-57a38d73c4b2",
+    "signal_ts": 1778632014615865088,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "6ebe5218-4bc0-45cb-af81-57a38d73c4b2",
+    "signal_ts": 1778632014615865088,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "6ebe5218-4bc0-45cb-af81-57a38d73c4b2",
+    "signal_ts": 1778632014615865088,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "6ebe5218-4bc0-45cb-af81-57a38d73c4b2",
+    "signal_ts": 1778632014615865088,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "6ebe5218-4bc0-45cb-af81-57a38d73c4b2",
+    "signal_ts": 1778632014615865088,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "6ebe5218-4bc0-45cb-af81-57a38d73c4b2",
+    "signal_ts": 1778632014615865088,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "16f8068a-a4f4-4c8d-99f2-4c77f4ef8c34",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "16f8068a-a4f4-4c8d-99f2-4c77f4ef8c34",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "16f8068a-a4f4-4c8d-99f2-4c77f4ef8c34",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "16f8068a-a4f4-4c8d-99f2-4c77f4ef8c34",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "16f8068a-a4f4-4c8d-99f2-4c77f4ef8c34",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "16f8068a-a4f4-4c8d-99f2-4c77f4ef8c34",
+    "signal_ts": 1778632027496640000,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "e84a0ecb-0267-46bb-a8b8-5cddab7819ab",
+    "signal_ts": 1778631973078216192,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "b5be6200-65c0-4258-b60f-8917617ba49f",
+    "signal_ts": 1778631983683873024,
+    "target_venue": "kraken",
+    "target_symbol": "ETH/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "3415092f-d717-4250-a915-ad8c7020fb37",
+    "signal_ts": 1778631986371069952,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "43146017-ba40-4bc8-80f3-40e68ecd30ef",
+    "signal_ts": 1778631997945468928,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "053c5bd0-4970-4e1a-a0b7-046d4ca4298a",
+    "signal_ts": 1778631986371069952,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "ef9b0d5c-d8b9-4fad-b18a-5220614f2405",
+    "signal_ts": 1778631997945468928,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "762a477b-a53d-4bce-a10c-854cfdaedaff",
+    "signal_ts": 1778631986371069952,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "d9a12548-8aca-4dba-bff9-319f78980460",
+    "signal_ts": 1778631997945468928,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "db39bdc6-b1dc-4534-97a6-5cf565f8ba7a",
+    "signal_ts": 1778632013237394944,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "db39bdc6-b1dc-4534-97a6-5cf565f8ba7a",
+    "signal_ts": 1778632013237394944,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "79249043-af9e-43c2-81bd-d8f22f0c1d55",
+    "signal_ts": 1778631986371069952,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "3c891e73-ca4c-42da-a46c-e8fe0995e2c2",
+    "signal_ts": 1778631997945468928,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "9b5df601-b95c-47f1-bd87-cd9745d9b9d7",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "9b5df601-b95c-47f1-bd87-cd9745d9b9d7",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "9b5df601-b95c-47f1-bd87-cd9745d9b9d7",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "4401a5bc-ddc0-4535-b17b-922b8db7b7dd",
+    "signal_ts": 1778631986371069952,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "03d0d46a-8c89-4849-af64-5fb3e7f27519",
+    "signal_ts": 1778631997945468928,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "ed04f989-10ed-429e-8044-e085a732ef4e",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "ed04f989-10ed-429e-8044-e085a732ef4e",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "ed04f989-10ed-429e-8044-e085a732ef4e",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "b352a128-2911-451f-b1e0-aec8c8525248",
+    "signal_ts": 1778631986371069952,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "6e1a1523-2f97-44b3-9de0-04bdaca1316d",
+    "signal_ts": 1778631997945468928,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "02855d7d-b2da-4f0f-a4b5-ca26a11da9aa",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "02855d7d-b2da-4f0f-a4b5-ca26a11da9aa",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "02855d7d-b2da-4f0f-a4b5-ca26a11da9aa",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "5d6e884f-5a89-431c-9876-1326e42be49d",
+    "signal_ts": 1778631986371069952,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "cb966378-3b85-4a3e-9a4e-56372f899d66",
+    "signal_ts": 1778631997945468928,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "f409c306-7b1a-461a-a637-de8e310f384f",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "f409c306-7b1a-461a-a637-de8e310f384f",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "f409c306-7b1a-461a-a637-de8e310f384f",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "88e6109f-b126-4ba0-b5b5-10ee11b25b93",
+    "signal_ts": 1778631978667574016,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "e57b5c88-5461-48e1-86c2-54bac4a86ba0",
+    "signal_ts": 1778631997945468928,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "f20267e3-7a40-43f7-87d8-a6430fd50ac1",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "f20267e3-7a40-43f7-87d8-a6430fd50ac1",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "f20267e3-7a40-43f7-87d8-a6430fd50ac1",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "82ffec14-bce9-4548-96c1-506493419810",
+    "signal_ts": 1778631986249551104,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "32820d9a-e1be-4272-b2df-477cfe987abe",
+    "signal_ts": 1778631997945468928,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "a8bb0e34-6561-4eb0-ab57-9e307f39d920",
+    "signal_ts": 1778632017897658112,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "a8bb0e34-6561-4eb0-ab57-9e307f39d920",
+    "signal_ts": 1778632017897658112,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "0b09a4e1-f933-484c-9997-c45bad109a1c",
+    "signal_ts": 1778631986249551104,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "07cc9f2c-d005-432e-9632-acfa25fb99d3",
+    "signal_ts": 1778631997945468928,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "6a7ec806-1853-46f0-94c0-9a05cca1af09",
+    "signal_ts": 1778632017897658112,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "6a7ec806-1853-46f0-94c0-9a05cca1af09",
+    "signal_ts": 1778632017897658112,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "9d352927-b37d-4d3f-9637-5ba2cbe1a640",
+    "signal_ts": 1778631986371069952,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "3afef63f-ee6a-4607-a757-0dd841d9f8ab",
+    "signal_ts": 1778631997040013056,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "55925ba1-4227-468b-aa91-b2ec471b200a",
+    "signal_ts": 1778632013237394944,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "55925ba1-4227-468b-aa91-b2ec471b200a",
+    "signal_ts": 1778632013237394944,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "93fa1ce6-acab-40b1-a2e6-76152b23638a",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "93fa1ce6-acab-40b1-a2e6-76152b23638a",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "93fa1ce6-acab-40b1-a2e6-76152b23638a",
+    "signal_ts": 1778632023477339136,
+    "target_venue": "coinbase",
+    "target_symbol": "BTC/USD",
+    "signal_type": "signed_imbalance",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "8a8a1b7e-1ac1-4b67-8373-2d5123a4eaa4",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "8a8a1b7e-1ac1-4b67-8373-2d5123a4eaa4",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "8a8a1b7e-1ac1-4b67-8373-2d5123a4eaa4",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "8a8a1b7e-1ac1-4b67-8373-2d5123a4eaa4",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "8a8a1b7e-1ac1-4b67-8373-2d5123a4eaa4",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "8a8a1b7e-1ac1-4b67-8373-2d5123a4eaa4",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "d11bc297-f524-4f31-8802-fc1f91a68c5f",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "d11bc297-f524-4f31-8802-fc1f91a68c5f",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "d11bc297-f524-4f31-8802-fc1f91a68c5f",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "d11bc297-f524-4f31-8802-fc1f91a68c5f",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "d11bc297-f524-4f31-8802-fc1f91a68c5f",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "d11bc297-f524-4f31-8802-fc1f91a68c5f",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "49530069-ea37-48fe-a8d4-56a3d9f83b08",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "49530069-ea37-48fe-a8d4-56a3d9f83b08",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "49530069-ea37-48fe-a8d4-56a3d9f83b08",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "49530069-ea37-48fe-a8d4-56a3d9f83b08",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "49530069-ea37-48fe-a8d4-56a3d9f83b08",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "49530069-ea37-48fe-a8d4-56a3d9f83b08",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "de806947-a2d4-4af5-b6b9-c9afd12fa2d1",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "de806947-a2d4-4af5-b6b9-c9afd12fa2d1",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "de806947-a2d4-4af5-b6b9-c9afd12fa2d1",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "de806947-a2d4-4af5-b6b9-c9afd12fa2d1",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "de806947-a2d4-4af5-b6b9-c9afd12fa2d1",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "de806947-a2d4-4af5-b6b9-c9afd12fa2d1",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "notional_burst",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "a21cc40d-38cc-48a2-8af1-63df91e3c7f2",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "a21cc40d-38cc-48a2-8af1-63df91e3c7f2",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "a21cc40d-38cc-48a2-8af1-63df91e3c7f2",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "a21cc40d-38cc-48a2-8af1-63df91e3c7f2",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "a21cc40d-38cc-48a2-8af1-63df91e3c7f2",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "a21cc40d-38cc-48a2-8af1-63df91e3c7f2",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "dc645186-19de-4c61-8b98-61d59498dd68",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "dc645186-19de-4c61-8b98-61d59498dd68",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "dc645186-19de-4c61-8b98-61d59498dd68",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "dc645186-19de-4c61-8b98-61d59498dd68",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "dc645186-19de-4c61-8b98-61d59498dd68",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "dc645186-19de-4c61-8b98-61d59498dd68",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "d614a193-14d8-4534-91ed-9487b6f82793",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "d614a193-14d8-4534-91ed-9487b6f82793",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "d614a193-14d8-4534-91ed-9487b6f82793",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "d614a193-14d8-4534-91ed-9487b6f82793",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "d614a193-14d8-4534-91ed-9487b6f82793",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "d614a193-14d8-4534-91ed-9487b6f82793",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  },
+  {
+    "signal_id": "198120a1-0029-452d-bb74-752248075743",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 1000,
+    "rejection_reason": "no_forward_price_at_1000ms"
+  },
+  {
+    "signal_id": "198120a1-0029-452d-bb74-752248075743",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 2000,
+    "rejection_reason": "no_forward_price_at_2000ms"
+  },
+  {
+    "signal_id": "198120a1-0029-452d-bb74-752248075743",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 5000,
+    "rejection_reason": "no_forward_price_at_5000ms"
+  },
+  {
+    "signal_id": "198120a1-0029-452d-bb74-752248075743",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 10000,
+    "rejection_reason": "no_forward_price_at_10000ms"
+  },
+  {
+    "signal_id": "198120a1-0029-452d-bb74-752248075743",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 30000,
+    "rejection_reason": "no_forward_price_at_30000ms"
+  },
+  {
+    "signal_id": "198120a1-0029-452d-bb74-752248075743",
+    "signal_ts": 1778632028117697024,
+    "target_venue": "coinbase",
+    "target_symbol": "ETH/USD",
+    "signal_type": "large_trade",
+    "horizon_ms": 60000,
+    "rejection_reason": "no_forward_price_at_60000ms"
+  }
+]
