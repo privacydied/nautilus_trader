@@ -284,7 +284,7 @@ def build_accumulated_stress_corpus(
         "status": status,
     })
     coverage_by_target = {
-        target: sum(1 for window in usable_windows if target in window.target_assets_available)
+        target: sum(1 for window in windows if target in window.target_assets_available)
         for target in TARGET_ASSETS
     }
     source_files = [str(p) for p in files if _asset_from_filename(p) in SOURCE_ASSETS]
@@ -333,6 +333,7 @@ def build_accumulated_stress_corpus(
     }
     target_coverage_summary = {
         "schema_version": "accumulated_target_coverage_summary.v1",
+        "status": status,
         "coverage_by_target": coverage_by_target,
         "target_assets": list(TARGET_ASSETS),
         "stress_window_count": len(windows),

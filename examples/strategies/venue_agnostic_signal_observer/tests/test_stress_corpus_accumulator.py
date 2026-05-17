@@ -12,6 +12,13 @@ PROJECT_ROOT = str(Path(__file__).resolve().parents[4])
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture import (
+    build_parser as build_capture_parser,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (
+    TARGET_ASSETS,
+    _asset_from_filename,
+)
 from examples.strategies.venue_agnostic_signal_observer.stress_corpus_accumulator import (
     MIN_READY_USABLE_WINDOWS,
     build_accumulated_stress_corpus,
@@ -62,6 +69,25 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
+def _split_symbols(raw: str) -> set[str]:
+    return {item.strip() for item in raw.split(",") if item.strip()}
+
+
+def test_capture_default_target_contract_includes_all_stress_beta_targets():
+    args = build_capture_parser().parse_args([])
+    target_symbols = _split_symbols(args.target_symbols)
+
+    assert set(TARGET_ASSETS) == {"SOL", "LINK", "DOGE", "AVAX"}
+    assert {f"{asset}/USD" for asset in TARGET_ASSETS}.issubset(target_symbols)
+    if "AVAX" in TARGET_ASSETS:
+        assert "AVAX/USD" in target_symbols
+
+
+def test_unresolved_capture_filename_prefix_is_parsed_by_artifact_layer():
+    assert _asset_from_filename(Path("trades_coinbase_UNRESOLVED:AVAX-USD_1.jsonl")) == "AVAX"
+    assert _asset_from_filename(Path("trades_kraken_UNRESOLVED:XDG-USD_1.jsonl")) == "DOGE"
+
+
 class TestStressCorpusAccumulator:
     def test_quiet_input_produces_no_new_stress_windows(self, tmp_path: Path):
         data = tmp_path / "data"
@@ -99,6 +125,31 @@ class TestStressCorpusAccumulator:
         manifest = _read_json(result.manifest_path)
         assert manifest["stress_windows"][0]["target_assets_missing"]
 
+    def test_partial_target_coverage_summary_counts_all_stress_windows(self, tmp_path: Path):
+        data = tmp_path / "data"
+        ticks: list[TradeTickLite] = []
+        for idx in range(6):
+            ticks.extend(_source_stress_ticks("BTC", offset_s=idx * 60 * 60))
+        _write_ticks(data / "trades_local_BTC-USD_1.jsonl", ticks)
+        _write_ticks(data / "trades_local_SOL-USD_1.jsonl", _target_ticks("SOL"))
+        for target in ("LINK", "DOGE"):
+            _write_ticks(data / f"trades_local_{target}-USD_1.jsonl", _target_ticks(target, end_s=60 * 60 + 420 + 360))
+
+        result = build_accumulated_stress_corpus((data,), tmp_path / "out", created_at_utc="2026-01-01T00:00:00+00:00")
+
+        summary = _read_json(result.output_dir / "target_coverage_summary.json")
+        assert result.status == "TARGET_COVERAGE_LIMITED"
+        assert result.stress_window_count == 6
+        assert result.usable_window_count == 0
+        assert summary["status"] == "TARGET_COVERAGE_LIMITED"
+        assert summary["coverage_by_target"] == {
+            "SOL": 6,
+            "LINK": 2,
+            "DOGE": 2,
+            "AVAX": 0,
+        }
+        assert summary["usable_window_count"] == 0
+
     def test_source_stress_with_target_coverage_is_accepted_but_accumulating(self, tmp_path: Path):
         data = tmp_path / "data"
         _write_ticks(data / "trades_local_BTC-USD_1.jsonl", _source_stress_ticks())
@@ -126,6 +177,8 @@ class TestStressCorpusAccumulator:
 
         assert result.status == "CORPUS_READY_FOR_RERUN"
         assert result.usable_window_count == MIN_READY_USABLE_WINDOWS
+        summary = _read_json(result.output_dir / "target_coverage_summary.json")
+        assert summary["coverage_by_target"] == {target: MIN_READY_USABLE_WINDOWS for target in TARGET_ASSETS}
         manifest = load_accumulated_corpus_manifest(result.manifest_path)
         assert manifest["ready_for_rerun"] is True
 
@@ -141,10 +194,13 @@ class TestStressCorpusAccumulator:
         second = build_accumulated_stress_corpus((data_b,), tmp_path / "out_b", created_at_utc="2026-01-01T00:00:00+00:00")
         windows_a = _read_json(first.manifest_path)["stress_windows"]
         windows_b = _read_json(second.manifest_path)["stress_windows"]
+        summary_a = _read_json(first.output_dir / "target_coverage_summary.json")
+        summary_b = _read_json(second.output_dir / "target_coverage_summary.json")
 
         comparable_a = [{k: v for k, v in row.items() if k != "stress_window_id"} for row in windows_a]
         comparable_b = [{k: v for k, v in row.items() if k != "stress_window_id"} for row in windows_b]
         assert comparable_a == comparable_b
+        assert summary_a["coverage_by_target"] == summary_b["coverage_by_target"]
 
     def test_corpus_hash_is_stable(self, tmp_path: Path):
         data = tmp_path / "data"

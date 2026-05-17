@@ -986,9 +986,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--run-id", type=str, default=None,
                     help="Optional run ID. Auto-generated if not provided.")
     p.add_argument("--source-venue", type=str, default="binance_perp")
-    p.add_argument("--source-symbols", type=str, default="BTC/USDT,ETH/USDT,SOL/USDT")
+    p.add_argument("--source-symbols", type=str, default="BTC/USDT,ETH/USDT")
     p.add_argument("--target-venues", type=str, default="kraken,coinbase")
-    p.add_argument("--target-symbols", type=str, default="BTC/USD,ETH/USD,SOL/USD")
+    p.add_argument("--target-symbols", type=str, default="BTC/USD,ETH/USD,SOL/USD,LINK/USD,DOGE/USD,AVAX/USD")
     p.add_argument("--duration-seconds", type=int, default=600)
     p.add_argument("--capture-open-interest", action="store_true", default=False)
     p.add_argument("--open-interest-interval-seconds", type=int, default=5)

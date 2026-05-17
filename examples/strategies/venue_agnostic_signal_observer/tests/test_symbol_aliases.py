@@ -57,6 +57,16 @@ class TestSymbolResolution:
         c = resolve_symbol("ETH/USD")
         assert c == CanonicalSymbol("ETH", "USD")
 
+    @pytest.mark.parametrize("raw", ["AVAX/USD", "AVAX-USD"])
+    def test_avax_usd_variants(self, raw: str):
+        c = resolve_symbol(raw)
+        assert c == CanonicalSymbol("AVAX", "USD")
+
+    @pytest.mark.parametrize("raw", ["UNRESOLVED:AVAX/USD", "UNRESOLVED:AVAX-USD"])
+    def test_unresolved_prefix_is_not_a_symbol_alias(self, raw: str):
+        with pytest.raises(ValueError):
+            resolve_symbol(raw)
+
     def test_kraken_xethzusd(self):
         c = resolve_symbol("XETHZUSD")
         assert c == CanonicalSymbol("ETH", "USD")
