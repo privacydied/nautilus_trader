@@ -41,14 +41,13 @@ from .funding_crowding_reversal import (
     signal_return_bps_for_negative_funding,
     signal_return_bps_for_positive_funding,
     compute_past_only_percentile_threshold,
+    net_signal_return_bps,
 )
 
 from .funding_crowding_timestamp_null import (
     TimestampShuffleNullInput,
     TimestampShuffleNullResult,
     run_timestamp_shuffle_null,
-    NO_NULL_WORTHY_CELLS,
-    NULL_REJECTED_DIAGNOSTIC,
     STATUS_TIMESTAMP_SHUFFLE_NULL_INVALID_INPUT,
 )
 
@@ -814,7 +813,6 @@ def run_null_for_cell(
     p_value = null_result.empirical_p_value
 
     if null_result.status in (
-        NO_NULL_WORTHY_CELLS,
         STATUS_TIMESTAMP_SHUFFLE_NULL_INVALID_INPUT,
     ):
         new_verdict = VERDICT_NO_NULL_WORTHY

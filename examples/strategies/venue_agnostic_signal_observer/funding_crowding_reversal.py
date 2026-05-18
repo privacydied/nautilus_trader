@@ -144,7 +144,7 @@ def net_signal_return_bps(
     forward_btc_spot_return_bps: float,
     *,
     funding_positive: bool,
-    total_cost_bps: float = TOTAL_COST_BPS,
+    total_cost_bps: float = PRIMARY_COST_BPS,
 ) -> float:
     """Compute net reversal return after cost."""
     raw = (

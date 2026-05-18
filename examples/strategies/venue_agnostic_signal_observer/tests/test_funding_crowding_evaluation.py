@@ -1020,7 +1020,7 @@ class TestExistingTests:
         from examples.strategies.venue_agnostic_signal_observer import (
             funding_crowding_timestamp_null,
         )
-        assert funding_crowding_timestamp_null.NO_NULL_WORTHY_CELLS == "NO_NULL_WORTHY_CELLS"
+        assert funding_crowding_timestamp_null.STATUS_TIMESTAMP_SHUFFLE_NULL_REJECTED_DIAGNOSTIC == "TIMESTAMP_SHUFFLE_NULL_REJECTED_DIAGNOSTIC"
 
 
 # ===================================================================
