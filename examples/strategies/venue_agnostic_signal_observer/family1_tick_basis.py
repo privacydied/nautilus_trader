@@ -123,6 +123,9 @@ def compute_family1_tick_signal(
         direction = 1.0 if basis_change_bps < 0.0 else -1.0
 
         # --- forward return (unscaled by signal magnitude) ---
+        # Local guard despite upstream entry_price check — cascaded-guard defence
+        if entry_price <= 0 or not math.isfinite(entry_price) or not math.isfinite(exit_price):
+            continue
         target_return_bps = ((exit_price / entry_price) - 1.0) * 10_000.0
         raw_bps = direction * target_return_bps
         net_bps = raw_bps - cost_total
