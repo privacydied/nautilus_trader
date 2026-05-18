@@ -1,0 +1,7 @@
+INVALIDATION
+Status: INVALID_RUN_BUG_COMPROMISED_EVENTS_DROPPED
+Previous SHA: ad55c351f03b53b6633bf56a5fa81905e303209a
+Reason: CellResult.to_dict() omitted events; null/holdout/FDR gates received empty event tuples
+Invalid verdicts: 35 NO_NULL_WORTHY_CELLS
+Valid-but-not-final: 25 NEEDS_MORE_DATA sample-size classifications were not null-gate dependent
+Quarantined at: 2026-05-18 18:00 UTC
