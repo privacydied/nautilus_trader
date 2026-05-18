@@ -74,12 +74,17 @@ DIRECTIONS: list[str] = [DIRECTION_POSITIVE_FUNDING, DIRECTION_NEGATIVE_FUNDING]
 
 # ---------------------------------------------------------------------------
 # Cost model (from existing FeeModel defaults in config.py)
-# ---------------------------------------------------------------------------
+# Cost model (from existing FeeModel defaults in config.py)
+# PRIMARY_COST_BPS: primary candidate-gating cost
+# OPTIMISTIC_COST_BPS: diagnostic sensitivity tier (never gates promotion)
 
 FEE_BPS: float = 5.0
 SLIPPAGE_BPS: float = 1.0
 QUOTE_MISMATCH_BUFFER_BPS: float = 0.0
 TOTAL_COST_BPS: float = FEE_BPS + SLIPPAGE_BPS  # 6.0
+
+PRIMARY_COST_BPS: float = 50.0  # 40 fee + 5 slippage + 5 buffer (gates promotion)
+OPTIMISTIC_COST_BPS: float = TOTAL_COST_BPS  # 6.0 (diagnostic sensitivity only)
 
 # ---------------------------------------------------------------------------
 # Acceptance gates
