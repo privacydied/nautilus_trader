@@ -60,13 +60,21 @@ For Binance Vision, download monthly `.zip` files from `https://data.binance.vis
 python -m pytest examples/strategies/venue_agnostic_signal_observer/tests/test_funding_dispersion_carry.py -v
 ```
 
-## The study has NOT been run
+## Study evaluation completed
 
-No verdict file exists. No evaluation has been performed against real data. The pipeline is ready to run but has not been executed. The precommitment must be frozen (committed to the project) before the first evaluation run. Running against real data before freezing would break the precommitment property.
+The first evaluation run was performed on 2026-05-18. The precommitment was frozen and committed (SHA `27119f35c7`) before the run. The evaluation used archive-only data (no REST, WebSocket, auth, or live endpoints).
 
-All three pre-freeze ambiguities have been resolved and written into the precommitment (Appendix A):
-- R1: funding-unit heuristic confirmed against actual Binance Vision CSV and Bybit archive format (both are decimal fractions)
-- R2: worst-decile = p10 single value
-- R3: Stage 8 bug fixed with boolean tracking fields
+**Study-level verdict:** `NEEDS_MORE_DATA_OR_NO_TAIL`
+
+This verdict was produced at Gate A (Stage 1 — distribution sizing). The cross-exchange funding spread between Bybit and Binance never exceeded 5 bps at any settlement in the entire 17-month window (1261 aligned settlements, 2024-01 to 2025-05). Maximum observed dispersion was 4.49 bps (ETH). Zero events were recorded at every threshold for both assets.
+
+**Key diagnostic:**
+- BTC mean abs dispersion: 0.44 bps, max: 4.14 bps
+- ETH mean abs dispersion: 0.42 bps, max: 4.49 bps
+- No single settlement produced a cross-exchange spread ≥ 5 bps
+
+The verdict is a legitimate scientific result: the data does not support the hypothesis that cross-exchange funding dispersion carry exists at these scales for BTC/ETH perpetuals on Binance vs Bybit during this window.
+
+Output directory: `reports/funding_dispersion_carry/cross_exchange_funding_dispersion_carry_v1_27119f3/`
 
 No live, private-key, or order-placement code paths exist anywhere in the implementation.
