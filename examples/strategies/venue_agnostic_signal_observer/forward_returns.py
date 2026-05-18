@@ -194,7 +194,7 @@ def evaluate_signal(
             continue
 
         forward_ts, forward_price = forward_info
-        if not math.isfinite(forward_price):
+        if not math.isfinite(forward_price) or forward_price <= 0:
             results.append(ForwardReturnResult(
                 signal_id=signal.signal_id,
                 signal_timestamp=signal.timestamp,
@@ -213,7 +213,26 @@ def evaluate_signal(
             ))
             continue
 
-        dir_adj_bps = compute_forward_return(entry_price, forward_price, signal.direction)
+        try:
+            dir_adj_bps = compute_forward_return(entry_price, forward_price, signal.direction)
+        except ValueError:
+            results.append(ForwardReturnResult(
+                signal_id=signal.signal_id,
+                signal_timestamp=signal.timestamp,
+                source_venue=signal.source_venue,
+                source_instrument=signal.source_instrument,
+                target_venue=signal.target_venue,
+                target_instrument=signal.target_instrument,
+                signal_type=signal.signal_type,
+                direction=signal.direction,
+                strength=signal.strength,
+                horizon=h.name,
+                entry_reference_price=entry_price,
+                forward_price=forward_price,
+                valid=False,
+                rejection_reason="invalid_prices_in_compute_forward_return",
+            ))
+            continue
         # raw_bps is the unsigned price move (not direction-adjusted)
         raw_bps = (forward_price - entry_price) / entry_price * 10000.0
 

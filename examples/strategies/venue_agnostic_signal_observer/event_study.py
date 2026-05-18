@@ -304,8 +304,23 @@ def evaluate_tick_signal(
             )
             continue
 
+        if entry_price <= 0 or not math.isfinite(entry_price) or not math.isfinite(forward_price):
+            results.append(TickForwardReturn(
+                signal_id=signal.signal_id,
+                signal_ts=signal.ts_event,
+                target_venue=signal.target_venue,
+                target_symbol=signal.target_symbol,
+                horizon_ms=horizon_ms,
+                entry_reference_price=entry_price,
+                forward_price=forward_price,
+                fee_bps=fee_bps,
+                slippage_bps=slippage_bps,
+                quote_mismatch_buffer_bps=quote_mismatch_buffer_bps if quote_mismatch else None,
+                valid=False,
+                rejection_reason="non_finite_or_zero_prices_in_division",
+            ))
+            continue
         raw_return_bps = (forward_price - entry_price) / entry_price * 10000.0
-
         if signal.direction == "short":
             dir_adj = -raw_return_bps
         else:
