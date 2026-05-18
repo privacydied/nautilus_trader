@@ -1,0 +1,154 @@
+{
+  "study_id": "funding_oi_crowding_regime_v0",
+  "phase": "0AB",
+  "symbol": "BTCUSDT",
+  "fixed_probe_dates": [
+    "2021-01-01",
+    "2021-06-01",
+    "2022-01-01",
+    "2023-01-01",
+    "2024-01-01",
+    "2025-01-01",
+    "2026-01-01"
+  ],
+  "monthly_probes": {
+    "2021-01-01": {
+      "path": "data/futures/um/monthly/metrics/BTCUSDT/BTCUSDT-metrics-2021-01.zip",
+      "http_status": 404
+    },
+    "2021-06-01": {
+      "path": "data/futures/um/monthly/metrics/BTCUSDT/BTCUSDT-metrics-2021-06.zip",
+      "http_status": 404
+    },
+    "2022-01-01": {
+      "path": "data/futures/um/monthly/metrics/BTCUSDT/BTCUSDT-metrics-2022-01.zip",
+      "http_status": 404
+    },
+    "2023-01-01": {
+      "path": "data/futures/um/monthly/metrics/BTCUSDT/BTCUSDT-metrics-2023-01.zip",
+      "http_status": 404
+    },
+    "2024-01-01": {
+      "path": "data/futures/um/monthly/metrics/BTCUSDT/BTCUSDT-metrics-2024-01.zip",
+      "http_status": 404
+    },
+    "2025-01-01": {
+      "path": "data/futures/um/monthly/metrics/BTCUSDT/BTCUSDT-metrics-2025-01.zip",
+      "http_status": 404
+    },
+    "2026-01-01": {
+      "path": "data/futures/um/monthly/metrics/BTCUSDT/BTCUSDT-metrics-2026-01.zip",
+      "http_status": 404
+    }
+  },
+  "daily_probes": {
+    "2021-01-01": {
+      "path": "data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2021-01-01.zip",
+      "http_status": 200
+    },
+    "2021-06-01": {
+      "path": "data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2021-06-01.zip",
+      "http_status": 200
+    },
+    "2022-01-01": {
+      "path": "data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2022-01-01.zip",
+      "http_status": 200
+    },
+    "2023-01-01": {
+      "path": "data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2023-01-01.zip",
+      "http_status": 200
+    },
+    "2024-01-01": {
+      "path": "data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2024-01-01.zip",
+      "http_status": 200
+    },
+    "2025-01-01": {
+      "path": "data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2025-01-01.zip",
+      "http_status": 200
+    },
+    "2026-01-01": {
+      "path": "data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2026-01-01.zip",
+      "http_status": 200
+    }
+  },
+  "first_successful_probe": [
+    "daily",
+    "2021-01-01"
+  ],
+  "first_failed_probe": null,
+  "schema_fields": [
+    "create_time",
+    "symbol",
+    "sum_open_interest",
+    "sum_open_interest_value",
+    "count_toptrader_long_short_ratio",
+    "sum_toptrader_long_short_ratio",
+    "count_long_short_ratio",
+    "sum_taker_long_short_vol_ratio"
+  ],
+  "selected_oi_field": "sum_open_interest",
+  "observed_cadence": "5 minutes",
+  "alignment_offsets_end_minutes": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "alignment_offsets_start_minutes": [
+    0.0,
+    0.0
+  ],
+  "alignment_verdict": "OI_ALIGNMENT_OK",
+  "coverage_estimate": {
+    "earliest_probe": "2021-01-01",
+    "latest_probe": "2026-01-01",
+    "coverage_span_days": 1826,
+    "eval_period_days": 2006,
+    "estimated_settlement_slots": 6018,
+    "meets_warmup": true,
+    "meets_5500_slots": true,
+    "reaches_min_date": true
+  },
+  "phase0a_verdict": "PHASE0A_ARCHIVE_FEASIBILITY_PASSED",
+  "final_verdict": "PHASE0B_POPULATION_FEASIBILITY_PASSED",
+  "phase0b": {
+    "total_aligned_settlements": 1437,
+    "total_excluded_oi_unaligned": 0,
+    "positive_funding_extreme_count": 958,
+    "negative_funding_extreme_count": 479,
+    "positive_extreme_rising_oi": 526,
+    "positive_extreme_falling_oi": 432,
+    "negative_extreme_rising_oi": 256,
+    "negative_extreme_falling_oi": 223,
+    "rising_falling_split_positive": {
+      "rising_pct": 54.91,
+      "falling_pct": 45.09
+    },
+    "rising_falling_split_negative": {
+      "rising_pct": 53.44,
+      "falling_pct": 46.56
+    },
+    "train_70_counts": {
+      "aligned_settlements": 1006,
+      "oi_unaligned": 0,
+      "positive_extreme_rising_oi": 381,
+      "positive_extreme_falling_oi": 313,
+      "negative_extreme_rising_oi": 177,
+      "negative_extreme_falling_oi": 135
+    },
+    "holdout_30_counts": {
+      "aligned_settlements": 431,
+      "oi_unaligned": 0,
+      "positive_extreme_rising_oi": 145,
+      "positive_extreme_falling_oi": 119,
+      "negative_extreme_rising_oi": 79,
+      "negative_extreme_falling_oi": 88
+    },
+    "verdict": "PHASE0B_POPULATION_FEASIBILITY_PASSED",
+    "notes": []
+  }
+}

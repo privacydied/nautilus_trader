@@ -1,0 +1,36 @@
+{
+  "total_aligned_settlements": 1437,
+  "total_excluded_oi_unaligned": 0,
+  "positive_funding_extreme_count": 958,
+  "negative_funding_extreme_count": 479,
+  "positive_extreme_rising_oi": 526,
+  "positive_extreme_falling_oi": 432,
+  "negative_extreme_rising_oi": 256,
+  "negative_extreme_falling_oi": 223,
+  "rising_falling_split_positive": {
+    "rising_pct": 54.91,
+    "falling_pct": 45.09
+  },
+  "rising_falling_split_negative": {
+    "rising_pct": 53.44,
+    "falling_pct": 46.56
+  },
+  "train_70_counts": {
+    "aligned_settlements": 1006,
+    "oi_unaligned": 0,
+    "positive_extreme_rising_oi": 381,
+    "positive_extreme_falling_oi": 313,
+    "negative_extreme_rising_oi": 177,
+    "negative_extreme_falling_oi": 135
+  },
+  "holdout_30_counts": {
+    "aligned_settlements": 431,
+    "oi_unaligned": 0,
+    "positive_extreme_rising_oi": 145,
+    "positive_extreme_falling_oi": 119,
+    "negative_extreme_rising_oi": 79,
+    "negative_extreme_falling_oi": 88
+  },
+  "verdict": "PHASE0B_POPULATION_FEASIBILITY_PASSED",
+  "notes": []
+}
