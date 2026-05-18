@@ -708,10 +708,20 @@ the bottom-decile mean would dilute it).
 **Ambiguity:** The precommitment requires detecting the source unit and
 converting to bps, but does not specify the detection heuristic.
 
-**Resolution (2026-05-19):** Both Binance and Bybit return funding rates as
-**decimal fractions** (e.g., `0.00003877` for BTC, `0.00005491` for ETH),
-not as percentages. Confirmed by live API inspection of 20 recent records
-from each venue for each asset.
+**Resolution (2026-05-19):** Both archive sources return funding rates as
+**decimal fractions**, not percentages.
+
+Confirmed by inspecting the actual archive sources the pipeline will load:
+
+- **Binance Vision** (CSV from data.binance.vision): column
+  `last_funding_rate` contains decimal fractions like `0.00010000`,
+  `0.00037409`. Even during the May 2021 bull run, the maximum BTC rate
+  was `0.00098653` (= 9.87 bps). Units are decimal in all months tested
+  (2023-01, 2024-01, 2025-01, 2021-05).
+
+- **Bybit v5 API** (JSON, the archive source specified in Section 3):
+  field `fundingRate` contains decimal fraction strings like
+  `"0.00005491"`, `"-0.00001269"`. Units are decimal.
 
 The detection heuristic is:
 
@@ -725,11 +735,11 @@ The detection heuristic is:
 After normalization, if any value falls outside ±300 bps per settlement,
 stop with `FUNDING_UNIT_AMBIGUOUS`.
 
-Based on the live API data, all four series (Binance BTC, Binance ETH,
-Bybit BTC, Bybit ETH) have rates in the range approximately ±0.0001
-(max ≈ 8e-5), which will correctly classify as decimal by rule 1 and
-normalize to approximately ±1 bps per settlement — well within the ±300 bps
-sanity band.
+Based on the archive data, all four series (Binance BTC, Binance ETH,
+Bybit BTC, Bybit ETH) have rates in the range approximately ±0.001
+(max ≈ 0.001 in extreme periods), which will correctly classify as decimal
+by rule 1 and normalize to approximately ±10 bps per settlement — well
+within the ±300 bps sanity band.
 
 ### A.3: Stage 8 verdict-assembly tracking (Q4, bug fix)
 
