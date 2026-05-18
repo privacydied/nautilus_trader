@@ -19,7 +19,7 @@ changing something structural.
 ## Mined Status
 
 The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 45 study groups:
-- **35 REJECTED**
+- **36 REJECTED**
 - **9 NEEDS_MORE_DATA** (insufficient events / zero signals)
 - **1 MARKET_MODERATE_DIAGNOSTIC** (quiet/moderate capture, below volatility gate)
 - **1 UNKNOWN**
@@ -55,7 +55,7 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 | Cross-asset spot impulse v1 | BTC/ETH spot impulse -> alt spot forward returns | Coinbase/Kraken/Binance spot | MARKET_MODERATE_DIAGNOSTIC | Best pair -43.98 bps (coinbase:ETH/USDT->coinbase:LINK/USD) in a quiet/moderate capture. BTC/ETH source movement during actual capture was only ~9-17 bps, below the 30 bps source-range gate required to test stress beta-lag. Not a full volatile-window rejection. | 2026-05-13 07:37-07:53 UTC, 906s capture, quiet/moderate market (BTC 12.6 bps, ETH 16.2 bps). 72 pairs, 11,890 signals, 50 pairs with overlap, 0 pairs with sufficient source/target movement. Diagnostic evidence only — open for volatile-window retest. |
 | Polymarket BTC Up/Down short-expiry liquidity probe v0 | CLOB orderbook liquidity near expiry | Polymarket CLOB (BTC Up/Down binary options) | REJECTED | Near-expiry depth collapses below $100 non-dust floor: $89 at 5-15m → $13 at 0-30s. Spreads tight (1c median) but depth wall blocks Chainlink/CLOB lag hypothesis. Parser-confounded 98c finding corrected and superseded. | `polymarket-btc-updown-liquidity-v0-rejected` |
 | **Family 1 same-venue USD/USDT quote-basis reversion** | Same-venue quote-basis reversion (BTC/USD vs BTC/USDT) | Kraken spot | **REJECTED** | Cached-data diagnostic: observed basis change over 30-120s lookbacks was ~5-30 bps peak; round-trip two-leg cost ~32 bps. Signal is structurally smaller than transaction cost. Cost-wall blocked. Diagnostic confirmed the blocker is signal-vs-cost, not window length or data sparsity. Tag: `family1-kraken-usd-usdt-reversion-cost-wall-rejected` |
-| **Family 2 funding crowding reversal** | Binance BTCUSDT funding-rate extremes → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M funding + spot) | **REJECTED** | 60 BTC primary cells evaluated Feb 2020–Apr 2026 window (180-day past-only percentile warmup). Approved run (2026-05-18): 25 NEEDS_MORE_DATA, 11 REJECTED, 23 NULL_REJECTED_DIAGNOSTIC, 1 FDR_BLOCKED_DIAGNOSTIC, **0 CANDIDATE_FOR_LONGER_OBSERVATION**. No cell passed all pre-null gates (mean_net > 0, median > 0, win_rate >= 0.55, worst_decile > -50, baseline_delta >= 10). Positive-funding cells uniformly negative. Negative-funding cells had mixed sign but sub-threshold win rates. Full 60-cell evidence: no edge survives after 50 bps cost under frozen precommitted design. | `family2-funding-crowding-reversal-rejected` |
+| **Family 2 funding crowding reversal** | Binance BTCUSDT funding-rate extremes → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M funding + spot) | **REJECTED** | 60 BTC primary cells evaluated Jun 2020–Apr 2026 window (180-day past-only percentile warmup). Approved run (2026-05-18): 25 NEEDS_MORE_DATA, 11 REJECTED, 23 NULL_REJECTED_DIAGNOSTIC, 1 FDR_BLOCKED_DIAGNOSTIC, **0 CANDIDATE_FOR_LONGER_OBSERVATION**. No cell passed all pre-null gates (mean_net > 0, median > 0, win_rate >= 0.55, worst_decile > -50, baseline_delta >= 10). Positive-funding cells uniformly negative. Negative-funding cells had mixed sign but sub-threshold win rates. Full 60-cell evidence: no edge survives after 50 bps cost under frozen precommitted design. | `family2-funding-crowding-reversal-rejected` |
 
 ## Rejection Details
 
@@ -191,8 +191,8 @@ The invalidated run artifacts are marked with `INVALIDATED.txt` markers under
   frozen design explicitly excluded this term.
 - **Perp basis / roll-yield strategies** — separate from the crowded-trade reversal
   hypothesis.
-- **Higher cost models** (above 50 bps) — the 50 bps primary cost already blocks;
-  higher costs would only strengthen the rejection.
+- **Maker-only / rebate cost tier** (never tested) — a sub-10 bps round trip
+  could change which cells clear the primary cost gate.
 
 **Archival Addendum (validated run `funding_crowding_reversal_20260518T180157_168230_8d622b`):**
 
@@ -286,7 +286,6 @@ The first real empirical run (2026-05-13 03:17-03:27 UTC) produced:
 - **Cross-asset beta lag under stress** — BTC/ETH shock leads slower repricing in higher-beta assets over 30s to 5m. Distinct from same-asset derivatives-to-spot lead-lag. Only testable during genuine stress windows. See `CROSS_ASSET_BETA_LAG_PRECOMMITMENT.md`.
 - **Cross-asset spot impulse v1** — Quiet/moderate-regime diagnostic only. BTC/ETH source movement during the actual capture was ~9-17 bps, below the 30 bps source-range gate required to test stress beta-lag. The 50 pairs with overlap all failed after the 50bps cost wall (best -43.98 bps), but this is diagnostic evidence from a quiet market, not a structural rejection. Open for a genuine volatile/stress-window retest only.
 - OI + price regime classification (filter, not standalone trade)
-- Funding as crowding/sentiment feature (not carry)
 - L2 adverse selection conditioning on book state
 - Options IV/RV regime overlay (filter, not trade)
 
