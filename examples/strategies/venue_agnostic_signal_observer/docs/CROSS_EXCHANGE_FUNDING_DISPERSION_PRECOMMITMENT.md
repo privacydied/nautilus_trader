@@ -678,3 +678,75 @@ Recorded here as boundaries, not promises:
   intra-period funding estimate. v1 uses the safe `t+1` rule; pre-settlement
   entry needs a separate precommitment that establishes pre-settlement
   observability.
+
+---
+
+## Appendix A: Resolved ambiguities (pre-freeze)
+
+These were identified during implementation and must be recorded here before
+the first evaluation run to maintain the precommitment property.
+
+### A.1: Worst-decile definition (Q2)
+
+**Section:** 12.1 (Stage 4, pre-null economic gates), rule 3c
+
+**Ambiguity:** "worst decile net_carry_bps > −50" — is "worst decile" the p10
+single value or the mean of the bottom 10%?
+
+**Resolution (2026-05-19):** Worst decile means the **p10 single value** —
+the value at the 10th-percentile index of the sorted net-carry distribution.
+That is: `sorted_nc[max(0, len(sorted_nc) // 10 - 1)]`.
+
+This matches the standard statistical usage of "decile" and is the more
+conservative of the two interpretations (a single outlier can fail the gate;
+the bottom-decile mean would dilute it).
+
+### A.2: Funding-rate unit detection (Q1)
+
+**Section:** 7, step 2
+
+**Ambiguity:** The precommitment requires detecting the source unit and
+converting to bps, but does not specify the detection heuristic.
+
+**Resolution (2026-05-19):** Both Binance and Bybit return funding rates as
+**decimal fractions** (e.g., `0.00003877` for BTC, `0.00005491` for ETH),
+not as percentages. Confirmed by live API inspection of 20 recent records
+from each venue for each asset.
+
+The detection heuristic is:
+
+1. If `max_abs ≤ 0.05` and `median_abs ≤ 0.01` → classify as **decimal**,
+   normalize by `× 10_000` to get bps.
+2. If `max_abs > 1.0` → classify as **percent**, normalize by `× 100` to
+   get bps.
+3. If `median_abs ≤ 0.1` → classify as **percent**, normalize by `× 100`.
+4. Otherwise → **unclassifiable**, stop with `FUNDING_UNIT_AMBIGUOUS`.
+
+After normalization, if any value falls outside ±300 bps per settlement,
+stop with `FUNDING_UNIT_AMBIGUOUS`.
+
+Based on the live API data, all four series (Binance BTC, Binance ETH,
+Bybit BTC, Bybit ETH) have rates in the range approximately ±0.0001
+(max ≈ 8e-5), which will correctly classify as decimal by rule 1 and
+normalize to approximately ±1 bps per settlement — well within the ±300 bps
+sanity band.
+
+### A.3: Stage 8 verdict-assembly tracking (Q4, bug fix)
+
+**Section:** 13 (verdict assembly)
+
+**Ambiguity:** Rules 5, 6, and 7 refer to cells that "reached PASS_NULL" or
+"reached PASS_PRE_NULL" — but by Stage 8, cells carry their final verdict
+label (e.g., HOLDOUT_FAILED_DIAGNOSTIC, FDR_BLOCKED_DIAGNOSTIC), not the
+intermediate PASS_NULL label they held after Stage 5. A "cell reached
+PASS_NULL" is a statement about pipeline progress, not about the current
+label.
+
+**Resolution (2026-05-19):** Implementation uses two boolean tracking fields
+on CellRecord — `reached_pass_pre_null` (set True in Stage 4) and
+`reached_pass_null` (set True in Stage 5). These persist through relabeling
+in Stages 6 and 7 via `dataclasses.replace()`. Stage 8 rules 5, 6, and 7
+use these booleans to evaluate "cell reached X" conditions, not the
+intermediate verdict labels. This correctly implements the precommitment
+text and has been verified with tests for the mixed case (cell X survives
+FDR then fails holdout; cell Y is FDR-blocked — Rule 5 fires, not Rule 6).

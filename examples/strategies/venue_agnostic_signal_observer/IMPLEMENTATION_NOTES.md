@@ -56,6 +56,8 @@ python -m pytest examples/strategies/venue_agnostic_signal_observer/tests/test_f
 
 No verdict file exists. No evaluation has been performed against real data. The `run_funding_dispersion_carry.py` entry point calls `load_archive_data()` which raises `NotImplementedError`. This is intentional — the precommitment must be frozen (committed to the project) before the first evaluation run. Running against real data before freezing would break the precommitment property.
 
+All three pre-freeze ambiguities have been resolved and written into the precommitment (Appendix A). The freeze precondition is now met: R1 (funding-unit heuristic confirmed via live API data), R2 (worst-decile = p10), R3 (Stage 8 bug fixed with boolean tracking fields).
+
 ## Data loading interface
 
 The `load_archive_data()` function in `run_funding_dispersion_carry.py` is a stub. Before running the study, it must be implemented to:
