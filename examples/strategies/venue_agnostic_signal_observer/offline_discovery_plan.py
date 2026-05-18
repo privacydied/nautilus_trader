@@ -929,6 +929,8 @@ def write_offline_discovery_plan_outputs(
         "holdout_window_ids": plan.holdout_window_ids,
         "edge_family_cell_count": plan.edge_family_cell_count,
         "conditioning_cell_count": plan.conditioning_cell_count,
+        "data_corpus_hash": plan.data_corpus_hash,
+        "window_index_hash": plan.window_index_hash,
         "discovery_config_hash": plan.discovery_config_hash,
         "plan_hash": plan.plan_hash,
         "split_timestamp_boundary_ns": plan.split_timestamp_boundary_ns,
