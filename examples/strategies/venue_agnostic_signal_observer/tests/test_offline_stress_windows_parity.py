@@ -94,12 +94,16 @@ def _historical_absolute_return_bps(points: Sequence[dict[str, Any]]) -> float:
 # Fixture helpers
 # =========================================================================
 
-def _trade(ts_s: int, price: float, source_file: str = "stream") -> OfflineTradeRecord:
+def _trade(
+    ts_s: int, price: float, source_file: str = "stream",
+    symbol: str = "BTC/USD",
+) -> OfflineTradeRecord:
+    quote = symbol.split("/")[1] if "/" in symbol else "USD"
     return OfflineTradeRecord(
         venue="kraken",
-        symbol="BTC/USD",
+        symbol=symbol,
         base_asset="BTC",
-        quote_asset="USD",
+        quote_asset=quote,
         timestamp_ns=ts_s * NS,
         price=price,
         size=1.0,
@@ -115,17 +119,19 @@ def _source_file(
     tmp_path: Path,
     *,
     logical_source_id: str = "stream",
+    symbol: str = "BTC/USD",
 ) -> OfflineSourceFile:
     tmp_path.mkdir(parents=True, exist_ok=True)
     payload_path = tmp_path / f"{logical_source_id}.csv"
     payload_path.write_text("fixture\n", encoding="utf-8")
+    quote = symbol.split("/")[1] if "/" in symbol else "USD"
     return OfflineSourceFile(
         path=str(payload_path),
         logical_source_id=logical_source_id,
         venue="kraken",
-        symbol="BTC/USD",
+        symbol=symbol,
         base_asset="BTC",
-        quote_asset="USD",
+        quote_asset=quote,
         source_kind="kraken_trades",
         stream_type="agg_trades",
         resolution_type=RESOLUTION_AGG_TRADE,
@@ -655,3 +661,306 @@ class TestOverlappingStressWindowDedup:
         for i, (ow, hw) in enumerate(zip(opt.windows, hist)):
             assert ow.trigger_timestamp_ns == hw["trigger_timestamp_ns"]
             assert abs(ow.trigger_value - hw["trigger_value"]) < 1e-9
+
+
+# =========================================================================
+# Part 1C: Multi-stream coverage parity fixture
+# =========================================================================
+
+class TestMultiStreamCoverageParity:
+    """Tests that the sliding-pointer rewrite handles multiple streams correctly.
+
+    The actual pipeline processes two Kraken streams (USD and USDT).  Each
+    source file gets its own ``_evaluate_rule_on_points`` call, so
+    ``window_left`` starts at 0 per source+rule pair.  A bug where
+    ``window_left`` leaked between sources or between rules would cause
+    dropped, merged, or double-counted windows in the second stream.
+
+    This fixture creates two synthetic streams with independent price
+    movements and compares the multi-stream output against a manual
+    concatenation of the single-stream historical reference runs.
+    """
+
+    def test_two_streams_produce_independent_windows(self, tmp_path: Path) -> None:
+        """HISTORICAL-EQUIVALENCE PARITY: two streams with different price activity.
+
+        Stream A (BTC/USD): early spike at 200s, baseline otherwise.
+        Stream B (BTC/USDT): flat until late spike at 600s.
+
+        Each stream should produce exactly 1 window, at 200s and 600s
+        respectively.  The combined output must have both, sorted by
+        trigger_timestamp_ns.
+        """
+        from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
+            OfflinePreparedDataset,
+        )
+
+        stream_a_id = "kraken__BTC_USD__kraken_trades"
+        stream_b_id = "kraken__BTC_USDT__kraken_trades"
+
+        # Stream A: spike at 200s
+        stream_a_trades = [
+            _trade(0, 100.0, source_file=stream_a_id, symbol="BTC/USD"),
+            _trade(100, 100.0, source_file=stream_a_id, symbol="BTC/USD"),
+            _trade(200, 110.0, source_file=stream_a_id, symbol="BTC/USD"),  # trigger: range 1000bps
+            _trade(300, 100.5, source_file=stream_a_id, symbol="BTC/USD"),
+            _trade(400, 101.0, source_file=stream_a_id, symbol="BTC/USD"),
+        ]
+        # Stream B: spike at 600s
+        stream_b_trades = [
+            _trade(100, 100.0, source_file=stream_b_id, symbol="BTC/USDT"),
+            _trade(200, 100.0, source_file=stream_b_id, symbol="BTC/USDT"),
+            _trade(300, 100.0, source_file=stream_b_id, symbol="BTC/USDT"),
+            _trade(400, 100.0, source_file=stream_b_id, symbol="BTC/USDT"),
+            _trade(500, 100.0, source_file=stream_b_id, symbol="BTC/USDT"),
+            _trade(600, 115.0, source_file=stream_b_id, symbol="BTC/USDT"),  # trigger: range 1500bps
+            _trade(700, 101.0, source_file=stream_b_id, symbol="BTC/USDT"),
+        ]
+
+        source_a = _source_file(tmp_path / "src_a", logical_source_id=stream_a_id, symbol="BTC/USD")
+        source_b = _source_file(tmp_path / "src_b", logical_source_id=stream_b_id, symbol="BTC/USDT")
+
+        combined_ds = OfflinePreparedDataset(
+            source_files=[source_a, source_b],
+            trades_by_stream={
+                stream_a_id: stream_a_trades,
+                stream_b_id: stream_b_trades,
+            },
+            bars_by_stream={},
+            data_corpus_hash="dummy-multi-stream-hash",
+            schema_version=OFFLINE_DATA_SCHEMA_VERSION,
+            created_at_utc="2024-01-01T00:00:00+00:00",
+            git_sha="deadbeef",
+        )
+
+        rule = StressRuleConfig(
+            rule_name="rolling_range_bps",
+            rule_version="v1",
+            lookback_seconds=200,
+            threshold_bps=500.0,
+            cooldown_seconds=300,
+            pre_window_seconds=60,
+            post_window_seconds=300,
+            min_required_points=2,
+            supported_resolutions=("trade", "agg_trade"),
+            trigger_metric="range_bps",
+        )
+
+        # Optimized multi-stream path
+        opt = build_stress_window_index(
+            combined_ds, [rule], selection_mode=WINDOW_MODE_CAUSAL,
+        )
+
+        assert opt.status == STATUS_OFFLINE_STRESS_INDEX_READY, (
+            f"Multi-stream: expected READY, got {opt.status}"
+        )
+
+        # We expect 2 windows total (one per stream)
+        assert len(opt.windows) == 2, (
+            f"Expected 2 windows (1 per stream), got {len(opt.windows)}: "
+            f"{[(w.source_symbol, w.trigger_timestamp_ns / NS) for w in opt.windows]}"
+        )
+
+        # Windows should be sorted by trigger timestamp
+        # Stream A triggers at 200s, stream B at 600s
+        assert opt.windows[0].trigger_timestamp_ns == 200 * NS, (
+            f"First window should be at 200s (stream A), "
+            f"got {opt.windows[0].trigger_timestamp_ns / NS}s"
+        )
+        assert opt.windows[1].trigger_timestamp_ns == 600 * NS, (
+            f"Second window should be at 600s (stream B), "
+            f"got {opt.windows[1].trigger_timestamp_ns / NS}s"
+        )
+
+        # Each window should have the correct source symbol
+        symbols = {w.source_symbol for w in opt.windows}
+        assert "BTC/USD" in symbols, "Missing BTC/USD stream result"
+        assert "BTC/USDT" in symbols, "Missing BTC/USDT stream result"
+
+        # Each stream's cooldown operates independently, so suppressed triggers
+        # from intermediate points within each stream are expected (they are
+        # within cooldown of their respective first trigger).
+        # What matters is that no cross-stream suppression occurs: both streams
+        # produce their own windows with no interaction.
+        sup = opt.manifest_metadata.get("suppressed_trigger_count", -1)
+        assert sup >= 2, (
+            f"Expected at least 2 suppressed triggers (intermediate points "
+            f"within each stream's cooldown), got {sup}"
+        )
+
+    def test_multi_stream_matches_independent_references(
+        self, tmp_path: Path,
+    ) -> None:
+        """HISTORICAL-EQUIVALENCE PARITY: multi-stream vs historical per-stream.
+
+        Runs both streams independently through the historical reference,
+        then verifies the optimized multi-stream output matches the union.
+        """
+        from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
+            OfflinePreparedDataset,
+        )
+
+        stream_a_id = "kraken__BTC_USD__kraken_trades"
+        stream_b_id = "kraken__BTC_USDT__kraken_trades"
+
+        stream_a_trades = [
+            _trade(0, 100.0, source_file=stream_a_id, symbol="BTC/USD"),
+            _trade(100, 100.0, source_file=stream_a_id, symbol="BTC/USD"),
+            _trade(200, 110.0, source_file=stream_a_id, symbol="BTC/USD"),
+            _trade(300, 100.5, source_file=stream_a_id, symbol="BTC/USD"),
+        ]
+        stream_b_trades = [
+            _trade(300, 100.0, source_file=stream_b_id, symbol="BTC/USDT"),
+            _trade(400, 100.0, source_file=stream_b_id, symbol="BTC/USDT"),
+            _trade(500, 100.0, source_file=stream_b_id, symbol="BTC/USDT"),
+            _trade(600, 115.0, source_file=stream_b_id, symbol="BTC/USDT"),
+        ]
+
+        source_a = _source_file(tmp_path / "src_a", logical_source_id=stream_a_id, symbol="BTC/USD")
+        source_b = _source_file(tmp_path / "src_b", logical_source_id=stream_b_id, symbol="BTC/USDT")
+
+        combined_ds = OfflinePreparedDataset(
+            source_files=[source_a, source_b],
+            trades_by_stream={
+                stream_a_id: stream_a_trades,
+                stream_b_id: stream_b_trades,
+            },
+            bars_by_stream={},
+            data_corpus_hash="dummy-multi-stream-hash-v2",
+            schema_version=OFFLINE_DATA_SCHEMA_VERSION,
+            created_at_utc="2024-01-01T00:00:00+00:00",
+            git_sha="deadbeef",
+        )
+
+        rule = StressRuleConfig(
+            rule_name="rolling_range_bps",
+            rule_version="v1",
+            lookback_seconds=200,
+            threshold_bps=500.0,
+            cooldown_seconds=300,
+            pre_window_seconds=60,
+            post_window_seconds=300,
+            min_required_points=2,
+            supported_resolutions=("trade", "agg_trade"),
+            trigger_metric="range_bps",
+        )
+
+        # Optimized multi-stream path
+        opt = build_stress_window_index(
+            combined_ds, [rule], selection_mode=WINDOW_MODE_CAUSAL,
+        )
+
+        # Historical reference per stream
+        hist_a = _hist_evaluate_rule_on_points(
+            points=_points_for_fixture(stream_a_trades),
+            source=source_a,
+            rule=rule,
+        )
+        hist_b = _hist_evaluate_rule_on_points(
+            points=_points_for_fixture(stream_b_trades),
+            source=source_b,
+            rule=rule,
+        )
+
+        # Combined historical: both streams should produce 1 window each
+        assert len(hist_a) == 1, f"Stream A expected 1 window, got {len(hist_a)}"
+        assert len(hist_b) == 1, f"Stream B expected 1 window, got {len(hist_b)}"
+
+        # HISTORICAL-EQUIVALENCE PARITY
+        assert len(opt.windows) == len(hist_a) + len(hist_b), (
+            f"Multi-stream: optimized={len(opt.windows)}, "
+            f"historical total={len(hist_a) + len(hist_b)}"
+        )
+
+        assert opt.windows[0].trigger_timestamp_ns == 200 * NS
+        assert opt.windows[1].trigger_timestamp_ns == 600 * NS
+
+    def test_multi_stream_with_range_and_absolute_rules(
+        self, tmp_path: Path,
+    ) -> None:
+        """HISTORICAL-EQUIVALENCE PARITY: two rules on two streams.
+
+        This exercises the full product of (sources × rules) that the
+        pipeline uses.  Each source+rule pair starts with ``window_left=0``.
+        A pointer leak between pairs would cause incorrect results on the
+        second rule of the second stream.
+        """
+        from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
+            OfflinePreparedDataset,
+        )
+
+        stream_a_id = "kraken__BTC_USD__kraken_trades"
+        stream_b_id = "kraken__BTC_USDT__kraken_trades"
+
+        stream_a_trades = [
+            _trade(0, 100.0, source_file=stream_a_id, symbol="BTC/USD"),
+            _trade(200, 110.0, source_file=stream_a_id, symbol="BTC/USD"),
+        ]
+        stream_b_trades = [
+            _trade(300, 100.0, source_file=stream_b_id, symbol="BTC/USDT"),
+            _trade(600, 120.0, source_file=stream_b_id, symbol="BTC/USDT"),
+        ]
+
+        source_a = _source_file(tmp_path / "src_a", logical_source_id=stream_a_id, symbol="BTC/USD")
+        source_b = _source_file(tmp_path / "src_b", logical_source_id=stream_b_id, symbol="BTC/USDT")
+
+        combined_ds = OfflinePreparedDataset(
+            source_files=[source_a, source_b],
+            trades_by_stream={
+                stream_a_id: stream_a_trades,
+                stream_b_id: stream_b_trades,
+            },
+            bars_by_stream={},
+            data_corpus_hash="dummy-multi-stream-rules-hash",
+            schema_version=OFFLINE_DATA_SCHEMA_VERSION,
+            created_at_utc="2024-01-01T00:00:00+00:00",
+            git_sha="deadbeef",
+        )
+
+        rule_range = StressRuleConfig(
+            rule_name="rolling_range_bps",
+            rule_version="v1",
+            lookback_seconds=400,
+            threshold_bps=500.0,
+            cooldown_seconds=500,
+            pre_window_seconds=60,
+            post_window_seconds=300,
+            min_required_points=2,
+            supported_resolutions=("trade", "agg_trade"),
+            trigger_metric="range_bps",
+        )
+        rule_abs = StressRuleConfig(
+            rule_name="rolling_absolute_return_bps",
+            rule_version="v1",
+            lookback_seconds=400,
+            threshold_bps=500.0,
+            cooldown_seconds=500,
+            pre_window_seconds=60,
+            post_window_seconds=300,
+            min_required_points=2,
+            supported_resolutions=("trade", "agg_trade"),
+            trigger_metric="absolute_return_bps",
+        )
+
+        # Both rules together
+        opt = build_stress_window_index(
+            combined_ds, [rule_range, rule_abs],
+            selection_mode=WINDOW_MODE_CAUSAL,
+        )
+
+        assert opt.status == STATUS_OFFLINE_STRESS_INDEX_READY
+        # 2 streams × 2 rules × 1 trigger each = 4 windows
+        assert len(opt.windows) == 4, (
+            f"Expected 4 windows (2 streams × 2 rules), got {len(opt.windows)}: "
+            f"{[(w.source_symbol, w.rule_name, w.trigger_timestamp_ns / NS) for w in opt.windows]}"
+        )
+
+        # Verify all 4 windows have distinct IDs
+        assert len({w.window_id for w in opt.windows}) == 4, (
+            "All windows should have distinct IDs (no merging between rules or streams)"
+        )
+
+        # No cross-stream suppression
+        assert opt.manifest_metadata.get("suppressed_trigger_count", -1) == 0, (
+            "No cross-stream cooldown interaction expected"
+        )
