@@ -1,4 +1,5 @@
 {
+  "closure_note": "Family 1 reversion rejected as cost-wall blocked. See REJECTED_RESEARCH.md. This precommitment is closed; do not run the verdict pipeline against it.",
   "created_after_pipeline_construction": true,
   "created_after_pipeline_construction_note": "This precommitment file was authored after eleven phases of the offline historical replay lane had already been implemented and tested. It is a retrospective/final-gate precommitment for the first end-to-end Family 1 verdict run, not a clean pre-registration before all empirical work began. Future lanes should pre-register their precommitment before any pipeline construction.",
   "created_at_utc": "2026-05-18T00:00:00.000Z",
@@ -151,6 +152,7 @@
     "timestamp_matching_rule": "first tick at or after requested timestamp",
     "units": "basis points"
   },
+  "status": "CLOSED_REJECTED_COST_WALL",
   "verdict_run_scope": {
     "families_out_of_scope": [
       "family_2_cross_asset_stress_beta_lag",
