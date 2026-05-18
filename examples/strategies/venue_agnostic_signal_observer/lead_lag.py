@@ -8,6 +8,7 @@ timestamps for the same data window — a signal is only interesting if it
 beats random at the same frequency.
 """
 
+import bisect
 import math
 import random
 from dataclasses import dataclass, field
@@ -65,11 +66,8 @@ def generate_lead_lag_signals(
 
         # Find the oldest data point still within the lookback window
         window_start = ts - lookback_seconds
-        j = i - 1
-        while j >= 0 and source_timestamps[j] >= window_start:
-            j -= 1
-        # j now points OUTSIDE the window (or -1); use j+1 for the first tick inside
-        j = j + 1 if j + 1 < len(source_prices) else 0
+        j = bisect.bisect_left(source_timestamps, window_start, 0, i)
+        # j now points to first tick >= window_start
 
         ref_price = source_prices[j]
         if ref_price <= 0 or not math.isfinite(ref_price):
