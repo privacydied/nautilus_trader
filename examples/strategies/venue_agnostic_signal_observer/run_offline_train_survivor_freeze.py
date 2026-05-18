@@ -20,9 +20,9 @@ def _load_freeze_config(path: str | None) -> OfflineTrainSurvivorFreezeConfig:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     return OfflineTrainSurvivorFreezeConfig(
         min_valid_events=int(payload.get("min_valid_events", 2)),
-        min_net_mean_bps=float(payload.get("min_net_mean_bps", 0.0)),
-        min_net_median_bps=float(payload.get("min_net_median_bps", 0.0)),
-        min_win_rate=float(payload.get("min_win_rate", 0.5)),
+        min_net_mean_bps=None if payload.get("min_net_mean_bps") is None else float(payload.get("min_net_mean_bps")),
+        min_net_median_bps=None if payload.get("min_net_median_bps") is None else float(payload.get("min_net_median_bps")),
+        min_win_rate=None if payload.get("min_win_rate") is None else float(payload.get("min_win_rate")),
         min_worst_net_bps=None if payload.get("min_worst_net_bps") is None else float(payload.get("min_worst_net_bps")),
         max_survivors=None if payload.get("max_survivors") is None else int(payload.get("max_survivors")),
     )

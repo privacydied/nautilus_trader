@@ -128,8 +128,8 @@ class QuoteTickLite:
             symbol=d["symbol"],
             bid=bid,
             ask=ask,
-            bid_size=float(d.get("bid_size", 0.0)),
-            ask_size=float(d.get("ask_size", 0.0)),
+            bid_size=float(d["bid_size"]) if "bid_size" in d and d["bid_size"] is not None else 0.0,
+            ask_size=float(d["ask_size"]) if "ask_size" in d and d["ask_size"] is not None else 0.0,
             raw=d.get("raw"),
         )
 

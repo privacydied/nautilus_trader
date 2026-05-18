@@ -108,8 +108,8 @@ def load_quotes_jsonl(path: str) -> list[QuoteTickLite]:
 
             # Pre-validate ask > bid before delegating to from_dict
             try:
-                ask_val = float(data.get("ask", 0.0))
-                bid_val = float(data.get("bid", 0.0))
+                ask_val = float(data["ask"]) if "ask" in data and data["ask"] is not None else 0.0
+                bid_val = float(data["bid"]) if "bid" in data and data["bid"] is not None else 0.0
             except (TypeError, ValueError) as exc:
                 print(
                     f"WARNING: skipping quote line {lineno} in {path}: "

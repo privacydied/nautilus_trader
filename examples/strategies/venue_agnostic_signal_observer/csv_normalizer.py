@@ -21,16 +21,24 @@ def load_ohlc_csv(path: str) -> List[dict]:
         reader = csv.DictReader(fh)
         for row in reader:
             try:
-                ts = float(row.get("timestamp", ""))
-                close = float(row.get("close", ""))
+                ts_str = row.get("timestamp", "")
+                close_str = row.get("close", "")
+                if not ts_str or not close_str:
+                    continue
+                ts = float(ts_str)
+                close = float(close_str)
                 if close > 0:
+                    open_str = row.get("open", close_str)
+                    high_str = row.get("high", close_str)
+                    low_str = row.get("low", close_str)
+                    vol_str = row.get("volume", "0")
                     rows.append({
                         "timestamp": ts,
-                        "open": float(row.get("open", close)),
-                        "high": float(row.get("high", close)),
-                        "low": float(row.get("low", close)),
+                        "open": float(open_str) if open_str else close,
+                        "high": float(high_str) if high_str else close,
+                        "low": float(low_str) if low_str else close,
                         "close": close,
-                        "volume": float(row.get("volume", 0)),
+                        "volume": float(vol_str) if vol_str else 0,
                     })
             except (ValueError, TypeError):
                 continue
