@@ -1,0 +1,23 @@
+{
+  "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+  "discovery_config_hash": "53caf5e2c33784fcc36a318541ce5b86f2358f15b6615730244593dd195931f5",
+  "discovery_plan_manifest_path": "reports/venue_agnostic_signal_observer/offline_discovery_plan/offline_discovery_plan_20260518_015139/offline_discovery_plan_manifest.json",
+  "evaluated_cell_count": 0,
+  "evaluation_hash": "84be3d1131ea5dcc18b1d12ff3b078a90213cb9181e3a42140ee2bdf590728a8",
+  "excluded_cell_count": 0,
+  "generated_at_utc": "2026-05-18T01:52:16.023012+00:00",
+  "git_sha": "e59e5039bf52f61e939c449cb52d511da209d0e9",
+  "phase": "offline_train_evaluation",
+  "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+  "precommitment_hash": null,
+  "prepare_manifest_path": "reports/venue_agnostic_signal_observer/offline_historical_prepare/offline_prepare_20260518_015032/offline_prepare_manifest.json",
+  "raw_train_screen_cell_count": 0,
+  "run_id": "offline_train_evaluation_20260518_015216",
+  "safety": "public_data_observer_only",
+  "schema_version": "offline_train_evaluation_v1",
+  "status": "INPUT_HASH_MISMATCH",
+  "stress_window_manifest_path": "reports/venue_agnostic_signal_observer/offline_stress_windows/offline_stress_window_index_20260518_015103/stress_window_manifest.json",
+  "survivor_freeze_status": "NOT_RUN_PHASE_2B2A",
+  "train_survivor_cell_count": 0,
+  "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091"
+}

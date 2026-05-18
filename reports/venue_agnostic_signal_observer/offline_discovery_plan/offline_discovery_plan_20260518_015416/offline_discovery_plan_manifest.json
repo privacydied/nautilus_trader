@@ -1,0 +1,21 @@
+{
+  "conditioning_cell_count": 0,
+  "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+  "discovery_config_hash": "53caf5e2c33784fcc36a318541ce5b86f2358f15b6615730244593dd195931f5",
+  "edge_family_cell_count": 6,
+  "generated_at_utc": "2026-05-18T01:54:16.824879+00:00",
+  "git_sha": "e59e5039bf52f61e939c449cb52d511da209d0e9",
+  "holdout_window_count": 7,
+  "phase": "offline_discovery_plan",
+  "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+  "precommitment_hash": "b9aba30a3f5830cae924e5383ceb4e75f119bbed442e5bac1b8a624e31eb47ef",
+  "prepare_manifest_path": "reports/venue_agnostic_signal_observer/offline_historical_prepare/offline_prepare_20260518_015032/offline_prepare_manifest.json",
+  "run_id": "offline_discovery_plan_20260518_015416",
+  "safety": "public_data_observer_only",
+  "schema_version": "offline_discovery_plan_v1",
+  "status": "OFFLINE_DISCOVERY_PLAN_READY",
+  "stress_rule_config_hash": "9d80885443629f888eef4e339fc44dee9722912739c74023573023c8ffaf5d9a",
+  "stress_window_manifest_path": "reports/venue_agnostic_signal_observer/offline_stress_windows/offline_stress_window_index_20260518_015103/stress_window_manifest.json",
+  "train_window_count": 14,
+  "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091"
+}

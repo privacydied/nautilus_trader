@@ -1,0 +1,134 @@
+{
+  "schema_version": "offline_native_null_v1",
+  "status": "NO_NULL_ELIGIBLE_CELLS",
+  "method": "sign_flip_mean_net_bps_greater_than_zero",
+  "alternative": "greater",
+  "eligible_cell_ids": [],
+  "tested_cell_ids": [],
+  "excluded_cell_ids": [
+    "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3",
+    "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969",
+    "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2"
+  ],
+  "exclusion_reasons_by_cell": {
+    "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3": [
+      "comparison_failed",
+      "not_holdout_survivor"
+    ],
+    "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969": [
+      "comparison_failed",
+      "not_holdout_survivor"
+    ],
+    "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2": [
+      "comparison_failed",
+      "not_holdout_survivor"
+    ]
+  },
+  "cell_results": [
+    {
+      "cell_id": "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3",
+      "family_id": "family_1_same_venue_quote_basis",
+      "family_name": "Kraken same-venue USD/USDT quote-basis",
+      "signal_variant": null,
+      "method": "sign_flip_mean_net_bps_greater_than_zero",
+      "alternative": "greater",
+      "event_count": 7,
+      "observed_statistic": null,
+      "p_value": null,
+      "exact": false,
+      "iterations": null,
+      "random_seed": null,
+      "status": "excluded",
+      "exclusion_reasons": [
+        "comparison_failed",
+        "not_holdout_survivor"
+      ],
+      "evidence_hash": null,
+      "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+      "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+      "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+      "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403",
+      "survivor_freeze_hash": "a48a6c3496917aa8dac60181a28c73881df2c9d993968b02649ea4570374cb8a",
+      "holdout_evaluation_hash": "57fc7f1f34b06e125b90ff3cad326f72f35c2fa6f7d7e37a13594d6379239e0a",
+      "comparison_hash": "c6a76182219b7ddb32ebb6cbd58d435823d7e31f49fa6a56200cd44bbe7df82f"
+    },
+    {
+      "cell_id": "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969",
+      "family_id": "family_1_same_venue_quote_basis",
+      "family_name": "Kraken same-venue USD/USDT quote-basis",
+      "signal_variant": null,
+      "method": "sign_flip_mean_net_bps_greater_than_zero",
+      "alternative": "greater",
+      "event_count": 7,
+      "observed_statistic": null,
+      "p_value": null,
+      "exact": false,
+      "iterations": null,
+      "random_seed": null,
+      "status": "excluded",
+      "exclusion_reasons": [
+        "comparison_failed",
+        "not_holdout_survivor"
+      ],
+      "evidence_hash": null,
+      "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+      "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+      "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+      "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403",
+      "survivor_freeze_hash": "a48a6c3496917aa8dac60181a28c73881df2c9d993968b02649ea4570374cb8a",
+      "holdout_evaluation_hash": "57fc7f1f34b06e125b90ff3cad326f72f35c2fa6f7d7e37a13594d6379239e0a",
+      "comparison_hash": "c6a76182219b7ddb32ebb6cbd58d435823d7e31f49fa6a56200cd44bbe7df82f"
+    },
+    {
+      "cell_id": "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2",
+      "family_id": "family_1_same_venue_quote_basis",
+      "family_name": "Kraken same-venue USD/USDT quote-basis",
+      "signal_variant": null,
+      "method": "sign_flip_mean_net_bps_greater_than_zero",
+      "alternative": "greater",
+      "event_count": 7,
+      "observed_statistic": null,
+      "p_value": null,
+      "exact": false,
+      "iterations": null,
+      "random_seed": null,
+      "status": "excluded",
+      "exclusion_reasons": [
+        "comparison_failed",
+        "not_holdout_survivor"
+      ],
+      "evidence_hash": null,
+      "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+      "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+      "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+      "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403",
+      "survivor_freeze_hash": "a48a6c3496917aa8dac60181a28c73881df2c9d993968b02649ea4570374cb8a",
+      "holdout_evaluation_hash": "57fc7f1f34b06e125b90ff3cad326f72f35c2fa6f7d7e37a13594d6379239e0a",
+      "comparison_hash": "c6a76182219b7ddb32ebb6cbd58d435823d7e31f49fa6a56200cd44bbe7df82f"
+    }
+  ],
+  "pvalue_input": null,
+  "native_null_config_hash": "acf116227f3cecc63d0f7b45a2c0b19fee01b5f093aae4f80cc96c911ef455a7",
+  "native_null_hash": "69bcf4485fc14c9c2708719c3e3e35207963c675d4c3c23ca0650b11e7c9089b",
+  "metadata": {
+    "null_config": {
+      "schema_version": "offline_native_null_v1",
+      "method": "sign_flip_mean_net_bps_greater_than_zero",
+      "min_events": 2,
+      "exact_max_events": 20,
+      "monte_carlo_iterations": 10000,
+      "random_seed": 1337,
+      "alternative": "greater"
+    },
+    "comparison_status": "NO_HOLDOUT_SURVIVORS",
+    "holdout_evaluation_status": "OFFLINE_HOLDOUT_EVALUATION_READY"
+  },
+  "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+  "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+  "discovery_config_hash": "53caf5e2c33784fcc36a318541ce5b86f2358f15b6615730244593dd195931f5",
+  "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+  "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403",
+  "survivor_freeze_hash": "a48a6c3496917aa8dac60181a28c73881df2c9d993968b02649ea4570374cb8a",
+  "holdout_evaluation_hash": "57fc7f1f34b06e125b90ff3cad326f72f35c2fa6f7d7e37a13594d6379239e0a",
+  "comparison_hash": "c6a76182219b7ddb32ebb6cbd58d435823d7e31f49fa6a56200cd44bbe7df82f"
+}

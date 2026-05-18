@@ -1,0 +1,86 @@
+{
+  "schema_version": "offline_holdout_evaluation_v1",
+  "status": "NO_EVALUABLE_SURVIVORS",
+  "cell_results": [],
+  "excluded_survivor_cells": {
+    "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2": [
+      "unsupported_resolution:trade"
+    ],
+    "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969": [
+      "unsupported_resolution:trade"
+    ],
+    "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3": [
+      "unsupported_resolution:trade"
+    ]
+  },
+  "train_survivor_cell_ids": [
+    "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3",
+    "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969",
+    "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2"
+  ],
+  "holdout_evaluated_cell_ids": [],
+  "train_window_ids_seen_but_not_evaluated": [
+    "122fbfdb9bae4a47778745f9811801e005a56179829717e5d9f26c060014e15d",
+    "20cf9e2d4d64cd42549554badd596184c67c6a5e267433c00b7f3b8059a6cfb2",
+    "2c98ff9fb79bb48e517be5dcde8cfcc7a928c54bc142ed55d047c13fc0f50777",
+    "305e6e437a36bf50cd696a6ff3c270f7f0469c1bc315212b048a250f70db5e55",
+    "363114a0fa61a1ceadaa74b6eafe743fea8dfe4b2bc39bbb7f1ad8a7c1cad730",
+    "4605e49c7597c01d0eb9172a79607b1042f475e1abd54e1faf0022242217fbc0",
+    "646740896ae78ca97da73fa4b14b9aaa5ffffa6f5091d9bd16ad29f989500e94",
+    "9aa6bef870312ed452f57b13f49fac8b85522a23d5d4cd2c819ea9e2d3c95caf",
+    "a74589bf7a5b03872313fcd58acf8ece1d4abed07bc20feabc0f32d590b2951b",
+    "a8675eeded227a47cdf56591c942528b5135cc3fe967ed4c75581a462ed65dc5",
+    "b3a89fd0ad20302befed8e9c4eee7ee0aafbdbb0a01cab08ab9dbf1c75b91514",
+    "c9f67431e53d11046d6959a1ca98023a1e172a989b9eaa2c7e7278e7f695e0a7",
+    "f06c063d95269f142a86401fe746c5d0d15eadadf089a0e6af451accad584e0f",
+    "fa4251295d0f572005d05e3cb82de24819019a785cffa0b0c040b88a8e81e789"
+  ],
+  "holdout_window_ids": [
+    "226cfe1d33e7e15913af4df9c1e6097a576bb5e341cadeb55d18cde5339f193b",
+    "3adc83df54de8fb472bfe511f61d693837121487ff40d08d177fe930fcbbf773",
+    "3b2ac51cadfd5f44b6eab4b8160adf31f9bf7c358ca6f19bc31730933cf5efbc",
+    "65afb7224f539c02f2c79d5065ea713e92a88865975479b8a0ecebc18cfbc76e",
+    "934a6cc5380d9820791a26488facb2eff895db6e08ab89494509b31dd9491bb8",
+    "a8eb1cbb23814b885aa5122cdcc2c6f3f5998a67bf3ef0235e3123b4299e355f",
+    "e3797098240f130bb19952c769db7fa19e91c0cc34f79da10fa2194be6939023"
+  ],
+  "holdout_evaluation_hash": "d1e00e5b10f0c7e6a91235ca95f7a3a975b535c4f97dbcbf16d6030f902e5bbf",
+  "metadata": {
+    "train_window_ids_seen_but_not_evaluated": [
+      "122fbfdb9bae4a47778745f9811801e005a56179829717e5d9f26c060014e15d",
+      "20cf9e2d4d64cd42549554badd596184c67c6a5e267433c00b7f3b8059a6cfb2",
+      "2c98ff9fb79bb48e517be5dcde8cfcc7a928c54bc142ed55d047c13fc0f50777",
+      "305e6e437a36bf50cd696a6ff3c270f7f0469c1bc315212b048a250f70db5e55",
+      "363114a0fa61a1ceadaa74b6eafe743fea8dfe4b2bc39bbb7f1ad8a7c1cad730",
+      "4605e49c7597c01d0eb9172a79607b1042f475e1abd54e1faf0022242217fbc0",
+      "646740896ae78ca97da73fa4b14b9aaa5ffffa6f5091d9bd16ad29f989500e94",
+      "9aa6bef870312ed452f57b13f49fac8b85522a23d5d4cd2c819ea9e2d3c95caf",
+      "a74589bf7a5b03872313fcd58acf8ece1d4abed07bc20feabc0f32d590b2951b",
+      "a8675eeded227a47cdf56591c942528b5135cc3fe967ed4c75581a462ed65dc5",
+      "b3a89fd0ad20302befed8e9c4eee7ee0aafbdbb0a01cab08ab9dbf1c75b91514",
+      "c9f67431e53d11046d6959a1ca98023a1e172a989b9eaa2c7e7278e7f695e0a7",
+      "f06c063d95269f142a86401fe746c5d0d15eadadf089a0e6af451accad584e0f",
+      "fa4251295d0f572005d05e3cb82de24819019a785cffa0b0c040b88a8e81e789"
+    ],
+    "holdout_window_ids": [
+      "226cfe1d33e7e15913af4df9c1e6097a576bb5e341cadeb55d18cde5339f193b",
+      "3adc83df54de8fb472bfe511f61d693837121487ff40d08d177fe930fcbbf773",
+      "3b2ac51cadfd5f44b6eab4b8160adf31f9bf7c358ca6f19bc31730933cf5efbc",
+      "65afb7224f539c02f2c79d5065ea713e92a88865975479b8a0ecebc18cfbc76e",
+      "934a6cc5380d9820791a26488facb2eff895db6e08ab89494509b31dd9491bb8",
+      "a8eb1cbb23814b885aa5122cdcc2c6f3f5998a67bf3ef0235e3123b4299e355f",
+      "e3797098240f130bb19952c769db7fa19e91c0cc34f79da10fa2194be6939023"
+    ]
+  },
+  "run_id": "offline_holdout_evaluation_20260518_020443",
+  "generated_at_utc": "2026-05-18T02:04:43.822390+00:00",
+  "git_sha": "93789ed01926f81e9c725404c878625e04d90631",
+  "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+  "precommitment_hash": "b9aba30a3f5830cae924e5383ceb4e75f119bbed442e5bac1b8a624e31eb47ef",
+  "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+  "discovery_config_hash": "53caf5e2c33784fcc36a318541ce5b86f2358f15b6615730244593dd195931f5",
+  "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+  "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403",
+  "survivor_freeze_config_hash": "b8eee2be24d8f7668f5249cf07848648e6f9f7b0f5e996e37a8a60d0479b6b5d",
+  "survivor_freeze_hash": "a48a6c3496917aa8dac60181a28c73881df2c9d993968b02649ea4570374cb8a"
+}

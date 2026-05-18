@@ -1,0 +1,138 @@
+{
+  "schema_version": "offline_fdr_correction_v1",
+  "status": "FDR_INPUT_PVALUES_MISSING",
+  "method": null,
+  "alpha": null,
+  "fdr_family_size": 0,
+  "eligible_cell_ids": [],
+  "fdr_passed_cell_ids": [],
+  "fdr_failed_cell_ids": [],
+  "excluded_cell_ids": [
+    "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3",
+    "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969",
+    "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2"
+  ],
+  "exclusion_reasons_by_cell": {
+    "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3": [
+      "comparison_failed",
+      "missing_pvalue"
+    ],
+    "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969": [
+      "comparison_failed",
+      "missing_pvalue"
+    ],
+    "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2": [
+      "comparison_failed",
+      "missing_pvalue"
+    ]
+  },
+  "fdr_config_hash": "f4426588eefa1569e8cdf9f7d8aa9e1e6220aef768e65013479f816996b20f67",
+  "pvalue_input_hash": null,
+  "fdr_hash": "490719d575c10834c4173595db2176e8330e6144a4ed5aab919d676751fd96b3",
+  "cell_results": [
+    {
+      "cell_id": "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3",
+      "family_id": "family_1_same_venue_quote_basis",
+      "family_name": "Kraken same-venue USD/USDT quote-basis",
+      "signal_variant": null,
+      "lookback_ms": 120000,
+      "horizon_ms": 60000,
+      "comparison_passed": false,
+      "p_value": null,
+      "q_value": null,
+      "rank": null,
+      "method": null,
+      "alpha": null,
+      "fdr_passed": null,
+      "exclusion_reasons": [
+        "comparison_failed",
+        "missing_pvalue"
+      ],
+      "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+      "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+      "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+      "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403",
+      "survivor_freeze_hash": "a48a6c3496917aa8dac60181a28c73881df2c9d993968b02649ea4570374cb8a",
+      "holdout_evaluation_hash": "57fc7f1f34b06e125b90ff3cad326f72f35c2fa6f7d7e37a13594d6379239e0a",
+      "comparison_hash": "c6a76182219b7ddb32ebb6cbd58d435823d7e31f49fa6a56200cd44bbe7df82f"
+    },
+    {
+      "cell_id": "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969",
+      "family_id": "family_1_same_venue_quote_basis",
+      "family_name": "Kraken same-venue USD/USDT quote-basis",
+      "signal_variant": null,
+      "lookback_ms": 60000,
+      "horizon_ms": 60000,
+      "comparison_passed": false,
+      "p_value": null,
+      "q_value": null,
+      "rank": null,
+      "method": null,
+      "alpha": null,
+      "fdr_passed": null,
+      "exclusion_reasons": [
+        "comparison_failed",
+        "missing_pvalue"
+      ],
+      "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+      "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+      "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+      "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403",
+      "survivor_freeze_hash": "a48a6c3496917aa8dac60181a28c73881df2c9d993968b02649ea4570374cb8a",
+      "holdout_evaluation_hash": "57fc7f1f34b06e125b90ff3cad326f72f35c2fa6f7d7e37a13594d6379239e0a",
+      "comparison_hash": "c6a76182219b7ddb32ebb6cbd58d435823d7e31f49fa6a56200cd44bbe7df82f"
+    },
+    {
+      "cell_id": "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2",
+      "family_id": "family_1_same_venue_quote_basis",
+      "family_name": "Kraken same-venue USD/USDT quote-basis",
+      "signal_variant": null,
+      "lookback_ms": 30000,
+      "horizon_ms": 60000,
+      "comparison_passed": false,
+      "p_value": null,
+      "q_value": null,
+      "rank": null,
+      "method": null,
+      "alpha": null,
+      "fdr_passed": null,
+      "exclusion_reasons": [
+        "comparison_failed",
+        "missing_pvalue"
+      ],
+      "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+      "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+      "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+      "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403",
+      "survivor_freeze_hash": "a48a6c3496917aa8dac60181a28c73881df2c9d993968b02649ea4570374cb8a",
+      "holdout_evaluation_hash": "57fc7f1f34b06e125b90ff3cad326f72f35c2fa6f7d7e37a13594d6379239e0a",
+      "comparison_hash": "c6a76182219b7ddb32ebb6cbd58d435823d7e31f49fa6a56200cd44bbe7df82f"
+    }
+  ],
+  "metadata": {
+    "fdr_config": {
+      "schema_version": "offline_fdr_correction_v1",
+      "method": "by",
+      "alpha": 0.05,
+      "eligible_families": [
+        "family_1",
+        "family_2",
+        "family_3"
+      ],
+      "exclude_conditioning_families": true,
+      "require_comparison_passed": true,
+      "require_edge_family": true
+    },
+    "pvalue_input_provided": false,
+    "comparison_status": "NO_HOLDOUT_SURVIVORS"
+  },
+  "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+  "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+  "discovery_config_hash": "53caf5e2c33784fcc36a318541ce5b86f2358f15b6615730244593dd195931f5",
+  "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+  "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403",
+  "survivor_freeze_hash": "a48a6c3496917aa8dac60181a28c73881df2c9d993968b02649ea4570374cb8a",
+  "holdout_evaluation_hash": "57fc7f1f34b06e125b90ff3cad326f72f35c2fa6f7d7e37a13594d6379239e0a",
+  "comparison_config_hash": "55a4f63b68cd42cfc1f100829e60cb93dd42b050bf12274ca20f48d136330ccd",
+  "comparison_hash": "c6a76182219b7ddb32ebb6cbd58d435823d7e31f49fa6a56200cd44bbe7df82f"
+}

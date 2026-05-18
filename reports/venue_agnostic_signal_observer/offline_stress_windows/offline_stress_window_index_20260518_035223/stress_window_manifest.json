@@ -1,0 +1,335 @@
+{
+  "data_corpus_hash": "ffeeabe369eb327af107493f9f73d4deccf063729e5d59373b06ad737a034af6",
+  "deduped_window_count": 0,
+  "generated_at_utc": "2026-05-18T03:52:23.932553+00:00",
+  "git_sha": "0ee7302441db2482fcd102d2551a2f76c2bf84b9",
+  "input_prepare_manifest_hash": "9a4932fa4a7d8e4197c03d6c95ca3bb0d0a651c0930424b52d961f58261934dc",
+  "input_prepare_manifest_path": "reports/venue_agnostic_signal_observer/offline_historical_prepare/offline_prepare_20260518_035158/offline_prepare_manifest.json",
+  "phase": "offline_stress_window_index",
+  "precommitment_hash": "5e971aeed2d6a562f994425d8ad4e49793658ba1f55a94301b039662543f2065",
+  "promotion_allowed": true,
+  "rejected_rules": [
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USDT__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    }
+  ],
+  "resolution_summary": {
+    "trade": 14
+  },
+  "run_id": "offline_stress_window_index_20260518_035223",
+  "safety": "public_data_observer_only",
+  "schema_version": "offline_stress_window_index_v1",
+  "selection_mode": "causal",
+  "source_streams_used": [
+    "kraken__BTC_USDT__kraken_trades",
+    "kraken__BTC_USDT__kraken_trades",
+    "kraken__BTC_USDT__kraken_trades",
+    "kraken__BTC_USDT__kraken_trades",
+    "kraken__BTC_USDT__kraken_trades",
+    "kraken__BTC_USDT__kraken_trades",
+    "kraken__BTC_USDT__kraken_trades",
+    "kraken__BTC_USD__kraken_trades",
+    "kraken__BTC_USD__kraken_trades",
+    "kraken__BTC_USD__kraken_trades",
+    "kraken__BTC_USD__kraken_trades",
+    "kraken__BTC_USD__kraken_trades",
+    "kraken__BTC_USD__kraken_trades",
+    "kraken__BTC_USD__kraken_trades"
+  ],
+  "status": "NO_STRESS_WINDOWS",
+  "stress_rule_config_hash": "e1e0b43f99fd297059f1e1820b0bc89f8dd99fa16786e3df892965acc3e0a1c3",
+  "suppressed_trigger_count": 0,
+  "window_count": 0,
+  "window_index_hash": "ff326106520beb58c4a385862809e9b471feaacb89072a0aeda76d7830e03b2d"
+}

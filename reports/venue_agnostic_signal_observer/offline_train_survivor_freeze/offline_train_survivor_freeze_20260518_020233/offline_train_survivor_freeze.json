@@ -1,0 +1,131 @@
+{
+  "schema_version": "offline_train_survivor_freeze_v1",
+  "status": "OFFLINE_TRAIN_SURVIVOR_FREEZE_READY",
+  "train_survivor_cell_ids": [
+    "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3",
+    "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969",
+    "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2"
+  ],
+  "rejected_cell_ids": [
+    "1a5d4211e034a88bbb3d08e5158b069735a69f5d563ef9048460fc12ebcee1f1",
+    "6abd7ecadcb8909da202aeac1960a1c00f9aecdd02c857189561e143e93a0633",
+    "a8badf6703f6d0a0f3ada8a3642549d57699f7a1c59de2dd0a6c3f0d2e3bb7ac"
+  ],
+  "rejection_reasons_by_cell": {
+    "1a5d4211e034a88bbb3d08e5158b069735a69f5d563ef9048460fc12ebcee1f1": [
+      "not_in_raw_train_screen"
+    ],
+    "6abd7ecadcb8909da202aeac1960a1c00f9aecdd02c857189561e143e93a0633": [
+      "not_in_raw_train_screen"
+    ],
+    "a8badf6703f6d0a0f3ada8a3642549d57699f7a1c59de2dd0a6c3f0d2e3bb7ac": [
+      "not_in_raw_train_screen"
+    ]
+  },
+  "raw_train_screen_cell_ids": [
+    "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3",
+    "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969",
+    "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2"
+  ],
+  "holdout_window_ids_seen_but_not_evaluated": [
+    "226cfe1d33e7e15913af4df9c1e6097a576bb5e341cadeb55d18cde5339f193b",
+    "3adc83df54de8fb472bfe511f61d693837121487ff40d08d177fe930fcbbf773",
+    "3b2ac51cadfd5f44b6eab4b8160adf31f9bf7c358ca6f19bc31730933cf5efbc",
+    "65afb7224f539c02f2c79d5065ea713e92a88865975479b8a0ecebc18cfbc76e",
+    "934a6cc5380d9820791a26488facb2eff895db6e08ab89494509b31dd9491bb8",
+    "a8eb1cbb23814b885aa5122cdcc2c6f3f5998a67bf3ef0235e3123b4299e355f",
+    "e3797098240f130bb19952c769db7fa19e91c0cc34f79da10fa2194be6939023"
+  ],
+  "survivor_cells": [
+    {
+      "cell_id": "15a23e16fd368c8ecee655f6cba7a4aabb12f622f97a0fdf1fc8d096c2fbd7d3",
+      "family_id": "family_1_same_venue_quote_basis",
+      "family_name": "Kraken same-venue USD/USDT quote-basis",
+      "signal_variant": null,
+      "lookback_ms": 120000,
+      "horizon_ms": 60000,
+      "valid_event_count": 14,
+      "net_mean_bps": 119.87868166699157,
+      "net_median_bps": 86.48195328982075,
+      "win_rate": 0.6428571428571429,
+      "worst_net_bps": -354.0338671441223,
+      "freeze_rank": 1,
+      "freeze_reasons": [
+        "passed_train_survivor_freeze"
+      ],
+      "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+      "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+      "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+      "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403"
+    },
+    {
+      "cell_id": "40b4d97fd92f9e26f499d2e240909de203a64e5967848a88cb93d8b468d83969",
+      "family_id": "family_1_same_venue_quote_basis",
+      "family_name": "Kraken same-venue USD/USDT quote-basis",
+      "signal_variant": null,
+      "lookback_ms": 60000,
+      "horizon_ms": 60000,
+      "valid_event_count": 14,
+      "net_mean_bps": 119.87868166699157,
+      "net_median_bps": 86.48195328982075,
+      "win_rate": 0.6428571428571429,
+      "worst_net_bps": -354.0338671441223,
+      "freeze_rank": 2,
+      "freeze_reasons": [
+        "passed_train_survivor_freeze"
+      ],
+      "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+      "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+      "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+      "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403"
+    },
+    {
+      "cell_id": "e679f73bcc60ba93607f9eacdb9090935fe8861e8b1608d034f773db8e2256d2",
+      "family_id": "family_1_same_venue_quote_basis",
+      "family_name": "Kraken same-venue USD/USDT quote-basis",
+      "signal_variant": null,
+      "lookback_ms": 30000,
+      "horizon_ms": 60000,
+      "valid_event_count": 14,
+      "net_mean_bps": 119.87868166699157,
+      "net_median_bps": 86.48195328982075,
+      "win_rate": 0.6428571428571429,
+      "worst_net_bps": -354.0338671441223,
+      "freeze_rank": 3,
+      "freeze_reasons": [
+        "passed_train_survivor_freeze"
+      ],
+      "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+      "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+      "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+      "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403"
+    }
+  ],
+  "survivor_freeze_config_hash": "b8eee2be24d8f7668f5249cf07848648e6f9f7b0f5e996e37a8a60d0479b6b5d",
+  "survivor_freeze_hash": "a48a6c3496917aa8dac60181a28c73881df2c9d993968b02649ea4570374cb8a",
+  "metadata": {
+    "holdout_window_ids_seen_but_not_evaluated": [
+      "226cfe1d33e7e15913af4df9c1e6097a576bb5e341cadeb55d18cde5339f193b",
+      "3adc83df54de8fb472bfe511f61d693837121487ff40d08d177fe930fcbbf773",
+      "3b2ac51cadfd5f44b6eab4b8160adf31f9bf7c358ca6f19bc31730933cf5efbc",
+      "65afb7224f539c02f2c79d5065ea713e92a88865975479b8a0ecebc18cfbc76e",
+      "934a6cc5380d9820791a26488facb2eff895db6e08ab89494509b31dd9491bb8",
+      "a8eb1cbb23814b885aa5122cdcc2c6f3f5998a67bf3ef0235e3123b4299e355f",
+      "e3797098240f130bb19952c769db7fa19e91c0cc34f79da10fa2194be6939023"
+    ],
+    "freeze_config": {
+      "schema_version": "offline_train_survivor_freeze_v1",
+      "min_valid_events": 2,
+      "min_net_mean_bps": 0.0,
+      "min_net_median_bps": 0.0,
+      "min_win_rate": 0.5,
+      "min_worst_net_bps": null,
+      "max_survivors": null
+    }
+  },
+  "data_corpus_hash": "6b2b73b84f9055143c355ae3386a150e0500af0a96c2d13b972e1413c7eb3da8",
+  "window_index_hash": "f0849fa09886dd1ace7f90b48536a539137a106fb1ce62743a639e899e085091",
+  "discovery_config_hash": "53caf5e2c33784fcc36a318541ce5b86f2358f15b6615730244593dd195931f5",
+  "plan_hash": "49f9af4b073b23329b655f1c1187a5812566c82b10c16c96b507d1e0678de1c4",
+  "evaluation_hash": "01187d951b84763fa17fea8adad95a36b1c69cd0614f2b78d353c9fbaa521403"
+}

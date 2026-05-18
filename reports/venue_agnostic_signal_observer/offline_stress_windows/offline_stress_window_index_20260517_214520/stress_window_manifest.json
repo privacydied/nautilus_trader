@@ -1,0 +1,325 @@
+{
+  "data_corpus_hash": "03e188060e5bcdf600f70369085f616bb706aa8d67f900ca66974a77fc4f9dc5",
+  "deduped_window_count": 0,
+  "generated_at_utc": "2026-05-17T21:45:20.801821+00:00",
+  "git_sha": "e5bc7043f8234a490c4213d809da06e43548e853",
+  "input_prepare_manifest_hash": "966cbee989faa426405358f17e31c9915c899ec15b316fd04ee6d90b6d382f72",
+  "input_prepare_manifest_path": "reports/venue_agnostic_signal_observer/offline_historical_prepare/offline_prepare_20260517_214434/offline_prepare_manifest.json",
+  "phase": "offline_stress_window_index",
+  "precommitment_hash": null,
+  "promotion_allowed": true,
+  "rejected_rules": [
+    {
+      "available_points": 0,
+      "logical_source_id": "binance_perp__perp_BTC_USDT__binance_um_agg_trades",
+      "min_required_points": 2,
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "INSUFFICIENT_HISTORICAL_COVERAGE"
+    },
+    {
+      "available_points": 0,
+      "logical_source_id": "binance_perp__perp_BTC_USDT__binance_um_agg_trades",
+      "min_required_points": 2,
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "INSUFFICIENT_HISTORICAL_COVERAGE"
+    },
+    {
+      "available_points": 0,
+      "logical_source_id": "binance_perp__perp_BTC_USDT__binance_um_agg_trades",
+      "min_required_points": 2,
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "INSUFFICIENT_HISTORICAL_COVERAGE"
+    },
+    {
+      "available_points": 0,
+      "logical_source_id": "binance_perp__perp_ETH_USDT__binance_um_agg_trades",
+      "min_required_points": 2,
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "INSUFFICIENT_HISTORICAL_COVERAGE"
+    },
+    {
+      "available_points": 0,
+      "logical_source_id": "binance_perp__perp_ETH_USDT__binance_um_agg_trades",
+      "min_required_points": 2,
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "INSUFFICIENT_HISTORICAL_COVERAGE"
+    },
+    {
+      "available_points": 0,
+      "logical_source_id": "binance_perp__perp_ETH_USDT__binance_um_agg_trades",
+      "min_required_points": 2,
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "INSUFFICIENT_HISTORICAL_COVERAGE"
+    },
+    {
+      "logical_source_id": "coinbase__AVAX_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__AVAX_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__AVAX_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__BTC_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__BTC_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__BTC_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__DOGE_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__DOGE_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__DOGE_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__ETH_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__ETH_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__ETH_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__LINK_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__LINK_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__LINK_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__SOL_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__SOL_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "coinbase__SOL_USD__coinbase_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__BTC_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__DOGE_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__DOGE_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__DOGE_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__ETH_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__ETH_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__ETH_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__LINK_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__LINK_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__LINK_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__SOL_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_absolute_return_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__SOL_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "rolling_range_bps",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    },
+    {
+      "logical_source_id": "kraken__SOL_USD__kraken_trades",
+      "resolution_type": "trade",
+      "rule_name": "tick_only_burst_placeholder",
+      "rule_version": "v1",
+      "status": "NO_STRESS_WINDOWS"
+    }
+  ],
+  "resolution_summary": {
+    "trade": 13
+  },
+  "run_id": "offline_stress_window_index_20260517_214520",
+  "safety": "public_data_observer_only",
+  "schema_version": "offline_stress_window_index_v1",
+  "selection_mode": "causal",
+  "source_streams_used": [
+    "binance_perp__perp_BTC_USDT__binance_um_agg_trades",
+    "binance_perp__perp_ETH_USDT__binance_um_agg_trades",
+    "coinbase__AVAX_USD__coinbase_trades",
+    "coinbase__BTC_USD__coinbase_trades",
+    "coinbase__DOGE_USD__coinbase_trades",
+    "coinbase__ETH_USD__coinbase_trades",
+    "coinbase__LINK_USD__coinbase_trades",
+    "coinbase__SOL_USD__coinbase_trades",
+    "kraken__BTC_USD__kraken_trades",
+    "kraken__DOGE_USD__kraken_trades",
+    "kraken__ETH_USD__kraken_trades",
+    "kraken__LINK_USD__kraken_trades",
+    "kraken__SOL_USD__kraken_trades"
+  ],
+  "status": "INSUFFICIENT_HISTORICAL_COVERAGE",
+  "stress_rule_config_hash": "46d673b00296aa156fb23220df8ad6ea2df0c80236f2b565b3ffb9882499ce40",
+  "suppressed_trigger_count": 0,
+  "window_count": 0,
+  "window_index_hash": "9d07d18969519e42b527e248a6dc4b0ca036876eeb56671cfa9eeafa289e1e72"
+}
