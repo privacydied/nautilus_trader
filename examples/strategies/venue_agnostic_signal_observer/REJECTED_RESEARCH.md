@@ -18,9 +18,9 @@ changing something structural.
 
 ## Mined Status
 
-The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 45 study groups:
+The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 46 study groups:
 - **36 REJECTED**
-- **9 NEEDS_MORE_DATA** (insufficient events / zero signals)
+- **10 NEEDS_MORE_DATA** (insufficient events / zero signals / no tail)
 - **1 MARKET_MODERATE_DIAGNOSTIC** (quiet/moderate capture, below volatility gate)
 - **1 UNKNOWN**
 
@@ -56,6 +56,7 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 | Polymarket BTC Up/Down short-expiry liquidity probe v0 | CLOB orderbook liquidity near expiry | Polymarket CLOB (BTC Up/Down binary options) | REJECTED | Near-expiry depth collapses below $100 non-dust floor: $89 at 5-15m → $13 at 0-30s. Spreads tight (1c median) but depth wall blocks Chainlink/CLOB lag hypothesis. Parser-confounded 98c finding corrected and superseded. | `polymarket-btc-updown-liquidity-v0-rejected` |
 | **Family 1 same-venue USD/USDT quote-basis reversion** | Same-venue quote-basis reversion (BTC/USD vs BTC/USDT) | Kraken spot | **REJECTED** | Cached-data diagnostic: observed basis change over 30-120s lookbacks was ~5-30 bps peak; round-trip two-leg cost ~32 bps. Signal is structurally smaller than transaction cost. Cost-wall blocked. Diagnostic confirmed the blocker is signal-vs-cost, not window length or data sparsity. Tag: `family1-kraken-usd-usdt-reversion-cost-wall-rejected` |
 | **Family 2 funding crowding reversal** | Binance BTCUSDT funding-rate extremes → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M funding + spot) | **REJECTED** | 60 BTC primary cells evaluated Jun 2020–Apr 2026 window (180-day past-only percentile warmup). Approved run (2026-05-18): 25 NEEDS_MORE_DATA, 11 REJECTED, 23 NULL_REJECTED_DIAGNOSTIC, 1 FDR_BLOCKED_DIAGNOSTIC, **0 CANDIDATE_FOR_LONGER_OBSERVATION**. No cell passed all pre-null gates (mean_net > 0, median > 0, win_rate >= 0.55, worst_decile > -50, baseline_delta >= 10). Positive-funding cells uniformly negative. Negative-funding cells had mixed sign but sub-threshold win rates. Full 60-cell evidence: no edge survives after 50 bps cost under frozen precommitted design. | `family2-funding-crowding-reversal-rejected` |
+| **Cross-exchange funding dispersion carry v1** | Binance vs Bybit perp funding spread carry (short high/long low) | Binance Vision + Bybit v5 archive (BTC & ETH) | **NEEDS_MORE_DATA_OR_NO_TAIL** | Gate A (Stage 1): zero dispersion events at all frozen thresholds (5/10/20/40 bps) for both BTC and ETH. Absolute funding spread never exceeded 5 bps across 1,261 aligned settlements (2024-01 to 2025-05). BTC max: 4.14 bps; ETH max: 4.49 bps. Gate B, null, FDR, holdout never reached. | `cross-exchange-funding-dispersion-carry-v1-no-tail` |
 
 ## Rejection Details
 
@@ -200,6 +201,99 @@ The approved bugfix rerun (commit `54d3f5257292efb4270fbfe4f3773fbb53cd5220`, se
 
 Two prior runs (SHA `ad55c351f0`) were invalidated as `INVALID_RUN_BUG_COMPROMISED_EVENTS_DROPPED` (`CellResult.to_dict()` omitted `events`). Both are quarantined with `INVALIDATED.txt` markers under `reports/funding_crowding_reversal_v1/` and are not used as evidence. The 25 `NEEDS_MORE_DATA` cells — the strictest thresholds (`abs ≥ 0.0025`, top/bottom 1%) at longer horizons — are underpowered because extreme funding is rare; Phase 0 explicitly predicted this, so it is expected behavior, not a bug. One cell (`BTC/pct_funding_top_bottom_5pct/h8/negative_funding_extreme`) survived the timestamp-shuffle null and was then blocked by family-wide BY FDR — the multiple-comparisons correction working as designed; no single cell's isolated edge survived correction across 60 correlated tests. The 6 bps diagnostic sensitivity tier changed no verdicts.
 
+### Cross-Exchange Funding Dispersion Carry v1
+
+**Tag:** `cross-exchange-funding-dispersion-carry-v1-no-tail`
+
+**Verdict:** `NEEDS_MORE_DATA_OR_NO_TAIL`
+
+**Hypothesis:** When the funding rate differential between Bybit and Binance perpetual
+BTC/ETH contracts exceeds a threshold, shorting the higher-funding venue and going
+long on the lower-funding venue produces positive carry over the subsequent N
+settlements (N = 3, 6, 12) after deducting 50 bps round-trip cost.
+
+**Tested conditions (frozen precommitment design):**
+
+| Parameter | Value |
+|---|---|
+| Study ID | `cross-exchange-funding-dispersion-carry-v1` |
+| Assets | BTC, ETH |
+| Venues | Binance (long leg), Bybit (short leg) |
+| Thresholds | 5, 10, 20, 40 bps (absolute funding spread) |
+| Hold lengths | 3, 6, 12 settlements |
+| Grid dimensions | 2 assets × 4 thresholds × 3 holds = 24 cells |
+| Primary cost | 50 bps per campaign (charged once, not per settlement) |
+| Diagnostic cost | 6 bps (changes no verdict) |
+| Null | Event-vector circular shift, 1000 iterations, alpha 0.05, seed 42 |
+| FDR | Benjamini-Yekutieli, alpha 0.05, family size 24 |
+| Split | 70/30 chronological, split at 2024-12-13 |
+| Data sources | Binance Vision monthly CSV archives + Bybit v5 public API historical |
+| Window | 2024-01-01 00:00 UTC → 2025-05-31 16:00 UTC (1261 aligned settlements) |
+| Dropped unaligned | 290 settlements |
+| Funding unit | Decimal (auto-detected, confirmed via Binance Vision CSV + Bybit API archive) |
+| Safety mode | `public_data_observer_only` |
+
+**Key result:** Gate A (Stage 1 — distribution sizing) found zero dispersion events at
+every frozen threshold for both BTC and ETH. The absolute cross-exchange funding
+spread between Bybit and Binance never exceeded 5 bps at any settlement in the
+entire 17-month window. The pipeline terminated at Gate A; Gate B, null test, FDR,
+and holdout were never reached.
+
+| Asset | Mean |disp| | Median |disp| | Max |disp| | p95 |p95| | p99 |p99| |
+|---|---|---|---|---|---|
+| BTC | 0.44 bps | 0.31 bps | 4.14 bps | 1.43 bps | 2.30 bps |
+| ETH | 0.42 bps | 0.27 bps | 4.49 bps | 1.32 bps | 2.41 bps |
+
+Top 10 absolute dispersion observations by asset:
+
+BTC:
+1. 2025-02-22 00:00 UTC: 4.14 bps (bybit 5.14, binance 1.00)
+2. 2024-12-05 08:00 UTC: 3.61 bps (bybit 10.86, binance 7.24)
+3. 2025-03-10 00:00 UTC: 3.33 bps (bybit −2.94, binance 0.40)
+4. 2024-03-05 00:00 UTC: 3.11 bps (bybit 8.00, binance 4.90)
+5. 2024-03-05 08:00 UTC: 2.98 bps (bybit 11.28, binance 8.30)
+
+ETH:
+1. 2024-02-27 08:00 UTC: 4.49 bps (bybit 2.18, binance 6.68)
+2. 2024-12-04 16:00 UTC: 3.99 bps (bybit 5.98, binance 1.98)
+3. 2024-12-04 08:00 UTC: 3.63 bps (bybit 5.22, binance 1.59)
+4. 2024-12-05 08:00 UTC: 3.45 bps (bybit 8.40, binance 4.95)
+5. 2024-11-28 00:00 UTC: 3.36 bps (bybit 4.95, binance 1.59)
+
+**Verdict justification:** The 5 bps threshold is the minimum in the frozen grid.
+The maximum observed absolute spread was 4.49 bps (ETH), below 5 bps. Neither
+asset produced a single event at any threshold. Under the precommitment, Gate A
+fires `NEEDS_MORE_DATA_OR_NO_TAIL` when both assets have zero events at every
+threshold. This is the correct verdict — the signal is absent from the data, not
+merely underpowered.
+
+**What this closes:**
+- BTC/ETH perpetual funding dispersion carry between Binance and Bybit only
+- Fixed-N settlement holds (3, 6, 12) only
+- Frozen thresholds 5, 10, 20, 40 bps only
+- Pure funding-accrual carry (no basis/spot-return component) only
+- Archive-only v1 design only
+- The specific 2024-01 to 2025-05 window only
+
+**What this does NOT close:**
+- Cross-exchange funding carry as a broad family (other venue pairs may differ)
+- OKX or three-venue dispersion (never tested)
+- Altcoin funding dispersion (never tested)
+- Stress-only funding dislocations (the 2024-01 to 2025-05 window includes no
+  312-like or LUNA-like event; extreme regime behavior was not observed)
+- Maker/rebate or institutional-fee cost models (never tested; a sub-5 bps cost
+  model could make the observed 1-4 bps spreads partially capturable)
+- Convergence-triggered exits (never tested)
+- Funding plus basis/mark-to-market spread components (never tested)
+- Variable position sizing (never tested)
+- Pre-settlement entry timing (never tested)
+
+**Run artifacts:**
+- Output: `reports/funding_dispersion_carry/cross_exchange_funding_dispersion_carry_v1_27119f3/fdc_20260518T202319_073672_d67801/`
+- Metadata includes: git SHA, seed, window, split date, content hashes, funding-unit detection results, Gate A output, Gate B output (empty)
+- Precommitment: `docs/CROSS_EXCHANGE_FUNDING_DISPERSION_PRECOMMITMENT.md` (frozen, with Appendix A resolutions R1/R2/R3)
+- Implementation SHA: `4d2a322558ae10e84b8a13e6b03166bfb34c97ff`
+
 ### Polymarket BTC Up/Down Liquidity Probe v0 — Rejection Detail
 
 **Date:** 2026-05-16
@@ -280,6 +374,8 @@ The first real empirical run (2026-05-13 03:17-03:27 UTC) produced:
 9. **Family 2 funding crowding reversal** (Binance BTCUSDT funding extremes → spot BTC forward returns). 0/60 cells survived the frozen design. Signal absent at 50 bps cost; 6 bps diagnostic also shows no consistent edge. Do not revisit without a materially different signal definition (tick-level funding, cross-exchange, multi-asset, or funding+OI conditioning). Do not reopen by merely changing thresholds, horizons, windows, or null iterations.
 
 10. **Family 2 funding crowding reversal v1** (frozen design: 60 BTC cells, spot return leg, 50 bps primary cost, Binance Vision archive, timestamp-shuffle null, BY FDR). 0 candidates; 1 FDR-blocked cell confirmed. Do not reopen by changing thresholds, horizons, window, seed, or cost within the v1 protocol. Revisiting requires a materially different precommitment — a perp return leg with explicit funding-paid-while-held modeling, a maker/rebate cost tier, a different instrument universe, or a different crowding feature.
+
+11. **Cross-exchange funding dispersion carry v1** (Binance vs Bybit, BTC/ETH, thresholds 5/10/20/40 bps, holds 3/6/12 settlements, 50 bps cost, event-vector shift null, BY FDR). Zero dispersion events at every threshold for both assets. Maximum absolute spread was 4.49 bps — below the 5 bps minimum threshold. The data does not contain a tail to test. Do not reopen by merely lowering thresholds or adding venues within the v1 protocol. Revisiting requires a materially different precommitment — different venue pairs (OKX, three-venue), altcoins, stress-regime conditioning, sub-5 bps cost models, or a convergence-triggered exit mechanism.
 
 ## Still Open
 
