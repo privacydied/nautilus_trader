@@ -13,6 +13,7 @@ The real evaluation run is a separate future task.
 
 from __future__ import annotations
 
+import bisect
 import math
 import random
 import statistics
@@ -975,13 +976,39 @@ def evaluate_all_cells(
             )
             result = evaluate_gates(result, config)
 
-            # Build signed return map for null
+            # Build signed return map covering ALL eligible timestamps
+            # (not just extreme-event timestamps) for the null module.
+            # The null randomly samples from the eligible calendar and
+            # needs precomputed returns for every eligible timestamp.
             event_ts = tuple(
                 e.event_timestamp_ns for e in result.events
             )
+            funding_positive = cell.direction == DIRECTION_POSITIVE_FUNDING
+            h_seconds = cell.horizon_seconds
             signed_returns: dict[int, float] = {}
-            for e in result.events:
-                signed_returns[e.event_timestamp_ns] = e.net_return_bps
+            if eligible_ts:
+                horizon_ns = h_seconds * 1_000_000_000
+                spot_times = [p.timestamp_ns for p in spot_windowed]
+                spot_vals = [p.price for p in spot_windowed]
+                for ets in eligible_ts:
+                    if spot_times and spot_times[0] <= ets:
+                        # Find entry price (latest spot <= event time)
+                        ei = bisect.bisect_right(spot_times, ets) - 1
+                        if ei >= 0:
+                            entry_price = spot_vals[ei]
+                            # Find exit price (latest spot <= event time + horizon)
+                            xi = bisect.bisect_right(spot_times, ets + horizon_ns) - 1
+                            if xi >= 0:
+                                exit_price = spot_vals[xi]
+                                if (entry_price > 0 and math.isfinite(entry_price)
+                                        and exit_price > 0 and math.isfinite(exit_price)):
+                                    fwd_bps = (exit_price - entry_price) / entry_price * 10000.0
+                                    net_bps = net_signal_return_bps(
+                                        fwd_bps, funding_positive=funding_positive,
+                                        total_cost_bps=config.cost_bps,
+                                    )
+                                    if math.isfinite(net_bps):
+                                        signed_returns[ets] = net_bps
 
             result = run_null_for_cell(
                 result, eligible_ts, event_ts, signed_returns, config

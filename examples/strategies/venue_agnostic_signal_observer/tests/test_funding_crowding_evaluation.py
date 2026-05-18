@@ -1115,3 +1115,207 @@ class TestArchiveProbeAudit:
         source = inspect.getsource(mod.run_evaluation)
         assert "NOT YET AVAILABLE" in source
         assert "separate future task" in source
+
+
+# ===================================================================
+# 36: Events-preservation regression tests
+# ===================================================================
+
+
+class TestEventsPreservation:
+    """Verify CellResult events survive gate pipeline reconstruction."""
+
+    def test_to_dict_includes_events(self) -> None:
+        """CellResult.to_dict() must include the events field."""
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellResult, CellEvent,
+        )
+        cr = CellResult(
+            cell_id="BTC/abs_funding_ge_5bp/h24/positive_funding_extreme",
+            threshold_label="abs_funding_ge_5bp",
+            horizon_label="h24",
+            direction="positive_funding_extreme",
+        )
+        d = cr.to_dict()
+        assert "events" in d, "events missing from to_dict"
+        assert d["events"] == (), "default events should be empty tuple"
+
+    def test_reconstruction_preserves_events(self) -> None:
+        """Reconstructing CellResult(**result.to_dict()) preserves event count."""
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellResult, CellEvent,
+        )
+        events = (
+            CellEvent(event_timestamp_ns=1, forward_spot_return_bps=100.0, funding_rate=0.001, net_return_bps=50.0),
+            CellEvent(event_timestamp_ns=2, forward_spot_return_bps=200.0, funding_rate=0.002, net_return_bps=100.0),
+        )
+        cr = CellResult(
+            cell_id="BTC/abs_funding_ge_5bp/h24/positive_funding_extreme",
+            threshold_label="abs_funding_ge_5bp",
+            horizon_label="h24",
+            direction="positive_funding_extreme",
+            valid_count=2,
+            events=events,
+        )
+        d = cr.to_dict()
+        cr2 = CellResult(**d)
+        assert len(cr2.events) == 2, f"reconstructed events lost: {len(cr2.events)}"
+        assert cr2.events[0].event_timestamp_ns == 1
+        assert cr2.events[1].net_return_bps == 100.0
+
+    def test_gate_reconstruction_preserves_events(self) -> None:
+        """Gate-pipeline reconstruction via **result.to_dict() must preserve events."""
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellResult, CellEvent, VERDICT_NEEDS_MORE_DATA,
+        )
+        events = (
+            CellEvent(event_timestamp_ns=1, forward_spot_return_bps=100.0, funding_rate=0.001, net_return_bps=50.0),
+        )
+        cr = CellResult(
+            cell_id="BTC/abs_funding_ge_5bp/h24/positive_funding_extreme",
+            threshold_label="abs_funding_ge_5bp",
+            horizon_label="h24",
+            direction="positive_funding_extreme",
+            valid_count=1,
+            events=events,
+            verdict=VERDICT_NEEDS_MORE_DATA,
+        )
+        cr2 = CellResult(**{**cr.to_dict(), "verdict": VERDICT_NEEDS_MORE_DATA})
+        assert len(cr2.events) == 1, f"gate reconstruction dropped events: {len(cr2.events)}"
+
+    def test_run_null_receives_nonempty_returns(self) -> None:
+        """run_null_for_cell must receive non-empty signed_returns when events exist."""
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellResult, CellEvent, EvaluationRunConfig, VERDICT_CANDIDATE,
+            MIN_VALID_EVENTS_FOR_CANDIDATE,
+        )
+        count = MIN_VALID_EVENTS_FOR_CANDIDATE + 1
+        events = tuple(
+            CellEvent(
+                event_timestamp_ns=i * 3600_000_000_000,
+                forward_spot_return_bps=100.0,
+                funding_rate=0.001,
+                net_return_bps=10.0,
+            )
+            for i in range(count)
+        )
+        cr = CellResult(
+            cell_id="BTC/abs_funding_ge_5bp/h24/positive_funding_extreme",
+            threshold_label="abs_funding_ge_5bp",
+            horizon_label="h24",
+            direction="positive_funding_extreme",
+            valid_count=count,
+            eligible_count=count * 5,
+            events=events,
+            mean_net_bps=10.0,
+            median_net_bps=8.0,
+            win_rate=0.60,
+            worst_decile_net_bps=-20.0,
+            baseline_delta_bps=15.0,
+            verdict=VERDICT_CANDIDATE,
+        )
+        cr_gated = CellResult(**{**cr.to_dict(), "verdict": VERDICT_CANDIDATE})
+        signed_after: dict[int, float] = {}
+        for e in cr_gated.events:
+            signed_after[e.event_timestamp_ns] = e.net_return_bps
+        assert len(signed_after) == count, (
+            f"Events lost in gate reconstruction: expected {count} signed returns, got {len(signed_after)}"
+        )
+
+    def test_valid_cell_not_wrongly_no_null_worthy(self) -> None:
+        """Cells with valid events must not be mapped to NO_NULL_WORTHY for the wrong reason."""
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellResult, CellEvent, EvaluationRunConfig, VERDICT_CANDIDATE,
+            VERDICT_NO_NULL_WORTHY, VERDICT_NULL_REJECTED, run_null_for_cell,
+            compute_forward_return_bps, net_signal_return_bps, MIN_VALID_EVENTS_FOR_CANDIDATE,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+            DIRECTION_POSITIVE_FUNDING,
+        )
+        import bisect
+        # Build a rising price series so forward returns are positive
+        count = 120
+        eligible_multiple = 10
+        eligible_count = count * eligible_multiple
+        base_price = 50000.0
+        price_increment = 0.5  # ~1 bp increment per interval
+        spot_times: list[int] = []
+        spot_prices_list: list[float] = []
+        current_price = base_price
+        for i in range(eligible_count * 3):
+            spot_times.append(i * 1800_000_000_000)
+            spot_prices_list.append(current_price)
+            current_price += price_increment
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import SpotPriceSnapshot
+        spot_snaps = [
+            SpotPriceSnapshot(timestamp_ns=t, price=p)
+            for t, p in zip(spot_times, spot_prices_list)
+        ]
+        spot_t_arr = [p.timestamp_ns for p in spot_snaps]
+        spot_p_arr = [p.price for p in spot_snaps]
+        # Precompute returns for ALL eligible timestamps (matching the fix logic)
+        funding_positive = True
+        h_seconds = 24 * 3600
+        horizon_ns = h_seconds * 1_000_000_000
+        eligible_ts = tuple(i * 3600_000_000_000 for i in range(eligible_count))
+        signed_returns: dict[int, float] = {}
+        for ets in eligible_ts:
+            ei = bisect.bisect_right(spot_t_arr, ets) - 1
+            if ei >= 0:
+                xi = bisect.bisect_right(spot_t_arr, ets + horizon_ns) - 1
+                if xi >= 0:
+                    entry_price = spot_p_arr[ei]
+                    exit_price = spot_p_arr[xi]
+                    if entry_price > 0 and exit_price > 0:
+                        fwd_bps = (exit_price - entry_price) / entry_price * 10000.0
+                        net_bps = net_signal_return_bps(
+                            fwd_bps, funding_positive=funding_positive,
+                            total_cost_bps=50.0,
+                        )
+                        if math.isfinite(net_bps):
+                            signed_returns[ets] = net_bps
+        # Build events using the same eligible timestamps (first 120)
+        event_ts_list = list(eligible_ts[:count])
+        events_list: list[CellEvent] = []
+        for ets in event_ts_list:
+            net_bps = signed_returns.get(ets, None)
+            if net_bps is not None:
+                events_list.append(CellEvent(
+                    event_timestamp_ns=ets,
+                    forward_spot_return_bps=0.0,  # not critical for null
+                    funding_rate=0.001,
+                    net_return_bps=net_bps,  # must match eligible return
+                ))
+        net_return_vals = [e.net_return_bps for e in events_list]
+        mean_net = sum(net_return_vals) / len(net_return_vals) if net_return_vals else 0.0
+        events = tuple(events_list)
+        cr = CellResult(
+            cell_id="BTC/abs_funding_ge_5bp/h24/positive_funding_extreme",
+            threshold_label="abs_funding_ge_5bp",
+            horizon_label="h24",
+            direction=DIRECTION_POSITIVE_FUNDING,
+            valid_count=len(events),
+            eligible_count=eligible_count,
+            events=events,
+            mean_net_bps=mean_net,
+            median_net_bps=mean_net,  # approximate
+            win_rate=0.60,
+            worst_decile_net_bps=min(net_return_vals) if net_return_vals else -20.0,
+            baseline_delta_bps=10.0,
+            verdict=VERDICT_CANDIDATE,
+        )
+        event_ts = tuple(e.event_timestamp_ns for e in events)
+        config = EvaluationRunConfig(
+            data_window_start_ns=0,
+            data_window_end_ns=eligible_count * 3600_000_000_000,
+            seed=42,
+            cost_bps=50.0,
+            optimistic_cost_bps=6.0,
+            null_iterations=100,
+            baseline_seed=999,
+        )
+        result = run_null_for_cell(cr, eligible_ts, event_ts, signed_returns, config)
+        assert result.verdict != VERDICT_NO_NULL_WORTHY, (
+            f"Valid cell with events wrongly got {result.verdict}. "
+            f"null_survived={result.null_survived}, null_p_value={result.null_p_value}"
+        )
