@@ -477,7 +477,7 @@ def evaluate_candidate_group(
 
         # Gate 4: win rate > 50% OR beats baseline win rate
         passes_win_rate = (win_rate > 0.5) or (
-            baseline_win_rate is not None and win_rate > baseline_win_rate
+            baseline_win_rate is not None and math.isfinite(baseline_win_rate) and win_rate > baseline_win_rate
         )
         if not passes_win_rate:
             rejection_reasons.append(
@@ -485,7 +485,7 @@ def evaluate_candidate_group(
             )
 
         # Gate 5: mean net > baseline mean + margin
-        if baseline_mean_net is not None:
+        if baseline_mean_net is not None and math.isfinite(baseline_mean_net):
             if mean_net > baseline_mean_net + baseline_margin_bps:
                 beats_baseline = True
             else:
@@ -535,7 +535,7 @@ def evaluate_candidate_group(
         "mean_net_return_bps": round(mean_net, 4) if valid else None,
         "median_net_return_bps": round(median_net, 4) if valid else None,
         "win_rate": round(win_rate, 4) if valid else None,
-        "baseline_mean_net": round(baseline_mean_net, 4) if baseline_mean_net is not None else None,
+        "baseline_mean_net": round(baseline_mean_net, 4) if baseline_mean_net is not None and math.isfinite(baseline_mean_net) else None,
         "beats_baseline": beats_baseline,
         "not_single_event_driven": not_single_event_driven,
         "rejection_reasons": rejection_reasons,

@@ -45,16 +45,18 @@ class ShadowResult:
 
 
 def _mean(xs: list[float]) -> float | None:
-    if not xs:
+    finite = [x for x in xs if math.isfinite(x)]
+    if not finite:
         return None
-    return sum(xs) / len(xs)
+    return sum(finite) / len(finite)
 
 
 def _std(xs: list[float]) -> float | None:
-    if len(xs) < 2:
+    finite = [x for x in xs if math.isfinite(x)]
+    if len(finite) < 2:
         return None
-    m = sum(xs) / len(xs)
-    return math.sqrt(sum((x - m) ** 2 for x in xs) / (len(xs) - 1))
+    m = sum(finite) / len(finite)
+    return math.sqrt(sum((x - m) ** 2 for x in finite) / (len(finite) - 1))
 
 
 def run_shadow(
