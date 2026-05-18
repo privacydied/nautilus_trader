@@ -48,6 +48,7 @@ from .funding_dispersion_carry import (
     ASSETS,
     FROZEN_CELL_COUNT,
     HOLD_LENGTHS,
+    NULL_ITERATIONS,
     NULL_SEED,
     PRIMARY_CAMPAIGN_COST_BPS,
     SAFETY_MODE,
@@ -338,7 +339,7 @@ def run_coverage(args: argparse.Namespace) -> int:
     print(f"  Grid dimensions:    {len(ASSETS)} x {len(THRESHOLDS_BPS)} x {len(HOLD_LENGTHS)} = {FROZEN_CELL_COUNT} cells")
     print(f"  Primary cost:       {PRIMARY_CAMPAIGN_COST_BPS} bps")
     print(f"  Diagnostic cost:    {PRIMARY_CAMPAIGN_COST_BPS if False else 6.0} bps (6 bps diagnostic tier)")
-    print(f"  Null iterations:    {NULL_SEED} (default seed)")
+    print(f"  Null iterations:    {NULL_ITERATIONS} (seed {NULL_SEED})")
     print(f"  FDR method:         BY (Benjamini-Yekutieli)")
     print(f"  FDR alpha:          0.05")
     print(f"  FDR family size:    {FROZEN_CELL_COUNT} (frozen)")
