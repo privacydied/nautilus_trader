@@ -187,6 +187,7 @@ class CellResult:
             "verdict": self.verdict,
             "optimistic_mean_bps": self.optimistic_mean_bps,
             "optimistic_win_rate": self.optimistic_win_rate,
+            "events": tuple(self.events),
         }
 
 
