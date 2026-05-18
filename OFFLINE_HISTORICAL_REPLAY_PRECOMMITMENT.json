@@ -53,6 +53,23 @@
     "resolution_pinned_note": "The data-resolution decision is pinned to trade/tick before any verdict run consumes this file. No runtime discovery of available granularity will alter this decision. If the pipeline encounters only OHLCVT/bar data during Phase 1 prepare, it must reject with UNSUPPORTED_RESOLUTION_FOR_FAST_HORIZON or equivalent diagnostic \u2014 it cannot fall back to bar data mid-flight.",
     "resolution_pinned_value": "trade"
   },
+  "signal_definition": {
+    "family": "family_1_same_venue_quote_basis",
+    "signed_signal_formula": "basis_change_bps = basis_bps(t1) - basis_bps(t0)",
+    "basis_bps_formula": "10000 * (P_usdt(t) - P_usd(t)) / P_usd(t)",
+    "t0": "trigger_timestamp_ns - lookback_ms * 1_000_000",
+    "t1": "trigger_timestamp_ns",
+    "timestamp_matching_rule": "first tick at or after requested timestamp",
+    "missing_tick_rule": "explicit exclusion, no interpolation, no fabrication",
+    "units": "basis points",
+    "sign_convention": "positive means BTC/USDT became more expensive versus BTC/USD",
+    "direction_mapping": "basis_change_bps < 0 → long (expect USDT recovery toward USD); basis_change_bps > 0 → short (expect USDT reversion toward USD)",
+    "forward_return_evaluation": "direction_sign * target_return_bps, unscaled by signal magnitude",
+    "minimum_lookback_ms": 30000,
+    "minimum_lookback_rationale": "Kraken XBTUSDT observed ~700 trades/hour (~5s between prints). Sub-30s lookbacks produce weakly observed basis-change measurements and are excluded for Kraken trade-history data.",
+    "allowed_horizons_ms": [60000, 300000],
+    "lookback_inertness_fix_note": "This precommitment replaces the old instantaneous-basis evaluator which never read cell.lookback_ms. All Family 1 cells now compute basis_change_bps over the lookback window."
+  },
   "schema_version": "offline_historical_replay_precommitment_v1",
   "verdict_run_scope": {
     "families_out_of_scope": [

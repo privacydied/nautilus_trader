@@ -17,6 +17,7 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Optional
 
+from .family1_tick_basis import compute_family1_tick_signal
 from .offline_discovery_plan import (
     CostConfig,
     DISCOVERY_SCHEMA_VERSION,
@@ -215,46 +216,61 @@ def _returns_summary(raw_returns_bps: list[float], net_returns_bps: list[float])
 
 
 def _evaluate_family1(cell: OfflineDiscoveryPlanCell, train_window_ids: list[str], windows: dict[str, dict[str, Any]], series: dict[tuple[str, str], list[_PricePoint]], plan_hash: str) -> OfflineTrainEvaluationCellResult:
-    exclusions: list[str] = []
-    if cell.required_resolution not in (RESOLUTION_BAR, RESOLUTION_TRADE, RESOLUTION_AGG_TRADE):
-        exclusions.append(f"unsupported_resolution:{cell.required_resolution}")
+    # --- Resolution gate ---
+    # BAR resolution is explicitly unsupported. The old tick-resolvable
+    # evaluator was broken (ignored cell.lookback_ms) and has been
+    # decommissioned. Only TRADE / AGG_TRADE may use the new tick-basis
+    # signal. A separate precommitted bar evaluator would be needed for BAR.
+    if cell.required_resolution == RESOLUTION_BAR:
+        return _excluded_cell_result(
+            cell, train_window_ids, plan_hash, STATUS_UNSUPPORTED_PLAN_CELL,
+            ["bar_resolution_not_supported_for_family1_tick_basis"],
+        )
+    if cell.required_resolution not in (RESOLUTION_TRADE, RESOLUTION_AGG_TRADE):
+        return _excluded_cell_result(
+            cell, train_window_ids, plan_hash, STATUS_UNSUPPORTED_PLAN_CELL,
+            [f"unsupported_resolution:{cell.required_resolution}"],
+        )
+    if cell.lookback_ms < 30_000:
+        return _excluded_cell_result(
+            cell, train_window_ids, plan_hash, STATUS_UNSUPPORTED_PLAN_CELL,
+            [f"lookback_below_minimum_30s:{cell.lookback_ms}ms"],
+        )
     if len(cell.source_symbols) < 2 or not cell.target_symbols:
-        exclusions.append("unsupported_plan_shape")
-    if exclusions:
-        return _excluded_cell_result(cell, train_window_ids, plan_hash, STATUS_UNSUPPORTED_PLAN_CELL, exclusions)
+        return _excluded_cell_result(
+            cell, train_window_ids, plan_hash, STATUS_UNSUPPORTED_PLAN_CELL,
+            ["unsupported_plan_shape"],
+        )
 
     source_a = series.get((cell.source_venues[0], cell.source_symbols[0]))
     source_b = series.get((cell.source_venues[0], cell.source_symbols[1]))
     target = series.get((cell.target_venues[0], cell.target_symbols[0]))
     if not source_a or not source_b or not target:
-        return _excluded_cell_result(cell, train_window_ids, plan_hash, STATUS_UNSUPPORTED_PLAN_CELL, ["missing_required_stream_coverage"])
+        return _excluded_cell_result(
+            cell, train_window_ids, plan_hash, STATUS_UNSUPPORTED_PLAN_CELL,
+            ["missing_required_stream_coverage"],
+        )
 
-    raw_returns: list[float] = []
-    net_returns: list[float] = []
-    evaluated = 0
-    cost_total = _cost_total_bps(cell.cost_config)
-    for window_id in train_window_ids:
-        window = windows.get(window_id)
-        if not window:
-            continue
-        trigger_ts = int(window["trigger_timestamp_ns"])
-        anchor_a = _find_price_at_or_after(source_a, trigger_ts)
-        anchor_b = _find_price_at_or_after(source_b, trigger_ts)
-        entry = _find_price_at_or_after(target, trigger_ts)
-        exit_price = _find_price_at_or_after(target, trigger_ts + (cell.horizon_ms * 1_000_000))
-        evaluated += 1
-        if None in (anchor_a, anchor_b, entry, exit_price):
-            continue
-        basis_signal = (anchor_b - anchor_a) / anchor_a if anchor_a else 0.0
-        direction = 1.0 if basis_signal >= 0.0 else -1.0
-        basis_scale = abs(basis_signal) * 10_000.0
-        raw_bps = direction * basis_scale * ((exit_price - entry) / entry) * 10_000.0
-        net_bps = raw_bps - cost_total
-        raw_returns.append(raw_bps)
-        net_returns.append(net_bps)
+    # Use the precommitted shared tick-basis helper
+    raw_returns, net_returns, evaluated, valid_count, exclusion_reasons = (
+        compute_family1_tick_signal(
+            source_a_prices=source_a,
+            source_b_prices=source_b,
+            target_prices=target,
+            window_ids=train_window_ids,
+            windows=windows,
+            lookback_ms=cell.lookback_ms,
+            horizon_ms=cell.horizon_ms,
+            cost_total=_cost_total_bps(cell.cost_config),
+        )
+    )
 
-    if len(net_returns) < max(2, len(train_window_ids)):
-        return _excluded_cell_result(cell, train_window_ids, plan_hash, STATUS_INSUFFICIENT_TRAIN_EVENTS, ["insufficient_train_events"], evaluated_count=evaluated, valid_count=len(net_returns))
+    if valid_count < max(2, len(train_window_ids)):
+        return _excluded_cell_result(
+            cell, train_window_ids, plan_hash, STATUS_INSUFFICIENT_TRAIN_EVENTS,
+            exclusion_reasons or ["insufficient_train_events"],
+            evaluated_count=evaluated, valid_count=valid_count,
+        )
 
     summary = _returns_summary(raw_returns, net_returns)
     return OfflineTrainEvaluationCellResult(
@@ -265,7 +281,7 @@ def _evaluate_family1(cell: OfflineDiscoveryPlanCell, train_window_ids: list[str
         status=STATUS_OFFLINE_TRAIN_EVALUATION_READY,
         train_window_ids=list(train_window_ids),
         evaluated_event_count=evaluated,
-        valid_event_count=len(net_returns),
+        valid_event_count=valid_count,
         lookback_ms=cell.lookback_ms,
         horizon_ms=cell.horizon_ms,
         signal_variant=cell.signal_variant,
@@ -280,7 +296,7 @@ def _evaluate_family1(cell: OfflineDiscoveryPlanCell, train_window_ids: list[str
         fee_bps=cell.cost_config.fees_bps,
         slippage_bps=cell.cost_config.slippage_bps,
         quote_mismatch_buffer_bps=cell.cost_config.quote_mismatch_bps,
-        exclusion_reasons=[],
+        exclusion_reasons=exclusion_reasons,
         data_corpus_hash=cell.data_corpus_hash,
         window_index_hash=cell.window_index_hash,
         plan_hash=plan_hash,

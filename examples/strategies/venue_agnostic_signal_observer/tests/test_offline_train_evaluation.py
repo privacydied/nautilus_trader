@@ -10,6 +10,7 @@ from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash impo
 from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OFFLINE_DATA_SCHEMA_VERSION,
     RESOLUTION_BAR,
+    RESOLUTION_TRADE,
     WINDOW_MODE_CAUSAL,
     OfflinePrepareManifest,
     OfflineSourceFile,
@@ -314,8 +315,24 @@ def _source_config(tmp_path: Path, price_map: dict[str, list[tuple[int, float]]]
 def _price_map(train_positive: bool = True, *, holdout_shift: float = 0.0) -> dict[str, list[tuple[int, float]]]:
     target_train_second = 105.0 if train_positive else 100.0
     return {
-        "kraken|BTC/USD": [(100 * NS, 100.0), (160 * NS, 102.0), (200 * NS, 103.0), (220 * NS, target_train_second), (280 * NS, 106.0), (340 * NS, 108.0)],
-        "kraken|BTC/USDT": [(100 * NS, 101.0), (160 * NS, 100.0), (200 * NS, 99.0 if train_positive else 103.0), (220 * NS, 103.0), (280 * NS, 103.5), (340 * NS, 104.0 + holdout_shift)],
+        "kraken|BTC/USD": [
+            (0 * NS, 100.0),
+            (100 * NS, 100.0),
+            (160 * NS, 102.0),
+            (200 * NS, 103.0),
+            (220 * NS, target_train_second),
+            (280 * NS, 106.0),
+            (340 * NS, 108.0),
+        ],
+        "kraken|BTC/USDT": [
+            (0 * NS, 102.0 if train_positive else 100.0),
+            (100 * NS, 100.5),
+            (160 * NS, 100.0),
+            (200 * NS, 99.0 if train_positive else 103.0),
+            (220 * NS, 103.0),
+            (280 * NS, 103.5),
+            (340 * NS, 104.0 + holdout_shift),
+        ],
         "binance|BTC/USDT": [(100 * NS, 100.0), (160 * NS, 103.0), (200 * NS, 104.0), (220 * NS, 105.0), (280 * NS, 106.0), (340 * NS, 107.0 + holdout_shift)],
         "binance|ETH/USDT": [(100 * NS, 50.0), (160 * NS, 51.0), (200 * NS, 52.0), (220 * NS, 53.0), (280 * NS, 53.5), (340 * NS, 54.0 + holdout_shift)],
         "binance|SOL/USDT": [(100 * NS, 10.0), (160 * NS, 10.3), (200 * NS, target_train_second / 10.0), (220 * NS, 10.5), (280 * NS, 10.8), (340 * NS, 11.1 + holdout_shift)],
@@ -420,6 +437,7 @@ def test_does_not_evaluate_holdout_windows(tmp_path: Path):
         target_venues=("kraken",),
         target_symbols=("BTC/USD",),
         window_ids=("w1", "w2", "w3"),
+        required_resolution=RESOLUTION_TRADE,
     )
     report = _evaluate(tmp_path, cells=[cell], price_map=_price_map())
     assert report.status in {STATUS_OFFLINE_TRAIN_EVALUATION_READY, STATUS_TRAIN_RAW_EDGE_SCREEN_READY}
@@ -436,6 +454,7 @@ def test_holdout_ids_preserved_only_as_metadata(tmp_path: Path):
         target_venues=("kraken",),
         target_symbols=("BTC/USD",),
         window_ids=("w1", "w2", "w3"),
+        required_resolution=RESOLUTION_TRADE,
     )
     report = _evaluate(tmp_path, cells=[cell], price_map=_price_map())
     assert report.holdout_window_ids_seen_but_not_evaluated == ["w3"]
@@ -451,6 +470,7 @@ def test_changing_holdout_only_price_data_does_not_change_train_evaluation_hash(
         target_venues=("kraken",),
         target_symbols=("BTC/USD",),
         window_ids=("w1", "w2", "w3"),
+        required_resolution=RESOLUTION_TRADE,
     )
     report_a = _evaluate(tmp_path / "a", cells=[cell], price_map=_price_map())
     report_b = _evaluate(tmp_path / "b", cells=[cell], price_map=_price_map(holdout_shift=1000.0))
@@ -466,6 +486,7 @@ def test_changing_train_price_data_changes_train_evaluation_hash(tmp_path: Path)
         target_venues=("kraken",),
         target_symbols=("BTC/USD",),
         window_ids=("w1", "w2"),
+        required_resolution=RESOLUTION_TRADE,
     )
     report_a = _evaluate(tmp_path / "a", cells=[cell], price_map=_price_map(train_positive=True))
     report_b = _evaluate(tmp_path / "b", cells=[cell], price_map=_price_map(train_positive=False))
@@ -482,6 +503,7 @@ def test_family1_plan_cell_can_produce_deterministic_train_cell_result_from_synt
         target_symbols=("BTC/USD",),
         window_ids=("w1", "w2"),
         cost_config=CostConfig(1.0, 2.0, 3.0),
+        required_resolution=RESOLUTION_TRADE,
     )
     report = _evaluate(tmp_path, cells=[cell], price_map=_price_map())
     result = report.cell_results[0]
@@ -568,6 +590,7 @@ def test_costs_are_applied_exactly_from_plan_cell(tmp_path: Path):
         target_symbols=("BTC/USD",),
         window_ids=("w1", "w2"),
         cost_config=CostConfig(4.0, 5.0, 6.0),
+        required_resolution=RESOLUTION_TRADE,
     )
     report = _evaluate(tmp_path, cells=[cell], price_map=_price_map())
     result = report.cell_results[0]
@@ -586,6 +609,7 @@ def test_raw_and_net_bps_are_recorded_separately(tmp_path: Path):
         target_venues=("kraken",),
         target_symbols=("BTC/USD",),
         window_ids=("w1", "w2"),
+        required_resolution=RESOLUTION_TRADE,
     )
     report = _evaluate(tmp_path, cells=[cell], price_map=_price_map())
     result = report.cell_results[0]
@@ -602,6 +626,7 @@ def test_insufficient_train_events_excludes_a_cell(tmp_path: Path):
         target_venues=("kraken",),
         target_symbols=("BTC/USD",),
         window_ids=("w1",),
+        required_resolution=RESOLUTION_TRADE,
     )
     report = _evaluate(tmp_path, cells=[cell], price_map=_price_map())
     assert report.cell_results[0].status == STATUS_INSUFFICIENT_TRAIN_EVENTS
@@ -616,11 +641,11 @@ def test_unsupported_resolution_excludes_a_cell(tmp_path: Path):
         target_venues=("kraken",),
         target_symbols=("BTC/USD",),
         window_ids=("w1", "w2"),
-        required_resolution="agg_trade",
+        required_resolution="unsupported_foo",
     )
     report = _evaluate(tmp_path, cells=[cell], price_map=_price_map())
     assert report.cell_results[0].status == STATUS_UNSUPPORTED_PLAN_CELL
-    assert "unsupported_resolution:agg_trade" in report.cell_results[0].exclusion_reasons
+    assert "unsupported_resolution:unsupported_foo" in report.cell_results[0].exclusion_reasons
 
 
 def test_raw_train_screen_can_populate_when_cell_has_positive_net_mean_and_enough_events(tmp_path: Path):
@@ -632,8 +657,9 @@ def test_raw_train_screen_can_populate_when_cell_has_positive_net_mean_and_enoug
         target_venues=("kraken",),
         target_symbols=("BTC/USD",),
         window_ids=("w1", "w2"),
+        required_resolution=RESOLUTION_TRADE,
     )
-    report = _evaluate(tmp_path, cells=[cell], price_map=_price_map(train_positive=False))
+    report = _evaluate(tmp_path, cells=[cell], price_map=_price_map(train_positive=True))
     assert report.raw_train_screen_cell_ids == [cell.cell_id]
     assert report.status == STATUS_TRAIN_RAW_EDGE_SCREEN_READY
 

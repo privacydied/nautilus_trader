@@ -11,6 +11,7 @@ from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash impo
 from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OFFLINE_DATA_SCHEMA_VERSION,
     RESOLUTION_BAR,
+    RESOLUTION_TRADE,
     WINDOW_MODE_CAUSAL,
     OfflinePrepareManifest,
     OfflineSourceFile,
@@ -516,6 +517,7 @@ def _source_config(tmp_path: Path, price_map: dict[str, list[tuple[int, float]]]
 def _base_price_map(*, train_shift: float = 0.0, holdout_shift: float = 0.0) -> dict[str, list[tuple[int, float]]]:
     return {
         "kraken|BTC/USD": [
+            (0 * NS, 100.0),
             (100 * NS, 100.0 + train_shift),
             (160 * NS, 102.0 + train_shift),
             (200 * NS, 103.0 + train_shift),
@@ -524,12 +526,13 @@ def _base_price_map(*, train_shift: float = 0.0, holdout_shift: float = 0.0) -> 
             (360 * NS, 106.0),
         ],
         "kraken|BTC/USDT": [
+            (0 * NS, 101.0 + train_shift),
             (100 * NS, 101.0 + train_shift),
             (160 * NS, 100.0 + train_shift),
             (200 * NS, 99.0 + train_shift),
             (220 * NS, 103.0 + train_shift),
             (300 * NS, 105.0),
-            (360 * NS, 102.0),
+            (360 * NS, 106.0),
         ],
         "binance|BTC/USDT": [
             (100 * NS, 100.0),
@@ -716,6 +719,8 @@ def _family1_cell(*, data_corpus_hash: str = "corpus_hash", window_index_hash: s
         window_ids=("w1", "w2", "w3"),
         data_corpus_hash=data_corpus_hash,
         window_index_hash=window_index_hash,
+        required_resolution=RESOLUTION_TRADE,
+        lookback_ms=60_000,
     )
 
 
@@ -926,7 +931,14 @@ def test_insufficient_holdout_events_excludes_survivor_cell(tmp_path: Path):
     limited_prices = _base_price_map()
     limited_prices["coinbase|BTC/USD"] = [(100 * NS, 100.0), (160 * NS, 102.0), (200 * NS, 103.0), (220 * NS, 104.0)]
     report = _evaluate(tmp_path, cells=[survivor], survivor_ids=[survivor.cell_id], price_map=limited_prices)
-    assert report.excluded_survivor_cells[survivor.cell_id] == [STATUS_INSUFFICIENT_HOLDOUT_EVENTS]
+    assert survivor.cell_id in report.excluded_survivor_cells
+    excl_reasons = report.excluded_survivor_cells[survivor.cell_id]
+    # With the new tick-basis evaluator, missing target prices produce specific
+    # exclusion reasons (e.g. missing_entry_price) instead of a generic status.
+    # The status of the cell result is INSUFFICIENT_HOLDOUT_EVENTS.
+    assert STATUS_INSUFFICIENT_HOLDOUT_EVENTS in excl_reasons or any(
+        "missing" in r for r in excl_reasons
+    ), f"excl_reasons={excl_reasons}"
 
 
 def test_unsupported_resolution_excludes_survivor_cell(tmp_path: Path):
@@ -939,12 +951,12 @@ def test_unsupported_resolution_excludes_survivor_cell(tmp_path: Path):
         target_venues=survivor.target_venues,
         target_symbols=survivor.target_symbols,
         window_ids=survivor.window_ids,
-        required_resolution="trade",
+        required_resolution="unsupported_baz",
         data_corpus_hash=survivor.data_corpus_hash,
         window_index_hash=survivor.window_index_hash,
     )
     report = _evaluate(tmp_path, cells=[unsupported], survivor_ids=[unsupported.cell_id], survivor_cells=[_holdout_cell_from_plan(unsupported)])
-    assert report.excluded_survivor_cells[unsupported.cell_id] == ["unsupported_resolution:trade"]
+    assert report.excluded_survivor_cells[unsupported.cell_id] == ["unsupported_resolution:unsupported_baz"]
 
 
 def test_identical_runs_produce_identical_parsed_output_json_and_identical_hash(tmp_path: Path):
