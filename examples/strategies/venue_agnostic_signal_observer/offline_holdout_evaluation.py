@@ -19,7 +19,14 @@ from typing import Any, Optional
 
 from .offline_corpus_hash import compute_data_corpus_hash
 from .offline_discovery_plan import CostConfig, OfflineDiscoveryPlan, OfflineDiscoveryPlanCell, compute_window_index_hash
-from .offline_historical_models import OFFLINE_DATA_SCHEMA_VERSION, OfflinePrepareManifest, OfflineSourceFile, RESOLUTION_BAR
+from .offline_historical_models import (
+    OFFLINE_DATA_SCHEMA_VERSION,
+    RESOLUTION_AGG_TRADE,
+    RESOLUTION_BAR,
+    RESOLUTION_TRADE,
+    OfflinePrepareManifest,
+    OfflineSourceFile,
+)
 from .run_artifacts import atomic_write_json, safe_output_dir
 
 HOLDOUT_EVALUATION_SCHEMA_VERSION = "offline_holdout_evaluation_v1"
@@ -152,7 +159,7 @@ def _compute_source_config_corpus_hash(source_config_path: Path, *, prepare_mani
             raise KeyError(f"Unknown prepared source for {key!r}")
         path = Path(source["path"])
         rows_payload = json.loads(path.read_text(encoding="utf-8"))
-        rows = rows_payload.get("rows", rows_payload)
+        rows = rows_payload if isinstance(rows_payload, list) else rows_payload.get("rows", rows_payload)
         timestamps = [int(row["timestamp_ns"]) for row in rows]
         source_file = OfflineSourceFile(
             path=manifest_source.path,
@@ -185,7 +192,7 @@ def _load_price_series(source_config_path: Path) -> dict[tuple[str, str], list[_
         venue = str(source["venue"])
         symbol = str(source["symbol"])
         rows_payload = json.loads(Path(source["path"]).read_text(encoding="utf-8"))
-        rows = rows_payload.get("rows", rows_payload)
+        rows = rows_payload if isinstance(rows_payload, list) else rows_payload.get("rows", rows_payload)
         points = sorted(
             [_PricePoint(timestamp_ns=int(row["timestamp_ns"]), price=float(row["close"])) for row in rows],
             key=lambda item: item.timestamp_ns,
@@ -397,14 +404,14 @@ def _evaluate_family1(
     plan_hash: str,
 ) -> OfflineHoldoutEvaluationCellResult:
     exclusions: list[str] = []
-    if cell.required_resolution != RESOLUTION_BAR:
+    if cell.required_resolution not in (RESOLUTION_BAR, RESOLUTION_TRADE, RESOLUTION_AGG_TRADE):
         exclusions.append(f"unsupported_resolution:{cell.required_resolution}")
     if len(cell.source_symbols) < 2 or not cell.target_symbols:
         exclusions.append("unsupported_plan_shape")
     if exclusions:
         return _make_excluded_cell_result(cell, holdout_window_ids, evaluation_hash, survivor_freeze_hash, plan_hash, STATUS_UNSUPPORTED_SURVIVOR_CELL, exclusions)
-
     source_a = series.get((cell.source_venues[0], cell.source_symbols[0]))
+    source_b = series.get((cell.source_venues[0], cell.source_symbols[1]))
     source_b = series.get((cell.source_venues[0], cell.source_symbols[1]))
     target = series.get((cell.target_venues[0], cell.target_symbols[0]))
     if not source_a or not source_b or not target:

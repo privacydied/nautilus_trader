@@ -24,7 +24,12 @@ from .offline_discovery_plan import (
     OfflineDiscoveryPlanCell,
     compute_window_index_hash,
 )
-from .offline_historical_models import OFFLINE_DATA_SCHEMA_VERSION, RESOLUTION_BAR
+from .offline_historical_models import (
+    OFFLINE_DATA_SCHEMA_VERSION,
+    RESOLUTION_AGG_TRADE,
+    RESOLUTION_BAR,
+    RESOLUTION_TRADE,
+)
 
 EVALUATION_SCHEMA_VERSION = "offline_train_evaluation_v1"
 
@@ -211,7 +216,7 @@ def _returns_summary(raw_returns_bps: list[float], net_returns_bps: list[float])
 
 def _evaluate_family1(cell: OfflineDiscoveryPlanCell, train_window_ids: list[str], windows: dict[str, dict[str, Any]], series: dict[tuple[str, str], list[_PricePoint]], plan_hash: str) -> OfflineTrainEvaluationCellResult:
     exclusions: list[str] = []
-    if cell.required_resolution != RESOLUTION_BAR:
+    if cell.required_resolution not in (RESOLUTION_BAR, RESOLUTION_TRADE, RESOLUTION_AGG_TRADE):
         exclusions.append(f"unsupported_resolution:{cell.required_resolution}")
     if len(cell.source_symbols) < 2 or not cell.target_symbols:
         exclusions.append("unsupported_plan_shape")
