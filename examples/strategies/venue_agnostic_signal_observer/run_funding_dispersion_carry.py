@@ -436,7 +436,8 @@ def run_evaluation(args: argparse.Namespace) -> int:
 
     # Write metadata
     if metadata is not None:
-        atomic_write_json(run_dir / "metadata.json", metadata.to_dict())
+        from dataclasses import asdict
+        atomic_write_json(run_dir / "metadata.json", asdict(metadata))
 
     # IMPORTANT: this script produces a verdict but it MUST NOT be interpreted
     # as a trading signal. The verdict is an archive-level economic signal
