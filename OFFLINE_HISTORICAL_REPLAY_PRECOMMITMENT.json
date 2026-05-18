@@ -29,15 +29,34 @@
     ],
     "venue": "kraken"
   },
+  "date_window_selection_rationale": "Dates were selected by a deterministic calendar-spread rule before data inspection: starting from the original 2025-02-03 seed, choose the first occurrence of each weekday across consecutive calendar months, Monday through Sunday, using a fixed 13:00-16:00 UTC window. This deliberately spreads weekday and calendar-regime exposure while avoiding volatility scanning, window-count inspection, train/holdout inspection, or Phase 2A success targeting.\n\nFive consecutive Mondays in Feb-Mar 2025 would be deterministic but correlated. It would test one weekday and one short calendar regime. The expanded calendar-spread set is still deterministic, but it samples weekday and weekend microstructure across multiple months, making any later negative or positive result easier to interpret as multi-condition evidence.",
+  "execution_policy": {
+    "event_vector_invariant": "During holdout evaluation, exported event_raw_bps and event_net_bps must reconcile with the summary metrics. If event vectors are missing, length-mismatched, or summaries cannot be recomputed from vectors, the run must stop as TICK_BASIS_EVENT_VECTOR_SUMMARY_MISMATCH.",
+    "outcome_labels": [
+      "MULTI_DATE_PRECOMMITMENT_MISSING",
+      "DATE_SELECTION_NOT_PRECOMMITTED_CLEANLY",
+      "TICK_BASIS_REVERSION_NEEDS_MORE_DATA_NO_PROMOTABLE_WINDOWS",
+      "TICK_BASIS_REVERSION_NEEDS_MORE_DATA_LOW_EVENT_COUNT",
+      "TICK_BASIS_REVERSION_NO_TRAIN_SURVIVORS",
+      "TICK_BASIS_REVERSION_REJECTED_BY_HOLDOUT_REPLICATION",
+      "TICK_BASIS_REVERSION_UNDERPOWERED_HOLDOUT_FAILURE",
+      "TICK_BASIS_REVERSION_FDR_READY_ZERO_PASS",
+      "TICK_BASIS_REVERSION_FDR_SURVIVOR_NOT_LIVE_READY",
+      "TICK_BASIS_INSTRUMENTATION_FAILURE",
+      "TICK_BASIS_EVENT_VECTOR_SUMMARY_MISMATCH",
+      "TICK_BASIS_PIPELINE_BREAK"
+    ],
+    "run_framing": "This run tests Family 1 same-venue USD/USDT quote-basis reversion only. Momentum framing remains untested and requires a separate precommitment and FDR family-size decision."
+  },
   "fdr_config": {
     "alpha": 0.05,
-    "alpha_note": "Fixed at 0.05 before the run. Do not tune after seeing p-values.",
+    "alpha_note": "Fixed at 0.05 before the run. Do not tune after seeing p-values. This setting applies to the current precommitment only and is not a global Edge Miner default.",
     "comparison_passed_cells_required": true,
     "eligible_families": [
       "family_1_same_venue_quote_basis"
     ],
     "method": "by",
-    "method_note": "Benjamini-Yekutieli (BY) for conservative dependency-aware correction. Hard-coded: do not switch to BH mid-run after seeing p-values.",
+    "method_note": "Benjamini-Yekutieli (BY) for conservative dependency-aware correction. Hard-coded: do not switch to BH mid-run after seeing p-values. This method applies to the current precommitment only and is not a global Edge Miner default.",
     "no_fdr_config_overrides": true
   },
   "gate_controls": {
@@ -53,24 +72,85 @@
     "resolution_pinned_note": "The data-resolution decision is pinned to trade/tick before any verdict run consumes this file. No runtime discovery of available granularity will alter this decision. If the pipeline encounters only OHLCVT/bar data during Phase 1 prepare, it must reject with UNSUPPORTED_RESOLUTION_FOR_FAST_HORIZON or equivalent diagnostic \u2014 it cannot fall back to bar data mid-flight.",
     "resolution_pinned_value": "trade"
   },
+  "multi_date_windows": [
+    {
+      "date": "2025-02-03",
+      "label": "family1_reversion_2025_02_03_mon",
+      "selection_rationale": "Deterministic seed date. First Monday of the calendar-spread set.",
+      "weekday": "Monday",
+      "window_end_utc": "16:00:00Z",
+      "window_start_utc": "13:00:00Z"
+    },
+    {
+      "date": "2025-03-04",
+      "label": "family1_reversion_2025_03_04_tue",
+      "selection_rationale": "First Tuesday in March 2025, next calendar month after the seed.",
+      "weekday": "Tuesday",
+      "window_end_utc": "16:00:00Z",
+      "window_start_utc": "13:00:00Z"
+    },
+    {
+      "date": "2025-04-02",
+      "label": "family1_reversion_2025_04_02_wed",
+      "selection_rationale": "First Wednesday in April 2025, next calendar month after Tuesday.",
+      "weekday": "Wednesday",
+      "window_end_utc": "16:00:00Z",
+      "window_start_utc": "13:00:00Z"
+    },
+    {
+      "date": "2025-05-01",
+      "label": "family1_reversion_2025_05_01_thu",
+      "selection_rationale": "First Thursday in May 2025, next calendar month after Wednesday.",
+      "weekday": "Thursday",
+      "window_end_utc": "16:00:00Z",
+      "window_start_utc": "13:00:00Z"
+    },
+    {
+      "date": "2025-06-06",
+      "label": "family1_reversion_2025_06_06_fri",
+      "selection_rationale": "First Friday in June 2025, next calendar month after Thursday.",
+      "weekday": "Friday",
+      "window_end_utc": "16:00:00Z",
+      "window_start_utc": "13:00:00Z"
+    },
+    {
+      "date": "2025-07-05",
+      "label": "family1_reversion_2025_07_05_sat",
+      "selection_rationale": "First Saturday in July 2025, next calendar month after Friday.",
+      "weekday": "Saturday",
+      "window_end_utc": "16:00:00Z",
+      "window_start_utc": "13:00:00Z"
+    },
+    {
+      "date": "2025-08-03",
+      "label": "family1_reversion_2025_08_03_sun",
+      "selection_rationale": "First Sunday in August 2025, next calendar month after Saturday. Completes the weekday spread.",
+      "weekday": "Sunday",
+      "window_end_utc": "16:00:00Z",
+      "window_start_utc": "13:00:00Z"
+    }
+  ],
+  "schema_version": "offline_historical_replay_precommitment_v1",
   "signal_definition": {
-    "family": "family_1_same_venue_quote_basis",
-    "signed_signal_formula": "basis_change_bps = basis_bps(t1) - basis_bps(t0)",
+    "allowed_horizons_ms": [
+      60000,
+      300000
+    ],
     "basis_bps_formula": "10000 * (P_usdt(t) - P_usd(t)) / P_usd(t)",
+    "direction_mapping": "basis_change_bps < 0 \u2192 long (expect USDT recovery toward USD); basis_change_bps > 0 \u2192 short (expect USDT reversion toward USD)",
+    "family": "family_1_same_venue_quote_basis",
+    "forward_return_evaluation": "direction_sign * target_return_bps, unscaled by signal magnitude",
+    "lookback_inertness_fix_note": "This precommitment replaces the old instantaneous-basis evaluator which never read cell.lookback_ms. All Family 1 cells now compute basis_change_bps over the lookback window.",
+    "minimum_lookback_ms": 30000,
+    "minimum_lookback_rationale": "Kraken XBTUSDT observed ~700 trades/hour (~5s between prints). Sub-30s lookbacks produce weakly observed basis-change measurements and are excluded for Kraken trade-history data.",
+    "missing_tick_rule": "explicit exclusion, no interpolation, no fabrication",
+    "sign_convention": "positive means BTC/USDT became more expensive versus BTC/USD",
+    "signed_signal_formula": "basis_change_bps = basis_bps(t1) - basis_bps(t0)",
     "t0": "trigger_timestamp_ns - lookback_ms * 1_000_000",
     "t1": "trigger_timestamp_ns",
     "timestamp_matching_rule": "first tick at or after requested timestamp",
-    "missing_tick_rule": "explicit exclusion, no interpolation, no fabrication",
-    "units": "basis points",
-    "sign_convention": "positive means BTC/USDT became more expensive versus BTC/USD",
-    "direction_mapping": "basis_change_bps < 0 → long (expect USDT recovery toward USD); basis_change_bps > 0 → short (expect USDT reversion toward USD)",
-    "forward_return_evaluation": "direction_sign * target_return_bps, unscaled by signal magnitude",
-    "minimum_lookback_ms": 30000,
-    "minimum_lookback_rationale": "Kraken XBTUSDT observed ~700 trades/hour (~5s between prints). Sub-30s lookbacks produce weakly observed basis-change measurements and are excluded for Kraken trade-history data.",
-    "allowed_horizons_ms": [60000, 300000],
-    "lookback_inertness_fix_note": "This precommitment replaces the old instantaneous-basis evaluator which never read cell.lookback_ms. All Family 1 cells now compute basis_change_bps over the lookback window."
+    "units": "basis points"
   },
-  "schema_version": "offline_historical_replay_precommitment_v1",
   "verdict_run_scope": {
     "families_out_of_scope": [
       "family_2_cross_asset_stress_beta_lag",
