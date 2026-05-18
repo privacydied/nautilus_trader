@@ -461,14 +461,18 @@ def extract_strike(text: str) -> tuple[str, float | None, str, str, str]:
     # Check for multiple plausible strikes (ambiguous)
     dollar_matches: list[float] = []
 
-    # Pattern for $X,XXX or $XXXXX (no trailing k or digit)
-    for m in re.finditer(r"\$(\d+(?:,\d{3})*(?:\.\d+)?)(?!k|\d)", t):
+    # Pattern for $X,XXX or $XXXXX (no trailing k, digit, or m)
+    for m in re.finditer(r"\$(\d+(?:,\d{3})*(?:\.\d+)?)(?!k|\d|m)", t):
         num = float(m.group(1).replace(",", ""))
         dollar_matches.append(num)
 
     # Pattern for Xk or $Xk (k-thousand)
     k_matches_raw = re.findall(r"(?<!\w)(\d{1,3})k(?!\w)", t)
     k_matches = [float(n) * 1000 for n in k_matches_raw]
+
+    # Pattern for Xm or $Xm (m-million) — large target strikes like $1m
+    m_matches_raw = re.findall(r"(?<!\w)(\d{1,3})m(?!\w)", t)
+    m_matches = [float(n) * 1_000_000 for n in m_matches_raw]
 
     # Raw 5-7 digit numbers (excluding date-like, year, epoch)
     raw_numbers_matches: list[float] = []
@@ -479,7 +483,7 @@ def extract_strike(text: str) -> tuple[str, float | None, str, str, str]:
 
     # Combine and deduplicate
     unique_strikes: set[float] = set()
-    for v in dollar_matches + k_matches + raw_numbers_matches:
+    for v in dollar_matches + k_matches + m_matches + raw_numbers_matches:
         unique_strikes.add(v)
 
     # If Up/Down and also has numbers, those are durations/timestamps, not strikes
@@ -830,14 +834,13 @@ async def fetch_gamma_markets(
     limit: int = 100,
     timeout: float = 10,
 ) -> list[dict[str, Any]]:
-    """Fetch active BTC-related markets from the Gamma API."""
+    """Fetch active markets from the Gamma API.
+    """
     url = f"{GAMMA_API_BASE}/markets"
     params: dict[str, Any] = {
         "active": "true",
-        "archived": "false",
         "closed": "false",
         "limit": limit,
-        "tag_id": "crypto",  # Polymarket crypto tag
     }
 
     try:
@@ -848,6 +851,7 @@ async def fetch_gamma_markets(
         data = resp.json()
         if not isinstance(data, list):
             return []
+        logger.info(f"Gamma API returned {len(data)} markets (limit={limit})")
         return data
     except Exception as e:
         logger.warning(f"Gamma API fetch failed: {e}")
@@ -861,12 +865,12 @@ async def discover_btc_price_target_markets(
     timeout: float = 10,
 ) -> list[MarketMetadata]:
     """Discover BTC Price Target markets from the Gamma API."""
-    raw_markets = await fetch_gamma_markets(http, limit=max_markets * 3, timeout=timeout)
+    raw_markets = await fetch_gamma_markets(http, limit=max_markets * 10, timeout=timeout)
     discovered: list[MarketMetadata] = []
     now = time.time()
 
-    for raw in raw_markets:
-        if raw == raw_markets[0]:
+    for i, raw in enumerate(raw_markets):
+        if i == 0:
             logger.info(f"Sample market keys: {list(raw.keys())}")
 
         market_id = str(raw.get("id", ""))
