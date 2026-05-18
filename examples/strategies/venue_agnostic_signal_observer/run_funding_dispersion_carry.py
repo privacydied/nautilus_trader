@@ -37,6 +37,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
+import math
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -59,6 +61,8 @@ from .funding_dispersion_carry import (
 )
 from .funding_dispersion_stages import run_pipeline, stage0_load_and_normalize
 from .run_artifacts import create_run_id, create_run_dir, atomic_write_json
+
+logger = logging.getLogger(__name__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -111,8 +115,147 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 # ---------------------------------------------------------------------------
-# Data loading stub — NOT IMPLEMENTED (by design)
+# Data loading — Binance Vision CSV + Bybit funding archive CSV
 # ---------------------------------------------------------------------------
+
+# Binance Vision CSV columns: calc_time, funding_interval_hours, last_funding_rate
+# Timestamp is milliseconds since epoch. Rate is a decimal fraction.
+BINANCE_COLUMNS = frozenset({"calc_time", "funding_interval_hours", "last_funding_rate"})
+
+# Bybit CSV columns: symbol, fundingRate, fundingRateTimestamp
+# Timestamp is milliseconds since epoch. Rate is a decimal fraction string.
+BYBIT_COLUMNS = frozenset({"symbol", "fundingRate", "fundingRateTimestamp"})
+
+
+def _read_binance_funding_csv(path: str) -> list[tuple[int, float]]:
+    """Parse a Binance Vision funding-rate CSV.
+
+    Expected columns: calc_time (ms epoch), funding_interval_hours, last_funding_rate.
+
+    Returns list of (timestamp_ns, rate) sorted by timestamp.
+    Raises ValueError on missing columns, unparsable rows, duplicate timestamps,
+    or non-finite rates.
+    """
+    import csv
+
+    rows: list[tuple[int, float]] = []
+    seen_ts: set[int] = set()
+
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            raise ValueError(f"Binance CSV file is empty: {path}")
+
+        col_names = set(reader.fieldnames)
+        missing = BINANCE_COLUMNS - col_names
+        if missing:
+            raise ValueError(
+                f"Binance CSV missing required columns {sorted(missing)}. "
+                f"Expected {sorted(BINANCE_COLUMNS)}, got {sorted(col_names)}"
+            )
+
+        for line_num, row in enumerate(reader, start=2):
+            # Parse timestamp (milliseconds → nanoseconds)
+            try:
+                ts_ms = int(row["calc_time"])
+            except (ValueError, TypeError) as e:
+                raise ValueError(
+                    f"Binance CSV row {line_num}: unparsable calc_time "
+                    f"'{row.get('calc_time', '')}': {e}"
+                ) from e
+            ts_ns = ts_ms * 1_000_000
+
+            # Parse funding rate
+            try:
+                rate = float(row["last_funding_rate"])
+            except (ValueError, TypeError) as e:
+                raise ValueError(
+                    f"Binance CSV row {line_num}: unparsable last_funding_rate "
+                    f"'{row.get('last_funding_rate', '')}': {e}"
+                ) from e
+
+            if not math.isfinite(rate):
+                raise ValueError(
+                    f"Binance CSV row {line_num}: non-finite funding rate {rate}"
+                )
+
+            if ts_ns in seen_ts:
+                raise ValueError(
+                    f"Binance CSV row {line_num}: duplicate timestamp {ts_ns} "
+                    f"(millis={ts_ms})"
+                )
+            seen_ts.add(ts_ns)
+
+            rows.append((ts_ns, rate))
+
+    rows.sort()
+    return rows
+
+
+def _read_bybit_funding_csv(path: str) -> list[tuple[int, float]]:
+    """Parse a Bybit funding-rate archive CSV.
+
+    Expected columns: symbol, fundingRate, fundingRateTimestamp.
+    Timestamp is milliseconds since epoch. Rate is a decimal fraction string.
+
+    Returns list of (timestamp_ns, rate) sorted by timestamp.
+    Raises ValueError on missing columns, unparsable rows, duplicate timestamps,
+    or non-finite rates.
+    """
+    import csv
+
+    rows: list[tuple[int, float]] = []
+    seen_ts: set[int] = set()
+
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            raise ValueError(f"Bybit CSV file is empty: {path}")
+
+        col_names = set(reader.fieldnames)
+        missing = BYBIT_COLUMNS - col_names
+        if missing:
+            raise ValueError(
+                f"Bybit CSV missing required columns {sorted(missing)}. "
+                f"Expected {sorted(BYBIT_COLUMNS)}, got {sorted(col_names)}"
+            )
+
+        for line_num, row in enumerate(reader, start=2):
+            # Parse timestamp (milliseconds → nanoseconds)
+            try:
+                ts_ms = int(row["fundingRateTimestamp"])
+            except (ValueError, TypeError) as e:
+                raise ValueError(
+                    f"Bybit CSV row {line_num}: unparsable fundingRateTimestamp "
+                    f"'{row.get('fundingRateTimestamp', '')}': {e}"
+                ) from e
+            ts_ns = ts_ms * 1_000_000
+
+            # Parse funding rate
+            try:
+                rate = float(row["fundingRate"])
+            except (ValueError, TypeError) as e:
+                raise ValueError(
+                    f"Bybit CSV row {line_num}: unparsable fundingRate "
+                    f"'{row.get('fundingRate', '')}': {e}"
+                ) from e
+
+            if not math.isfinite(rate):
+                raise ValueError(
+                    f"Bybit CSV row {line_num}: non-finite funding rate {rate}"
+                )
+
+            if ts_ns in seen_ts:
+                raise ValueError(
+                    f"Bybit CSV row {line_num}: duplicate timestamp {ts_ns} "
+                    f"(millis={ts_ms})"
+                )
+            seen_ts.add(ts_ns)
+
+            rows.append((ts_ns, rate))
+
+    rows.sort()
+    return rows
 
 
 def load_archive_data(
@@ -123,28 +266,57 @@ def load_archive_data(
 ) -> dict[str, list[tuple[int, float]]]:
     """Load funding-rate archives and return per-series (timestamp_ns, rate) data.
 
-    NOT IMPLEMENTED — this is a stub. The actual data loading must be
-    implemented before running the study. Data sources:
+    Reads Binance Vision CSV files and Bybit funding archive CSV files.
+    Each file's rates are returned in their original unit — Stage 0 will
+    detect and normalize them to bps.
 
-    - Binance Vision archive: https://www.binance.com/en/landing/data
-      (perpetual / USDⓈ-M funding rates)
-    - Bybit historical funding-rate archive:
-      https://www.bybit.com/en/crypto-market-data/
+    Data sources:
+    - Binance Vision: https://www.binance.com/en/landing/data
+      (perpetual / USDⓈ-M funding rates, monthly zipped CSVs)
+    - Bybit historical archive: exported as CSV with columns
+      symbol, fundingRate, fundingRateTimestamp
 
-    Each series must contain per-settlement funding rates with timestamps.
-    Binance and Bybit both settle BTC/ETH perp funding on an ~8h cadence.
+    Returns dict with keys: binance_BTC, binance_ETH, bybit_BTC, bybit_ETH.
+    Each value is a sorted list of (timestamp_ns, rate) tuples.
 
     Raises:
-        NotImplementedError: Always. Must be implemented before running.
+        ValueError: On missing columns, unparsable rows, duplicate timestamps,
+            or non-finite rates.
+        FileNotFoundError: If any required path is None or doesn't exist.
     """
-    raise NotImplementedError(
-        "Archive data loading is not yet implemented. "
-        "Implement this function to read Binance Vision and Bybit historical "
-        "funding-rate archives before running the pipeline. "
-        "Data sources: "
-        "Binance Vision: https://www.binance.com/en/landing/data "
-        "Bybit: https://www.bybit.com/en/crypto-market-data/"
-    )
+    required: dict[str, tuple[str | None, str, str]] = {
+        "binance_BTC": (binance_btc_path, "binance", "BTC"),
+        "binance_ETH": (binance_eth_path, "binance", "ETH"),
+        "bybit_BTC": (bybit_btc_path, "bybit", "BTC"),
+        "bybit_ETH": (bybit_eth_path, "bybit", "ETH"),
+    }
+
+    result: dict[str, list[tuple[int, float]]] = {}
+
+    for key, (path, venue, _asset) in required.items():
+        if path is None:
+            raise FileNotFoundError(
+                f"Required archive path for {key} is None. "
+                f"All four archive paths must be provided for run mode."
+            )
+        filepath = Path(path)
+        if not filepath.exists():
+            raise FileNotFoundError(f"Archive file not found: {path}")
+
+        if venue == "binance":
+            series = _read_binance_funding_csv(path)
+        elif venue == "bybit":
+            series = _read_bybit_funding_csv(path)
+        else:
+            raise ValueError(f"Unknown venue: {venue}")
+
+        if not series:
+            raise ValueError(f"Archive file {path} contains no valid funding rows")
+
+        result[key] = series
+        logger.info(f"Loaded {len(series)} settlements from {key} ({path})")
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +371,7 @@ def run_coverage(args: argparse.Namespace) -> int:
 
 def run_evaluation(args: argparse.Namespace) -> int:
     """Execute the full Stage 0-8 pipeline. NOT TO BE RUN until precommitment is frozen."""
-    # Attempt to load archive data
+    # Load archive data — requires all four paths
     try:
         raw_series = load_archive_data(
             args.binance_btc_archive,
@@ -207,10 +379,12 @@ def run_evaluation(args: argparse.Namespace) -> int:
             args.bybit_btc_archive,
             args.bybit_eth_archive,
         )
-    except NotImplementedError:
-        print("ERROR: Archive data loading is not implemented.", file=sys.stderr)
-        print("       Implement load_archive_data() before running the pipeline.", file=sys.stderr)
-        print("       The study must NOT be run until the precommitment is frozen.", file=sys.stderr)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        print("       All four archive paths must be provided for run mode.", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"ERROR: Archive data validation failed: {e}", file=sys.stderr)
         return 1
 
     # Set up output directory

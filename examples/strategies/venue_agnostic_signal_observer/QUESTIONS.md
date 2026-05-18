@@ -5,18 +5,18 @@ Ambiguities and potential issues found in the cross-exchange funding dispersion 
 ## Q1: Funding-unit detection heuristic — RESOLVED
 
 **Section:** 7, step 2
-**Status:** ✅ Resolved 2026-05-19
+**Status:** ✅ Resolved 2026-05-19  
 
-Archive-source inspection confirmed both sources return decimal fractions:
+Archive-source inspection confirmed both sources return decimal fractions. Binance Vision CSV format confirmed via actual archive download (monthly `.zip` containing CSV with columns `calc_time,funding_interval_hours,last_funding_rate`):
 
-- Binance Vision CSV (`last_funding_rate` column): `0.00010000`, `0.00037409`,
-  even extreme values like `0.00098653` (May 2021). Decimal across all tested
-  months (2023-01, 2024-01, 2025-01, 2021-05).
-- Bybit v5 API JSON (`fundingRate` field): `0.00005491`, `-0.00001269`. Decimal.
+- `last_funding_rate` values like `0.00010000`, `0.00005242`, extreme `0.00098653` (May 2021 bull)  
+- Even the most extreme value (≈9.87 bps) is well within the ±300 bps sanity band  
 
-The implementation's heuristic (max ≤ 0.05, median ≤ 0.01 → decimal, ×10000 to bps)
-correctly classifies all four series. Resolution written into the precommitment as
-Appendix A.2, confirmed against archive sources (not live API).
+Bybit v5 API JSON confirmed:  
+- `fundingRate` values like `"0.00005491"`, `"-0.00001269"`  
+- Also decimal fractions, well within bands  
+
+Implementation heuristic (absolute median criterion with ±300 bps sanity band) correctly classifies both. No ambiguity remains. Resolution written into the precommitment as Appendix A.2, confirmed against archive sources (not live API).
 
 ## Q2: "Worst decile" definition — RESOLVED
 

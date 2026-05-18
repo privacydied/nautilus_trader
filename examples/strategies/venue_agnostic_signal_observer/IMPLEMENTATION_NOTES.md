@@ -23,10 +23,16 @@ The eight-stage pipeline logic (Stages 0-8). Each stage is a pure function that 
 ### `run_funding_dispersion_carry.py`
 CLI entry point with argparse. Two modes:
 - `coverage`: Prints frozen parameters, grid dimensions, data requirements. Does NOT run the study.
-- `run`: Executes the Stage 0-8 pipeline against archive data. **The data loading function raises NotImplementedError** — it must be implemented before running.
+- `run`: Executes the Stage 0-8 pipeline against archive data. Requires all four archive paths to be provided.
+
+The archive loader handles two formats:
+- **Binance Vision CSV**: columns `calc_time` (ms epoch), `funding_interval_hours`, `last_funding_rate` (decimal fraction)
+- **Bybit CSV**: columns `symbol`, `fundingRate` (decimal fraction string), `fundingRateTimestamp` (ms epoch)
+
+Both parsers are fail-closed: missing columns, unparsable rows, duplicate timestamps, and non-finite rates all raise `ValueError`. Timestamps are converted from milliseconds to nanoseconds. Series are returned sorted by timestamp.
 
 ### `tests/test_funding_dispersion_carry.py`
-73 tests covering all 10 required test categories plus additional fidelity checks. Uses only synthetic data — no network calls, no real archives. Includes specific tests for the Stage 8 verdict-assembly rule precedence (rules 5/6/7) using `reached_pass_null` / `reached_pass_pre_null` boolean flags to correctly track pipeline progress across relabeling stages.
+91 tests covering all 10 required test categories, loader validation, and additional fidelity checks. Uses only synthetic data — no network calls, no real archives. Includes specific tests for the Stage 8 verdict-assembly rule precedence (rules 5/6/7) using `reached_pass_null` / `reached_pass_pre_null` boolean flags to correctly track pipeline progress across relabeling stages. Loader tests cover Binance and Bybit CSV parsing, unit normalization through Stage 0, and all fail-closed validation paths.
 
 ## How to run (once archives are available)
 
@@ -37,7 +43,7 @@ source .venv/bin/activate
 # Print configuration without running
 python -m examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry --mode coverage
 
-# Run the study (requires implementing load_archive_data first)
+# Run the study (requires all four archive paths)
 python -m examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry --mode run \
     --binance-btc-archive path/to/binance_btc_funding.csv \
     --binance-eth-archive path/to/binance_eth_funding.csv \
@@ -45,6 +51,8 @@ python -m examples.strategies.venue_agnostic_signal_observer.run_funding_dispers
     --bybit-eth-archive path/to/bybit_eth_funding.csv \
     --output-dir reports/funding_dispersion_carry
 ```
+
+For Binance Vision, download monthly `.zip` files from `https://data.binance.vision/data/futures/um/monthly/fundingRate/{SYMBOL}/` and extract the CSV. For Bybit, export funding history CSVs with columns `symbol,fundingRate,fundingRateTimestamp`.
 
 ## Running tests
 
@@ -54,15 +62,11 @@ python -m pytest examples/strategies/venue_agnostic_signal_observer/tests/test_f
 
 ## The study has NOT been run
 
-No verdict file exists. No evaluation has been performed against real data. The `run_funding_dispersion_carry.py` entry point calls `load_archive_data()` which raises `NotImplementedError`. This is intentional — the precommitment must be frozen (committed to the project) before the first evaluation run. Running against real data before freezing would break the precommitment property.
+No verdict file exists. No evaluation has been performed against real data. The pipeline is ready to run but has not been executed. The precommitment must be frozen (committed to the project) before the first evaluation run. Running against real data before freezing would break the precommitment property.
 
-All three pre-freeze ambiguities have been resolved and written into the precommitment (Appendix A). The freeze precondition is now met: R1 (funding-unit heuristic confirmed via Binance Vision CSV + Bybit v5 API archive inspection — both are decimal fractions, not percent), R2 (worst-decile = p10), R3 (Stage 8 bug fixed with boolean tracking fields).
+All three pre-freeze ambiguities have been resolved and written into the precommitment (Appendix A):
+- R1: funding-unit heuristic confirmed against actual Binance Vision CSV and Bybit archive format (both are decimal fractions)
+- R2: worst-decile = p10 single value
+- R3: Stage 8 bug fixed with boolean tracking fields
 
-## Data loading interface
-
-The `load_archive_data()` function in `run_funding_dispersion_carry.py` is a stub. Before running the study, it must be implemented to:
-1. Read Binance Vision funding-rate archives (CSV format from data.binance.vision)
-2. Read Bybit funding-rate archives (CSV format from bybit.com/api)
-3. Return a dict mapping `"binance_BTC"`, `"binance_ETH"`, `"bybit_BTC"`, `"bybit_ETH"` to lists of `(timestamp_ns, rate)` tuples
-
-Each series must contain per-settlement funding rates with nanosecond-precision timestamps. Binance and Bybit both settle BTC/ETH perp funding on approximately 8-hour intervals.
+No live, private-key, or order-placement code paths exist anywhere in the implementation.

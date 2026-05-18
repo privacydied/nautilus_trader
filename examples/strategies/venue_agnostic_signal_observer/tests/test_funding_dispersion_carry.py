@@ -1201,3 +1201,281 @@ class TestStage4PreNullGates:
         result = stage4_pre_null_economic_gates(cells)
         assert result[0].cell_verdict == VERDICT_NEEDS_MORE_DATA
         assert result[0].reached_pass_pre_null is False
+
+
+# ---------------------------------------------------------------------------
+# Archive loader tests
+# ---------------------------------------------------------------------------
+
+
+class TestBinanceFundingCSVLoader:
+    """Load Binance Vision funding-rate CSVs — fail-closed validation."""
+
+    def _write_csv(self, tmp_path, rows, header=None):
+        """Write a Binance-format CSV and return its path."""
+        if header is None:
+            header = "calc_time,funding_interval_hours,last_funding_rate"
+        path = tmp_path / "binance_btc.csv"
+        path.write_text(header + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
+        return str(path)
+
+    def test_decimal_format_parsed(self, tmp_path):
+        """Binance decimal rates (0.0001) parse correctly."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_binance_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "1735689600000,8,0.00010000",
+            "1735718400000,8,0.00005242",
+        ])
+        result = _read_binance_funding_csv(path)
+        assert len(result) == 2
+        # timestamp_ns = ms * 1_000_000
+        assert result[0][0] == 1735689600000 * 1_000_000
+        assert result[0][1] == pytest.approx(0.0001)
+        assert result[1][1] == pytest.approx(0.00005242)
+
+    def test_negative_rates_parsed(self, tmp_path):
+        """Negative funding rates parse correctly."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_binance_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "1735689600000,8,-0.00001488",
+        ])
+        result = _read_binance_funding_csv(path)
+        assert len(result) == 1
+        assert result[0][1] == pytest.approx(-0.00001488)
+
+    def test_sorted_by_timestamp(self, tmp_path):
+        """Rows are sorted by timestamp regardless of input order."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_binance_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "1735718400000,8,0.00005",
+            "1735689600000,8,0.00001",
+        ])
+        result = _read_binance_funding_csv(path)
+        assert result[0][0] < result[1][0]
+
+    def test_duplicate_timestamp_rejected(self, tmp_path):
+        """Duplicate timestamps cause ValueError."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_binance_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "1735689600000,8,0.0001",
+            "1735689600000,8,0.0002",  # duplicate timestamp
+        ])
+        with pytest.raises(ValueError, match="duplicate timestamp"):
+            _read_binance_funding_csv(path)
+
+    def test_missing_column_rejected(self, tmp_path):
+        """Missing required columns cause ValueError."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_binance_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "1735689600000,8,0.0001",
+        ], header="calc_time,funding_interval_hours")  # missing last_funding_rate
+        with pytest.raises(ValueError, match="missing required columns"):
+            _read_binance_funding_csv(path)
+
+    def test_unparsable_rate_rejected(self, tmp_path):
+        """Non-numeric funding rate causes ValueError."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_binance_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "1735689600000,8,NOT_A_NUMBER",
+        ])
+        with pytest.raises(ValueError, match="unparsable last_funding_rate"):
+            _read_binance_funding_csv(path)
+
+    def test_non_finite_rate_rejected(self, tmp_path):
+        """NaN and Inf funding rates cause ValueError."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_binance_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "1735689600000,8,inf",
+        ])
+        with pytest.raises(ValueError, match="non-finite"):
+            _read_binance_funding_csv(path)
+
+    def test_empty_file_accepted(self, tmp_path):
+        """Empty CSV (no data rows) is accepted — returns empty list."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_binance_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [], header="calc_time,funding_interval_hours,last_funding_rate")
+        result = _read_binance_funding_csv(path)
+        assert len(result) == 0
+
+
+class TestBybitFundingCSVLoader:
+    """Load Bybit funding-rate archive CSVs — fail-closed validation."""
+
+    def _write_csv(self, tmp_path, rows, header=None):
+        """Write a Bybit-format CSV and return its path."""
+        if header is None:
+            header = "symbol,fundingRate,fundingRateTimestamp"
+        path = tmp_path / "bybit_btc.csv"
+        path.write_text(header + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
+        return str(path)
+
+    def test_decimal_format_parsed(self, tmp_path):
+        """Bybit decimal rates parse correctly."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_bybit_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "BTCUSDT,0.00005491,1779091200000",
+            "BTCUSDT,-0.00001269,1779120000000",
+        ])
+        result = _read_bybit_funding_csv(path)
+        assert len(result) == 2
+        assert result[0][0] == 1779091200000 * 1_000_000
+        assert result[0][1] == pytest.approx(0.00005491)
+        assert result[1][1] == pytest.approx(-0.00001269)
+
+    def test_sorted_by_timestamp(self, tmp_path):
+        """Rows are sorted regardless of input order."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_bybit_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "BTCUSDT,0.00005,1779120000000",
+            "BTCUSDT,0.00001,1779091200000",
+        ])
+        result = _read_bybit_funding_csv(path)
+        assert result[0][0] < result[1][0]
+
+    def test_duplicate_timestamp_rejected(self, tmp_path):
+        """Duplicate timestamps cause ValueError."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_bybit_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "BTCUSDT,0.0001,1779091200000",
+            "BTCUSDT,0.0002,1779091200000",  # duplicate
+        ])
+        with pytest.raises(ValueError, match="duplicate timestamp"):
+            _read_bybit_funding_csv(path)
+
+    def test_missing_column_rejected(self, tmp_path):
+        """Missing required columns cause ValueError."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_bybit_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "BTCUSDT,0.0001,1779091200000",
+        ], header="symbol,fundingRate")  # missing fundingRateTimestamp
+        with pytest.raises(ValueError, match="missing required columns"):
+            _read_bybit_funding_csv(path)
+
+    def test_unparsable_timestamp_rejected(self, tmp_path):
+        """Non-numeric timestamp causes ValueError."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_bybit_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "BTCUSDT,0.0001,NOT_A_NUMBER",
+        ])
+        with pytest.raises(ValueError, match="unparsable fundingRateTimestamp"):
+            _read_bybit_funding_csv(path)
+
+    def test_non_finite_rate_rejected(self, tmp_path):
+        """NaN rate causes ValueError."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            _read_bybit_funding_csv,
+        )
+        path = self._write_csv(tmp_path, [
+            "BTCUSDT,nan,1779091200000",
+        ])
+        with pytest.raises(ValueError, match="non-finite"):
+            _read_bybit_funding_csv(path)
+
+
+class TestLoadArchiveData:
+    """Integration tests for load_archive_data.
+
+    Uses tiny synthetic CSVs, no network calls.
+    """
+
+    def _make_binance_csv(self, tmp_path, name, timestamps_and_rates):
+        """Create a minimal Binance-format CSV and return its path."""
+        lines = ["calc_time,funding_interval_hours,last_funding_rate"]
+        for ts_ms, rate in timestamps_and_rates:
+            lines.append(f"{ts_ms},8,{rate}")
+        path = tmp_path / name
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return str(path)
+
+    def _make_bybit_csv(self, tmp_path, name, timestamps_and_rates):
+        """Create a minimal Bybit-format CSV and return its path."""
+        lines = ["symbol,fundingRate,fundingRateTimestamp"]
+        for ts_ms, rate in timestamps_and_rates:
+            lines.append(f"BTCUSDT,{rate},{ts_ms}")
+        path = tmp_path / name
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return str(path)
+
+    def test_loads_all_four_series(self, tmp_path):
+        """All four series load successfully."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            load_archive_data,
+        )
+        ts = [(1735689600000 + i * 28800000, round(0.0001 + i * 0.000001, 6)) for i in range(10)]
+        binance_btc = self._make_binance_csv(tmp_path, "bnb_btc.csv", ts)
+        binance_eth = self._make_binance_csv(tmp_path, "bnb_eth.csv", ts)
+        bybit_btc = self._make_bybit_csv(tmp_path, "byb_btc.csv", ts)
+        bybit_eth = self._make_bybit_csv(tmp_path, "byb_eth.csv", ts)
+
+        result = load_archive_data(binance_btc, binance_eth, bybit_btc, bybit_eth)
+        assert set(result.keys()) == {"binance_BTC", "binance_ETH", "bybit_BTC", "bybit_ETH"}
+        for key, series in result.items():
+            assert len(series) == 10
+
+    def test_missing_path_raises_file_not_found(self, tmp_path):
+        """None path for any series raises FileNotFoundError."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            load_archive_data,
+        )
+        with pytest.raises(FileNotFoundError, match="Required archive path"):
+            load_archive_data(None, None, None, None)
+
+    def test_nonexistent_file_raises_file_not_found(self, tmp_path):
+        """Path to non-existent file raises FileNotFoundError."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            load_archive_data,
+        )
+        with pytest.raises(FileNotFoundError, match="not found"):
+            load_archive_data("/tmp/nonexistent.csv", None, None, None)
+
+    def test_unit_normalization_in_stage0(self, tmp_path):
+        """Decimal-format rates are normalized to bps by Stage 0."""
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            load_archive_data,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import (
+            stage0_load_and_normalize,
+        )
+        # Create series with enough data to pass window requirement (>200 settlements)
+        base_ts = 1735689600000
+        ts = [(base_ts + i * 28800000, round(0.0001, 8)) for i in range(250)]
+        binance_btc = self._make_binance_csv(tmp_path, "bnb_btc.csv", ts)
+        binance_eth = self._make_binance_csv(tmp_path, "bnb_eth.csv", ts)
+        bybit_btc = self._make_bybit_csv(tmp_path, "byb_btc.csv", ts)
+        bybit_eth = self._make_bybit_csv(tmp_path, "byb_eth.csv", ts)
+
+        raw = load_archive_data(binance_btc, binance_eth, bybit_btc, bybit_eth)
+        normalized, window, verdict = stage0_load_and_normalize(raw)
+
+        # Decimal 0.0001 should normalize to 1.0 bps
+        assert verdict is None  # no early exit
+        for key, series in normalized.items():
+            assert series.unit_detected == "decimal"
+            assert series.unit_normalized_to == "bps_per_settlement"
+            assert series.records[0].funding_rate_bps == pytest.approx(1.0)
