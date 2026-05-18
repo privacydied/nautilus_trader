@@ -272,23 +272,39 @@ def _points_for_stream(
     ]
 
 
-def _eligible_points(points: Sequence[dict[str, Any]], index: int, lookback_ns: int) -> list[dict[str, Any]]:
+def _eligible_slice(
+    points: Sequence[dict[str, Any]], index: int, lookback_ns: int, left: int = 0
+) -> tuple[int, int]:
+    """Return (start, end) indices of points within lookback_ns of points[index].
+
+    Uses a sliding-window left bound to avoid O(n²) list creation.
+    Since points are sorted by timestamp_ns, advancing from *left* is correct.
+    """
     current_ts = points[index]["timestamp_ns"]
     start_ts = current_ts - lookback_ns
-    return [point for point in points[: index + 1] if point["timestamp_ns"] >= start_ts]
+    start_idx = left
+    while start_idx <= index and points[start_idx]["timestamp_ns"] < start_ts:
+        start_idx += 1
+    return start_idx, index + 1
 
 
-def _range_bps(points: Sequence[dict[str, Any]]) -> float:
-    min_low = min(point["low"] for point in points)
-    max_high = max(point["high"] for point in points)
+def _range_bps(points: Sequence[dict[str, Any]], start: int = 0, end: int | None = None) -> float:
+    end = end or len(points)
+    if end - start < 2:
+        return 0.0
+    min_low = min(point["low"] for point in points[start:end])
+    max_high = max(point["high"] for point in points[start:end])
     if min_low <= 0:
         return 0.0
     return ((max_high - min_low) / min_low) * 10_000.0
 
 
-def _absolute_return_bps(points: Sequence[dict[str, Any]]) -> float:
-    start_price = points[0]["price"]
-    end_price = points[-1]["price"]
+def _absolute_return_bps(points: Sequence[dict[str, Any]], start: int = 0, end: int | None = None) -> float:
+    end = end or len(points)
+    if end - start < 2:
+        return 0.0
+    start_price = points[start]["price"]
+    end_price = points[end - 1]["price"]
     if start_price <= 0:
         return 0.0
     return abs((end_price - start_price) / start_price) * 10_000.0
@@ -328,16 +344,19 @@ def _evaluate_rule_on_points(
     last_emitted_ts: Optional[int] = None
     windows: list[OfflineStressWindow] = []
     suppressed = 0
+    window_left = 0
 
     for index in range(len(points)):
-        eligible = _eligible_points(points, index, lookback_ns)
-        if len(eligible) < rule.min_required_points:
+        start_idx, end_idx = _eligible_slice(points, index, lookback_ns, window_left)
+        window_left = start_idx
+        eligible_count = end_idx - start_idx
+        if eligible_count < rule.min_required_points:
             continue
 
         if rule.rule_name == "rolling_range_bps":
-            trigger_value = _range_bps(eligible)
+            trigger_value = _range_bps(points, start_idx, end_idx)
         elif rule.rule_name == "rolling_absolute_return_bps":
-            trigger_value = _absolute_return_bps(eligible)
+            trigger_value = _absolute_return_bps(points, start_idx, end_idx)
         elif rule.rule_name == "tick_only_burst_placeholder":
             trigger_value = 0.0
         else:
@@ -359,7 +378,7 @@ def _evaluate_rule_on_points(
 
         metadata = {
             "logical_source_id": source.logical_source_id,
-            "point_count": len(eligible),
+            "point_count": eligible_count,
             "current_timestamp_ns": trigger_ts,
         }
         window = _build_window(
@@ -646,6 +665,7 @@ def write_stress_window_outputs(
         "schema_version": OFFLINE_STRESS_WINDOW_SCHEMA_VERSION,
         "status": result.status,
         "windows": [_window_to_payload(window) for window in result.windows],
+        "window_index_hash": result.manifest_metadata.get("window_index_hash"),
     }
     stress_windows_path = run_dir / "stress_windows.json"
     stress_windows_path.write_text(json.dumps(windows_payload, indent=2, sort_keys=True), encoding="utf-8")

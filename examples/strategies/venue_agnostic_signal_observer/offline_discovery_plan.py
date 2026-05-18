@@ -407,7 +407,16 @@ def compute_discovery_config_hash(config: OfflineDiscoveryConfig) -> str:
 
 
 def compute_window_index_hash(stress_windows_payload: dict[str, Any]) -> str:
-    return _sha256_json(stress_windows_payload)
+    """Return the window_index_hash from the payload, or compute from windows.
+
+    If the payload includes a window_index_hash field (from post-patch stress
+    window output), use it directly. Otherwise compute deterministically from
+    the windows list for backward compatibility.
+    """
+    stored = stress_windows_payload.get("window_index_hash")
+    if stored is not None:
+        return stored
+    return _sha256_json({"schema_version": stress_windows_payload.get("schema_version"), "windows": stress_windows_payload.get("windows", [])})
 
 
 def _load_stress_windows(stress_windows_payload: dict[str, Any]) -> list[OfflineStressWindow]:
