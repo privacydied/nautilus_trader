@@ -1,0 +1,81 @@
+{
+  "run_id": "funding_falling_oi_unwind_v1_20260519T020249_995b1a",
+  "study_id": "family3_funding_falling_oi_unwind_v1",
+  "metadata": {
+    "run_id": "funding_falling_oi_unwind_v1_20260519T020249_995b1a",
+    "study_id": "family3_funding_falling_oi_unwind_v1",
+    "precommitment_sha256": "c26c02281e2b27316b102fead1a09a4d4226af1ff9c150603695de68b41b58b1",
+    "git_sha": "e5e077cff7a81fcfb8b1bffb4f7040a5860b2463",
+    "git_generated_at": "2026-05-19T01:02:49.495090+00:00",
+    "seed": 42,
+    "preflight_verdict": "PREFLIGHT_PASSED",
+    "stage_a_outcome": "POPULATION_SUFFICIENT",
+    "safety_mode": "public_data_observer_only"
+  },
+  "cell_results": [
+    {
+      "cell_key": "negative_funding_extreme_falling_oi_24h",
+      "horizon": "24h",
+      "n_events": 223,
+      "cost_bps": 100,
+      "mean_gross_bps": 54.8578,
+      "mean_net_bps": -45.1422,
+      "median_net_bps": -61.5648,
+      "win_rate": 0.3946,
+      "win_count": 88,
+      "worst_decile_net_bps": -491.7211,
+      "baseline_delta_bps": 47.3035,
+      "gates_pass": false,
+      "gate_failures": [
+        "mean_net_bps=-45.1422 <= 0",
+        "median_net_bps=-61.5648 <= 0",
+        "win_rate=0.3946 < 0.55",
+        "worst_decile=-491.7211 <= -50"
+      ],
+      "verdict": "GATES_FAILED",
+      "reason": "mean_net_bps=-45.1422 <= 0; median_net_bps=-61.5648 <= 0; win_rate=0.3946 < 0.55; worst_decile=-491.7211 <= -50",
+      "baseline_bps": -92.4457,
+      "null_p_value": 0.00999000999000999,
+      "null_mean": -91.40531634002366,
+      "fdr_rejected": true,
+      "fdr_raw_p": 0.00999000999000999,
+      "holdout_n_train": 157,
+      "holdout_n_holdout": 66,
+      "holdout_mean_net_bps": -23.9247,
+      "train_mean_net_bps": -54.0617,
+      "final_verdict": "GATES_FAILED"
+    },
+    {
+      "cell_key": "negative_funding_extreme_falling_oi_48h",
+      "horizon": "48h",
+      "n_events": 223,
+      "cost_bps": 100,
+      "mean_gross_bps": 62.0055,
+      "mean_net_bps": -37.9945,
+      "median_net_bps": -67.2407,
+      "win_rate": 0.435,
+      "win_count": 97,
+      "worst_decile_net_bps": -604.7921,
+      "baseline_delta_bps": 47.3834,
+      "gates_pass": false,
+      "gate_failures": [
+        "mean_net_bps=-37.9945 <= 0",
+        "median_net_bps=-67.2407 <= 0",
+        "win_rate=0.4350 < 0.55",
+        "worst_decile=-604.7921 <= -50"
+      ],
+      "verdict": "GATES_FAILED",
+      "reason": "mean_net_bps=-37.9945 <= 0; median_net_bps=-67.2407 <= 0; win_rate=0.4350 < 0.55; worst_decile=-604.7921 <= -50",
+      "baseline_bps": -85.3779,
+      "null_p_value": 0.03496503496503497,
+      "null_mean": -85.16698239708924,
+      "fdr_rejected": false,
+      "fdr_raw_p": 0.03496503496503497,
+      "holdout_n_train": 157,
+      "holdout_n_holdout": 66,
+      "holdout_mean_net_bps": -45.1638,
+      "train_mean_net_bps": -34.9807,
+      "final_verdict": "GATES_FAILED"
+    }
+  ]
+}
