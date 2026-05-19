@@ -115,10 +115,12 @@ def _args_to_dict(args: Any) -> dict[str, Any]:
         if any(word in kl for word in ("secret", "key", "password", "token", "auth")):
             d[key] = "<redacted>"
 
-    # Convert Path values to strings
+    # Convert Path values to strings (including nested in lists/tuples)
     for k, v in d.items():
         if isinstance(v, Path):
             d[k] = str(v)
+        elif isinstance(v, (list, tuple)):
+            d[k] = [str(x) if isinstance(x, Path) else x for x in v]
 
     return d
 
