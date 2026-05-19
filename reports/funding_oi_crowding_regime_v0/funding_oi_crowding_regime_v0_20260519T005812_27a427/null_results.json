@@ -1,0 +1,56 @@
+[
+  {
+    "cell_key": "positive_rising_oi_8h",
+    "n_events": 450,
+    "observed_mean": -108.18842652905337,
+    "null_mean": -108.18842652905401,
+    "null_std": 6.207881393861532e-13,
+    "p_value": 0.45454545454545453,
+    "n_shuffles": 1000
+  },
+  {
+    "cell_key": "positive_rising_oi_24h",
+    "n_events": 450,
+    "observed_mean": -118.32853862841186,
+    "null_mean": -118.3285386284115,
+    "null_std": 3.234182608455386e-13,
+    "p_value": 0.8581418581418582,
+    "n_shuffles": 1000
+  },
+  {
+    "cell_key": "positive_rising_oi_48h",
+    "n_events": 450,
+    "observed_mean": -125.62922563730532,
+    "null_mean": -125.62922563730302,
+    "null_std": 2.2798359995681223e-12,
+    "p_value": 0.6893106893106893,
+    "n_shuffles": 1000
+  },
+  {
+    "cell_key": "negative_rising_oi_8h",
+    "n_events": 225,
+    "observed_mean": -74.62474194758988,
+    "null_mean": -74.62474194759002,
+    "null_std": 1.0842239567075737e-13,
+    "p_value": 0.19880119880119881,
+    "n_shuffles": 1000
+  },
+  {
+    "cell_key": "negative_rising_oi_24h",
+    "n_events": 225,
+    "observed_mean": -56.97887034927642,
+    "null_mean": -56.97887034927575,
+    "null_std": 7.09241677710943e-13,
+    "p_value": 0.03496503496503497,
+    "n_shuffles": 1000
+  },
+  {
+    "cell_key": "negative_rising_oi_48h",
+    "n_events": 225,
+    "observed_mean": -19.267963251859626,
+    "null_mean": -19.26796325185941,
+    "null_std": 2.308031043769118e-13,
+    "p_value": 0.13186813186813187,
+    "n_shuffles": 1000
+  }
+]

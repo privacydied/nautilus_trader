@@ -1,0 +1,44 @@
+[
+  {
+    "cell_key": "positive_rising_oi_8h",
+    "n_events": 0,
+    "p_value": null,
+    "null_mean": null,
+    "verdict": "NEEDS_MORE_DATA"
+  },
+  {
+    "cell_key": "positive_rising_oi_24h",
+    "n_events": 0,
+    "p_value": null,
+    "null_mean": null,
+    "verdict": "NEEDS_MORE_DATA"
+  },
+  {
+    "cell_key": "positive_rising_oi_48h",
+    "n_events": 0,
+    "p_value": null,
+    "null_mean": null,
+    "verdict": "NEEDS_MORE_DATA"
+  },
+  {
+    "cell_key": "negative_rising_oi_8h",
+    "n_events": 0,
+    "p_value": null,
+    "null_mean": null,
+    "verdict": "NEEDS_MORE_DATA"
+  },
+  {
+    "cell_key": "negative_rising_oi_24h",
+    "n_events": 0,
+    "p_value": null,
+    "null_mean": null,
+    "verdict": "NEEDS_MORE_DATA"
+  },
+  {
+    "cell_key": "negative_rising_oi_48h",
+    "n_events": 0,
+    "p_value": null,
+    "null_mean": null,
+    "verdict": "NEEDS_MORE_DATA"
+  }
+]

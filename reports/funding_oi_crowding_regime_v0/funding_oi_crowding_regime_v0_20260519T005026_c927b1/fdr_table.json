@@ -1,0 +1,44 @@
+[
+  {
+    "cell": "positive_rising_oi_8h",
+    "p_value": 1.0,
+    "by_threshold": 0.0034013605442176874,
+    "rejected": false,
+    "verdict": "NEEDS_MORE_DATA"
+  },
+  {
+    "cell": "positive_rising_oi_24h",
+    "p_value": 1.0,
+    "by_threshold": 0.006802721088435375,
+    "rejected": false,
+    "verdict": "NEEDS_MORE_DATA"
+  },
+  {
+    "cell": "positive_rising_oi_48h",
+    "p_value": 1.0,
+    "by_threshold": 0.010204081632653062,
+    "rejected": false,
+    "verdict": "NEEDS_MORE_DATA"
+  },
+  {
+    "cell": "negative_rising_oi_8h",
+    "p_value": 1.0,
+    "by_threshold": 0.01360544217687075,
+    "rejected": false,
+    "verdict": "NEEDS_MORE_DATA"
+  },
+  {
+    "cell": "negative_rising_oi_24h",
+    "p_value": 1.0,
+    "by_threshold": 0.01700680272108844,
+    "rejected": false,
+    "verdict": "NEEDS_MORE_DATA"
+  },
+  {
+    "cell": "negative_rising_oi_48h",
+    "p_value": 1.0,
+    "by_threshold": 0.020408163265306124,
+    "rejected": false,
+    "verdict": "NEEDS_MORE_DATA"
+  }
+]

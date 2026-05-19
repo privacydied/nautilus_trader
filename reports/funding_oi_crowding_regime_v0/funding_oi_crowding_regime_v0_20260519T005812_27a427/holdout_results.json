@@ -1,0 +1,56 @@
+[
+  {
+    "cell_key": "positive_rising_oi_8h",
+    "n_train": 305,
+    "n_holdout": 145,
+    "train_mean_net_bps": -101.9934,
+    "holdout_mean_net_bps": -33.2193,
+    "holdout_verdict": "HOLDOUT_ADEQUATE",
+    "holdout_reason": "145 holdout events meets threshold"
+  },
+  {
+    "cell_key": "positive_rising_oi_24h",
+    "n_train": 305,
+    "n_holdout": 145,
+    "train_mean_net_bps": -97.3477,
+    "holdout_mean_net_bps": -74.4606,
+    "holdout_verdict": "HOLDOUT_ADEQUATE",
+    "holdout_reason": "145 holdout events meets threshold"
+  },
+  {
+    "cell_key": "positive_rising_oi_48h",
+    "n_train": 305,
+    "n_holdout": 145,
+    "train_mean_net_bps": -92.5067,
+    "holdout_mean_net_bps": -107.3007,
+    "holdout_verdict": "HOLDOUT_ADEQUATE",
+    "holdout_reason": "145 holdout events meets threshold"
+  },
+  {
+    "cell_key": "negative_rising_oi_8h",
+    "n_train": 174,
+    "n_holdout": 51,
+    "train_mean_net_bps": -65.967,
+    "holdout_mean_net_bps": -16.163,
+    "holdout_verdict": "HOLDOUT_ADEQUATE",
+    "holdout_reason": "51 holdout events meets threshold"
+  },
+  {
+    "cell_key": "negative_rising_oi_24h",
+    "n_train": 174,
+    "n_holdout": 51,
+    "train_mean_net_bps": -49.0848,
+    "holdout_mean_net_bps": 4.0883,
+    "holdout_verdict": "HOLDOUT_ADEQUATE",
+    "holdout_reason": "51 holdout events meets threshold"
+  },
+  {
+    "cell_key": "negative_rising_oi_48h",
+    "n_train": 174,
+    "n_holdout": 51,
+    "train_mean_net_bps": -26.1348,
+    "holdout_mean_net_bps": 92.1602,
+    "holdout_verdict": "HOLDOUT_ADEQUATE",
+    "holdout_reason": "51 holdout events meets threshold"
+  }
+]

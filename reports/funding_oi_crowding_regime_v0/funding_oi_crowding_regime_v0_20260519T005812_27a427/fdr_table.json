@@ -1,0 +1,44 @@
+[
+  {
+    "cell": "positive_rising_oi_8h",
+    "p_value": 0.45454545454545453,
+    "by_threshold": 0.0034013605442176874,
+    "rejected": false,
+    "verdict": "NULL_FAILED"
+  },
+  {
+    "cell": "positive_rising_oi_24h",
+    "p_value": 0.8581418581418582,
+    "by_threshold": 0.006802721088435375,
+    "rejected": false,
+    "verdict": "NULL_FAILED"
+  },
+  {
+    "cell": "positive_rising_oi_48h",
+    "p_value": 0.6893106893106893,
+    "by_threshold": 0.010204081632653062,
+    "rejected": false,
+    "verdict": "NULL_FAILED"
+  },
+  {
+    "cell": "negative_rising_oi_8h",
+    "p_value": 0.19880119880119881,
+    "by_threshold": 0.01360544217687075,
+    "rejected": false,
+    "verdict": "NULL_FAILED"
+  },
+  {
+    "cell": "negative_rising_oi_24h",
+    "p_value": 0.03496503496503497,
+    "by_threshold": 0.01700680272108844,
+    "rejected": false,
+    "verdict": "GATES_FAILED"
+  },
+  {
+    "cell": "negative_rising_oi_48h",
+    "p_value": 0.13186813186813187,
+    "by_threshold": 0.020408163265306124,
+    "rejected": false,
+    "verdict": "NULL_FAILED"
+  }
+]

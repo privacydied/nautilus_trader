@@ -1,0 +1,56 @@
+[
+  {
+    "cell_key": "positive_rising_oi_8h",
+    "n_train": 0,
+    "n_holdout": 0,
+    "train_mean_net_bps": null,
+    "holdout_mean_net_bps": null,
+    "holdout_verdict": "UNDERPOWERED_HOLDOUT_FAILURE",
+    "holdout_reason": "Only 0 holdout events (need >= 50)"
+  },
+  {
+    "cell_key": "positive_rising_oi_24h",
+    "n_train": 0,
+    "n_holdout": 0,
+    "train_mean_net_bps": null,
+    "holdout_mean_net_bps": null,
+    "holdout_verdict": "UNDERPOWERED_HOLDOUT_FAILURE",
+    "holdout_reason": "Only 0 holdout events (need >= 50)"
+  },
+  {
+    "cell_key": "positive_rising_oi_48h",
+    "n_train": 0,
+    "n_holdout": 0,
+    "train_mean_net_bps": null,
+    "holdout_mean_net_bps": null,
+    "holdout_verdict": "UNDERPOWERED_HOLDOUT_FAILURE",
+    "holdout_reason": "Only 0 holdout events (need >= 50)"
+  },
+  {
+    "cell_key": "negative_rising_oi_8h",
+    "n_train": 0,
+    "n_holdout": 0,
+    "train_mean_net_bps": null,
+    "holdout_mean_net_bps": null,
+    "holdout_verdict": "UNDERPOWERED_HOLDOUT_FAILURE",
+    "holdout_reason": "Only 0 holdout events (need >= 50)"
+  },
+  {
+    "cell_key": "negative_rising_oi_24h",
+    "n_train": 0,
+    "n_holdout": 0,
+    "train_mean_net_bps": null,
+    "holdout_mean_net_bps": null,
+    "holdout_verdict": "UNDERPOWERED_HOLDOUT_FAILURE",
+    "holdout_reason": "Only 0 holdout events (need >= 50)"
+  },
+  {
+    "cell_key": "negative_rising_oi_48h",
+    "n_train": 0,
+    "n_holdout": 0,
+    "train_mean_net_bps": null,
+    "holdout_mean_net_bps": null,
+    "holdout_verdict": "UNDERPOWERED_HOLDOUT_FAILURE",
+    "holdout_reason": "Only 0 holdout events (need >= 50)"
+  }
+]
