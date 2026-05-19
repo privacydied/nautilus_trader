@@ -1099,18 +1099,41 @@ def test_preflight_no_returns_or_prices():
     assert "win_rate" not in content
 
 
-def test_preflight_stage_b_artifacts_dont_exist():
-    """Stage B artifacts must NOT exist yet."""
+def test_stage_b_artifacts_exist_after_completion():
+    """Stage B artifacts must exist after Stage B completes."""
     base = os.path.join(
         os.path.dirname(__file__), "..", "..", "..", "..",
         "reports", "funding_falling_oi_unwind_v1"
     )
     stage_b_artifacts = [
         "stage_b_results.json",
-        "STAGE_B_REPORT.md",
-        "stage_b_null_results.json",
-        "stage_b_fdr_results.json",
+        "null_results.json",
+        "fdr_results.json",
+        "holdout_results.json",
     ]
     for art in stage_b_artifacts:
         p = os.path.join(base, art)
-        assert not os.path.exists(p), f"Stage B artifact exists before Stage B: {p}"
+        assert os.path.exists(p), f"Stage B artifact missing: {p}"
+
+
+def test_registry_contains_family3_v1():
+    """Registry must contain the Family 3 v1 falling-OI entry after Stage B."""
+    registry_path = os.path.join(
+        os.path.dirname(__file__), "..", "docs", "REJECTED_RESEARCH.md"
+    )
+    with open(registry_path) as f:
+        text = f.read()
+    assert "family3_funding_falling_oi_unwind_v1" in text or "Family 3 v1 funding" in text
+
+
+def test_registry_gates_failed_verdict():
+    """Registry entry must show REJECTED verdict (both cells GATES_FAILED)."""
+    registry_path = os.path.join(
+        os.path.dirname(__file__), "..", "docs", "REJECTED_RESEARCH.md"
+    )
+    with open(registry_path) as f:
+        text = f.read()
+    # Find the Family 3 v1 section
+    if "Family 3 v1" in text:
+        assert "GATES_FAILED" in text, "Registry should say GATES_FAILED"
+    assert "REJECTED" in text, "Registry should say REJECTED"

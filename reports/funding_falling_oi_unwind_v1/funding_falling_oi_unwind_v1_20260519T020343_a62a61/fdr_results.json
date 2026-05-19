@@ -1,0 +1,13 @@
+{
+  "method": "Benjamini-Yekutieli",
+  "alpha": 0.05,
+  "family_size": 2,
+  "p_values": [
+    0.00999000999000999,
+    0.03496503496503497
+  ],
+  "rejected": [
+    true,
+    false
+  ]
+}

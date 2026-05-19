@@ -472,3 +472,32 @@ falsification) remains available for other observer studies that share a compati
 report schema. The v2 evaluator, heatmap, cost sensitivity, permutation null, and
 falsification tools are generic across observer frameworks that produce lead-lag-group
 output format, not exclusive to the now-rejected derivatives v2 hypothesis.
+|
+| **Family 3 v1 funding × falling-OI unwind v1** | BTCUSDT negative funding extreme + falling OI → spot BTC forward returns (24h, 48h) | Binance Vision archive (funding + metrics + spot klines) | **REJECTED** | negative_funding_extreme_falling_oi_24h: GATES_FAILED (n=223); negative_funding_extreme_falling_oi_24h: GATES_FAILED, n=223, holdout=66, mean_net=-45.1422, wr=0.3946, p=0.00999000999000999, FDR=True; negative_funding_extreme_falling_oi_48h: GATES_FAILED (n=223); negative_funding_extreme_falling_oi_48h: GATES_FAILED, n=223, holdout=66, mean_net=-37.9945, wr=0.435, p=0.03496503496503497, FDR=False
+
+## Family 3 v1 Funding × Falling-OI Unwind — Registry Detail
+
+**Tag:** `family3-funding-falling-oi-unwind-v1-rejected`
+
+**Verdict:** `REJECTED`
+
+**Hypothesis:** When BTCUSDT funding is a negative extreme and BTCUSDT open interest is falling
+over the prior 8h into the funding settlement, the short unwind continuation produces positive
+BTC spot forward returns over 24h and 48h.
+
+**Primary cells:** 2 cells (negative funding extreme + falling OI × 24h, 48h). 50 bps one-way cost.
+Family size: exactly 2. BY FDR across both cells.
+
+**Run artifacts:**
+- Run: `funding_falling_oi_unwind_v1_20260519T020343_a62a61`
+- Precommitment SHA: `c26c02281e2b27316b102fead1a09a4d4226af1ff9c150603695de68b41b58b1`
+- Git SHA: `e5e077cff7a81fcfb8b1bffb4f7040a5860b2463`
+- Seed: 42
+- Safety: public_data_observer_only
+
+**Per-cell results:**
+
+- **negative_funding_extreme_falling_oi_24h**: Final=GATES_FAILED, N=223, Holdout=66, MeanNet=-45.1422 bps, WR=0.3946, WorstDecile=-491.7211, BaselineDelta=47.3035, NullP=0.00999000999000999, FDR=rejected
+- **negative_funding_extreme_falling_oi_48h**: Final=GATES_FAILED, N=223, Holdout=66, MeanNet=-37.9945 bps, WR=0.435, WorstDecile=-604.7921, BaselineDelta=47.3834, NullP=0.03496503496503497, FDR=survived
+\n**Lock discipline:** Lock #12 (rising-OI crowding-build mapping) is unchanged. This entry covers the falling-OI unwind mapping only.\n\n**What this rejects:**\n- BTCUSDT negative-funding + falling-OI unwind v1 under the exact frozen 2-cell design,\n  50 bps cost, Binance Vision archive, spot return leg, timestamp-shuffle null, and BY FDR\n  family size 2.\n\n**What this does NOT reject:** Multi-asset funding unwind, perp return leg with\n  funding-paid-while-held, cross-exchange OI, tick-level OI, lower-cost execution, or maker/rebate\n  models.\n
+---

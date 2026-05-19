@@ -1,0 +1,24 @@
+[
+  {
+    "cell_key": "negative_funding_extreme_falling_oi_24h",
+    "horizon": "24h",
+    "n_events": 223,
+    "observed_mean": -45.14222712325653,
+    "null_mean": -91.40531634002366,
+    "null_std": 18.64011223249489,
+    "p_value": 0.00999000999000999,
+    "n_shuffles": 1000,
+    "eligible_pool_size": 5392
+  },
+  {
+    "cell_key": "negative_funding_extreme_falling_oi_48h",
+    "horizon": "48h",
+    "n_events": 223,
+    "observed_mean": -37.99451490562183,
+    "null_mean": -85.16698239708924,
+    "null_std": 26.670929369851887,
+    "p_value": 0.03496503496503497,
+    "n_shuffles": 1000,
+    "eligible_pool_size": 5389
+  }
+]

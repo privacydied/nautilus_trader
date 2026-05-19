@@ -1,0 +1,18 @@
+[
+  {
+    "horizon": "24h",
+    "n_train": 157,
+    "n_holdout": 66,
+    "train_mean_net_bps": -54.0617,
+    "holdout_mean_net_bps": -23.9247,
+    "holdout_verdict": "HOLDOUT_ADEQUATE"
+  },
+  {
+    "horizon": "48h",
+    "n_train": 157,
+    "n_holdout": 66,
+    "train_mean_net_bps": -34.9807,
+    "holdout_mean_net_bps": -45.1638,
+    "holdout_verdict": "HOLDOUT_ADEQUATE"
+  }
+]
