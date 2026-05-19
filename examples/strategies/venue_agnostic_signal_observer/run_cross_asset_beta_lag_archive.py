@@ -130,6 +130,33 @@ def _load_checkpoint_payload(output_dir: Path, phase: str) -> Dict[str, Any]:
         return {}
 
 
+def _load_ts_prices_from_jsonl(path: Path) -> tuple:
+    """Load (timestamps, prices) arrays from a tick JSONL file.
+
+    Reads only ts_event and price fields, skips non-finite prices.
+    Returns (numpy.ndarray[int64], numpy.ndarray[float64]).
+    """
+    import json as _json  # noqa: PLC0415
+    import math as _math  # noqa: PLC0415
+
+    import numpy as np  # noqa: PLC0415
+
+    ts_list: list[int] = []
+    pr_list: list[float] = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            row = _json.loads(line)
+            price = row.get("price")
+            ts = row.get("ts_event")
+            if price is None or ts is None:
+                continue
+            if not _math.isfinite(price):
+                continue
+            ts_list.append(int(ts))
+            pr_list.append(float(price))
+    return np.array(ts_list, dtype=np.int64), np.array(pr_list, dtype=np.float64)
+
+
 def _reconstruct_labels_from_checkpoint(output_dir: Path) -> List[StressLabel]:
     """Reconstruct StressLabel objects from checkpoint '05_independent_windows'."""
     payload = _load_checkpoint_payload(output_dir, "05_independent_windows")
