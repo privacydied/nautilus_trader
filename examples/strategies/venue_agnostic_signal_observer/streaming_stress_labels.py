@@ -161,7 +161,7 @@ def compute_forward_returns_from_ts_prices(
             continue
 
         forward_price = prices[exit_idx]
-        if entry_price <= 0:
+        if entry_price <= 0 or not math.isfinite(entry_price):
             raw_return_bps = 0.0
         else:
             raw_return_bps = ((forward_price - entry_price) / entry_price) * 10_000
@@ -232,18 +232,18 @@ def generate_baseline_from_ts_prices(
 
     min_ts = min(all_ts)
     max_ts = max(all_ts)
+    sorted_ts = sorted(all_ts)
 
     baseline_frs = []
     for i in range(label_count):
         entry_ts_ns = rng.randint(min_ts, max_ts)
         # Find closest tick at or after entry_ts_ns
-        sorted_ts = sorted(all_ts)
         idx = bisect_left(sorted_ts, entry_ts_ns)
         if idx >= len(sorted_ts):
             continue
         actual_entry_ts = sorted_ts[idx]
         entry_price = all_prices_by_ts.get(actual_entry_ts)
-        if entry_price is None or entry_price <= 0:
+        if entry_price is None or entry_price <= 0 or not math.isfinite(entry_price):
             continue
 
         total_cost = FEE_BPS + SLIPPAGE_BPS + QUOTE_MISMATCH_BUFFER_BPS
