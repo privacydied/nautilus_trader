@@ -428,8 +428,7 @@ def main() -> None:
 
         # Phase 4E: Download planned aggTrades
         print(f"\n[Phase 4E] Downloading planned aggTrades...")
-        all_ticks: Dict[str, List[TradeTickLite]] = {sym: [] for sym in TARGET_SYMBOLS}
-        source_tick_counts: Dict[str, int] = {sym: 0 for sym in SOURCE_SYMBOLS}
+        all_tick_counts: Dict[str, int] = {sym: 0 for sym in ALL_SYMBOLS}
         file_manifest: List[Dict[str, Any]] = []
         total_files = 0
         failed_files = 0
@@ -449,11 +448,8 @@ def main() -> None:
                 continue
 
             ticks = parse_agg_trade_csv(data, sym, venue=VENUE)
-            if sym in SOURCE_SYMBOLS:
-                append_ticks_jsonl(tick_file_path(output_dir, sym), ticks)
-                source_tick_counts[sym] = source_tick_counts.get(sym, 0) + len(ticks)
-            else:
-                all_ticks.setdefault(sym, []).extend(ticks)
+            append_ticks_jsonl(tick_file_path(output_dir, sym), ticks)
+            all_tick_counts[sym] = all_tick_counts.get(sym, 0) + len(ticks)
 
             file_manifest.append({
                 "symbol": sym, "date": d, "source": "aggTrades",
@@ -463,33 +459,18 @@ def main() -> None:
             total_files += 1
 
         print(f"  Files: {total_files} OK, {failed_files} failed")
-        src_total = sum(source_tick_counts.values())
-        tgt_total = sum(len(t) for t in all_ticks.values())
-        print(f"  Total ticks: {src_total + tgt_total} (source: {src_total}, target: {tgt_total})")
+        total_tick_count = sum(all_tick_counts.values())
+        print(f"  Total ticks: {total_tick_count}")
 
         # Check per-symbol coverage
-        missing_symbols = []
-        for sym in ALL_SYMBOLS:
-            if sym in SOURCE_SYMBOLS:
-                if source_tick_counts.get(sym, 0) == 0:
-                    missing_symbols.append(sym)
-            elif not all_ticks.get(sym):
-                missing_symbols.append(sym)
+        missing_symbols = [sym for sym in ALL_SYMBOLS if all_tick_counts.get(sym, 0) == 0]
         per_sym_coverage: Dict[str, Dict[str, Any]] = {}
         for sym in ALL_SYMBOLS:
-            if sym in SOURCE_SYMBOLS:
-                per_sym_coverage[sym] = {
-                    "tick_count": source_tick_counts.get(sym, 0),
-                    "first_ts": None,  # from JSONL, would need scan
-                    "last_ts": None,
-                }
-            else:
-                ticks = all_ticks.get(sym, [])
-                per_sym_coverage[sym] = {
-                    "tick_count": len(ticks),
-                    "first_ts": ticks[0].ts_event if ticks else None,
-                    "last_ts": ticks[-1].ts_event if ticks else None,
-                }
+            per_sym_coverage[sym] = {
+                "tick_count": all_tick_counts.get(sym, 0),
+                "first_ts": None,
+                "last_ts": None,
+            }
 
         # Phase 4F: Exact aggTrade stress label reconstruction
         print(f"\n[Phase 4F] Reconstructing exact stress labels from aggTrades...")
@@ -539,7 +520,7 @@ def main() -> None:
         completed_phases.append("02_kline_prefilter")
         write_checkpoint(output_dir, "03_aggtrades",
             {"total_files": total_files, "failed_files": failed_files,
-             "per_sym_tick_counts": {sym: source_tick_counts.get(sym, len(all_ticks.get(sym, []))) for sym in ALL_SYMBOLS}},
+             "per_sym_tick_counts": {sym: all_tick_counts.get(sym, 0) for sym in ALL_SYMBOLS}},
             git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
         completed_phases.append("03_aggtrades")
 
@@ -661,13 +642,22 @@ def main() -> None:
             "total_checked": len(windowed),
         }
 
-    for lbl in windowed:
-        target_ticks_dict = {sym: all_ticks.get(sym, []) for sym in TARGET_SYMBOLS}
+    # Pre-load all target (timestamps, prices) from JSONL
+    target_data = {}
+    for sym in TARGET_SYMBOLS:
+        jpath = tick_file_path(output_dir, sym)
+        if jpath.exists() and jpath.stat().st_size > 0:
+            ts, pr = _load_ts_prices_from_jsonl(jpath)
+            target_data[sym] = (ts, pr)
+            print(f"  {sym}: {len(ts)} ticks from JSONL")
+        else:
+            target_data[sym] = ([], [])
 
+    for lbl in windowed:
         # Use max horizon for coverage
         max_horizon_ns = max(HORIZONS_MS) * MS_TO_NS
-        all_covered, coverage_intervals = check_target_coverage(
-            target_ticks_dict,
+        all_covered, coverage_intervals = check_target_coverage_from_ts_prices(
+            target_data,
             lbl.stress_end_ns + ENTRY_DELAY_NS,
             max_horizon_ns,
         )
@@ -717,14 +707,25 @@ def main() -> None:
     else:
         print(f"\n[Phase 5] Computing forward returns...")
 
-        for lbl in usable_labels:
-            for tgt_sym in TARGET_SYMBOLS:
-                target_ticks = all_ticks.get(tgt_sym, [])
-                if not target_ticks:
-                    continue
+        # Per-target loop: load one target, process all labels, discard
+        for tgt_sym in TARGET_SYMBOLS:
+            jpath = tick_file_path(output_dir, tgt_sym)
+            if not jpath.exists() or jpath.stat().st_size == 0:
+                print(f"  SKIP {tgt_sym}: no JSONL")
+                continue
+            ts_arr, pr_arr = _load_ts_prices_from_jsonl(jpath)
+            print(f"  {tgt_sym}: {len(ts_arr)} ticks for forward returns")
 
-                frs = compute_forward_returns_for_stress(
-                    lbl, target_ticks, tgt_sym, HORIZONS_MS,
+            for lbl in usable_labels:
+                frs = compute_forward_returns_from_ts_prices(
+                    lbl, ts_arr, pr_arr, tgt_sym, HORIZONS_MS,
+                    TickForwardReturn=TickForwardReturn,
+                    VENUE=VENUE,
+                    ENTRY_DELAY_NS=ENTRY_DELAY_NS,
+                    MS_TO_NS=MS_TO_NS,
+                    FEE_BPS=FEE_BPS,
+                    SLIPPAGE_BPS=SLIPPAGE_BPS,
+                    QUOTE_MISMATCH_BUFFER_BPS=QUOTE_MISMATCH_BUFFER_BPS,
                 )
 
                 for fr in frs:
@@ -913,10 +914,26 @@ def main() -> None:
                 continue
 
             src_sym = cell.get("source_symbol", "")
-            all_targets = {sym: all_ticks.get(sym, []) for sym in TARGET_SYMBOLS}
+            baseline_targets = {}
+            for tgt_sym in TARGET_SYMBOLS:
+                jpath = tick_file_path(output_dir, tgt_sym)
+                if jpath.exists() and jpath.stat().st_size > 0:
+                    ts_arr, pr_arr = _load_ts_prices_from_jsonl(jpath)
+                    baseline_targets[tgt_sym] = (ts_arr, pr_arr)
+                else:
+                    baseline_targets[tgt_sym] = ([], [])
 
-            baseline_frs = generate_baseline_events(
-                all_targets, src_sym, n, seed=args.seed,
+            baseline_frs = generate_baseline_from_ts_prices(
+                baseline_targets, src_sym, n,
+                seed=args.seed,
+                TickForwardReturn=TickForwardReturn,
+                VENUE=VENUE,
+                ENTRY_DELAY_NS=ENTRY_DELAY_NS,
+                MS_TO_NS=MS_TO_NS,
+                FEE_BPS=FEE_BPS,
+                SLIPPAGE_BPS=SLIPPAGE_BPS,
+                QUOTE_MISMATCH_BUFFER_BPS=QUOTE_MISMATCH_BUFFER_BPS,
+                HORIZONS_MS=HORIZONS_MS,
             )
 
             baseline_stats = compute_cell_stats(baseline_frs)
