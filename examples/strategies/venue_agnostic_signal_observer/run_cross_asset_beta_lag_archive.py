@@ -43,9 +43,13 @@ from .binance_vision_archive import (
     _iter_date_range,
     _sha256_bytes,
     _sha256_file,
-    compute_kline_candidate_days,
+    compute_kline_candidate_days,  # deprecated — kept for A/B comparison
     estimate_file_size_mb,
     estimate_kline_file_size_mb,
+)
+from .kline_prefilter_v1 import (
+    compute_kline_candidate_days_v1,
+    compute_kline_candidate_days_deprecated,  # A/B comparison
 )
 from .binance_vision_archive import append_ticks_jsonl, tick_file_path
 from .streaming_stress_labels import generate_stress_labels_streaming
@@ -403,21 +407,19 @@ def main() -> None:
         kline_kb = sum(m.get("size_bytes", 0) or 0 for m in kline_manifest) / 1024
         print(f"  Kline data: {kline_kb:.0f} KB")
 
-        # Phase 4B: Kline prefilter
-        print(f"\n[Phase 4B] Computing kline stress-day prefilter...")
-        # Conservative thresholds: match actual stress rules to be selective but
-        # still avoid false negatives. HL=30bps catches any 30s/30bps event
-        # (since intra-bar HL must be >= 30s move). OC=50bps catches any
-        # 60s/50bps event aligned to bar boundaries. Events crossing bar
-        # boundaries are caught by the HL threshold.
-        candidate_days = compute_kline_candidate_days(
-            source_kline_data,
-            hl_threshold_bps=30.0,
-            oc_threshold_bps=50.0,
-        )
-        print(f"  Candidate stress days: {len(candidate_days)}")
+        # Phase 4B: Kline prefilter (V1 — per-bar high-low range)
+        print(f"\n[Phase 4B] Computing kline stress-day prefilter (V1 — per-bar HL >= 30bps)...")
+        candidate_dates_set = compute_kline_candidate_days_v1(source_kline_data)
+        print(f"  Candidate stress days (V1): {len(candidate_dates_set)}")
 
-        if not candidate_days:
+        # A/B comparison: also compute the deprecated daily-range filter
+        candidate_dates_deprecated = compute_kline_candidate_days_deprecated(source_kline_data)
+        if candidate_dates_deprecated != candidate_dates_set:
+            print(f"  Candidate stress days (deprecated daily-range): {len(candidate_dates_deprecated)}")
+            diff = candidate_dates_deprecated - candidate_dates_set
+            print(f"  Deprecated filter over-selects {len(diff)} additional days")
+
+        if not candidate_dates_set:
             _write_prefilter_report(output_dir, run_id, git_sha, precommitment_sha,
                                     availability, {}, kline_manifest, [],
                                     brute_files, brute_mb)
@@ -426,6 +428,12 @@ def main() -> None:
                            early_stop="zero_kline_candidate_days")
             print(f"\n=== VERDICT: {verdict} ===")
             return
+
+        # Convert set of dates to the list-of-dicts format expected by build_stress_day_download_plan
+        candidate_days = [
+            {"date": d, "source_symbol": "BTCUSDT", "reason": "hl_per_bar_ge_30bps"}
+            for d in sorted(candidate_dates_set)
+        ]
 
         # Phase 4C: Build download plan
         print(f"\n[Phase 4C] Building aggTrade download plan...")
