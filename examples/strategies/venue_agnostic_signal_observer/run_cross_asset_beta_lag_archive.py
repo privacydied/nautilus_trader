@@ -116,6 +116,41 @@ from .run_artifacts import (
 )
 
 
+def _load_checkpoint_payload(output_dir: Path, phase: str) -> Dict[str, Any]:
+    """Load a checkpoint artifact payload if it exists and is valid."""
+    cp_path = output_dir / f"checkpoint_phase_{phase}.json"
+    if not cp_path.exists():
+        return {}
+    try:
+        data = json.loads(cp_path.read_text("utf-8"))
+        return data.get("payload", {})
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _reconstruct_labels_from_checkpoint(output_dir: Path) -> List[StressLabel]:
+    """Reconstruct StressLabel objects from checkpoint '05_independent_windows'."""
+    payload = _load_checkpoint_payload(output_dir, "05_independent_windows")
+    rows = payload.get("label_rows", [])
+    labels: List[StressLabel] = []
+    for r in rows:
+        labels.append(StressLabel(
+            label_id=r["label_id"],
+            source_symbol=r["source_symbol"],
+            stress_end_ns=r["stress_end_ns"],
+            stress_window_seconds=r["stress_window_seconds"],
+            source_move_bps=r["source_move_bps"],
+            direction=r["direction"],
+            independent_window_id=r["independent_window_id"],
+            rule_name=r.get("rule_name", "checkpoint_reconstructed"),
+            # Fields not stored in checkpoint (not needed for resume)
+            stress_start_ns=0,
+            source_start_price=0.0,
+            source_end_price=0.0,
+        ))
+    return labels
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Cross-asset beta-lag archive v0 study runner"
@@ -628,333 +663,374 @@ def main() -> None:
         print(f"\n=== VERDICT: {verdict} ===")
         return
 
-    # Phase 5: Compute forward returns
-    print(f"\n[Phase 5] Computing forward returns...")
+    all_cell_keys_list = all_cell_keys()
+
+    # Phase 5: Compute forward returns (resume-aware)
     forward_rows: List[Dict[str, Any]] = []
     signal_rows: List[Dict[str, Any]] = []
 
-    for lbl in usable_labels:
-        for tgt_sym in TARGET_SYMBOLS:
-            target_ticks = all_ticks.get(tgt_sym, [])
-            if not target_ticks:
-                continue
+    if "07_forward_returns" in completed_phases:
+        print(f"\n[Phase 5] Loading forward returns from checkpoint...")
+        payload = _load_checkpoint_payload(output_dir, "07_forward_returns")
+        forward_rows = payload.get("forward_rows", [])
+        print(f"  Forward return rows (from checkpoint): {len(forward_rows)}")
+    else:
+        print(f"\n[Phase 5] Computing forward returns...")
 
-            frs = compute_forward_returns_for_stress(
-                lbl, target_ticks, tgt_sym, HORIZONS_MS,
-            )
+        for lbl in usable_labels:
+            for tgt_sym in TARGET_SYMBOLS:
+                target_ticks = all_ticks.get(tgt_sym, [])
+                if not target_ticks:
+                    continue
 
-            for fr in frs:
-                group_key = cell_group_key(
-                    lbl.source_symbol, tgt_sym, lbl.stress_window_seconds,
-                    lbl.direction, fr.horizon_ms,
+                frs = compute_forward_returns_for_stress(
+                    lbl, target_ticks, tgt_sym, HORIZONS_MS,
                 )
 
-                row = {
-                    "stress_event_id": lbl.label_id,
-                    "independent_window_id": lbl.independent_window_id,
-                    "source_symbol": lbl.source_symbol,
-                    "target_symbol": tgt_sym,
-                    "direction": lbl.direction,
-                    "stress_window_seconds": lbl.stress_window_seconds,
-                    "source_move_bps": lbl.source_move_bps,
-                    "signal_ts": fr.signal_ts,
-                    "entry_ts": fr.signal_ts,  # same as signal_ts in our model
-                    "horizon_ms": fr.horizon_ms,
-                    "entry_price": fr.entry_reference_price,
-                    "forward_price": fr.forward_price,
-                    "raw_return_bps": fr.raw_return_bps,
-                    "direction_adjusted_return_bps": fr.direction_adjusted_return_bps,
-                    "cost_bps": TOTAL_COST_BPS,
-                    "net_bps": fr.net_return_bps,
-                    "valid": fr.valid,
-                    "invalid_reason": fr.rejection_reason,
-                    "group_key": group_key,
-                    "train_or_holdout": "",
-                }
-                forward_rows.append(row)
+                for fr in frs:
+                    group_key = cell_group_key(
+                        lbl.source_symbol, tgt_sym, lbl.stress_window_seconds,
+                        lbl.direction, fr.horizon_ms,
+                    )
 
-    print(f"  Forward return rows: {len(forward_rows)}")
+                    row = {
+                        "stress_event_id": lbl.label_id,
+                        "independent_window_id": lbl.independent_window_id,
+                        "source_symbol": lbl.source_symbol,
+                        "target_symbol": tgt_sym,
+                        "direction": lbl.direction,
+                        "stress_window_seconds": lbl.stress_window_seconds,
+                        "source_move_bps": lbl.source_move_bps,
+                        "signal_ts": fr.signal_ts,
+                        "entry_ts": fr.signal_ts,
+                        "horizon_ms": fr.horizon_ms,
+                        "entry_price": fr.entry_reference_price,
+                        "forward_price": fr.forward_price,
+                        "raw_return_bps": fr.raw_return_bps,
+                        "direction_adjusted_return_bps": fr.direction_adjusted_return_bps,
+                        "cost_bps": TOTAL_COST_BPS,
+                        "net_bps": fr.net_return_bps,
+                        "valid": fr.valid,
+                        "invalid_reason": fr.rejection_reason,
+                        "group_key": group_key,
+                        "train_or_holdout": "",
+                    }
+                    forward_rows.append(row)
 
-    # Checkpoint: 07_forward_returns (CRITICAL — survives crash without re-download)
-    write_checkpoint(output_dir, "07_forward_returns",
-        {"forward_row_count": len(forward_rows), "usable_label_count": len(usable_labels)},
-        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
-    completed_phases.append("07_forward_returns")
+        print(f"  Forward return rows: {len(forward_rows)}")
 
-    # Split train/holdout by stress label timestamp
-    sorted_labels = sorted(usable_labels, key=lambda x: x.stress_end_ns)
-    split_idx = int(len(sorted_labels) * TRAIN_FRAC)
-    train_labels = set(l.label_id for l in sorted_labels[:split_idx])
-    holdout_labels = set(l.label_id for l in sorted_labels[split_idx:])
+        # Checkpoint: 07_forward_returns (CRITICAL)
+        write_checkpoint(output_dir, "07_forward_returns",
+            {"forward_row_count": len(forward_rows), "usable_label_count": len(usable_labels),
+             "forward_rows": forward_rows},
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        completed_phases.append("07_forward_returns")
+
+    # Split train/holdout by stress event chronological order
+    # Use unique stress events sorted by first signal_ts (works for both fresh and resumed)
+    event_first_ts: Dict[str, int] = {}
+    for r in forward_rows:
+        eid = r["stress_event_id"]
+        ts = r.get("signal_ts", 0)
+        if eid not in event_first_ts or ts < event_first_ts[eid]:
+            event_first_ts[eid] = ts
+    sorted_event_ids = sorted(event_first_ts.keys(), key=lambda eid: event_first_ts[eid])
+    split_idx = int(len(sorted_event_ids) * TRAIN_FRAC)
+    train_event_ids = set(sorted_event_ids[:split_idx])
 
     for row in forward_rows:
-        if row["stress_event_id"] in train_labels:
+        if row["stress_event_id"] in train_event_ids:
             row["train_or_holdout"] = "train"
         else:
             row["train_or_holdout"] = "holdout"
 
-    # Phase 6: Cell evaluation
-    print(f"\n[Phase 6] Cell evaluation...")
+    # Phase 6: Cell evaluation (resume-aware)
     cell_results: Dict[str, Dict[str, Any]] = {}
-    all_cell_keys = all_cell_keys()
+    if "08_cell_results" in completed_phases:
+        print(f"\n[Phase 6] Loading cell results from checkpoint...")
+        payload = _load_checkpoint_payload(output_dir, "08_cell_results")
+        cell_results = payload.get("cell_results", {})
+        print(f"  Cell results (from checkpoint): {len(cell_results)} cells")
+    else:
+        print(f"\n[Phase 6] Cell evaluation...")
 
-    for gk in all_cell_keys:
-        cell_events = [r for r in forward_rows if r["group_key"] == gk and r["valid"]]
-        train_events = [r for r in cell_events if r["train_or_holdout"] == "train"]
-        holdout_events = [r for r in cell_events if r["train_or_holdout"] == "holdout"]
+        for gk in all_cell_keys_list:
+            cell_events = [r for r in forward_rows if r["group_key"] == gk and r["valid"]]
+            train_events = [r for r in cell_events if r["train_or_holdout"] == "train"]
+            holdout_events = [r for r in cell_events if r["train_or_holdout"] == "holdout"]
 
-        # Convert to TickForwardReturn for stats
-        fr_objects: List[TickForwardReturn] = []
-        for r in cell_events:
-            fr = TickForwardReturn(
-                signal_id=r["stress_event_id"],
-                signal_ts=r["signal_ts"],
-                target_venue=VENUE,
-                target_symbol=r["target_symbol"],
-                horizon_ms=r["horizon_ms"],
-                entry_reference_price=r["entry_price"],
-                forward_price=r["forward_price"],
-                raw_return_bps=r["raw_return_bps"],
-                direction_adjusted_return_bps=r["direction_adjusted_return_bps"],
-                fee_bps=TOTAL_COST_BPS,
-                net_return_bps=r["net_bps"],
-                valid=r["valid"],
-                rejection_reason=r["invalid_reason"],
-            )
-            fr_objects.append(fr)
-
-        stats = compute_cell_stats(fr_objects)
-        train_stats = compute_cell_stats([
-            TickForwardReturn(
-                signal_id=r["stress_event_id"], signal_ts=r["signal_ts"],
-                target_venue=VENUE, target_symbol=r["target_symbol"],
-                horizon_ms=r["horizon_ms"],
-                entry_reference_price=r["entry_price"], forward_price=r["forward_price"],
-                raw_return_bps=r["raw_return_bps"],
-                direction_adjusted_return_bps=r["direction_adjusted_return_bps"],
-                fee_bps=TOTAL_COST_BPS, net_return_bps=r["net_bps"],
-                valid=r["valid"], rejection_reason=r["invalid_reason"],
-            )
-            for r in train_events
-        ])
-        hold_stats = compute_cell_stats([
-            TickForwardReturn(
-                signal_id=r["stress_event_id"], signal_ts=r["signal_ts"],
-                target_venue=VENUE, target_symbol=r["target_symbol"],
-                horizon_ms=r["horizon_ms"],
-                entry_reference_price=r["entry_price"], forward_price=r["forward_price"],
-                raw_return_bps=r["raw_return_bps"],
-                direction_adjusted_return_bps=r["direction_adjusted_return_bps"],
-                fee_bps=TOTAL_COST_BPS, net_return_bps=r["net_bps"],
-                valid=r["valid"], rejection_reason=r["invalid_reason"],
-            )
-            for r in holdout_events
-        ])
-
-        # Gates
-        gates_passed = True
-        gate_reasons: List[str] = []
-
-        if stats.valid_count < MIN_EVENTS_PER_CELL:
-            gates_passed = False
-            gate_reasons.append(f"insufficient_events:{stats.valid_count}<{MIN_EVENTS_PER_CELL}")
-
-        if stats.mean_net_bps is not None and stats.mean_net_bps <= 0:
-            gates_passed = False
-            gate_reasons.append(f"mean_net_not_positive:{stats.mean_net_bps:.2f}")
-
-        if stats.median_net_bps is not None and stats.median_net_bps <= 0:
-            gates_passed = False
-            gate_reasons.append(f"median_net_not_positive:{stats.median_net_bps:.2f}")
-
-        if stats.win_rate is not None and stats.win_rate < WIN_RATE_THRESHOLD:
-            gates_passed = False
-            gate_reasons.append(f"win_rate_too_low:{stats.win_rate:.4f}<{WIN_RATE_THRESHOLD}")
-
-        if stats.worst_decile_net_bps is not None and stats.worst_decile_net_bps <= WORST_DECILE_THRESHOLD:
-            gates_passed = False
-            gate_reasons.append(f"worst_decile_too_low:{stats.worst_decile_net_bps:.2f}<={WORST_DECILE_THRESHOLD}")
-
-        cell_results[gk] = {
-            "group_key": gk,
-            "source_symbol": gk.split("->")[0],
-            "target_symbol": gk.split("->")[1].split("/")[0],
-            "stress_window_seconds": int(gk.split("/")[1].replace("s", "")),
-            "direction": gk.split("/")[2],
-            "horizon_ms": int(gk.split("/")[3].replace("ms", "")),
-            "valid_count": stats.valid_count,
-            "mean_net_bps": stats.mean_net_bps,
-            "median_net_bps": stats.median_net_bps,
-            "win_rate": stats.win_rate,
-            "worst_decile_net_bps": stats.worst_decile_net_bps,
-            "gates_passed": gates_passed,
-            "gate_reasons": gate_reasons,
-            "train_count": train_stats.valid_count,
-            "train_mean_net_bps": train_stats.mean_net_bps,
-            "holdout_count": hold_stats.valid_count,
-            "holdout_mean_net_bps": hold_stats.mean_net_bps,
-            "holdout_win_rate": hold_stats.win_rate,
-            "cell_verdict": _cell_verdict(gates_passed, stats.valid_count),
-        }
-
-    # Checkpoint: 08_cell_results
-    write_checkpoint(output_dir, "08_cell_results",
-        {"cell_results": cell_results, "powered_cells": sum(1 for c in cell_results.values() if c.get("valid_count", 0) >= MIN_EVENTS_PER_CELL)},
-        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
-    completed_phases.append("08_cell_results")
-
-    # Phase 7: Baseline
-    print(f"\n[Phase 7] Computing baseline...")
-    baseline_results: Dict[str, Dict[str, Any]] = {}
-    for gk in all_cell_keys:
-        cell = cell_results.get(gk, {})
-        n = cell.get("valid_count", 0)
-        if n < MIN_EVENTS_PER_CELL:
-            continue
-
-        # Generate baseline for this cell's source/target
-        src_sym = cell.get("source_symbol", "")
-        all_targets = {sym: all_ticks.get(sym, []) for sym in TARGET_SYMBOLS}
-
-        baseline_frs = generate_baseline_events(
-            all_targets, src_sym, n, seed=args.seed,
-        )
-
-        baseline_stats = compute_cell_stats(baseline_frs)
-
-        baseline_mean = baseline_stats.mean_net_bps
-        cell_mean = cell.get("mean_net_bps")
-        baseline_delta = None
-        if cell_mean is not None and baseline_mean is not None:
-            baseline_delta = float(cell_mean) - float(baseline_mean)
-
-        baseline_results[gk] = {
-            "group_key": gk,
-            "baseline_n": baseline_stats.valid_count,
-            "baseline_mean_net_bps": baseline_mean,
-            "baseline_median_net_bps": baseline_stats.median_net_bps,
-            "baseline_win_rate": baseline_stats.win_rate,
-            "cell_mean_net_bps": cell_mean,
-            "baseline_delta_bps": baseline_delta,
-        }
-
-        # Apply baseline gate
-        if baseline_delta is not None and baseline_delta < BASELINE_DELTA_BPS:
-            if "gates_passed" in cell_results[gk] and cell_results[gk]["gates_passed"]:
-                cell_results[gk]["gates_passed"] = False
-                cell_results[gk]["gate_reasons"].append(
-                    f"baseline_delta_too_low:{baseline_delta:.2f}<{BASELINE_DELTA_BPS}"
+            fr_objects: List[TickForwardReturn] = []
+            for r in cell_events:
+                fr = TickForwardReturn(
+                    signal_id=r["stress_event_id"],
+                    signal_ts=r["signal_ts"],
+                    target_venue=VENUE,
+                    target_symbol=r["target_symbol"],
+                    horizon_ms=r["horizon_ms"],
+                    entry_reference_price=r["entry_price"],
+                    forward_price=r["forward_price"],
+                    raw_return_bps=r["raw_return_bps"],
+                    direction_adjusted_return_bps=r["direction_adjusted_return_bps"],
+                    fee_bps=TOTAL_COST_BPS,
+                    net_return_bps=r["net_bps"],
+                    valid=r["valid"],
+                    rejection_reason=r["invalid_reason"],
                 )
-                cell_results[gk]["cell_verdict"] = _cell_verdict(False, n)
+                fr_objects.append(fr)
 
-    # Checkpoint: 09_baseline
-    write_checkpoint(output_dir, "09_baseline",
-        {"baseline_results": baseline_results},
-        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
-    completed_phases.append("09_baseline")
+            stats = compute_cell_stats(fr_objects)
+            train_stats = compute_cell_stats([
+                TickForwardReturn(
+                    signal_id=r["stress_event_id"], signal_ts=r["signal_ts"],
+                    target_venue=VENUE, target_symbol=r["target_symbol"],
+                    horizon_ms=r["horizon_ms"],
+                    entry_reference_price=r["entry_price"], forward_price=r["forward_price"],
+                    raw_return_bps=r["raw_return_bps"],
+                    direction_adjusted_return_bps=r["direction_adjusted_return_bps"],
+                    fee_bps=TOTAL_COST_BPS, net_return_bps=r["net_bps"],
+                    valid=r["valid"], rejection_reason=r["invalid_reason"],
+                )
+                for r in train_events
+            ])
+            hold_stats = compute_cell_stats([
+                TickForwardReturn(
+                    signal_id=r["stress_event_id"], signal_ts=r["signal_ts"],
+                    target_venue=VENUE, target_symbol=r["target_symbol"],
+                    horizon_ms=r["horizon_ms"],
+                    entry_reference_price=r["entry_price"], forward_price=r["forward_price"],
+                    raw_return_bps=r["raw_return_bps"],
+                    direction_adjusted_return_bps=r["direction_adjusted_return_bps"],
+                    fee_bps=TOTAL_COST_BPS, net_return_bps=r["net_bps"],
+                    valid=r["valid"], rejection_reason=r["invalid_reason"],
+                )
+                for r in holdout_events
+            ])
 
-    # Phase 8: Null test
-    print(f"\n[Phase 8] Running null tests ({args.null_iterations} iterations)...")
-    null_results: Dict[str, Dict[str, Any]] = {}
-    for gk in all_cell_keys:
-        cell = cell_results.get(gk, {})
-        if not cell.get("gates_passed", False):
-            null_results[gk] = {"p_value": None, "reason": "gates_not_passed"}
-            continue
+            gates_passed = True
+            gate_reasons: List[str] = []
 
-        n = cell.get("valid_count", 0)
-        if n < MIN_EVENTS_PER_CELL:
-            null_results[gk] = {"p_value": None, "reason": "insufficient_events"}
-            continue
+            if stats.valid_count < MIN_EVENTS_PER_CELL:
+                gates_passed = False
+                gate_reasons.append(f"insufficient_events:{stats.valid_count}<{MIN_EVENTS_PER_CELL}")
 
-        # Get net returns
-        cell_events = [r for r in forward_rows if r["group_key"] == gk and r["valid"] and r["train_or_holdout"] == "train"]
-        net_returns: List[float] = []
-        for r in cell_events:
-            nb = r.get("net_bps")
-            if nb is not None and math.isfinite(nb):
-                net_returns.append(float(nb))
+            if stats.mean_net_bps is not None and stats.mean_net_bps <= 0:
+                gates_passed = False
+                gate_reasons.append(f"mean_net_not_positive:{stats.mean_net_bps:.2f}")
 
-        if len(net_returns) < 2:
-            null_results[gk] = {"p_value": None, "reason": "insufficient_returns"}
-            continue
+            if stats.median_net_bps is not None and stats.median_net_bps <= 0:
+                gates_passed = False
+                gate_reasons.append(f"median_net_not_positive:{stats.median_net_bps:.2f}")
 
-        if null_engine == "gpu":
-            null_res = run_null_test_gpu(
-                net_returns, iterations=args.null_iterations, seed=args.seed,
-                device=null_device, batch_size=null_batch_size,
+            if stats.win_rate is not None and stats.win_rate < WIN_RATE_THRESHOLD:
+                gates_passed = False
+                gate_reasons.append(f"win_rate_too_low:{stats.win_rate:.4f}<{WIN_RATE_THRESHOLD}")
+
+            if stats.worst_decile_net_bps is not None and stats.worst_decile_net_bps <= WORST_DECILE_THRESHOLD:
+                gates_passed = False
+                gate_reasons.append(f"worst_decile_too_low:{stats.worst_decile_net_bps:.2f}<={WORST_DECILE_THRESHOLD}")
+
+            cell_results[gk] = {
+                "group_key": gk,
+                "source_symbol": gk.split("->")[0],
+                "target_symbol": gk.split("->")[1].split("/")[0],
+                "stress_window_seconds": int(gk.split("/")[1].replace("s", "")),
+                "direction": gk.split("/")[2],
+                "horizon_ms": int(gk.split("/")[3].replace("ms", "")),
+                "valid_count": stats.valid_count,
+                "mean_net_bps": stats.mean_net_bps,
+                "median_net_bps": stats.median_net_bps,
+                "win_rate": stats.win_rate,
+                "worst_decile_net_bps": stats.worst_decile_net_bps,
+                "gates_passed": gates_passed,
+                "gate_reasons": gate_reasons,
+                "train_count": train_stats.valid_count,
+                "train_mean_net_bps": train_stats.mean_net_bps,
+                "holdout_count": hold_stats.valid_count,
+                "holdout_mean_net_bps": hold_stats.mean_net_bps,
+                "holdout_win_rate": hold_stats.win_rate,
+                "cell_verdict": _cell_verdict(gates_passed, stats.valid_count),
+            }
+
+        # Checkpoint: 08_cell_results
+        write_checkpoint(output_dir, "08_cell_results",
+            {"cell_results": cell_results, "powered_cells": sum(1 for c in cell_results.values() if c.get("valid_count", 0) >= MIN_EVENTS_PER_CELL)},
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        completed_phases.append("08_cell_results")
+
+    # Phase 7: Baseline (resume-aware)
+    baseline_results: Dict[str, Dict[str, Any]] = {}
+    if "09_baseline" in completed_phases:
+        print(f"\n[Phase 7] Loading baseline results from checkpoint...")
+        payload = _load_checkpoint_payload(output_dir, "09_baseline")
+        baseline_results = payload.get("baseline_results", {})
+        print(f"  Baseline results (from checkpoint): {len(baseline_results)} cells")
+    else:
+        print(f"\n[Phase 7] Computing baseline...")
+        for gk in all_cell_keys_list:
+            cell = cell_results.get(gk, {})
+            n = cell.get("valid_count", 0)
+            if n < MIN_EVENTS_PER_CELL:
+                continue
+
+            src_sym = cell.get("source_symbol", "")
+            all_targets = {sym: all_ticks.get(sym, []) for sym in TARGET_SYMBOLS}
+
+            baseline_frs = generate_baseline_events(
+                all_targets, src_sym, n, seed=args.seed,
             )
-        else:
-            null_res = run_null_test(net_returns, iterations=args.null_iterations, seed=args.seed)
-        null_results[gk] = null_res
 
-    # Checkpoint: 10_null
-    write_checkpoint(output_dir, "10_null",
-        {"null_results": null_results},
-        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
-    completed_phases.append("10_null")
+            baseline_stats = compute_cell_stats(baseline_frs)
 
-    # Phase 9: FDR
-    print(f"\n[Phase 9] FDR correction...")
-    pvalues: List[Tuple[str, float]] = []
-    for gk in all_cell_keys:
-        nr = null_results.get(gk, {})
-        pv = nr.get("p_value")
-        if pv is not None and isinstance(pv, (int, float)) and 0 <= pv <= 1:
-            pvalues.append((gk, float(pv)))
+            baseline_mean = baseline_stats.mean_net_bps
+            cell_mean = cell.get("mean_net_bps")
+            baseline_delta = None
+            if cell_mean is not None and baseline_mean is not None:
+                baseline_delta = float(cell_mean) - float(baseline_mean)
 
-    fdr_results_raw = apply_by_fdr(pvalues, alpha=FDR_ALPHA)
+            baseline_results[gk] = {
+                "group_key": gk,
+                "baseline_n": baseline_stats.valid_count,
+                "baseline_mean_net_bps": baseline_mean,
+                "baseline_median_net_bps": baseline_stats.median_net_bps,
+                "baseline_win_rate": baseline_stats.win_rate,
+                "cell_mean_net_bps": cell_mean,
+                "baseline_delta_bps": baseline_delta,
+            }
 
+            # Apply baseline gate
+            if baseline_delta is not None and baseline_delta < BASELINE_DELTA_BPS:
+                if "gates_passed" in cell_results[gk] and cell_results[gk]["gates_passed"]:
+                    cell_results[gk]["gates_passed"] = False
+                    cell_results[gk]["gate_reasons"].append(
+                        f"baseline_delta_too_low:{baseline_delta:.2f}<{BASELINE_DELTA_BPS}"
+                    )
+                    cell_results[gk]["cell_verdict"] = _cell_verdict(False, n)
+
+        # Checkpoint: 09_baseline
+        write_checkpoint(output_dir, "09_baseline",
+            {"baseline_results": baseline_results},
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        completed_phases.append("09_baseline")
+
+    # Phase 8: Null test (resume-aware)
+    null_results: Dict[str, Dict[str, Any]] = {}
+    if "10_null" in completed_phases:
+        print(f"\n[Phase 8] Loading null results from checkpoint...")
+        payload = _load_checkpoint_payload(output_dir, "10_null")
+        null_results = payload.get("null_results", {})
+        print(f"  Null results (from checkpoint): {len(null_results)} cells")
+    else:
+        print(f"\n[Phase 8] Running null tests ({args.null_iterations} iterations)...")
+        for gk in all_cell_keys_list:
+            cell = cell_results.get(gk, {})
+            if not cell.get("gates_passed", False):
+                null_results[gk] = {"p_value": None, "reason": "gates_not_passed"}
+                continue
+
+            n = cell.get("valid_count", 0)
+            if n < MIN_EVENTS_PER_CELL:
+                null_results[gk] = {"p_value": None, "reason": "insufficient_events"}
+                continue
+
+            cell_events = [r for r in forward_rows if r["group_key"] == gk and r["valid"] and r["train_or_holdout"] == "train"]
+            net_returns: List[float] = []
+            for r in cell_events:
+                nb = r.get("net_bps")
+                if nb is not None and math.isfinite(nb):
+                    net_returns.append(float(nb))
+
+            if len(net_returns) < 2:
+                null_results[gk] = {"p_value": None, "reason": "insufficient_returns"}
+                continue
+
+            if null_engine == "gpu":
+                null_res = run_null_test_gpu(
+                    net_returns, iterations=args.null_iterations, seed=args.seed,
+                    device=null_device, batch_size=null_batch_size,
+                )
+            else:
+                null_res = run_null_test(net_returns, iterations=args.null_iterations, seed=args.seed)
+            null_results[gk] = null_res
+
+        # Checkpoint: 10_null
+        write_checkpoint(output_dir, "10_null",
+            {"null_results": null_results},
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        completed_phases.append("10_null")
+
+    # Phase 9: FDR (resume-aware)
     fdr_results: Dict[str, Dict[str, Any]] = {}
-    for gk in all_cell_keys:
-        if gk in fdr_results_raw:
-            fdr_results[gk] = fdr_results_raw[gk]
-        else:
-            fdr_results[gk] = {"fdr_passed": None, "reason": "no_pvalue"}
+    if "11_fdr" in completed_phases:
+        print(f"\n[Phase 9] Loading FDR results from checkpoint...")
+        payload = _load_checkpoint_payload(output_dir, "11_fdr")
+        fdr_results = payload.get("fdr_results", {})
+        print(f"  FDR results (from checkpoint): {len(fdr_results)} cells")
+    else:
+        print(f"\n[Phase 9] FDR correction...")
+        pvalues: List[Tuple[str, float]] = []
+        for gk in all_cell_keys_list:
+            nr = null_results.get(gk, {})
+            pv = nr.get("p_value")
+            if pv is not None and isinstance(pv, (int, float)) and 0 <= pv <= 1:
+                pvalues.append((gk, float(pv)))
 
-    # Checkpoint: 11_fdr
-    write_checkpoint(output_dir, "11_fdr",
-        {"fdr_results": fdr_results, "pvalues_checked": len(pvalues)},
-        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
-    completed_phases.append("11_fdr")
+        fdr_results_raw = apply_by_fdr(pvalues, alpha=FDR_ALPHA)
 
-    # Phase 10: Holdout evaluation
-    print(f"\n[Phase 10] Holdout evaluation...")
+        for gk in all_cell_keys_list:
+            if gk in fdr_results_raw:
+                fdr_results[gk] = fdr_results_raw[gk]
+            else:
+                fdr_results[gk] = {"fdr_passed": None, "reason": "no_pvalue"}
+
+        # Checkpoint: 11_fdr
+        write_checkpoint(output_dir, "11_fdr",
+            {"fdr_results": fdr_results, "pvalues_checked": len(pvalues)},
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        completed_phases.append("11_fdr")
+
+    # Phase 10: Holdout evaluation (resume-aware)
     holdout_results: Dict[str, Dict[str, Any]] = {}
-    for gk in all_cell_keys:
-        cell = cell_results.get(gk, {})
-        hold_n = cell.get("holdout_count", 0)
-        hold_mean = cell.get("holdout_mean_net_bps")
-        hold_wr = cell.get("holdout_win_rate")
+    if "12_holdout" in completed_phases:
+        print(f"\n[Phase 10] Loading holdout results from checkpoint...")
+        payload = _load_checkpoint_payload(output_dir, "12_holdout")
+        holdout_results = payload.get("holdout_results", {})
+        print(f"  Holdout results (from checkpoint): {len(holdout_results)} cells")
+    else:
+        print(f"\n[Phase 10] Holdout evaluation...")
+        for gk in all_cell_keys_list:
+            cell = cell_results.get(gk, {})
+            hold_n = cell.get("holdout_count", 0)
+            hold_mean = cell.get("holdout_mean_net_bps")
+            hold_wr = cell.get("holdout_win_rate")
 
-        holdout_pass = True
-        hold_reasons: List[str] = []
+            holdout_pass = True
+            hold_reasons: List[str] = []
 
-        if hold_n < MIN_EVENTS_HOLDOUT:
-            hold_reasons.append(f"underpowered:{hold_n}<{MIN_EVENTS_HOLDOUT}")
-            holdout_pass = False
+            if hold_n < MIN_EVENTS_HOLDOUT:
+                hold_reasons.append(f"underpowered:{hold_n}<{MIN_EVENTS_HOLDOUT}")
+                holdout_pass = False
 
-        if hold_mean is not None and hold_mean <= 0:
-            hold_reasons.append(f"holdout_mean_not_positive:{hold_mean:.2f}")
-            holdout_pass = False
+            if hold_mean is not None and hold_mean <= 0:
+                hold_reasons.append(f"holdout_mean_not_positive:{hold_mean:.2f}")
+                holdout_pass = False
 
-        if hold_n >= MIN_EVENTS_HOLDOUT and hold_wr is not None and hold_wr < WIN_RATE_THRESHOLD:
-            hold_reasons.append(f"holdout_wr_too_low:{hold_wr:.4f}<{WIN_RATE_THRESHOLD}")
-            holdout_pass = False
+            if hold_n >= MIN_EVENTS_HOLDOUT and hold_wr is not None and hold_wr < WIN_RATE_THRESHOLD:
+                hold_reasons.append(f"holdout_wr_too_low:{hold_wr:.4f}<{WIN_RATE_THRESHOLD}")
+                holdout_pass = False
 
-        holdout_results[gk] = {
-            "holdout_n": hold_n,
-            "holdout_mean_net_bps": hold_mean,
-            "holdout_win_rate": hold_wr,
-            "holdout_passed": holdout_pass,
-            "holdout_reasons": hold_reasons,
-        }
+            holdout_results[gk] = {
+                "holdout_n": hold_n,
+                "holdout_mean_net_bps": hold_mean,
+                "holdout_win_rate": hold_wr,
+                "holdout_passed": holdout_pass,
+                "holdout_reasons": hold_reasons,
+            }
 
-    # Checkpoint: 12_holdout
-    write_checkpoint(output_dir, "12_holdout",
-        {"holdout_results": holdout_results},
-        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
-    completed_phases.append("12_holdout")
+        # Checkpoint: 12_holdout
+        write_checkpoint(output_dir, "12_holdout",
+            {"holdout_results": holdout_results},
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        completed_phases.append("12_holdout")
 
     # Phase 11: Event vector reconciliation
     print(f"\n[Phase 11] Event vector reconciliation...")
@@ -1009,7 +1085,7 @@ def main() -> None:
     best_cells_mean: List[Dict[str, Any]] = []
     best_cells_delta: List[Dict[str, Any]] = []
 
-    for gk in all_cell_keys:
+    for gk in all_cell_keys_list:
         cell = cell_results.get(gk, {})
         n = cell.get("valid_count", 0)
 
@@ -1070,7 +1146,7 @@ def main() -> None:
         cell_results.get(gk, {}).get("mean_net_bps") is not None
         and cell_results.get(gk, {}).get("mean_net_bps", 0) is not None
         and float(cell_results.get(gk, {}).get("mean_net_bps", -1) or -1) <= 0
-        for gk in all_cell_keys
+        for gk in all_cell_keys_list
         if cell_results.get(gk, {}).get("valid_count", 0) >= MIN_EVENTS_PER_CELL
     ):
         verdict = "SIGNAL_ABSENCE_AT_COST"
