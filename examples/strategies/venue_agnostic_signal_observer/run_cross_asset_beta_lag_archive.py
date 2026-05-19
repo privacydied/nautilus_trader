@@ -47,6 +47,8 @@ from .binance_vision_archive import (
     estimate_file_size_mb,
     estimate_kline_file_size_mb,
 )
+from .binance_vision_archive import append_ticks_jsonl, tick_file_path
+from .streaming_stress_labels import generate_stress_labels_streaming
 from .cross_asset_beta_lag_archive import (
     ALL_SYMBOLS,
     SOURCE_SYMBOLS,
@@ -426,7 +428,8 @@ def main() -> None:
 
         # Phase 4E: Download planned aggTrades
         print(f"\n[Phase 4E] Downloading planned aggTrades...")
-        all_ticks: Dict[str, List[TradeTickLite]] = {sym: [] for sym in ALL_SYMBOLS}
+        all_ticks: Dict[str, List[TradeTickLite]] = {sym: [] for sym in TARGET_SYMBOLS}
+        source_tick_counts: Dict[str, int] = {sym: 0 for sym in SOURCE_SYMBOLS}
         file_manifest: List[Dict[str, Any]] = []
         total_files = 0
         failed_files = 0
@@ -446,7 +449,11 @@ def main() -> None:
                 continue
 
             ticks = parse_agg_trade_csv(data, sym, venue=VENUE)
-            all_ticks.setdefault(sym, []).extend(ticks)
+            if sym in SOURCE_SYMBOLS:
+                append_ticks_jsonl(tick_file_path(output_dir, sym), ticks)
+                source_tick_counts[sym] = source_tick_counts.get(sym, 0) + len(ticks)
+            else:
+                all_ticks.setdefault(sym, []).extend(ticks)
 
             file_manifest.append({
                 "symbol": sym, "date": d, "source": "aggTrades",
@@ -456,32 +463,48 @@ def main() -> None:
             total_files += 1
 
         print(f"  Files: {total_files} OK, {failed_files} failed")
-        print(f"  Total ticks: {sum(len(t) for t in all_ticks.values())}")
+        src_total = sum(source_tick_counts.values())
+        tgt_total = sum(len(t) for t in all_ticks.values())
+        print(f"  Total ticks: {src_total + tgt_total} (source: {src_total}, target: {tgt_total})")
 
         # Check per-symbol coverage
-        missing_symbols = [sym for sym in ALL_SYMBOLS if not all_ticks.get(sym)]
+        missing_symbols = []
+        for sym in ALL_SYMBOLS:
+            if sym in SOURCE_SYMBOLS:
+                if source_tick_counts.get(sym, 0) == 0:
+                    missing_symbols.append(sym)
+            elif not all_ticks.get(sym):
+                missing_symbols.append(sym)
         per_sym_coverage: Dict[str, Dict[str, Any]] = {}
         for sym in ALL_SYMBOLS:
-            ticks = all_ticks.get(sym, [])
-            per_sym_coverage[sym] = {
-                "tick_count": len(ticks),
-                "first_ts": ticks[0].ts_event if ticks else None,
-                "last_ts": ticks[-1].ts_event if ticks else None,
-            }
+            if sym in SOURCE_SYMBOLS:
+                per_sym_coverage[sym] = {
+                    "tick_count": source_tick_counts.get(sym, 0),
+                    "first_ts": None,  # from JSONL, would need scan
+                    "last_ts": None,
+                }
+            else:
+                ticks = all_ticks.get(sym, [])
+                per_sym_coverage[sym] = {
+                    "tick_count": len(ticks),
+                    "first_ts": ticks[0].ts_event if ticks else None,
+                    "last_ts": ticks[-1].ts_event if ticks else None,
+                }
 
         # Phase 4F: Exact aggTrade stress label reconstruction
         print(f"\n[Phase 4F] Reconstructing exact stress labels from aggTrades...")
         all_labels: List[StressLabel] = []
         for src_sym in SOURCE_SYMBOLS:
-            src_ticks = all_ticks.get(src_sym, [])
-            if not src_ticks:
-                print(f"  WARNING: No ticks for {src_sym}")
+            jsonl = tick_file_path(output_dir, src_sym)
+            if not jsonl.exists() or jsonl.stat().st_size == 0:
+                print(f"  WARNING: No JSONL tick file for {src_sym}")
                 continue
             for rule_name, lookback_sec, threshold in STRESS_RULES:
-                labels = generate_stress_labels(
-                    src_ticks, src_sym,
+                labels = generate_stress_labels_streaming(
+                    jsonl, src_sym,
                     lookback_seconds=lookback_sec,
                     threshold_bps=threshold,
+                    StressLabel=StressLabel,
                 )
                 all_labels.extend(labels)
                 print(f"  {src_sym} {rule_name}: {len(labels)} labels")
@@ -516,7 +539,7 @@ def main() -> None:
         completed_phases.append("02_kline_prefilter")
         write_checkpoint(output_dir, "03_aggtrades",
             {"total_files": total_files, "failed_files": failed_files,
-             "per_sym_tick_counts": {sym: len(all_ticks.get(sym, [])) for sym in ALL_SYMBOLS}},
+             "per_sym_tick_counts": {sym: source_tick_counts.get(sym, len(all_ticks.get(sym, []))) for sym in ALL_SYMBOLS}},
             git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
         completed_phases.append("03_aggtrades")
 

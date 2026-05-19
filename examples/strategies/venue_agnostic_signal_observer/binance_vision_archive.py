@@ -615,3 +615,53 @@ def estimate_kline_file_size_mb(symbol: str) -> float:
     """Rough per-file size estimate for 1m klines (small)."""
     return 0.3  # ~300KB per daily kline zip
 
+
+# ---------------------------------------------------------------------------
+# Disk-based tick persistence (avoids in-memory accumulation for full calendar)
+# ---------------------------------------------------------------------------
+
+def append_ticks_jsonl(path: Path, ticks: List[Any]) -> None:
+    """Append TradeTickLite objects to a JSONL file. Creates file if needed."""
+    import json as _json  # noqa: PLC0415
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        for t in ticks:
+            row = {
+                "ts_event": t.ts_event,
+                "venue": t.venue,
+                "symbol": t.symbol,
+                "price": t.price,
+                "size": t.size,
+                "side": t.side,
+                "trade_id": t.trade_id,
+            }
+            f.write(_json.dumps(row) + "\n")
+
+
+def load_ticks_jsonl(path: Path) -> List[Any]:
+    """Load TradeTickLite objects from a JSONL file."""
+    import json as _json  # noqa: PLC0415
+
+    from .tick_models import TradeTickLite  # noqa: PLC0415
+
+    ticks: List[Any] = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            row = _json.loads(line)
+            ticks.append(TradeTickLite(
+                ts_event=row["ts_event"],
+                venue=row["venue"],
+                symbol=row["symbol"],
+                price=row["price"],
+                size=row["size"],
+                side=row["side"],
+                trade_id=row.get("trade_id"),
+            ))
+    return ticks
+
+
+def tick_file_path(output_dir: Path, symbol: str) -> Path:
+    """Return the JSONL tick file path for a symbol."""
+    return output_dir / f"ticks_{symbol.lower()}.jsonl"
+
