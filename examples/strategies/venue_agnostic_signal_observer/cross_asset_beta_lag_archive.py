@@ -1044,9 +1044,6 @@ def _build_checkpoint_config_identity() -> Dict[str, Any]:
         "baseline_delta_bps": BASELINE_DELTA_BPS,
         "min_independent_windows": MIN_INDEPENDENT_WINDOWS,
         "train_frac": TRAIN_FRAC,
-        "null_engine": "cpu",
-        "null_device": "cpu",
-        "null_batch_size": 0,
     }
 
 
@@ -1071,9 +1068,6 @@ def write_checkpoint(
 ) -> None:
     """Atomically write a checkpoint artifact with metadata."""
     config_id = _build_checkpoint_config_identity()
-    config_id["null_engine"] = null_engine
-    config_id["null_device"] = null_device
-    config_id["null_batch_size"] = null_batch_size
 
     artifact = {
         "phase": phase,
@@ -1112,7 +1106,6 @@ def write_checkpoint_manifest(
 ) -> None:
     """Write the checkpoint manifest tracking completed phases."""
     config_id = _build_checkpoint_config_identity()
-    config_id["null_engine"] = null_engine
 
     manifest = {
         "study_id": "cross_asset_beta_lag_archive_v0",
@@ -1186,7 +1179,6 @@ def validate_checkpoint_config(
         return False, "no_checkpoint_manifest"
 
     config_id = _build_checkpoint_config_identity()
-    config_id["null_engine"] = null_engine
     expected_id = _sha256_json(config_id)
     stored_id = manifest.get("config_identity_sha256", "")
     if stored_id != expected_id:
