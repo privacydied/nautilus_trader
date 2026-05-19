@@ -34,6 +34,7 @@ from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive i
     scan_archive_availability,
     compute_common_calendar,
     build_file_manifest,
+    compute_kline_candidate_days,
 )
 
 from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
@@ -67,6 +68,7 @@ from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_arc
     run_null_test,
     apply_by_fdr,
     reconcile_event_vector,
+    build_stress_day_download_plan,
 
     CoverageInterval,
     CellStats,
@@ -162,8 +164,8 @@ class TestCsvParser:
         assert ticks[1].side == "sell"  # is_buyer_maker=1
 
     def test_1m_klines_csv_with_header(self):
-        """1m klines has header row. Parse with DictReader."""
-        csv_content = "open_time,open,high,low,close,volume,close_time,quote_asset_volume,number_of_trades,taker_buy_base_vol,taker_buy_quote_vol,ignore\n1704067200000,42000.0,42100.0,41900.0,42050.0,100.0,1704067260000,4200000.0,500,50.0,2100000.0,0\n"
+        """1m klines has no header. Parse by position."""
+        csv_content = "1704067200000,42000.0,42100.0,41900.0,42050.0,100.0,4200000.0,500,50.0,2100000.0,0\n"
         import zipfile
         import io
         zip_buf = io.BytesIO()
@@ -809,3 +811,267 @@ def test_new_files_safety_scan():
                 raise AssertionError(
                     f"SAFETY: File {fname} contains '{fb}'"
                 )
+
+
+# ===================================================================
+# Kline prefilter tests
+# ===================================================================
+
+
+class TestKlinePrefilter:
+    """Tests for the kline stress-day prefilter."""
+
+    def test_kline_parses_with_header(self):
+        """1m klines CSV (no header, positional) parses correctly."""
+        csv_content = (
+            "1704067200000,42000.0,42100.0,41900.0,42050.0,100.0,"
+            "1704067260000,4200000.0,500,50.0,2100000.0,0\n"
+            "1704067260000,42050.0,42200.0,41950.0,42100.0,150.0,"
+            "1704067320000,6300000.0,750,75.0,3150000.0,0\n"
+        )
+        import zipfile, io
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf:
+            zf.writestr("test.csv", csv_content)
+        rows = parse_1m_klines_csv(zip_buf.getvalue())
+        assert len(rows) == 2
+        assert rows[0]["close"] == 42050.0
+
+    def test_kline_prefilter_marks_candidate_day(self):
+        """Kline prefilter marks a day with large price swing as candidate."""
+        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
+            compute_kline_candidate_days,
+        )
+        base_ns = 1704067200000000000  # 2024-01-01 in ns
+        klines = {
+            "BTCUSDT": [
+                {"open_time_ns": base_ns, "open": 50000.0, "high": 50100.0,
+                 "low": 49900.0, "close": 50050.0, "volume": 100.0},
+                {"open_time_ns": base_ns + 60_000_000_000,
+                 "open": 50050.0, "high": 51000.0,
+                 "low": 50000.0, "close": 50900.0, "volume": 200.0},
+            ]
+        }
+        candidates = compute_kline_candidate_days(klines, hl_threshold_bps=15.0, oc_threshold_bps=15.0)
+        assert len(candidates) >= 1
+        assert candidates[0]["source_symbol"] == "BTCUSDT"
+
+    def test_kline_prefilter_conservative(self):
+        """Kline prefilter includes days near threshold."""
+        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
+            compute_kline_candidate_days,
+        )
+        base_ns = 1704067200000000000
+        # Small swing but high-low = 25 bps
+        klines = {
+            "BTCUSDT": [
+                {"open_time_ns": base_ns, "open": 50000.0, "high": 50125.0,
+                 "low": 50000.0, "close": 50010.0, "volume": 100.0},
+            ]
+        }
+        candidates = compute_kline_candidate_days(klines, hl_threshold_bps=20.0, oc_threshold_bps=20.0)
+        assert len(candidates) >= 1  # 25 bps HL >= 20 bps threshold
+
+    def test_kline_prefilter_no_false_positive_on_quiet_day(self):
+        """Kline prefilter does not mark a very quiet day (no large moves)."""
+        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
+            compute_kline_candidate_days,
+        )
+        base_ns = 1704067200000000000
+        klines = {
+            "BTCUSDT": [
+                {"open_time_ns": base_ns, "open": 50000.0, "high": 50003.0,
+                 "low": 49997.0, "close": 50001.0, "volume": 100.0},
+            ]
+        }
+        candidates = compute_kline_candidate_days(klines, hl_threshold_bps=15.0, oc_threshold_bps=15.0)
+        assert len(candidates) == 0  # <0.6 bps HL range, <0.02 bps OC
+
+    def test_kline_prefilter_does_not_create_final_labels(self):
+        """Kline prefilter output has no label_id or StressLabel fields."""
+        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
+            compute_kline_candidate_days,
+        )
+        base_ns = 1704067200000000000
+        klines = {
+            "ETHUSDT": [
+                {"open_time_ns": base_ns, "open": 3000.0, "high": 3100.0,
+                 "low": 2950.0, "close": 3050.0, "volume": 500.0},
+            ]
+        }
+        candidates = compute_kline_candidate_days(klines)
+        assert len(candidates) >= 1
+        assert "label_id" not in candidates[0]
+        assert "independent_window_id" not in candidates[0]
+
+
+class TestDownloadPlan:
+    """Tests for the stress-day download plan builder."""
+
+    def test_plan_deduplicates_files(self):
+        """Same symbol+date should not appear twice."""
+        candidates = [
+            {"date": "2024-01-15", "source_symbol": "BTCUSDT", "reason": "test", "max_hl_bps": 30.0, "max_oc_bps": 10.0, "kline_count": 1440},
+            {"date": "2024-01-15", "source_symbol": "ETHUSDT", "reason": "test", "max_hl_bps": 25.0, "max_oc_bps": 8.0, "kline_count": 1440},
+        ]
+        plan = build_stress_day_download_plan(
+            candidates, ALL_SYMBOLS, SOURCE_SYMBOLS,
+            ["2024-01-14", "2024-01-15", "2024-01-16"],
+        )
+        file_keys = plan["file_keys_sorted"]
+        # Should have 1 entry per (symbol, date) pair
+        btc_15 = [k for k in file_keys if "BTCUSDT" in k and "2024-01-15" in k]
+        assert len(btc_15) == 1
+
+    def test_plan_includes_all_six_symbols(self):
+        """Plan should include files for all 6 symbols per candidate day."""
+        candidates = [
+            {"date": "2024-01-15", "source_symbol": "BTCUSDT", "reason": "test",
+             "max_hl_bps": 30.0, "max_oc_bps": 10.0, "kline_count": 1440},
+        ]
+        plan = build_stress_day_download_plan(
+            candidates, ALL_SYMBOLS, SOURCE_SYMBOLS,
+            ["2024-01-14", "2024-01-15", "2024-01-16"],
+        )
+        for sym in ALL_SYMBOLS:
+            matching = [f for f in plan["required_files"] if f["symbol"] == sym and f["date"] == "2024-01-15"]
+            assert len(matching) >= 1, f"Missing {sym} for 2024-01-15"
+
+    def test_plan_estimates_bytes_files(self):
+        """Plan should report estimated MB and file count."""
+        candidates = [
+            {"date": "2024-01-15", "source_symbol": "BTCUSDT", "reason": "test",
+             "max_hl_bps": 30.0, "max_oc_bps": 10.0, "kline_count": 1440},
+        ]
+        plan = build_stress_day_download_plan(
+            candidates, ALL_SYMBOLS, SOURCE_SYMBOLS,
+            ["2024-01-14", "2024-01-15", "2024-01-16"],
+        )
+        assert plan["total_estimated_mb"] > 0
+        assert plan["required_file_count"] > 0
+        assert plan["brute_force_estimated_mb"] > 0
+        assert plan["reduction_ratio"] >= 1.0
+
+    def test_plan_includes_next_day_buffer(self):
+        """Plan should include next day for forward coverage."""
+        candidates = [
+            {"date": "2024-01-15", "source_symbol": "BTCUSDT", "reason": "test",
+             "max_hl_bps": 30.0, "max_oc_bps": 10.0, "kline_count": 1440},
+        ]
+        plan = build_stress_day_download_plan(
+            candidates, ALL_SYMBOLS, SOURCE_SYMBOLS,
+            ["2024-01-14", "2024-01-15", "2024-01-16"],
+        )
+        next_day_files = [f for f in plan["required_files"] if f.get("reason") == "forward_buffer"]
+        assert len(next_day_files) > 0
+
+    def test_plan_includes_prev_day_context(self):
+        """Plan should include previous day for source rolling context."""
+        candidates = [
+            {"date": "2024-01-15", "source_symbol": "BTCUSDT", "reason": "test",
+             "max_hl_bps": 30.0, "max_oc_bps": 10.0, "kline_count": 1440},
+        ]
+        plan = build_stress_day_download_plan(
+            candidates, ALL_SYMBOLS, SOURCE_SYMBOLS,
+            ["2024-01-14", "2024-01-15", "2024-01-16"],
+        )
+        prev_day_files = [f for f in plan["required_files"] if f.get("reason") == "previous_day_context"]
+        assert len(prev_day_files) > 0
+
+
+class TestPrefilterIntegration:
+    """Integration tests for the prefilter pipeline."""
+
+    def test_exact_labels_from_aggtrades_only(self):
+        """Generate stress labels from real aggTrade data."""
+        base_ts = 1704067200000000000
+        ticks = [
+            TradeTickLite(ts_event=base_ts, venue=VENUE, symbol="BTCUSDT",
+                          price=50000.0, size=1.0, side="buy"),
+            TradeTickLite(ts_event=base_ts + 30_000_000_000, venue=VENUE, symbol="BTCUSDT",
+                          price=50300.0, size=1.0, side="buy"),  # +60 bps in 30s
+        ]
+        labels = generate_stress_labels(ticks, "BTCUSDT", lookback_seconds=30, threshold_bps=30.0)
+        assert len(labels) >= 1
+        # Labels must be StressLabel objects, not kline dicts
+        assert isinstance(labels[0], StressLabel)
+        assert labels[0].stress_window_seconds == 30
+
+    def test_kline_day_not_reproduced_has_no_stress_labels(self):
+        """A kline candidate day may have zero aggTrade stress labels."""
+        base_ts = 1704067200000000000
+        ticks = [
+            TradeTickLite(ts_event=base_ts, venue=VENUE, symbol="BTCUSDT",
+                          price=50000.0, size=1.0, side="buy"),
+            TradeTickLite(ts_event=base_ts + 1_000_000_000, venue=VENUE, symbol="BTCUSDT",
+                          price=50001.0, size=1.0, side="buy"),  # only +0.2 bps
+        ]
+        labels = generate_stress_labels(ticks, "BTCUSDT", lookback_seconds=30, threshold_bps=30.0)
+        assert len(labels) == 0  # no stress label despite kline candidate
+
+    def test_prefilter_summary_structure(self):
+        """Verify prefilter summary dict keys."""
+        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
+            compute_kline_candidate_days,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            build_stress_day_download_plan,
+        )
+
+        base_ns = 1704067200000000000
+        klines = {
+            "BTCUSDT": [
+                {"open_time_ns": base_ns, "open": 50000.0, "high": 50200.0,
+                 "low": 49800.0, "close": 50100.0, "volume": 500.0},
+            ]
+        }
+        candidates = compute_kline_candidate_days(klines)
+        assert len(candidates) >= 1
+
+        # Verify candidates have required fields
+        assert "date" in candidates[0]
+        assert "source_symbol" in candidates[0]
+        assert "reason" in candidates[0]
+        assert "max_hl_bps" in candidates[0]
+        assert "kline_count" in candidates[0]
+
+    def test_timestamp_unit_ms_us(self):
+        """Kline parser handles both ms and us timestamps."""
+        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
+            parse_1m_klines_csv, _ts_to_ns,
+        )
+        # ms timestamp (pre-2025)
+        ms_ns = _ts_to_ns(1704067200000)
+        assert ms_ns == 1704067200000 * 1_000_000
+
+        # us timestamp (2025+)
+        us_ns = _ts_to_ns(1735689600000000)
+        assert us_ns == 1735689600000000 * 1_000
+
+
+# Safety scan for all new/modified files
+def test_new_implementation_files_safety_scan():
+    """Safety scan for all implementation files (no false positives)."""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    files = [
+        "binance_vision_archive.py",
+        "cross_asset_beta_lag_archive.py",
+        "run_cross_asset_beta_lag_archive.py",
+    ]
+    forbidden = [
+        "TradingNode", "LiveNode", "OrderFactory",
+        "submit_order", "submit_order_list", "modify_order",
+        "cancel_order", "ExecutionClient",
+        "POLYMARKET_PK", "PRIVATE_KEY", "API_SECRET", "API_KEY",
+        "wallet", "signer", "private key", "live trading",
+    ]
+    for fname in files:
+        fpath = os.path.join(base, fname)
+        if not os.path.exists(fpath):
+            continue
+        with open(fpath) as f:
+            content = f.read()
+        for fb in forbidden:
+            if fb.lower() in content.lower():
+                raise AssertionError(f"SAFETY: {fname} contains '{fb}'")
+    assert True

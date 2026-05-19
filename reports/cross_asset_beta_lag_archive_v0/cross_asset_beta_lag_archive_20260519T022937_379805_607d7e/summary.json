@@ -1,0 +1,9 @@
+{
+  "run_id": "cross_asset_beta_lag_archive_20260519T022937_379805_607d7e",
+  "study_id": "cross_asset_beta_lag_archive_v0",
+  "precommitment_hash": "a51cdf6a92898df2df31c9b74cd45b6e11042b4bcfb926308ebad27a2df27f1f",
+  "git_sha": "e85969342ef603f0e6394f7518e94fffc09336e6",
+  "final_verdict": "ARCHIVE_PREFILTERED_DATA_VOLUME_TOO_LARGE",
+  "early_stop_reason": "prefiltered_volume_39494mb_exceeds_5120mb",
+  "completion_time": "2026-05-19T02:30:34.245699+00:00"
+}

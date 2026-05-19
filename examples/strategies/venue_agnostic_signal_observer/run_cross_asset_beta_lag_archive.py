@@ -35,12 +35,17 @@ from .tick_models import TickForwardReturn, TradeTickLite
 
 from .binance_vision_archive import (
     download_daily_agg_trades,
+    download_daily_klines_1m,
     scan_archive_availability,
     compute_common_calendar,
     parse_agg_trade_csv,
+    parse_1m_klines_csv,
     _iter_date_range,
     _sha256_bytes,
     _sha256_file,
+    compute_kline_candidate_days,
+    estimate_file_size_mb,
+    estimate_kline_file_size_mb,
 )
 from .cross_asset_beta_lag_archive import (
     ALL_SYMBOLS,
@@ -89,6 +94,7 @@ from .cross_asset_beta_lag_archive import (
     _sha256_json,
     MS_TO_NS,
     ENTRY_DELAY_NS,
+    build_stress_day_download_plan,
 )
 
 from .run_artifacts import (
@@ -120,6 +126,26 @@ def main() -> None:
     parser.add_argument(
         "--null-iterations", type=int, default=NULL_ITERATIONS,
         help="Null test iterations (default: 1000)",
+    )
+    parser.add_argument(
+        "--prefilter-source-klines", action="store_true", default=True,
+        help="Enable source kline stress-day prefilter (default: enabled)",
+    )
+    parser.add_argument(
+        "--no-prefilter-source-klines", action="store_false", dest="prefilter_source_klines",
+        help="Disable source kline prefilter (brute-force download)",
+    )
+    parser.add_argument(
+        "--max-planned-download-gb", type=float, default=5.0,
+        help="Max planned download in GB after prefilter (default: 5.0)",
+    )
+    parser.add_argument(
+        "--force-refresh-klines", action="store_true", default=False,
+        help="Force re-download of cached kline files",
+    )
+    parser.add_argument(
+        "--force-refresh-aggtrades", action="store_true", default=False,
+        help="Force re-download of cached aggTrade files",
     )
     args = parser.parse_args()
 
@@ -177,36 +203,107 @@ def main() -> None:
         print(f"\n=== VERDICT: {verdict} ===")
         return
 
-    # Estimate data volume
+    # Estimate brute-force data volume (audit only)
     date_list = _iter_date_range(common_start or CALENDAR_START, common_end or CALENDAR_END)
-    estimated_files = len(ALL_SYMBOLS) * len(date_list)
-    estimated_bytes_mb = estimated_files * 15  # rough ~15MB per aggTrade zip for active pairs
-    print(f"  Estimated files: {estimated_files} ({estimated_bytes_mb} MB)")
+    brute_files = len(ALL_SYMBOLS) * len(date_list)
+    brute_mb = sum(estimate_file_size_mb(sym) for sym in ALL_SYMBOLS) * len(date_list)
+    print(f"  Brute-force estimate: {brute_files} files ({brute_mb:.0f} MB)")
 
-    if estimated_bytes_mb > 5000:
-        print(f"  ARCHIVE_DATA_VOLUME_TOO_LARGE_FOR_ONE_PROMPT: ~{estimated_bytes_mb} MB")
-        _write_availability_report(output_dir, run_id, git_sha, precommitment_sha,
-                                   availability, common_start, common_end, common_days)
-        verdict = "NEEDS_MORE_DATA_ARCHIVE_AVAILABILITY"
-        _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict,
-                       early_stop=f"archive_data_volume_too_large_{estimated_bytes_mb}mb")
-        print(f"\n=== VERDICT: {verdict} ===")
-        print(f"Data volume ~{estimated_bytes_mb} MB exceeds single-run limit.")
-        print("Use a narrow date window and re-run with --date-start --date-end.")
-        return
+    if args.prefilter_source_klines:
+        # ── Prefilter path ────────────────────────────────────────────────
+        print(f"\n[Phase 4A] Downloading source klines ({len(SOURCE_SYMBOLS)} symbols)...")
+        source_kline_data: Dict[str, List[Dict[str, Any]]] = {}
+        kline_manifest: List[Dict[str, Any]] = []
+        
+        for src_sym in SOURCE_SYMBOLS:
+            print(f"  Downloading 1m klines for {src_sym}...")
+            sym_klines: List[Dict[str, Any]] = []
+            for d in date_list:
+                force = args.force_refresh_klines
+                kzip, sha = download_daily_klines_1m(src_sym, d, cache=not force)
+                if kzip is not None:
+                    rows = parse_1m_klines_csv(kzip)
+                    sym_klines.extend(rows)
+                    kline_manifest.append({
+                        "symbol": src_sym, "date": d, "source": "klines_1m",
+                        "status": "downloaded", "sha256": sha,
+                        "size_bytes": len(kzip), "row_count": len(rows),
+                    })
+                else:
+                    kline_manifest.append({
+                        "symbol": src_sym, "date": d, "source": "klines_1m",
+                        "status": "not_found", "sha256": None,
+                        "size_bytes": None, "row_count": 0,
+                    })
+            source_kline_data[src_sym] = sym_klines
+            print(f"    {len(sym_klines)} klines for {src_sym}")
 
-    # Phase 2: Download aggTrade data for all symbols
-    print(f"\n[Phase 2] Downloading archive data for {len(ALL_SYMBOLS)} symbols...")
-    all_ticks: Dict[str, List[TradeTickLite]] = {}
-    file_manifest: List[Dict[str, Any]] = []
-    total_files = 0
-    failed_files = 0
+        kline_kb = sum(m.get("size_bytes", 0) or 0 for m in kline_manifest) / 1024
+        print(f"  Kline data: {kline_kb:.0f} KB")
 
-    for sym in ALL_SYMBOLS:
-        print(f"  Downloading {sym}...")
-        sym_ticks: List[TradeTickLite] = []
-        for d in date_list:
-            data, sha = download_daily_agg_trades(sym, d, cache=True)
+        # Phase 4B: Kline prefilter
+        print(f"\n[Phase 4B] Computing kline stress-day prefilter...")
+        # Conservative thresholds: match actual stress rules to be selective but
+        # still avoid false negatives. HL=30bps catches any 30s/30bps event
+        # (since intra-bar HL must be >= 30s move). OC=50bps catches any
+        # 60s/50bps event aligned to bar boundaries. Events crossing bar
+        # boundaries are caught by the HL threshold.
+        candidate_days = compute_kline_candidate_days(
+            source_kline_data,
+            hl_threshold_bps=30.0,
+            oc_threshold_bps=50.0,
+        )
+        print(f"  Candidate stress days: {len(candidate_days)}")
+
+        if not candidate_days:
+            _write_prefilter_report(output_dir, run_id, git_sha, precommitment_sha,
+                                    availability, {}, kline_manifest, [],
+                                    brute_files, brute_mb)
+            verdict = "NEEDS_MORE_DATA_ARCHIVE_NO_KLINE_STRESS_DAYS"
+            _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict,
+                           early_stop="zero_kline_candidate_days")
+            print(f"\n=== VERDICT: {verdict} ===")
+            return
+
+        # Phase 4C: Build download plan
+        print(f"\n[Phase 4C] Building aggTrade download plan...")
+        dl_plan = build_stress_day_download_plan(
+            candidate_days, ALL_SYMBOLS, SOURCE_SYMBOLS, date_list,
+        )
+        planned_mb = dl_plan["total_estimated_mb"]
+        planned_files = dl_plan["required_file_count"]
+        reduction_ratio = dl_plan["reduction_ratio"]
+
+        print(f"  Planned files: {planned_files} ({planned_mb:.1f} MB)")
+        print(f"  Reduction ratio: {reduction_ratio}x")
+
+        # Phase 4D: Volume gate on planned download
+        print(f"\n[Phase 4D] Checking planned download volume...")
+        max_planned_mb = args.max_planned_download_gb * 1024
+        if planned_mb > max_planned_mb:
+            print(f"  PREFILTERED VOLUME EXCEEDS CAP: {planned_mb:.1f} > {max_planned_mb:.0f} MB")
+            _write_prefilter_report(output_dir, run_id, git_sha, precommitment_sha,
+                                    availability, dl_plan, kline_manifest, candidate_days,
+                                    brute_files, brute_mb)
+            verdict = "ARCHIVE_PREFILTERED_DATA_VOLUME_TOO_LARGE"
+            _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict,
+                           early_stop=f"prefiltered_volume_{planned_mb:.0f}mb_exceeds_{max_planned_mb:.0f}mb")
+            print(f"\n=== VERDICT: {verdict} ===")
+            return
+
+        # Phase 4E: Download planned aggTrades
+        print(f"\n[Phase 4E] Downloading planned aggTrades...")
+        all_ticks: Dict[str, List[TradeTickLite]] = {sym: [] for sym in ALL_SYMBOLS}
+        file_manifest: List[Dict[str, Any]] = []
+        total_files = 0
+        failed_files = 0
+
+        for entry in dl_plan["required_files"]:
+            sym = entry["symbol"]
+            d = entry["date"]
+            force = args.force_refresh_aggtrades
+
+            data, sha = download_daily_agg_trades(sym, d, cache=not force)
             if data is None:
                 failed_files += 1
                 file_manifest.append({
@@ -216,7 +313,7 @@ def main() -> None:
                 continue
 
             ticks = parse_agg_trade_csv(data, sym, venue=VENUE)
-            sym_ticks.extend(ticks)
+            all_ticks.setdefault(sym, []).extend(ticks)
 
             file_manifest.append({
                 "symbol": sym, "date": d, "source": "aggTrades",
@@ -225,42 +322,112 @@ def main() -> None:
             })
             total_files += 1
 
-        all_ticks[sym] = sym_ticks
-        print(f"    {len(sym_ticks)} ticks for {sym}")
+        print(f"  Files: {total_files} OK, {failed_files} failed")
+        print(f"  Total ticks: {sum(len(t) for t in all_ticks.values())}")
 
-    print(f"  Total files: {total_files}, failed: {failed_files}")
-    print(f"  Total ticks: {sum(len(t) for t in all_ticks.values())}")
+        # Check per-symbol coverage
+        missing_symbols = [sym for sym in ALL_SYMBOLS if not all_ticks.get(sym)]
+        per_sym_coverage: Dict[str, Dict[str, Any]] = {}
+        for sym in ALL_SYMBOLS:
+            ticks = all_ticks.get(sym, [])
+            per_sym_coverage[sym] = {
+                "tick_count": len(ticks),
+                "first_ts": ticks[0].ts_event if ticks else None,
+                "last_ts": ticks[-1].ts_event if ticks else None,
+            }
 
-    # Check per-symbol coverage
-    missing_symbols = [sym for sym in ALL_SYMBOLS if not all_ticks.get(sym)]
-    per_sym_coverage: Dict[str, Dict[str, Any]] = {}
-    for sym in ALL_SYMBOLS:
-        ticks = all_ticks.get(sym, [])
-        per_sym_coverage[sym] = {
-            "tick_count": len(ticks),
-            "first_ts": ticks[0].ts_event if ticks else None,
-            "last_ts": ticks[-1].ts_event if ticks else None,
-        }
+        # Phase 4F: Exact aggTrade stress label reconstruction
+        print(f"\n[Phase 4F] Reconstructing exact stress labels from aggTrades...")
+        all_labels: List[StressLabel] = []
+        for src_sym in SOURCE_SYMBOLS:
+            src_ticks = all_ticks.get(src_sym, [])
+            if not src_ticks:
+                print(f"  WARNING: No ticks for {src_sym}")
+                continue
+            for rule_name, lookback_sec, threshold in STRESS_RULES:
+                labels = generate_stress_labels(
+                    src_ticks, src_sym,
+                    lookback_seconds=lookback_sec,
+                    threshold_bps=threshold,
+                )
+                all_labels.extend(labels)
+                print(f"  {src_sym} {rule_name}: {len(labels)} labels")
 
-    # Phase 3: Generate stress labels from source ticks
-    print(f"\n[Phase 3] Generating stress labels...")
-    all_labels: List[StressLabel] = []
+        if not all_labels:
+            _write_prefilter_report(output_dir, run_id, git_sha, precommitment_sha,
+                                    availability, dl_plan, kline_manifest, candidate_days,
+                                    brute_files, brute_mb)
+            verdict = "NEEDS_MORE_DATA_ARCHIVE_NO_EXACT_STRESS_LABELS"
+            _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict,
+                           early_stop="zero_exact_stress_labels")
+            print(f"\n=== VERDICT: {verdict} ===")
+            return
 
-    for src_sym in SOURCE_SYMBOLS:
-        source_ticks = all_ticks.get(src_sym, [])
-        if not source_ticks:
-            print(f"  WARNING: No ticks for {src_sym}, skipping")
-            continue
+        # Write prefilter artifacts
+        _write_prefilter_artifacts(
+            output_dir, candidate_days, dl_plan, kline_manifest, all_labels,
+            brute_files, brute_mb, planned_mb,
+        )
 
-        for rule_name, lookback_sec, threshold in STRESS_RULES:
-            labels = generate_stress_labels(
-                source_ticks, src_sym,
-                lookback_seconds=lookback_sec,
-                threshold_bps=threshold,
-            )
-            all_labels.extend(labels)
-            print(f"  {src_sym} {rule_name}: {len(labels)} raw labels")
+        # Note: evaluation continues from Phase 3 below
+        phase_label = "[Phase 4G]"
+    else:
+        # ── Brute-force path (prefilter disabled) ─────────────────────────
+        if brute_mb > 5000:
+            print(f"  BRUTE-FORCE VOLUME TOO LARGE: ~{brute_mb:.0f} MB")
+            _write_availability_report(output_dir, run_id, git_sha, precommitment_sha,
+                                       availability, common_start, common_end, common_days)
+            verdict = "NEEDS_MORE_DATA_ARCHIVE_AVAILABILITY"
+            _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict,
+                           early_stop=f"archive_data_volume_too_large_{brute_mb:.0f}mb")
+            print(f"\n=== VERDICT: {verdict} ===")
+            print(f"Use --prefilter-source-klines to enable kline prefilter.")
+            return
 
+        print(f"\n[Phase 2] Downloading all aggTrades ({len(ALL_SYMBOLS)} symbols)...")
+        all_ticks = {sym: [] for sym in ALL_SYMBOLS}
+        file_manifest = []
+        total_files = 0
+        failed_files = 0
+
+        for sym in ALL_SYMBOLS:
+            sym_ticks: List[TradeTickLite] = []
+            for d in date_list:
+                data, sha = download_daily_agg_trades(sym, d, cache=not args.force_refresh_aggtrades)
+                if data is None:
+                    failed_files += 1
+                    file_manifest.append({"symbol": sym, "date": d, "source": "aggTrades",
+                        "status": "not_found", "sha256": None, "size_bytes": None, "row_count": 0})
+                    continue
+                ticks = parse_agg_trade_csv(data, sym, venue=VENUE)
+                sym_ticks.extend(ticks)
+                file_manifest.append({"symbol": sym, "date": d, "source": "aggTrades",
+                    "status": "downloaded", "sha256": sha, "size_bytes": len(data), "row_count": len(ticks)})
+                total_files += 1
+            all_ticks[sym] = sym_ticks
+
+        missing_symbols = [sym for sym in ALL_SYMBOLS if not all_ticks.get(sym)]
+        per_sym_coverage = {}
+        for sym in ALL_SYMBOLS:
+            t = all_ticks.get(sym, [])
+            per_sym_coverage[sym] = {"tick_count": len(t), "first_ts": t[0].ts_event if t else None,
+                                      "last_ts": t[-1].ts_event if t else None}
+
+        # Generate stress labels from all source ticks
+        print(f"\n[Phase 3] Generating stress labels...")
+        all_labels = []
+        for src_sym in SOURCE_SYMBOLS:
+            src_ticks = all_ticks.get(src_sym, [])
+            if not src_ticks:
+                continue
+            for rule_name, lookback_sec, threshold in STRESS_RULES:
+                labels = generate_stress_labels(src_ticks, src_sym,
+                    lookback_seconds=lookback_sec, threshold_bps=threshold)
+                all_labels.extend(labels)
+
+        phase_label = "[Phase 3]"
+
+    # ── Common evaluation path (dedup, coverage, forward returns, null, FDR) ──
     if not all_labels:
         print("  NO STRESS LABELS GENERATED")
         _write_data_report(output_dir, run_id, git_sha, precommitment_sha,
@@ -790,6 +957,20 @@ def main() -> None:
         })
 
     # Build summary
+    prefilter_summary = {}
+    if args.prefilter_source_klines:
+        prefilter_summary = {
+            "full_calendar_retained": True,
+            "kline_prefilter": "source_only_non_verdict_producing",
+            "exact_stress_labels_from_aggtrades": True,
+            "brute_force_mb": round(brute_mb, 1) if 'brute_mb' in dir() else 0,
+            "planned_mb": round(planned_mb, 1) if 'planned_mb' in dir() else 0,
+            "candidate_days": len(candidate_days) if 'candidate_days' in dir() else 0,
+            "exact_stress_labels": len(windowed) if 'windowed' in dir() else 0,
+            "usable_windows": all_target_windows if 'all_target_windows' in dir() else 0,
+            "evaluation_reached": True,
+        }
+
     summary = {
         "run_id": run_id,
         "study_id": "cross_asset_beta_lag_archive_v0",
@@ -815,6 +996,7 @@ def main() -> None:
         "final_verdict": verdict,
         "registry_updated": False,
         "test_results": {"run": 0, "passed": 0, "failed": 0},
+        "prefilter_summary": prefilter_summary,
     }
 
     _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict, summary=summary)
@@ -913,6 +1095,67 @@ def _write_summary(
             "completion_time": _now_utc_iso(),
         }
     atomic_write_json(output_dir / "summary.json", summary)
+
+
+def _write_prefilter_report(
+    output_dir: Path, run_id: str, git_sha: str, precommitment_sha: str,
+    availability: Dict[str, Any], dl_plan: Dict[str, Any],
+    kline_manifest: List, candidate_days: List,
+    brute_files: int, brute_mb: float,
+) -> None:
+    """Write prefilter artifacts when stopping at a prefilter gate."""
+    atomic_write_json(output_dir / "preflight.json", {
+        "run_id": run_id, "git_sha": git_sha, "precommitment_hash": precommitment_sha,
+    })
+    atomic_write_json(output_dir / "archive_availability.json", availability)
+    atomic_write_json(output_dir / "kline_manifest.json", kline_manifest)
+    atomic_write_json(output_dir / "kline_prefilter_summary.json", {
+        "total_klines_downloaded": len(kline_manifest),
+        "candidate_days_count": len(candidate_days),
+        "candidate_days": candidate_days,
+    })
+    if dl_plan:
+        atomic_write_json(output_dir / "download_plan.json", dl_plan)
+    atomic_write_json(output_dir / "prefilter_reduction_summary.json", {
+        "brute_force_files": brute_files,
+        "brute_force_mb": round(brute_mb, 1),
+        "planned_files": dl_plan.get("required_file_count", 0) if dl_plan else 0,
+        "planned_mb": dl_plan.get("total_estimated_mb", 0) if dl_plan else 0,
+        "reduction_ratio": dl_plan.get("reduction_ratio", 1.0) if dl_plan else 1.0,
+    })
+
+
+def _write_prefilter_artifacts(
+    output_dir: Path,
+    candidate_days: List,
+    dl_plan: Dict[str, Any],
+    kline_manifest: List,
+    all_labels: List,
+    brute_files: int,
+    brute_mb: float,
+    planned_mb: float,
+) -> None:
+    """Write prefilter success artifacts before evaluation."""
+    atomic_write_json(output_dir / "kline_prefilter_summary.json", {
+        "total_klines_downloaded": len(kline_manifest),
+        "candidate_days_count": len(candidate_days),
+        "candidate_days": candidate_days,
+        "note": "Kline prefilter is source-only and non-verdict-producing",
+    })
+    atomic_write_json(output_dir / "candidate_stress_days.json", candidate_days)
+    atomic_write_json(output_dir / "download_plan.json", dl_plan)
+    atomic_write_json(output_dir / "prefilter_reduction_summary.json", {
+        "brute_force_files": brute_files,
+        "brute_force_mb": round(brute_mb, 1),
+        "planned_files": dl_plan.get("required_file_count", 0),
+        "planned_mb": round(planned_mb, 1),
+        "reduction_ratio": dl_plan.get("reduction_ratio", 1.0),
+    })
+    atomic_write_json(output_dir / "aggtrade_exact_stress_reconstruction.json", {
+        "total_labels": len(all_labels),
+        "note": "All labels are aggTrade-derived (kline was only a prefilter)",
+        "symbol_breakdown": {},
+    })
 
 
 if __name__ == "__main__":

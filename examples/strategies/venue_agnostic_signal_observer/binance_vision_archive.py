@@ -335,7 +335,21 @@ def parse_agg_trade_csv(
 
 
 def parse_1m_klines_csv(zip_bytes: bytes) -> List[dict[str, Any]]:
-    """Parse 1m klines CSV from Binance Vision (has header).
+    """Parse 1m klines CSV from Binance Vision (NO header).
+
+    Daily 1m klines CSVs have NO header row. Columns are positional:
+      0: open_time
+      1: open
+      2: high
+      3: low
+      4: close
+      5: volume
+      6: close_time
+      7: quote_asset_volume
+      8: number_of_trades
+      9: taker_buy_base_vol
+      10: taker_buy_quote_vol
+      11: ignore
 
     Returns list of dicts with keys:
       open_time_ns, open, high, low, close, volume
@@ -349,21 +363,24 @@ def parse_1m_klines_csv(zip_bytes: bytes) -> List[dict[str, Any]]:
         with zf.open(names[0]) as f:
             content = f.read().decode("utf-8", errors="replace")
 
-    reader = csv.DictReader(io.StringIO(content))
-    for r in reader:
+    # Use csv.reader for no-header format
+    reader = csv.reader(io.StringIO(content))
+    for row in reader:
+        if len(row) < 6:
+            continue
         try:
-            open_time = int(r.get("open_time", "0") or "0")
+            open_time = int(row[0])
             k = {
                 "open_time_ns": _ts_to_ns(open_time),
-                "open": float(r.get("open", "0") or "0"),
-                "high": float(r.get("high", "0") or "0"),
-                "low": float(r.get("low", "0") or "0"),
-                "close": float(r.get("close", "0") or "0"),
-                "volume": float(r.get("volume", "0") or "0"),
+                "open": float(row[1]),
+                "high": float(row[2]),
+                "low": float(row[3]),
+                "close": float(row[4]),
+                "volume": float(row[5]),
             }
             if _isfinite_positive(k["close"]) and _isfinite_positive(k["open"]):
                 rows.append(k)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, IndexError):
             continue
 
     return rows
@@ -490,3 +507,111 @@ def build_file_manifest(
         }
         for d in downloads
     ]
+
+
+# ---------------------------------------------------------------------------
+# Kline stress-day prefilter
+# ---------------------------------------------------------------------------
+
+
+def compute_kline_candidate_days(
+    klines_by_source: Dict[str, List[Dict[str, Any]]],
+    *,
+    hl_threshold_bps: float = 15.0,
+    oc_threshold_bps: float = 15.0,
+) -> List[Dict[str, Any]]:
+    """Identify candidate stress days from 1m klines.
+
+    This is a conservative (low-threshold) prefilter only.
+    It marks candidate days where source stress *may* have occurred.
+    Final stress labels are NOT produced here — they must come from
+    aggTrade reconstruction.
+
+    Parameters
+    ----------
+    klines_by_source : dict
+        source_symbol -> list of kline dicts with open_time_ns, open, high, low, close
+    hl_threshold_bps :
+        High-low range threshold (conservative default 15 bps)
+    oc_threshold_bps :
+        Close-open absolute change threshold (conservative default 15 bps)
+
+    Returns
+    -------
+    list of candidate-day dicts:
+        date, source_symbol, reason, max_hl_bps, max_oc_bps, kline_count
+    """
+    candidates: List[Dict[str, Any]] = []
+
+    for src_sym, klines in klines_by_source.items():
+        if not klines:
+            continue
+
+        # Group klines by calendar date
+        from datetime import timedelta
+        day_klines: Dict[str, List[Dict[str, Any]]] = {}
+        for k in klines:
+            ts_ns = k.get("open_time_ns", 0)
+            ts_sec = ts_ns // 1_000_000_000
+            from datetime import datetime
+            dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
+            date_key = dt.strftime("%Y-%m-%d")
+            day_klines.setdefault(date_key, []).append(k)
+
+        for date_key, day_bars in sorted(day_klines.items()):
+            max_hl = 0.0
+            max_oc = 0.0
+            reason_parts: List[str] = []
+
+            for k in day_bars:
+                o = float(k.get("open", 0))
+                h = float(k.get("high", 0))
+                l_val = float(k.get("low", 0))
+                c = float(k.get("close", 0))
+
+                if o <= 0:
+                    continue
+
+                hl_bps = (h - l_val) / o * 10000.0 if h > 0 and l_val > 0 else 0.0
+                oc_bps = abs(c - o) / o * 10000.0
+
+                if hl_bps > max_hl:
+                    max_hl = hl_bps
+                if oc_bps > max_oc:
+                    max_oc = oc_bps
+
+            if max_hl >= hl_threshold_bps:
+                reason_parts.append(f"high-low_{max_hl:.1f}bps")
+            if max_oc >= oc_threshold_bps:
+                reason_parts.append(f"open-close_{max_oc:.1f}bps")
+
+            if reason_parts:
+                candidates.append({
+                    "date": date_key,
+                    "source_symbol": src_sym,
+                    "reason": "; ".join(reason_parts),
+                    "max_hl_bps": round(max_hl, 2),
+                    "max_oc_bps": round(max_oc, 2),
+                    "kline_count": len(day_bars),
+                })
+
+    return candidates
+
+
+def estimate_file_size_mb(symbol: str) -> float:
+    """Rough per-file size estimate for different symbols (MB)."""
+    sizes = {
+        "BTCUSDT": 17.0,
+        "ETHUSDT": 10.0,
+        "SOLUSDT": 5.0,
+        "LINKUSDT": 2.5,
+        "DOGEUSDT": 8.0,
+        "AVAXUSDT": 4.0,
+    }
+    return sizes.get(symbol.upper(), 5.0)
+
+
+def estimate_kline_file_size_mb(symbol: str) -> float:
+    """Rough per-file size estimate for 1m klines (small)."""
+    return 0.3  # ~300KB per daily kline zip
+

@@ -1089,4 +1089,141 @@ def _build_final_report_md(
     lines.append(f"- Tests passed: {tests.get('passed', 0)}")
     lines.append(f"- Tests failed: {tests.get('failed', 0)}")
 
+    # Prefilter info
+    pf = summary.get("prefilter_summary", {})
+    if pf:
+        lines.append(f"\n## Kline Prefilter\n")
+        lines.append(f"- Full calendar retained: {pf.get('full_calendar_retained', 'N/A')}")
+        lines.append(f"- Kline prefilter: source-only (non-verdict-producing)")
+        lines.append(f"- Exact stress labels from aggTrades only")
+        lines.append(f"- Brute-force estimate: {pf.get('brute_force_mb', 'N/A')} MB")
+        lines.append(f"- Planned download estimate: {pf.get('planned_mb', 'N/A')} MB")
+        lines.append(f"- Candidate days: {pf.get('candidate_days', 'N/A')}")
+        lines.append(f"- Exact aggTrade stress labels: {pf.get('exact_stress_labels', 'N/A')}")
+        lines.append(f"- Independent all-target usable windows: {pf.get('usable_windows', 'N/A')}")
+        lines.append(f"- Evaluation reached: {pf.get('evaluation_reached', False)}")
+
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Download plan builder
+# ---------------------------------------------------------------------------
+
+
+def build_stress_day_download_plan(
+    candidate_days: List[Dict[str, Any]],
+    all_symbols: List[str],
+    source_symbols: List[str],
+    date_list: List[str],
+    *,
+    extra_buffer_days: int = 1,
+) -> Dict[str, Any]:
+    """Build a download plan from candidate stress days.
+
+    Takes candidate days (from kline prefilter) and produces:
+    - Deduplicated list of required aggTrade files
+    - Estimated download size
+    - Brute-force comparison
+
+    Parameters
+    ----------
+    candidate_days : list of dicts with 'date' and 'source_symbol' keys
+    all_symbols : all 6 symbols needing aggTrades per candidate day
+    source_symbols : source symbols (2)
+    date_list : full calendar date list (for brute-force estimate)
+
+    Returns
+    -------
+    dict with:
+        candidate_dates_sorted, all_required_files, required file details,
+        total_estimated_mb, brute_force_estimated_mb, reduction_ratio
+    """
+    from .binance_vision_archive import estimate_file_size_mb
+
+    # Collect unique candidate dates and symbols
+    candidate_dates_set: set = set()
+    for cd in candidate_days:
+        candidate_dates_set.add(cd["date"])
+
+    candidate_dates = sorted(candidate_dates_set)
+
+    # For each candidate date, add all 6 symbols
+    all_required: List[Dict[str, Any]] = []
+    file_set: set = set()
+    total_est_mb = 0.0
+
+    for d in candidate_dates:
+        for sym in all_symbols:
+            fkey = f"{sym}_{d}"
+            if fkey not in file_set:
+                file_set.add(fkey)
+                sz = estimate_file_size_mb(sym)
+                total_est_mb += sz
+                all_required.append({
+                    "symbol": sym,
+                    "date": d,
+                    "source": "aggTrades",
+                    "estimated_mb": sz,
+                })
+
+    # Add next-day buffer for each candidate date (forward coverage)
+    for d in candidate_dates:
+        from datetime import datetime, timedelta, timezone
+        dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        next_dt = dt + timedelta(days=extra_buffer_days)
+        next_d = next_dt.strftime("%Y-%m-%d")
+        # Only if within calendar
+        if next_d in date_list:
+            for sym in all_symbols:
+                fkey = f"{sym}_{next_d}"
+                if fkey not in file_set:
+                    file_set.add(fkey)
+                    sz = estimate_file_size_mb(sym)
+                    total_est_mb += sz
+                    all_required.append({
+                        "symbol": sym,
+                        "date": next_d,
+                        "source": "aggTrades",
+                        "estimated_mb": sz,
+                        "reason": "forward_buffer",
+                    })
+
+    # Add previous-day buffer for source symbols (rolling context)
+    for d in candidate_dates:
+        from datetime import datetime, timedelta, timezone
+        dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        prev_dt = dt - timedelta(days=extra_buffer_days)
+        prev_d = prev_dt.strftime("%Y-%m-%d")
+        if prev_d in date_list:
+            for sym in source_symbols:
+                fkey = f"{sym}_{prev_d}"
+                if fkey not in file_set:
+                    file_set.add(fkey)
+                    sz = estimate_file_size_mb(sym)
+                    total_est_mb += sz
+                    all_required.append({
+                        "symbol": sym,
+                        "date": prev_d,
+                        "source": "aggTrades",
+                        "estimated_mb": sz,
+                        "reason": "previous_day_context",
+                    })
+
+    # Brute-force estimate
+    brute_files = len(all_symbols) * len(date_list)
+    brute_mb = sum(estimate_file_size_mb(sym) for sym in all_symbols) * len(date_list)
+
+    reduction_ratio = brute_mb / total_est_mb if total_est_mb > 0 else 1.0
+
+    return {
+        "candidate_dates": candidate_dates,
+        "candidate_dates_count": len(candidate_dates),
+        "required_file_count": len(all_required),
+        "required_files": all_required,
+        "total_estimated_mb": round(total_est_mb, 1),
+        "brute_force_files": brute_files,
+        "brute_force_estimated_mb": round(brute_mb, 1),
+        "reduction_ratio": round(reduction_ratio, 1),
+        "file_keys_sorted": sorted(file_set),
+    }
