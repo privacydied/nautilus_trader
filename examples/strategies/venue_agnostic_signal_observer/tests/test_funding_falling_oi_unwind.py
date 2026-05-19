@@ -1137,3 +1137,60 @@ def test_registry_gates_failed_verdict():
     if "Family 3 v1" in text:
         assert "GATES_FAILED" in text, "Registry should say GATES_FAILED"
     assert "REJECTED" in text, "Registry should say REJECTED"
+
+
+def test_registry_lock_13_exists():
+    """Lock #13 must exist for falling-OI v1."""
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "docs", "REJECTED_RESEARCH.md"
+    )
+    with open(path) as f:
+        text = f.read()
+    assert "13. **Family 3 v1" in text
+    assert "falling-OI" in text
+
+
+def test_registry_lock_12_unchanged():
+    """Lock #12 must still say rising-OI only."""
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "docs", "REJECTED_RESEARCH.md"
+    )
+    with open(path) as f:
+        text = f.read()
+    # Find Lock #12 context
+    idx = text.find("12. **Family 3 funding")
+    assert idx >= 0, "Lock #12 not found"
+    chunk = text[idx:idx+500]
+    assert "rising" in chunk.lower() or "v0" in chunk, "Lock #12 should mention rising-OI v0"
+    assert "falling" not in chunk.lower() or "v1" not in chunk, "Lock #12 should not mention v1"
+
+
+def test_registry_still_open_adjacent():
+    """Still Open has the funding x OI adjacent variants bullet."""
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "docs", "REJECTED_RESEARCH.md"
+    )
+    with open(path) as f:
+        text = f.read()
+    assert "Funding × OI adjacent variants" in text
+
+
+def test_registry_mined_status_updated():
+    """Mined status shows 48 groups and 37 REJECTED."""
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "docs", "REJECTED_RESEARCH.md"
+    )
+    with open(path) as f:
+        text = f.read()
+    assert "48 study groups" in text
+    assert "37 REJECTED" in text
+
+
+def test_registry_v1_status_row_present():
+    """Family 3 v1 status table row exists."""
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "docs", "REJECTED_RESEARCH.md"
+    )
+    with open(path) as f:
+        text = f.read()
+    assert "family3-funding-falling-oi-unwind-v1-rejected" in text

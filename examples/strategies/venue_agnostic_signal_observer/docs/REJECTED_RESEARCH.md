@@ -18,8 +18,8 @@ changing something structural.
 
 ## Mined Status
 
-The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 47 study groups:
-- **36 REJECTED**
+The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 48 study groups:
+- **37 REJECTED**
 - **11 NEEDS_MORE_DATA** (insufficient events / zero signals / no tail / market availability blocked)
 - **1 MARKET_MODERATE_DIAGNOSTIC** (quiet/moderate capture, below volatility gate)
 - **1 UNKNOWN**
@@ -59,6 +59,7 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 | **Family 2 funding crowding reversal** | Binance BTCUSDT funding-rate extremes → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M funding + spot) | **REJECTED** | 60 BTC primary cells evaluated Jun 2020–Apr 2026 window (180-day past-only percentile warmup). Approved run (2026-05-18): 25 NEEDS_MORE_DATA, 11 REJECTED, 23 NULL_REJECTED_DIAGNOSTIC, 1 FDR_BLOCKED_DIAGNOSTIC, **0 CANDIDATE_FOR_LONGER_OBSERVATION**. No cell passed all pre-null gates (mean_net > 0, median > 0, win_rate >= 0.55, worst_decile > -50, baseline_delta >= 10). Positive-funding cells uniformly negative. Negative-funding cells had mixed sign but sub-threshold win rates. Full 60-cell evidence: no edge survives after 50 bps cost under frozen precommitted design. | `family2-funding-crowding-reversal-rejected` |
 || **Cross-exchange funding dispersion carry v1** | Binance vs Bybit perp funding spread carry (short high/long low) | Binance Vision + Bybit v5 archive (BTC & ETH) | **NEEDS_MORE_DATA_OR_NO_TAIL** | Gate A (Stage 1): zero dispersion events at all frozen thresholds (5/10/20/40 bps) for both BTC and ETH. Absolute funding spread never exceeded 5 bps across 1,261 aligned settlements (2024-01 to 2025-05). BTC max: 4.14 bps; ETH max: 4.49 bps. Gate B, null, FDR, holdout never reached. | `cross-exchange-funding-dispersion-carry-v1-no-tail` |
 || **Family 3 funding × OI crowding regime v0** | Binance BTCUSDT funding extremes × OI regime (rising/falling) → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M metrics + funding + spot) | **SIGNAL_ABSENCE_AT_COST** | 6 primary cells (2 directions × 1 OI regime × 3 horizons). All 6 cells failed evaluation gates (mean net bps < 0). Best cell: negative_extreme × rising_oi 48h = -19.3 bps mean net, 48.4% win rate. All mean net bps negative (range: -19 to -126 bps). 2/6 cells passed null test (negative extremes less bad than random at p<0.05) but still negative. No cell reached FDR or holdout. Blocker: cost wall + signal absence. 456 aligned extreme × rising events (226 neg) adequate for detection but directional mapping does not overcome 50 bps cost. See run `funding_oi_crowding_regime_v0_20260519T010334_54ceff`. Precommitment SHA: `5f911c3f`. Tag: `family3-funding-oi-crowding-regime-signal-absence` |
+|| **Family 3 v1 funding × falling-OI unwind mapping** | Binance BTCUSDT negative funding extreme × falling OI → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M metrics + funding + spot) | **REJECTED** | 2 primary cells, 24h and 48h. Stage A POPULATION_SUFFICIENT after ms/µs spot-kline parser fix and preflight. Both cells GATES_FAILED at 50 bps primary cost: 24h mean_net -45.14 bps, WR 0.395; 48h mean_net -38.00 bps, WR 0.435. Both beat timestamp-shuffle null (p=0.010 / 0.035), but remained economically negative. "Less bad than random," not tradeable. | `family3-funding-falling-oi-unwind-v1-rejected` |
 
 ## Rejection Details
 
@@ -422,6 +423,105 @@ The first real empirical run (2026-05-13 03:17-03:27 UTC) produced:
 - 30-60 minute capture during active market hours
 - Lower minimum thresholds (e.g. $100k liquidity / $50k vol1h) to include mid-tier pools
 
+### Family 3 v1 — Funding × Falling-OI Unwind Mapping
+
+**Tag:** `family3-funding-falling-oi-unwind-v1-rejected`
+
+**Verdict:** `REJECTED`
+
+**Hypothesis:** When BTCUSDT funding is in the bottom 5% of its past-only 180-day distribution
+and OI is falling over the prior 8h window, the short unwind itself may continue into positive
+BTC spot forward returns over 24h and 48h.
+
+**Tested conditions:**
+- Asset: BTCUSDT only
+- Funding threshold: bottom 5% negative funding, past-only 180-day percentile
+- OI regime: falling OI only
+- OI change rule: `OI_end` = last row <= settlement_ts; `OI_start` = last row <= settlement_ts − 8h
+- Return leg: BTC spot forward return only
+- Horizons: 24h and 48h only
+- Family size: exactly 2
+- Cost: frozen 50 bps one-way / 100 bps round-trip primary cost
+- Null: timestamp-shuffle null (1,000 shuffles, fixed seed 42)
+- FDR: Benjamini-Yekutieli, alpha = 0.05, across exactly 2 cells
+- Split: chronological 70/30 train/holdout
+- Data: Binance Vision archive only (funding + OI metrics + spot klines)
+
+**Preflight and bugfix note:**
+An earlier Stage A `UNDERPOWERED_HOLDOUT_FAILURE` result was invalidated by a spot-kline
+timestamp-unit parser bug. The Binance Vision spot klines archive changed from milliseconds
+(13-digit, 2024 and earlier) to microseconds (16-digit, 2025+) at the 2025 year boundary.
+The old parser used `datetime.fromtimestamp(ts / 1000)` and silently dropped all 2025+ rows
+via `OverflowError`. After `parse_klines_timestamp()` with auto-detection was added, Stage A
+became `POPULATION_SUFFICIENT` with 223 total events and 66 holdout events for both horizons.
+
+Preflight confirmed:
+- PREFLIGHT_PASSED
+- 24h/48h identical spot-availability counts were data-driven, not code-driven
+- Last spot timestamp: 2026-01-31 23:00 UTC
+- Last event timestamp: 2026-01-09 00:00 UTC
+- 0 boundary events (no event where 24h should pass but 48h should fail)
+- Funding timestamps: all 5,937 rows use 13-digit ms timestamps (FUNDING_TIMESTAMP_MS_CONFIRMED)
+- OI metrics parser: string-based `%Y-%m-%d %H:%M:%S` format
+- OI alignment: 1,040 rows exactly at funding grid timestamps (OI_ALIGNMENT_GENUINE_CONFIRMED)
+
+**Stage B results:**
+
+| Cell | N | Holdout | Mean Gross (bps) | Mean Net (bps) | Win Rate | Worst Decile | Baseline Delta | Null p | BY FDR | Cell Verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 24h | 223 | 66 | +54.86 | −45.14 | 0.395 | −491.72 | +47.30 | 0.010 | rejected | GATES_FAILED |
+| 48h | 223 | 66 | +62.01 | −38.00 | 0.435 | −604.79 | +47.38 | 0.035 | survived | GATES_FAILED |
+
+**Null / FDR interpretation:**
+Both cells beat the timestamp-shuffle null (p = 0.010 / 0.035), meaning the falling-OI events
+were statistically distinguishable from random eligible settlement timestamps. However,
+"distinguishable" does not mean "profitable" — the cell means were still deeply negative
+(−45 / −38 bps) after 100 bps round-trip cost. The baseline (all eligible funding settlements)
+averaged −92 / −85 bps, so the falling-OI conditioning reduced losses but did not eliminate
+them. A null pass cannot override failed economic gates.
+
+**Verdict justification:**
+Both cells failed the pre-null economic gates:
+- `mean_net_bps < 0` (required > 0)
+- `win_rate < 0.55` (required >= 0.55)
+- `worst_decile_net_bps` deeply negative (required > −50)
+
+The rejection is due to economic gate failure under the frozen 50 bps primary cost. This is
+not a null rejection, not an FDR rejection — it is a GATES_FAILED rejection. The signal
+direction is correct (positive gross returns at both horizons) but the magnitude after cost
+is negative and inconsistent.
+
+**What this rejects:**
+- BTCUSDT negative-funding + falling-OI unwind v1 only
+- Binance Vision archive only
+- spot BTC return leg only
+- 24h / 48h horizons only
+- frozen 2-cell family only
+- 50 bps primary cost only
+- timestamp-shuffle null + BY FDR family size 2 only
+
+**What this does NOT reject:**
+- Multi-asset falling-OI unwind portfolio
+- Perp return leg with funding-paid-while-held
+- Cross-exchange OI divergence
+- Tick-level OI or higher-frequency OI
+- Lower-cost execution
+- Maker/rebate cost model
+- Altcoin-specific versions
+- Venue-specific OI behavior outside Binance BTCUSDT
+- Options IV/RV overlays
+- Using falling-OI as a filter rather than a standalone trade
+
+**Run artifacts:**
+- Phase 0 / preflight commit: `e5e077cff7a81fcfb8b1bffb4f7040a5860b2463`
+- Stage B commit: `1f0668053e82e9b72c9a1c27878cbe5ab2f3a60b`
+- Stage B run: `funding_falling_oi_unwind_v1_20260519T020343_a62a61`
+- Precommitment SHA: `c26c02281e2b27316b102fead1a09a4d4226af1ff9c150603695de68b41b58b1`
+- Seed: 42
+- Safety: `public_data_observer_only`
+
+---
+
 ## Locked Gates — Do Not Revisit Without Structural Change
 
 1. **Kraken BTC/USD spot OHLCV indicators** (5m, 1h, Donchian, EMA, ATR). ~80 bps round-trip taker fees. Rejected V1-V4. Stop.
@@ -447,6 +547,8 @@ The first real empirical run (2026-05-13 03:17-03:27 UTC) produced:
 11. **Cross-exchange funding dispersion carry v1** (Binance vs Bybit, BTC/ETH, thresholds 5/10/20/40 bps, holds 3/6/12 settlements, 50 bps cost, event-vector shift null, BY FDR). Zero dispersion events at every threshold for both assets. Maximum absolute spread was 4.49 bps — below the 5 bps minimum threshold. The data does not contain a tail to test. Do not reopen by merely lowering thresholds or adding venues within the v1 protocol. Revisiting requires a materially different precommitment — different venue pairs (OKX, three-venue), altcoins, stress-regime conditioning, sub-5 bps cost models, or a convergence-triggered exit mechanism.\n
 12. **Family 3 funding × OI crowding regime v0** (Binance BTCUSDT funding extremes × OI change regime → spot BTC forward returns, 6 primary cells, rising OI only, 50 bps cost, failing-oi diagnostic). All 6 primary cells failed evaluation gates — mean net bps negative across all horizons (best: -19 bps for neg_extreme × rising_oi 48h). Signal absence at cost: the OI conditioning does not rescue the funding-extreme reversal hypothesis. Do not reopen without a materially different mechanism: tick-level OI, cross-exchange OI divergence, multi-asset OI conditioning, or a perp return leg with explicit funding-paid-while-held modeling. Do not reopen by merely changing thresholds, horizons, lookbacks, OI regime cutoffs, or cost.
 
+13. **Family 3 v1 funding × falling-OI unwind mapping** — BTCUSDT negative-funding + falling-OI → spot BTC 24h/48h forward returns. Both primary cells GATES_FAILED at frozen 50 bps cost despite passing timestamp-shuffle null. Mean net remained negative (−45.14 / −38.00 bps), win rates were sub-threshold (0.395 / 0.435), and worst decile losses were large (−491 / −605 bps). Do not reopen this exact BTCUSDT 2-cell archive design by changing split, seed, horizons, OI cutoff, funding percentile, null iterations, or cost. Reopening requires a materially different mechanism: multi-asset portfolio, perp return leg with funding-paid-while-held, cross-exchange OI divergence, tick-level OI, or materially different fee/execution model.
+
 ## Still Open
 
 - **Cross-asset beta lag under stress** — BTC/ETH shock leads slower repricing in higher-beta assets over 30s to 5m. Distinct from same-asset derivatives-to-spot lead-lag. Only testable during genuine stress windows. See `CROSS_ASSET_BETA_LAG_PRECOMMITMENT.md`.
@@ -455,6 +557,7 @@ The first real empirical run (2026-05-13 03:17-03:27 UTC) produced:
 - OI + price regime classification (filter, not standalone trade)
 - L2 adverse selection conditioning on book state
 - Options IV/RV regime overlay (filter, not trade)
+- **Funding × OI adjacent variants** — Family 3 v0 rejected the BTCUSDT rising-OI crowding-build mapping; Family 3 v1 rejected the BTCUSDT negative-funding + falling-OI unwind mapping at 50 bps on spot returns. Still untested: multi-asset falling-OI portfolios, perp return legs with funding-paid-while-held, cross-exchange OI divergence, tick-level OI, and materially lower-cost maker/rebate execution. These require fresh precommitments and cannot reuse the rejected BTCUSDT v1 grid.
 
 ## Known Issues
 
@@ -472,32 +575,3 @@ falsification) remains available for other observer studies that share a compati
 report schema. The v2 evaluator, heatmap, cost sensitivity, permutation null, and
 falsification tools are generic across observer frameworks that produce lead-lag-group
 output format, not exclusive to the now-rejected derivatives v2 hypothesis.
-|
-| **Family 3 v1 funding × falling-OI unwind v1** | BTCUSDT negative funding extreme + falling OI → spot BTC forward returns (24h, 48h) | Binance Vision archive (funding + metrics + spot klines) | **REJECTED** | negative_funding_extreme_falling_oi_24h: GATES_FAILED (n=223); negative_funding_extreme_falling_oi_24h: GATES_FAILED, n=223, holdout=66, mean_net=-45.1422, wr=0.3946, p=0.00999000999000999, FDR=True; negative_funding_extreme_falling_oi_48h: GATES_FAILED (n=223); negative_funding_extreme_falling_oi_48h: GATES_FAILED, n=223, holdout=66, mean_net=-37.9945, wr=0.435, p=0.03496503496503497, FDR=False
-
-## Family 3 v1 Funding × Falling-OI Unwind — Registry Detail
-
-**Tag:** `family3-funding-falling-oi-unwind-v1-rejected`
-
-**Verdict:** `REJECTED`
-
-**Hypothesis:** When BTCUSDT funding is a negative extreme and BTCUSDT open interest is falling
-over the prior 8h into the funding settlement, the short unwind continuation produces positive
-BTC spot forward returns over 24h and 48h.
-
-**Primary cells:** 2 cells (negative funding extreme + falling OI × 24h, 48h). 50 bps one-way cost.
-Family size: exactly 2. BY FDR across both cells.
-
-**Run artifacts:**
-- Run: `funding_falling_oi_unwind_v1_20260519T020343_a62a61`
-- Precommitment SHA: `c26c02281e2b27316b102fead1a09a4d4226af1ff9c150603695de68b41b58b1`
-- Git SHA: `e5e077cff7a81fcfb8b1bffb4f7040a5860b2463`
-- Seed: 42
-- Safety: public_data_observer_only
-
-**Per-cell results:**
-
-- **negative_funding_extreme_falling_oi_24h**: Final=GATES_FAILED, N=223, Holdout=66, MeanNet=-45.1422 bps, WR=0.3946, WorstDecile=-491.7211, BaselineDelta=47.3035, NullP=0.00999000999000999, FDR=rejected
-- **negative_funding_extreme_falling_oi_48h**: Final=GATES_FAILED, N=223, Holdout=66, MeanNet=-37.9945 bps, WR=0.435, WorstDecile=-604.7921, BaselineDelta=47.3834, NullP=0.03496503496503497, FDR=survived
-\n**Lock discipline:** Lock #12 (rising-OI crowding-build mapping) is unchanged. This entry covers the falling-OI unwind mapping only.\n\n**What this rejects:**\n- BTCUSDT negative-funding + falling-OI unwind v1 under the exact frozen 2-cell design,\n  50 bps cost, Binance Vision archive, spot return leg, timestamp-shuffle null, and BY FDR\n  family size 2.\n\n**What this does NOT reject:** Multi-asset funding unwind, perp return leg with\n  funding-paid-while-held, cross-exchange OI, tick-level OI, lower-cost execution, or maker/rebate\n  models.\n
----
