@@ -1,0 +1,12 @@
+{
+  "source_symbols": [
+    "BTCUSDT",
+    "ETHUSDT"
+  ],
+  "total_days": 851,
+  "source_files_estimated": 1702,
+  "source_mb_estimated": 22977.0,
+  "source_gb_estimated": 22.4,
+  "max_source_gb": 10.0,
+  "status": "VOLUME_GATE_STOPPED"
+}
