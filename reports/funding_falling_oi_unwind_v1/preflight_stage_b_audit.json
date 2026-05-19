@@ -1,0 +1,157 @@
+{
+  "audit_ts": "2026-05-19T00:58:03.666643+00:00",
+  "study_id": "family3_funding_falling_oi_unwind_v1",
+  "horizon_awareness": {
+    "both_available": 223,
+    "both_unavailable": 0,
+    "only_24h_available": 0,
+    "only_48h_available": 0,
+    "total_events": 223,
+    "latest_settlement_ts": "2026-01-09T00:00:00.003000+00:00",
+    "latest_24h_target": "2026-01-10T00:00:00.003000+00:00",
+    "latest_48h_target": "2026-01-11T00:00:00.003000+00:00",
+    "last_spot_ts": "2026-01-31T23:00:00+00:00",
+    "boundary_events_count": 0,
+    "boundary_events": []
+  },
+  "horizon_verdict": "HORIZON_AWARENESS_CONFIRMED_IDENTICAL_BY_DATA",
+  "funding_parser_audit": {
+    "parser_path": "datetime.fromtimestamp(int(r['calc_time']) / 1000, tz=timezone.utc)",
+    "raw_column_name": "calc_time",
+    "total_rows": 5937,
+    "samples": {
+      "earliest": {
+        "data": {
+          "ym": "2020-09",
+          "raw_value": "1598918400000",
+          "digit_count": 13,
+          "unit_inference": "milliseconds",
+          "parsed_ts": "2020-09-01T00:00:00+00:00",
+          "settlement_grid_check": {
+            "hour": 0,
+            "minute": 0,
+            "on_grid": true
+          }
+        }
+      },
+      "latest": {
+        "data": {
+          "ym": "2026-01",
+          "raw_value": "1769875200009",
+          "digit_count": 13,
+          "unit_inference": "milliseconds",
+          "parsed_ts": "2026-01-31T16:00:00.009000+00:00",
+          "settlement_grid_check": {
+            "hour": 16,
+            "minute": 0,
+            "on_grid": true
+          }
+        }
+      },
+      "around_2024_12": {
+        "data": {
+          "ym": "2024-12",
+          "raw_value": "1734220800000",
+          "digit_count": 13,
+          "unit_inference": "milliseconds",
+          "parsed_ts": "2024-12-15T00:00:00+00:00",
+          "settlement_grid_check": {
+            "hour": 0,
+            "minute": 0,
+            "on_grid": true
+          }
+        }
+      },
+      "around_2025_01": {
+        "data": {
+          "ym": "2025-01",
+          "raw_value": "1735689600015",
+          "digit_count": 13,
+          "unit_inference": "milliseconds",
+          "parsed_ts": "2025-01-01T00:00:00.015000+00:00",
+          "settlement_grid_check": {
+            "hour": 0,
+            "minute": 0,
+            "on_grid": true
+          }
+        }
+      }
+    },
+    "rows_with_microsecond_timestamps": 0,
+    "rows_ms_only": true,
+    "off_grid_settlements": 0,
+    "post_2024_rows": 1188,
+    "funding_unit_verdict": "FUNDING_TIMESTAMP_MS_CONFIRMED"
+  },
+  "oi_parser_audit": {
+    "parser_path": "datetime.strptime(r['create_time'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)",
+    "raw_column_name": "create_time",
+    "total_rows": 103426,
+    "samples": [
+      {
+        "date": "2021-04-20",
+        "raw_create_time": "2021-04-20 00:00:00",
+        "parsed_ts": "2021-04-20T00:00:00+00:00",
+        "oi_value": 27224.823
+      },
+      {
+        "date": "2021-06-01",
+        "raw_create_time": "2021-06-01 07:05:00",
+        "parsed_ts": "2021-06-01T07:05:00+00:00",
+        "oi_value": 37701.457
+      },
+      {
+        "date": "2026-01-09",
+        "raw_create_time": "2026-01-10 00:00:00",
+        "parsed_ts": "2026-01-10T00:00:00+00:00",
+        "oi_value": 95976.245
+      }
+    ],
+    "exact_grid_rows_count": 1040,
+    "exact_grid_examples": [
+      {
+        "ts": "2021-04-20T00:00:00+00:00",
+        "raw": "2021-04-20 00:00:00"
+      },
+      {
+        "ts": "2021-04-20T00:00:00+00:00",
+        "raw": "2021-04-20 00:00:00"
+      },
+      {
+        "ts": "2021-04-20T08:00:00+00:00",
+        "raw": "2021-04-20 08:00:00"
+      },
+      {
+        "ts": "2021-04-20T08:00:00+00:00",
+        "raw": "2021-04-20 08:00:00"
+      },
+      {
+        "ts": "2021-04-20T16:00:00+00:00",
+        "raw": "2021-04-20 16:00:00"
+      },
+      {
+        "ts": "2021-04-20T16:00:00+00:00",
+        "raw": "2021-04-20 16:00:00"
+      },
+      {
+        "ts": "2021-04-21T00:00:00+00:00",
+        "raw": "2021-04-21 00:00:00"
+      },
+      {
+        "ts": "2021-04-21T00:00:00+00:00",
+        "raw": "2021-04-21 00:00:00"
+      },
+      {
+        "ts": "2021-04-21T08:00:00+00:00",
+        "raw": "2021-04-21 08:00:00"
+      },
+      {
+        "ts": "2021-04-21T08:00:00+00:00",
+        "raw": "2021-04-21 08:00:00"
+      }
+    ],
+    "alignment_verdict": "OI_ALIGNMENT_GENUINE_CONFIRMED",
+    "parse_failures": 0
+  },
+  "preflight_verdict": "PREFLIGHT_PASSED"
+}

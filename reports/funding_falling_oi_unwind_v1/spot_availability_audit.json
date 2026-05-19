@@ -1,0 +1,660 @@
+{
+  "diagnostic_run_ts": "2026-05-19T00:45:50.241805+00:00",
+  "total_events": 223,
+  "train_count": 157,
+  "holdout_count": 66,
+  "pass_24h": 183,
+  "pass_48h": 183,
+  "holdout_pass_24h": 26,
+  "holdout_pass_48h": 26,
+  "total_fail_24h": 40,
+  "total_fail_48h": 40,
+  "holdout_fail_24h": 40,
+  "holdout_fail_48h": 40,
+  "fail_both": 40,
+  "fail_24h_only": 0,
+  "fail_48h_only": 0,
+  "fail_by_day_of_month": {
+    "1": 1,
+    "2": 3,
+    "3": 1,
+    "4": 1,
+    "5": 1,
+    "7": 2,
+    "8": 1,
+    "9": 2,
+    "11": 1,
+    "12": 1,
+    "13": 1,
+    "14": 1,
+    "15": 4,
+    "16": 1,
+    "18": 2,
+    "20": 2,
+    "21": 1,
+    "22": 2,
+    "23": 1,
+    "24": 3,
+    "25": 2,
+    "26": 3,
+    "27": 1,
+    "28": 1,
+    "30": 1
+  },
+  "fail_by_settlement_month": {
+    "2025-02": 2,
+    "2025-03": 11,
+    "2025-04": 10,
+    "2025-05": 3,
+    "2025-06": 2,
+    "2025-09": 1,
+    "2025-10": 7,
+    "2025-11": 3,
+    "2026-01": 1
+  },
+  "fail_by_days_until_month_end": {
+    "0 days": 1,
+    "2 days": 1,
+    "3 days": 1,
+    "4-7 days": 9,
+    "8+ days": 28
+  },
+  "fail_crosses_month_boundary": 1,
+  "fail_not_cross_month_boundary": 39,
+  "spot_last_ts": "2024-12-31T23:00:00+00:00",
+  "spot_first_ts": "2020-09-01T00:00:00+00:00",
+  "last_event_ts": "2026-01-09T00:00:00.003000+00:00",
+  "last_event_48h_target": "2026-01-11T00:00:00.003000+00:00",
+  "last_event_48h_in_range": false,
+  "near_end_count_48h_beyond": 40,
+  "spot_zip_metadata": {
+    "2020-09": {
+      "ym": "2020-09",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2020-09.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2020-09-01T00:00:00+00:00",
+      "last_ts": "2020-09-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2020-10": {
+      "ym": "2020-10",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2020-10.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2020-10-01T00:00:00+00:00",
+      "last_ts": "2020-10-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2020-11": {
+      "ym": "2020-11",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2020-11.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2020-11-01T00:00:00+00:00",
+      "last_ts": "2020-11-30T23:00:00+00:00",
+      "n_rows": 719
+    },
+    "2020-12": {
+      "ym": "2020-12",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2020-12.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2020-12-01T00:00:00+00:00",
+      "last_ts": "2020-12-31T23:00:00+00:00",
+      "n_rows": 740
+    },
+    "2021-01": {
+      "ym": "2021-01",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-01.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-01-01T00:00:00+00:00",
+      "last_ts": "2021-01-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2021-02": {
+      "ym": "2021-02",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-02.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-02-01T00:00:00+00:00",
+      "last_ts": "2021-02-28T23:00:00+00:00",
+      "n_rows": 671
+    },
+    "2021-03": {
+      "ym": "2021-03",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-03.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-03-01T00:00:00+00:00",
+      "last_ts": "2021-03-31T23:00:00+00:00",
+      "n_rows": 743
+    },
+    "2021-04": {
+      "ym": "2021-04",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-04.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-04-01T00:00:00+00:00",
+      "last_ts": "2021-04-30T23:00:00+00:00",
+      "n_rows": 715
+    },
+    "2021-05": {
+      "ym": "2021-05",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-05.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-05-01T00:00:00+00:00",
+      "last_ts": "2021-05-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2021-06": {
+      "ym": "2021-06",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-06.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-06-01T00:00:00+00:00",
+      "last_ts": "2021-06-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2021-07": {
+      "ym": "2021-07",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-07.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-07-01T00:00:00+00:00",
+      "last_ts": "2021-07-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2021-08": {
+      "ym": "2021-08",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-08.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-08-01T00:00:00+00:00",
+      "last_ts": "2021-08-31T23:00:00+00:00",
+      "n_rows": 740
+    },
+    "2021-09": {
+      "ym": "2021-09",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-09.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-09-01T00:00:00+00:00",
+      "last_ts": "2021-09-30T23:00:00+00:00",
+      "n_rows": 718
+    },
+    "2021-10": {
+      "ym": "2021-10",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-10.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-10-01T00:00:00+00:00",
+      "last_ts": "2021-10-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2021-11": {
+      "ym": "2021-11",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-11.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-11-01T00:00:00+00:00",
+      "last_ts": "2021-11-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2021-12": {
+      "ym": "2021-12",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2021-12.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2021-12-01T00:00:00+00:00",
+      "last_ts": "2021-12-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2022-01": {
+      "ym": "2022-01",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-01.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "last_ts": "2022-01-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2022-02": {
+      "ym": "2022-02",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-02.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-02-01T00:00:00+00:00",
+      "last_ts": "2022-02-28T23:00:00+00:00",
+      "n_rows": 672
+    },
+    "2022-03": {
+      "ym": "2022-03",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-03.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-03-01T00:00:00+00:00",
+      "last_ts": "2022-03-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2022-04": {
+      "ym": "2022-04",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-04.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-04-01T00:00:00+00:00",
+      "last_ts": "2022-04-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2022-05": {
+      "ym": "2022-05",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-05.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-05-01T00:00:00+00:00",
+      "last_ts": "2022-05-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2022-06": {
+      "ym": "2022-06",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-06.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-06-01T00:00:00+00:00",
+      "last_ts": "2022-06-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2022-07": {
+      "ym": "2022-07",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-07.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-07-01T00:00:00+00:00",
+      "last_ts": "2022-07-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2022-08": {
+      "ym": "2022-08",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-08.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-08-01T00:00:00+00:00",
+      "last_ts": "2022-08-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2022-09": {
+      "ym": "2022-09",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-09.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-09-01T00:00:00+00:00",
+      "last_ts": "2022-09-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2022-10": {
+      "ym": "2022-10",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-10.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-10-01T00:00:00+00:00",
+      "last_ts": "2022-10-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2022-11": {
+      "ym": "2022-11",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-11.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-11-01T00:00:00+00:00",
+      "last_ts": "2022-11-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2022-12": {
+      "ym": "2022-12",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2022-12.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2022-12-01T00:00:00+00:00",
+      "last_ts": "2022-12-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2023-01": {
+      "ym": "2023-01",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-01.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-01-01T00:00:00+00:00",
+      "last_ts": "2023-01-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2023-02": {
+      "ym": "2023-02",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-02.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-02-01T00:00:00+00:00",
+      "last_ts": "2023-02-28T23:00:00+00:00",
+      "n_rows": 672
+    },
+    "2023-03": {
+      "ym": "2023-03",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-03.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-03-01T00:00:00+00:00",
+      "last_ts": "2023-03-31T23:00:00+00:00",
+      "n_rows": 743
+    },
+    "2023-04": {
+      "ym": "2023-04",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-04.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-04-01T00:00:00+00:00",
+      "last_ts": "2023-04-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2023-05": {
+      "ym": "2023-05",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-05.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-05-01T00:00:00+00:00",
+      "last_ts": "2023-05-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2023-06": {
+      "ym": "2023-06",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-06.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-06-01T00:00:00+00:00",
+      "last_ts": "2023-06-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2023-07": {
+      "ym": "2023-07",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-07.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-07-01T00:00:00+00:00",
+      "last_ts": "2023-07-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2023-08": {
+      "ym": "2023-08",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-08.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-08-01T00:00:00+00:00",
+      "last_ts": "2023-08-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2023-09": {
+      "ym": "2023-09",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-09.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-09-01T00:00:00+00:00",
+      "last_ts": "2023-09-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2023-10": {
+      "ym": "2023-10",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-10.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-10-01T00:00:00+00:00",
+      "last_ts": "2023-10-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2023-11": {
+      "ym": "2023-11",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-11.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-11-01T00:00:00+00:00",
+      "last_ts": "2023-11-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2023-12": {
+      "ym": "2023-12",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2023-12.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2023-12-01T00:00:00+00:00",
+      "last_ts": "2023-12-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2024-01": {
+      "ym": "2024-01",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-01.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-01-01T00:00:00+00:00",
+      "last_ts": "2024-01-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2024-02": {
+      "ym": "2024-02",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-02.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-02-01T00:00:00+00:00",
+      "last_ts": "2024-02-29T23:00:00+00:00",
+      "n_rows": 696
+    },
+    "2024-03": {
+      "ym": "2024-03",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-03.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-03-01T00:00:00+00:00",
+      "last_ts": "2024-03-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2024-04": {
+      "ym": "2024-04",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-04.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-04-01T00:00:00+00:00",
+      "last_ts": "2024-04-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2024-05": {
+      "ym": "2024-05",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-05.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-05-01T00:00:00+00:00",
+      "last_ts": "2024-05-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2024-06": {
+      "ym": "2024-06",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-06.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-06-01T00:00:00+00:00",
+      "last_ts": "2024-06-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2024-07": {
+      "ym": "2024-07",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-07.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-07-01T00:00:00+00:00",
+      "last_ts": "2024-07-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2024-08": {
+      "ym": "2024-08",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-08.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-08-01T00:00:00+00:00",
+      "last_ts": "2024-08-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2024-09": {
+      "ym": "2024-09",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-09.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-09-01T00:00:00+00:00",
+      "last_ts": "2024-09-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2024-10": {
+      "ym": "2024-10",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-10.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-10-01T00:00:00+00:00",
+      "last_ts": "2024-10-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2024-11": {
+      "ym": "2024-11",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-11.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-11-01T00:00:00+00:00",
+      "last_ts": "2024-11-30T23:00:00+00:00",
+      "n_rows": 720
+    },
+    "2024-12": {
+      "ym": "2024-12",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2024-12.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": "2024-12-01T00:00:00+00:00",
+      "last_ts": "2024-12-31T23:00:00+00:00",
+      "n_rows": 744
+    },
+    "2025-01": {
+      "ym": "2025-01",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-01.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-02": {
+      "ym": "2025-02",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-02.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-03": {
+      "ym": "2025-03",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-03.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-04": {
+      "ym": "2025-04",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-04.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-05": {
+      "ym": "2025-05",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-05.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-06": {
+      "ym": "2025-06",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-06.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-07": {
+      "ym": "2025-07",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-07.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-08": {
+      "ym": "2025-08",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-08.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-09": {
+      "ym": "2025-09",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-09.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-10": {
+      "ym": "2025-10",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-10.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-11": {
+      "ym": "2025-11",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-11.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2025-12": {
+      "ym": "2025-12",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-12.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    },
+    "2026-01": {
+      "ym": "2026-01",
+      "path": "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2026-01.zip",
+      "exists": true,
+      "download_error": null,
+      "first_ts": null,
+      "last_ts": null,
+      "n_rows": 0
+    }
+  },
+  "identical_failure_sets": true,
+  "verdict": "SPOT_HORIZON_LOGIC_BUG_CONFIRMED",
+  "verdict_reason": "24h and 48h failure sets are identical; horizon-specific target_ts not affecting result"
+}
