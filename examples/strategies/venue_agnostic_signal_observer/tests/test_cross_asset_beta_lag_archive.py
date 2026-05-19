@@ -1425,14 +1425,13 @@ class TestNullEngineSelection:
         assert "+ 1" in source  # p-value correction
 
     def test_gpu_cuda_check_functional(self):
-        """check_cuda_available from permutation_null_gpu is importable."""
+        """check_cuda_available from permutation_null_gpu is importable and returns valid tuple."""
         from examples.strategies.venue_agnostic_signal_observer.permutation_null_gpu import (
             check_cuda_available,
         )
         ok, reason = check_cuda_available("cuda:0")
-        # On this machine CUDA is not available
-        assert not ok
-        assert "unavailable" in reason.lower() or "not_installed" in reason.lower()
+        assert isinstance(ok, bool)
+        assert isinstance(reason, str) and len(reason) > 0
 
     def test_cell_verdict_independent_of_null_engine(self):
         """Cell verdict gates are unchanged regardless of null engine."""

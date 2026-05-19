@@ -243,37 +243,54 @@ def main() -> None:
     print(f"Calendar: {CALENDAR_START} to {CALENDAR_END}")
     print(f"========================================\n")
 
-    run_id = create_run_id("cross_asset_beta_lag_archive")
-    output_dir = Path(args.out) / run_id
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     # ── Resume logic ──────────────────────────────────────────────────────────
     completed_phases: List[str] = []
     resume_phase: Optional[str] = None
     prefilter_data_reloaded = False
+    run_id: str = ""
+    output_dir: Path = Path(args.out)
 
     if args.resume:
-        print(f"\n[Resume] Checking checkpoint state in {output_dir}...")
-        is_valid, reason = validate_checkpoint_config(
-            output_dir,
-            git_sha=git_sha,
-            precommitment_sha="",
-            null_engine=null_engine,
-        )
-        if is_valid:
-            resume_phase = compute_resume_phase(output_dir)
-            if resume_phase:
-                manifest = load_checkpoint_manifest(output_dir)
-                if manifest:
-                    completed_phases = manifest.get("completed_phases", [])
-                print(f"  Resume phase: {resume_phase}")
-                print(f"  Completed phases: {completed_phases}")
-            else:
-                print("  No valid checkpoint found — starting fresh.")
-        else:
-            print(f"  Checkpoint config mismatch: {reason}")
-            print("  Starting fresh.")
+        # Find the most recent existing run directory with a valid checkpoint
+        base = Path(args.out)
+        if base.exists():
+            candidate_dirs = sorted(
+                [d for d in base.iterdir() if d.is_dir()],
+                key=lambda d: d.name,
+                reverse=True,
+            )
+            for cand in candidate_dirs:
+                is_valid, reason = validate_checkpoint_config(
+                    cand,
+                    git_sha=git_sha,
+                    precommitment_sha="",
+                    null_engine=null_engine,
+                )
+                if is_valid:
+                    rp = compute_resume_phase(cand)
+                    if rp:
+                        output_dir = cand
+                        run_id = cand.name
+                        resume_phase = rp
+                        manifest = load_checkpoint_manifest(cand)
+                        if manifest:
+                            completed_phases = manifest.get("completed_phases", [])
+                        print(f"\n[Resume] Found valid checkpoint in {output_dir}")
+                        print(f"  Resume phase: {resume_phase}")
+                        print(f"  Completed phases: {completed_phases}")
+                        break
+                    else:
+                        print(f"\n[Resume] {cand.name}: manifest exists but no resumable phase.")
+        if not run_id:
+            print(f"\n[Resume] No valid checkpoint found in {args.out} — starting fresh.")
             resume_phase = None
+            run_id = create_run_id("cross_asset_beta_lag_archive")
+            output_dir = Path(args.out) / run_id
+    else:
+        run_id = create_run_id("cross_asset_beta_lag_archive")
+        output_dir = Path(args.out) / run_id
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Phase 0: Validate precommitment
     print("[Phase 0] Validating precommitment...")

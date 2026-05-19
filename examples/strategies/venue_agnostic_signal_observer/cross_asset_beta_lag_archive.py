@@ -1185,7 +1185,9 @@ def validate_checkpoint_config(
     if manifest is None:
         return False, "no_checkpoint_manifest"
 
-    expected_id = _sha256_json(_build_checkpoint_config_identity())
+    config_id = _build_checkpoint_config_identity()
+    config_id["null_engine"] = null_engine
+    expected_id = _sha256_json(config_id)
     stored_id = manifest.get("config_identity_sha256", "")
     if stored_id != expected_id:
         return False, f"checkpoint_config_mismatch:{stored_id[:8]}.._vs_{expected_id[:8]}.."
