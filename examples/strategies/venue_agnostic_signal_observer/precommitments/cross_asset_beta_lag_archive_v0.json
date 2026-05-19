@@ -1,0 +1,57 @@
+{
+  "schema_version": "cross_asset_beta_lag_archive_precommitment_v1",
+  "study_id": "cross_asset_beta_lag_archive_v0",
+  "date_frozen": "2026-05-19",
+  "hypothesis": "BTC/ETH spot stress impulses lead delayed repricing in higher-beta spot assets (SOL, LINK, DOGE, AVAX) over 30s to 5m forward horizons.",
+  "structural_change_rationale": "distinct from rejected same-asset cross-venue lead-lag and rejected derivatives-source spot lead-lag: source/target differ, stress is BTC/ETH spot impulse, target is beta-lag, stress windows are deterministic archive events",
+  "data_source": "binance_vision_public_archive_only",
+  "no_live_endpoints": true,
+  "no_authenticated_endpoints": true,
+  "no_exchange_credentials": true,
+  "source_symbols": ["BTCUSDT", "ETHUSDT"],
+  "target_symbols": ["SOLUSDT", "LINKUSDT", "DOGEUSDT", "AVAXUSDT"],
+  "venue": "binance_spot_archive",
+  "calendar_start": "2024-01-01T00:00:00Z",
+  "calendar_end": "2026-04-30T23:59:59Z",
+  "min_calendar_days": 90,
+  "stress_rules": [
+    {"name": "30s_30bps", "lookback_seconds": 30, "threshold_bps": 30.0},
+    {"name": "60s_50bps", "lookback_seconds": 60, "threshold_bps": 50.0}
+  ],
+  "stress_dedup_cooldown_seconds": 30,
+  "independent_window_separation_seconds": 1800,
+  "entry_delay_seconds": 1,
+  "cost_model": {
+    "fee_bps": 40,
+    "slippage_bps": 5,
+    "quote_mismatch_buffer_bps": 5,
+    "total_floor_bps": 50
+  },
+  "family_dimensions": {
+    "source_assets": ["BTC", "ETH"],
+    "target_assets": ["SOL", "LINK", "DOGE", "AVAX"],
+    "stress_windows_seconds": [30, 60],
+    "directions": ["bullish", "bearish"],
+    "forward_horizons_ms": [30000, 60000, 300000]
+  },
+  "primary_family_size": 96,
+  "min_events_per_cell": 50,
+  "min_events_holdout": 20,
+  "min_independent_windows": 20,
+  "train_frac": 0.7,
+  "seed": 42,
+  "null_iterations": 1000,
+  "fdr_method": "by",
+  "fdr_alpha": 0.05,
+  "economic_gates": {
+    "min_event_count": 50,
+    "mean_net_bps_gt": 0,
+    "median_net_bps_gt": 0,
+    "win_rate_ge": 0.55,
+    "worst_decile_net_bps_gt": -50,
+    "baseline_delta_bps_ge": 10,
+    "null_p_le": 0.05
+  },
+  "bearish_execution_status": "diagnostic_only_spot_short_not_assumed",
+  "forbidden_verdicts": ["TRADE_READY", "EXECUTION_READY", "BOT_READY"]
+}
