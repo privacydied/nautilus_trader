@@ -764,6 +764,90 @@ def run_null_test(
         "observed_mean": observed_mean,
         "count_extreme": count_extreme,
         "reason": None,
+        "engine": "cpu",
+    }
+
+
+def run_null_test_gpu(
+    event_net_returns: list,
+    *,
+    iterations: int = NULL_ITERATIONS,
+    seed: int = SEED,
+    device: str = "cuda:0",
+    batch_size: int = 4096,
+) -> dict[str, Any]:
+    """GPU-accelerated circular-shift null test. Semantically identical to CPU run_null_test.
+
+    Uses torch to batch random circular shifts of the return vector.
+    Conservative p-value with +1 correction preserved.
+    Seed stability: random offsets precomputed from Python stdlib random.Random,
+    identical to the CPU path for a given seed.
+    """
+    import torch  # noqa: PLC0415
+
+    if len(event_net_returns) < 2:
+        return {
+            "p_value": None,
+            "null_mean": None,
+            "null_std": None,
+            "iterations": 0,
+            "reason": "insufficient_events",
+            "engine": "gpu",
+            "device": device,
+        }
+
+    dev = torch.device(device)
+    n = len(event_net_returns)
+    returns = torch.tensor(event_net_returns, dtype=torch.float64, device=dev)
+    observed_mean = returns.mean().item()
+
+    # Precompute shift offsets from Python stdlib random — identical to CPU path
+    rng = random.Random(seed)
+    all_offsets = torch.tensor(
+        [rng.randint(0, n - 1) for _ in range(iterations)],
+        dtype=torch.int64, device=dev,
+    )
+
+    # Batch circular shift: shifted[i, j] = returns[(j + offset[i]) % n]
+    indices = torch.arange(n, device=dev).unsqueeze(0).expand(iterations, n)
+    shifted_indices = (indices + all_offsets.unsqueeze(1)) % n
+
+    count_extreme = 0
+    null_means_list: list[float] = []
+
+    for chunk_start in range(0, iterations, batch_size):
+        chunk_end = min(chunk_start + batch_size, iterations)
+        chunk_indices = shifted_indices[chunk_start:chunk_end]  # [chunk, n]
+        chunk_shifted = returns[chunk_indices]  # [chunk, n]
+        chunk_means = chunk_shifted.mean(dim=1)  # [chunk]
+
+        # Floating-point tolerance: circular shift preserves the multiset,
+        # so any mean deviation from observed_mean is pure fp noise (~1e-16).
+        # Use a tiny epsilon to avoid miscounting due to summation order.
+        extreme_mask = chunk_means >= (observed_mean - 1e-12)
+        count_extreme += int(extreme_mask.sum().item())
+        null_means_list.extend(chunk_means.cpu().tolist())
+
+        del chunk_indices, chunk_shifted, chunk_means
+
+    # Conservative p-value
+    p_value = (count_extreme + 1) / (iterations + 1)
+
+    import statistics as _st
+    null_mean = _st.mean(null_means_list)
+    null_std = _st.stdev(null_means_list) if len(null_means_list) > 1 else 0.0
+
+    return {
+        "p_value": p_value,
+        "null_mean": null_mean,
+        "null_std": null_std,
+        "iterations": iterations,
+        "observed_mean": observed_mean,
+        "count_extreme": count_extreme,
+        "reason": None,
+        "engine": "gpu",
+        "device": device,
+        "batch_size": batch_size,
     }
 
 
@@ -872,6 +956,241 @@ def reconcile_event_vector(cell_stats: CellStats, raw_events: List[TickForwardRe
         return False
 
     return True
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint / resume support
+# ---------------------------------------------------------------------------
+
+
+# Phases tracked for resume (order matters — resume picks the latest complete)
+CHECKPOINT_PHASES: List[str] = [
+    "01_availability",
+    "02_kline_prefilter",
+    "03_aggtrades",
+    "04_stress_labels",
+    "05_independent_windows",
+    "06_coverage",
+    "07_forward_returns",
+    "08_cell_results",
+    "09_baseline",
+    "10_null",
+    "11_fdr",
+    "12_holdout",
+]
+
+# Config fields whose values must match across resume
+_CHECKPOINT_CONFIG_FIELDS: List[str] = [
+    "study_id",
+    "source_symbols",
+    "target_symbols",
+    "calendar_start",
+    "calendar_end",
+    "stress_rules",
+    "stress_dedup_cooldown_seconds",
+    "independent_window_separation_seconds",
+    "entry_delay_seconds",
+    "cost_total_bps",
+    "horizons_ms",
+    "stress_window_seconds",
+    "directions",
+    "family_size",
+    "seed",
+    "null_iterations",
+    "fdr_alpha",
+    "null_alpha",
+    "min_events_per_cell",
+    "min_events_holdout",
+    "win_rate_threshold",
+    "worst_decile_threshold",
+    "baseline_delta_bps",
+    "min_independent_windows",
+    "train_frac",
+    "null_engine",
+    "null_device",
+    "null_batch_size",
+]
+
+
+def _build_checkpoint_config_identity() -> Dict[str, Any]:
+    """Return a deterministic dict of frozen config values for checkpoint validation."""
+    return {
+        "study_id": "cross_asset_beta_lag_archive_v0",
+        "source_symbols": sorted(SOURCE_SYMBOLS),
+        "target_symbols": sorted(TARGET_SYMBOLS),
+        "calendar_start": CALENDAR_START,
+        "calendar_end": CALENDAR_END,
+        "stress_rules": sorted(
+            [{"name": r[0], "lookback_seconds": r[1], "threshold_bps": r[2]}
+             for r in STRESS_RULES],
+            key=lambda x: x["name"],
+        ),
+        "stress_dedup_cooldown_seconds": STRESS_DEDUP_COOLDOWN_NS // 1_000_000_000,
+        "independent_window_separation_seconds": INDEPENDENT_WINDOW_SEPARATION_NS // 1_000_000_000,
+        "entry_delay_seconds": ENTRY_DELAY_NS // 1_000_000_000,
+        "cost_total_bps": TOTAL_COST_BPS,
+        "horizons_ms": sorted(HORIZONS_MS),
+        "stress_window_seconds": sorted(STRESS_WINDOW_SECONDS),
+        "directions": sorted(DIRECTIONS),
+        "family_size": FAMILY_SIZE,
+        "seed": SEED,
+        "null_iterations": NULL_ITERATIONS,
+        "fdr_alpha": FDR_ALPHA,
+        "null_alpha": NULL_ALPHA,
+        "min_events_per_cell": MIN_EVENTS_PER_CELL,
+        "min_events_holdout": MIN_EVENTS_HOLDOUT,
+        "win_rate_threshold": WIN_RATE_THRESHOLD,
+        "worst_decile_threshold": WORST_DECILE_THRESHOLD,
+        "baseline_delta_bps": BASELINE_DELTA_BPS,
+        "min_independent_windows": MIN_INDEPENDENT_WINDOWS,
+        "train_frac": TRAIN_FRAC,
+        "null_engine": "cpu",
+        "null_device": "cpu",
+        "null_batch_size": 0,
+    }
+
+
+def _checkpoint_path(output_dir: Path, phase: str) -> Path:
+    return output_dir / f"checkpoint_phase_{phase}.json"
+
+
+def _checkpoint_manifest_path(output_dir: Path) -> Path:
+    return output_dir / "checkpoint_manifest.json"
+
+
+def write_checkpoint(
+    output_dir: Path,
+    phase: str,
+    payload: Dict[str, Any],
+    *,
+    git_sha: str,
+    precommitment_sha: str,
+    null_engine: str = "cpu",
+    null_device: str = "cpu",
+    null_batch_size: int = 0,
+) -> None:
+    """Atomically write a checkpoint artifact with metadata."""
+    config_id = _build_checkpoint_config_identity()
+    config_id["null_engine"] = null_engine
+    config_id["null_device"] = null_device
+    config_id["null_batch_size"] = null_batch_size
+
+    artifact = {
+        "phase": phase,
+        "study_id": "cross_asset_beta_lag_archive_v0",
+        "git_sha": git_sha,
+        "precommitment_sha": precommitment_sha,
+        "config_identity": config_id,
+        "config_identity_sha256": _sha256_json(config_id),
+        "timestamp_utc": _now_utc_iso(),
+        "null_engine": null_engine,
+        "null_device": null_device,
+        "payload": payload,
+    }
+    path = _checkpoint_path(output_dir, phase)
+    atomic_write_json(path, artifact)
+
+
+def load_checkpoint_manifest(output_dir: Path) -> Optional[Dict[str, Any]]:
+    """Load the checkpoint manifest if it exists and is valid JSON."""
+    path = _checkpoint_manifest_path(output_dir)
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text("utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def write_checkpoint_manifest(
+    output_dir: Path,
+    completed_phases: List[str],
+    *,
+    git_sha: str,
+    precommitment_sha: str,
+    null_engine: str = "cpu",
+) -> None:
+    """Write the checkpoint manifest tracking completed phases."""
+    config_id = _build_checkpoint_config_identity()
+    config_id["null_engine"] = null_engine
+
+    manifest = {
+        "study_id": "cross_asset_beta_lag_archive_v0",
+        "git_sha": git_sha,
+        "precommitment_sha": precommitment_sha,
+        "config_identity_sha256": _sha256_json(config_id),
+        "null_engine": null_engine,
+        "completed_phases": completed_phases,
+        "timestamp_utc": _now_utc_iso(),
+    }
+    path = _checkpoint_manifest_path(output_dir)
+    atomic_write_json(path, manifest)
+
+
+def compute_resume_phase(output_dir: Path) -> Optional[str]:
+    """Determine which phase to resume from.
+
+    Returns the name of the latest completed phase, or None if no valid
+    checkpoint exists. Validates config identity.
+    """
+    manifest = load_checkpoint_manifest(output_dir)
+    if manifest is None:
+        return None
+
+    # Validate config identity
+    expected_id = _sha256_json(_build_checkpoint_config_identity())
+    stored_id = manifest.get("config_identity_sha256", "")
+    if stored_id != expected_id:
+        return None  # Config mismatch — caller should reject
+
+    completed = manifest.get("completed_phases", [])
+    if not completed:
+        return None
+
+    # Validate each completed checkpoint file exists
+    valid_phases: List[str] = []
+    for phase in completed:
+        cp_path = _checkpoint_path(output_dir, phase)
+        if cp_path.exists():
+            try:
+                data = json.loads(cp_path.read_text("utf-8"))
+                cp_cfg = data.get("config_identity_sha256", "")
+                if cp_cfg == expected_id:
+                    valid_phases.append(phase)
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    if not valid_phases:
+        return None
+
+    # Return the latest completed phase
+    # Sort by order in CHECKPOINT_PHASES
+    phase_order = {p: i for i, p in enumerate(CHECKPOINT_PHASES)}
+    valid_phases.sort(key=lambda p: phase_order.get(p, len(CHECKPOINT_PHASES)))
+    return valid_phases[-1]
+
+
+def validate_checkpoint_config(
+    output_dir: Path,
+    *,
+    git_sha: str,
+    precommitment_sha: str,
+    null_engine: str = "cpu",
+) -> Tuple[bool, str]:
+    """Validate that existing checkpoint matches requested config.
+
+    Returns (is_valid, reason_string).
+    """
+    manifest = load_checkpoint_manifest(output_dir)
+    if manifest is None:
+        return False, "no_checkpoint_manifest"
+
+    expected_id = _sha256_json(_build_checkpoint_config_identity())
+    stored_id = manifest.get("config_identity_sha256", "")
+    if stored_id != expected_id:
+        return False, f"checkpoint_config_mismatch:{stored_id[:8]}.._vs_{expected_id[:8]}.."
+
+    return True, "valid"
 
 
 # ---------------------------------------------------------------------------

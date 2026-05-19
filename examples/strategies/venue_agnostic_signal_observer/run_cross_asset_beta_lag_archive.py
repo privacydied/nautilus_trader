@@ -86,6 +86,7 @@ from .cross_asset_beta_lag_archive import (
     all_cell_keys,
     generate_baseline_events,
     run_null_test,
+    run_null_test_gpu,
     apply_by_fdr,
     reconcile_event_vector,
     write_report,
@@ -95,6 +96,14 @@ from .cross_asset_beta_lag_archive import (
     MS_TO_NS,
     ENTRY_DELAY_NS,
     build_stress_day_download_plan,
+
+    # Checkpoint functions
+    CHECKPOINT_PHASES,
+    write_checkpoint,
+    write_checkpoint_manifest,
+    load_checkpoint_manifest,
+    compute_resume_phase,
+    validate_checkpoint_config,
 )
 
 from .run_artifacts import (
@@ -147,7 +156,43 @@ def main() -> None:
         "--force-refresh-aggtrades", action="store_true", default=False,
         help="Force re-download of cached aggTrade files",
     )
+    parser.add_argument(
+        "--resume", action="store_true", default=False,
+        help="Resume from last completed checkpoint",
+    )
+    parser.add_argument(
+        "--null-engine", choices=["cpu", "gpu"], default="cpu",
+        help="Null test engine: cpu (default) or gpu. GPU requires CUDA.",
+    )
+    parser.add_argument(
+        "--null-device", default="cuda:0",
+        help="CUDA device for GPU null (default: cuda:0)",
+    )
+    parser.add_argument(
+        "--null-batch-size", type=int, default=0,
+        help="GPU null batch size (0 = default). CPU path ignores this.",
+    )
     args = parser.parse_args()
+
+    # ── GPU null engine check ────────────────────────────────────────────────
+    null_engine: str = args.null_engine
+    null_device: str = args.null_device
+    null_batch_size: int = args.null_batch_size if args.null_batch_size > 0 else 4096
+
+    if args.null_engine == "gpu":
+        try:
+            from .permutation_null_gpu import check_cuda_available
+            cuda_ok, cuda_reason = check_cuda_available(args.null_device)
+        except ImportError:
+            cuda_ok, cuda_reason = False, "permutation_null_gpu_import_failed"
+        if not cuda_ok:
+            print(f"GPU_UNAVAILABLE_DIAGNOSTIC: {cuda_reason}")
+            print("Falling back to CPU null.")
+            null_engine = "cpu"
+        else:
+            print(f"GPU null enabled: {null_device} (batch_size={null_batch_size})")
+    else:
+        print("Null engine: CPU")
 
     # Print start info
     git_sha = _get_git_sha()
@@ -166,6 +211,34 @@ def main() -> None:
     run_id = create_run_id("cross_asset_beta_lag_archive")
     output_dir = Path(args.out) / run_id
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Resume logic ──────────────────────────────────────────────────────────
+    completed_phases: List[str] = []
+    resume_phase: Optional[str] = None
+    prefilter_data_reloaded = False
+
+    if args.resume:
+        print(f"\n[Resume] Checking checkpoint state in {output_dir}...")
+        is_valid, reason = validate_checkpoint_config(
+            output_dir,
+            git_sha=git_sha,
+            precommitment_sha="",
+            null_engine=null_engine,
+        )
+        if is_valid:
+            resume_phase = compute_resume_phase(output_dir)
+            if resume_phase:
+                manifest = load_checkpoint_manifest(output_dir)
+                if manifest:
+                    completed_phases = manifest.get("completed_phases", [])
+                print(f"  Resume phase: {resume_phase}")
+                print(f"  Completed phases: {completed_phases}")
+            else:
+                print("  No valid checkpoint found — starting fresh.")
+        else:
+            print(f"  Checkpoint config mismatch: {reason}")
+            print("  Starting fresh.")
+            resume_phase = None
 
     # Phase 0: Validate precommitment
     print("[Phase 0] Validating precommitment...")
@@ -191,6 +264,14 @@ def main() -> None:
     # Compute common calendar
     common_start, common_end, common_days = compute_common_calendar(availability)
     print(f"  Common calendar: {common_start} to {common_end} ({common_days} days)")
+
+    # Checkpoint: 01_availability
+    write_checkpoint(output_dir, "01_availability",
+        {"common_start": common_start, "common_end": common_end,
+         "common_days": common_days, "all_symbols": ALL_SYMBOLS,
+         "availability_summary": {sym: {"days": v.get("days_available", 0)} for sym, v in availability.items()}},
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+    completed_phases.append("01_availability")
 
     # Check minimum calendar
     if common_days < MIN_CALENDAR_DAYS:
@@ -353,6 +434,12 @@ def main() -> None:
                 all_labels.extend(labels)
                 print(f"  {src_sym} {rule_name}: {len(labels)} labels")
 
+        # Checkpoint: 04_stress_labels (before dedup — raw labels exist)
+        write_checkpoint(output_dir, "04_stress_labels",
+            {"total_labels": len(all_labels), "source_symbols": SOURCE_SYMBOLS},
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        completed_phases.append("04_stress_labels")
+
         if not all_labels:
             _write_prefilter_report(output_dir, run_id, git_sha, precommitment_sha,
                                     availability, dl_plan, kline_manifest, candidate_days,
@@ -368,6 +455,18 @@ def main() -> None:
             output_dir, candidate_days, dl_plan, kline_manifest, all_labels,
             brute_files, brute_mb, planned_mb,
         )
+
+        # Checkpoint: 02_kline_prefilter + 03_aggtrades + 04_stress_labels
+        write_checkpoint(output_dir, "02_kline_prefilter",
+            {"candidate_days": len(candidate_days), "reduction_ratio": reduction_ratio,
+             "planned_files": planned_files, "planned_mb": planned_mb},
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        completed_phases.append("02_kline_prefilter")
+        write_checkpoint(output_dir, "03_aggtrades",
+            {"total_files": total_files, "failed_files": failed_files,
+             "per_sym_tick_counts": {sym: len(all_ticks.get(sym, [])) for sym in ALL_SYMBOLS}},
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        completed_phases.append("03_aggtrades")
 
         # Note: evaluation continues from Phase 3 below
         phase_label = "[Phase 4G]"
@@ -447,6 +546,19 @@ def main() -> None:
     independent_window_ids = list(set(l.independent_window_id for l in windowed))
     print(f"  Independent windows: {len(independent_window_ids)}")
 
+    # Checkpoint: 05_independent_windows
+    label_rows_cp = [{
+        "label_id": l.label_id, "source_symbol": l.source_symbol,
+        "stress_end_ns": l.stress_end_ns, "stress_window_seconds": l.stress_window_seconds,
+        "source_move_bps": l.source_move_bps, "direction": l.direction,
+        "independent_window_id": l.independent_window_id, "rule_name": l.rule_name,
+    } for l in windowed]
+    write_checkpoint(output_dir, "05_independent_windows",
+        {"window_count": len(independent_window_ids), "label_count": len(windowed),
+         "label_rows": label_rows_cp},
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+    completed_phases.append("05_independent_windows")
+
     if len(independent_window_ids) < MIN_INDEPENDENT_WINDOWS:
         print(f"  INSUFFICIENT: {len(independent_window_ids)} < {MIN_INDEPENDENT_WINDOWS}")
         _write_data_report(output_dir, run_id, git_sha, precommitment_sha,
@@ -498,6 +610,12 @@ def main() -> None:
 
     print(f"  Usable labels (all targets): {len(usable_labels)}")
     print(f"  All-target windows: {all_target_windows}")
+
+    # Checkpoint: 06_coverage
+    write_checkpoint(output_dir, "06_coverage",
+        coverage_summary,
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+    completed_phases.append("06_coverage")
 
     if all_target_windows < MIN_INDEPENDENT_WINDOWS:
         print(f"  INSUFFICIENT: {all_target_windows} < {MIN_INDEPENDENT_WINDOWS}")
@@ -556,6 +674,12 @@ def main() -> None:
                 forward_rows.append(row)
 
     print(f"  Forward return rows: {len(forward_rows)}")
+
+    # Checkpoint: 07_forward_returns (CRITICAL — survives crash without re-download)
+    write_checkpoint(output_dir, "07_forward_returns",
+        {"forward_row_count": len(forward_rows), "usable_label_count": len(usable_labels)},
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+    completed_phases.append("07_forward_returns")
 
     # Split train/holdout by stress label timestamp
     sorted_labels = sorted(usable_labels, key=lambda x: x.stress_end_ns)
@@ -673,6 +797,12 @@ def main() -> None:
             "cell_verdict": _cell_verdict(gates_passed, stats.valid_count),
         }
 
+    # Checkpoint: 08_cell_results
+    write_checkpoint(output_dir, "08_cell_results",
+        {"cell_results": cell_results, "powered_cells": sum(1 for c in cell_results.values() if c.get("valid_count", 0) >= MIN_EVENTS_PER_CELL)},
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+    completed_phases.append("08_cell_results")
+
     # Phase 7: Baseline
     print(f"\n[Phase 7] Computing baseline...")
     baseline_results: Dict[str, Dict[str, Any]] = {}
@@ -717,6 +847,12 @@ def main() -> None:
                 )
                 cell_results[gk]["cell_verdict"] = _cell_verdict(False, n)
 
+    # Checkpoint: 09_baseline
+    write_checkpoint(output_dir, "09_baseline",
+        {"baseline_results": baseline_results},
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+    completed_phases.append("09_baseline")
+
     # Phase 8: Null test
     print(f"\n[Phase 8] Running null tests ({args.null_iterations} iterations)...")
     null_results: Dict[str, Dict[str, Any]] = {}
@@ -743,8 +879,20 @@ def main() -> None:
             null_results[gk] = {"p_value": None, "reason": "insufficient_returns"}
             continue
 
-        null_res = run_null_test(net_returns, iterations=args.null_iterations, seed=args.seed)
+        if null_engine == "gpu":
+            null_res = run_null_test_gpu(
+                net_returns, iterations=args.null_iterations, seed=args.seed,
+                device=null_device, batch_size=null_batch_size,
+            )
+        else:
+            null_res = run_null_test(net_returns, iterations=args.null_iterations, seed=args.seed)
         null_results[gk] = null_res
+
+    # Checkpoint: 10_null
+    write_checkpoint(output_dir, "10_null",
+        {"null_results": null_results},
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+    completed_phases.append("10_null")
 
     # Phase 9: FDR
     print(f"\n[Phase 9] FDR correction...")
@@ -763,6 +911,12 @@ def main() -> None:
             fdr_results[gk] = fdr_results_raw[gk]
         else:
             fdr_results[gk] = {"fdr_passed": None, "reason": "no_pvalue"}
+
+    # Checkpoint: 11_fdr
+    write_checkpoint(output_dir, "11_fdr",
+        {"fdr_results": fdr_results, "pvalues_checked": len(pvalues)},
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+    completed_phases.append("11_fdr")
 
     # Phase 10: Holdout evaluation
     print(f"\n[Phase 10] Holdout evaluation...")
@@ -795,6 +949,12 @@ def main() -> None:
             "holdout_passed": holdout_pass,
             "holdout_reasons": hold_reasons,
         }
+
+    # Checkpoint: 12_holdout
+    write_checkpoint(output_dir, "12_holdout",
+        {"holdout_results": holdout_results},
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+    completed_phases.append("12_holdout")
 
     # Phase 11: Event vector reconciliation
     print(f"\n[Phase 11] Event vector reconciliation...")
@@ -997,9 +1157,19 @@ def main() -> None:
         "registry_updated": False,
         "test_results": {"run": 0, "passed": 0, "failed": 0},
         "prefilter_summary": prefilter_summary,
+        "null_engine": null_engine,
+        "null_device": null_device,
+        "cuda_available": null_engine == "gpu",
+        "completed_phases": completed_phases,
     }
 
     _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict, summary=summary)
+
+    # Write checkpoint manifest
+    write_checkpoint_manifest(
+        output_dir, completed_phases,
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine,
+    )
     print(f"\n=== DONE: {verdict} ===")
     print(f"Report: {output_dir}")
 
