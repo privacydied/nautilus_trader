@@ -255,11 +255,11 @@ def fetch_geckoterminal_pool_ohlcv(
         for o in ohlcv_list:
             result.append({
                 "timestamp": int(o.get("timestamp", 0)),
-                "open": float(o.get("open", 0)),
-                "high": float(o.get("high", 0)),
-                "low": float(o.get("low", 0)),
-                "close": float(o.get("close", 0)),
-                "volume": float(o.get("volume", 0)),
+                "open": float(o["open"]) if o.get("open") is not None else 0.0,
+                "high": float(o["high"]) if o.get("high") is not None else 0.0,
+                "low": float(o["low"]) if o.get("low") is not None else 0.0,
+                "close": float(o["close"]) if o.get("close") is not None else 0.0,
+                "volume": float(o["volume"]) if o.get("volume") is not None else 0.0,
             })
         return result, None
     except Exception as exc:

@@ -1,0 +1,49 @@
+{
+  "run_id": "polymarket_btc_price_target_liquidity_probe_v0_20260518T222721_d0cecd83",
+  "git_sha": "a5e32d51521812ecbaafa9bb9259e8476a5cc283",
+  "git_branch": "feat/polymarket-btc-price-target-liquidity-v0",
+  "dirty": true,
+  "selected_data_path": "PUBLIC_REST_FALLBACK_USED",
+  "nautilus_components_used": [],
+  "public_rest_components_used": [
+    "gamma-api.polymarket.com",
+    "clob.polymarket.com/book",
+    "api.binance.com"
+  ],
+  "start_utc": "2026-05-18T22:27:21.628180+00:00",
+  "end_utc": "2026-05-18T22:29:21.908534+00:00",
+  "requested_duration_seconds": 120,
+  "actual_duration_seconds": 120.28,
+  "poll_interval_seconds": 5,
+  "btc_proxy_venue": "binance",
+  "btc_proxy_symbol": "BTC/USDT",
+  "total_markets_discovered": 100,
+  "btc_price_target_markets": 1,
+  "btc_updown_markets_excluded": 0,
+  "btc_other_markets_excluded": 0,
+  "non_btc_markets_excluded": 99,
+  "markets_strike_extracted": 1,
+  "markets_sampled": 1,
+  "valid_two_sided_samples": 0,
+  "one_sided_or_empty": 48,
+  "primary_subset_count": 0,
+  "near_strike_near_expiry_count": 0,
+  "convex_danger_zone_count": 0,
+  "spread_status": null,
+  "depth_status": null,
+  "two_sided_status": null,
+  "median_spread_cents": null,
+  "p95_spread_cents": null,
+  "median_top_depth_usd": null,
+  "two_sided_rate": null,
+  "tte_rollup": {
+    ">15m": 48
+  },
+  "distance_rollup": {
+    "deep_below_strike": 48
+  },
+  "final_phase_0_verdict": "NEEDS_MORE_DATA",
+  "verdict_reason": "Insufficient primary subset samples: 0 < 5 minimum",
+  "v1_recommendation": "V1_BLOCKED_BY_INSUFFICIENT_DATA",
+  "include_raw_payloads": false
+}

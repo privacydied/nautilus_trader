@@ -282,6 +282,8 @@ class DerivativesImpulseGenerator:
         ref_idx = ref_idx + 1 if ref_idx + 1 <= idx else idx
         ref_price = trades[ref_idx].price
         curr_price = trades[idx].price
+        if ref_price <= 0 or not math.isfinite(ref_price) or not math.isfinite(curr_price):
+            return "long"  # default when prices are unreliable
         return "long" if curr_price >= ref_price else "short"
 
 

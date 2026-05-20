@@ -21,7 +21,10 @@ from __future__ import annotations
 
 import math
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import torch
 
 from .tick_models import TickSignalEvent, TradeTickLite
 from .trade_flow_impulse import (

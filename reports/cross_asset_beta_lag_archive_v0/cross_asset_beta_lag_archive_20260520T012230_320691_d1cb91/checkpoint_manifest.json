@@ -1,0 +1,22 @@
+{
+  "study_id": "cross_asset_beta_lag_archive_v0",
+  "git_sha": "acec8a011774bed7492e754c6e494a23eabf60be",
+  "precommitment_sha": "74eac2f485de2fbc93a09dfd8a9a5b34e1ae23b16be2fe44de0d602010cdf4a7",
+  "config_identity_sha256": "4ac413e9fd7f45e014971df5cb7605878f80e4fac2b7e26853db72c7944d2197",
+  "null_engine": "cpu",
+  "completed_phases": [
+    "01_availability",
+    "04_stress_labels",
+    "02_kline_prefilter",
+    "03_aggtrades",
+    "05_independent_windows",
+    "06_coverage",
+    "07_forward_returns",
+    "08_cell_results",
+    "09_baseline",
+    "10_null",
+    "11_fdr",
+    "12_holdout"
+  ],
+  "timestamp_utc": "2026-05-20T01:59:17.357564+00:00"
+}

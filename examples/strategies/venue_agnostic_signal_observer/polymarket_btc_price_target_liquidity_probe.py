@@ -814,7 +814,7 @@ async def poll_btc_binance_proxy(http: httpx.AsyncClient) -> BtcProxyTick:
         resp = await http.get(BINANCE_TICKER_URL, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
-            price = float(data.get("price", 0))
+            price = float(data["price"]) if data.get("price") is not None else 0
             return BtcProxyTick(ts_event=ts, price=price)
         return BtcProxyTick(
             ts_event=ts, price=None, error=f"HTTP {resp.status_code}",

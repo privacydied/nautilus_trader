@@ -564,10 +564,10 @@ def compute_kline_candidate_days(
             reason_parts: List[str] = []
 
             for k in day_bars:
-                o = float(k.get("open", 0))
-                h = float(k.get("high", 0))
-                l_val = float(k.get("low", 0))
-                c = float(k.get("close", 0))
+                o = float(k["open"]) if k.get("open") is not None else 0.0
+                h = float(k["high"]) if k.get("high") is not None else 0.0
+                l_val = float(k["low"]) if k.get("low") is not None else 0.0
+                c = float(k["close"]) if k.get("close") is not None else 0.0
 
                 if o <= 0:
                     continue

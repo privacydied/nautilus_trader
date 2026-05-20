@@ -1,0 +1,86 @@
+{
+  "study_id": "cross-exchange-funding-dispersion-carry-v1",
+  "schema_version": "1",
+  "git_sha": "27119f35c7f07b41c5e3212441ada9b6661821fa",
+  "seed": 42,
+  "generated_at": "2026-05-18T20:23:19.090800+00:00",
+  "python_version": "3.13.2",
+  "run_args": {},
+  "window_start": "1704067200000000000",
+  "window_end": "1748707200000000000",
+  "split_date": "1734076800000000000",
+  "content_hashes": {
+    "binance_BTC": "d81a3adeb3b35951097dd403da44fa4b29b5617f90c7cdfd3b8163d817e1e39d",
+    "binance_ETH": "1971db3ce1a44792cf794fe668da53676fc4b430237d2e64c8bfc412055ec368",
+    "bybit_BTC": "8c0e37af5e13441136a3a1492bcc737cef4a5df318df6e4a0135742232f2363a",
+    "bybit_ETH": "7224b3e477a6709821bb676b75b3887e776b8843a9fd6a98a275f0f9e7c5096b"
+  },
+  "funding_rate_unit_detected": {
+    "binance_BTC": "decimal",
+    "binance_ETH": "decimal",
+    "bybit_BTC": "decimal",
+    "bybit_ETH": "decimal"
+  },
+  "funding_rate_unit_normalized_to": {
+    "binance_BTC": "bps_per_settlement",
+    "binance_ETH": "bps_per_settlement",
+    "bybit_BTC": "bps_per_settlement",
+    "bybit_ETH": "bps_per_settlement"
+  },
+  "dropped_unaligned_settlements": 290,
+  "truncated_events": 0,
+  "overlapping_events_suppressed": 0,
+  "gate_a_output": [
+    {
+      "asset": "BTC",
+      "threshold_bps": 5,
+      "event_count": 0,
+      "frequency": 0.0
+    },
+    {
+      "asset": "BTC",
+      "threshold_bps": 10,
+      "event_count": 0,
+      "frequency": 0.0
+    },
+    {
+      "asset": "BTC",
+      "threshold_bps": 20,
+      "event_count": 0,
+      "frequency": 0.0
+    },
+    {
+      "asset": "BTC",
+      "threshold_bps": 40,
+      "event_count": 0,
+      "frequency": 0.0
+    },
+    {
+      "asset": "ETH",
+      "threshold_bps": 5,
+      "event_count": 0,
+      "frequency": 0.0
+    },
+    {
+      "asset": "ETH",
+      "threshold_bps": 10,
+      "event_count": 0,
+      "frequency": 0.0
+    },
+    {
+      "asset": "ETH",
+      "threshold_bps": 20,
+      "event_count": 0,
+      "frequency": 0.0
+    },
+    {
+      "asset": "ETH",
+      "threshold_bps": 40,
+      "event_count": 0,
+      "frequency": 0.0
+    }
+  ],
+  "gate_b_output": [],
+  "package_versions": {},
+  "safety_mode": "public_data_observer_only"
+}

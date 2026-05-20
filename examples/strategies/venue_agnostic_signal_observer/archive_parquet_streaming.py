@@ -18,6 +18,9 @@ from typing import Any, Iterable, Iterator, Sequence
 
 import numpy as np
 
+from .stress_labels import StressLabel
+from .tick_models import TickForwardReturn
+
 SEED = 42
 NS_PER_SECOND = 1_000_000_000
 DEFAULT_MEMORY_GUARD_LIMIT_BYTES = 8 * 1024**3

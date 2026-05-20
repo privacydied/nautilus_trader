@@ -1,0 +1,75 @@
+{
+  "phase": "04_stress_labels",
+  "study_id": "cross_asset_beta_lag_archive_v0",
+  "git_sha": "acec8a011774bed7492e754c6e494a23eabf60be",
+  "precommitment_sha": "74eac2f485de2fbc93a09dfd8a9a5b34e1ae23b16be2fe44de0d602010cdf4a7",
+  "config_identity": {
+    "study_id": "cross_asset_beta_lag_archive_v0",
+    "source_symbols": [
+      "BTCUSDT",
+      "ETHUSDT"
+    ],
+    "target_symbols": [
+      "AVAXUSDT",
+      "DOGEUSDT",
+      "LINKUSDT",
+      "SOLUSDT"
+    ],
+    "calendar_start": "2024-01-01",
+    "calendar_end": "2026-04-30",
+    "stress_rules": [
+      {
+        "name": "30s_30bps",
+        "lookback_seconds": 30,
+        "threshold_bps": 30.0
+      },
+      {
+        "name": "60s_50bps",
+        "lookback_seconds": 60,
+        "threshold_bps": 50.0
+      }
+    ],
+    "stress_dedup_cooldown_seconds": 30,
+    "independent_window_separation_seconds": 1800,
+    "entry_delay_seconds": 1,
+    "cost_total_bps": 50,
+    "horizons_ms": [
+      30000,
+      60000,
+      300000
+    ],
+    "stress_window_seconds": [
+      30,
+      60
+    ],
+    "directions": [
+      "bearish",
+      "bullish"
+    ],
+    "family_size": 96,
+    "seed": 42,
+    "null_iterations": 1000,
+    "fdr_alpha": 0.05,
+    "null_alpha": 0.05,
+    "min_events_per_cell": 50,
+    "min_events_holdout": 20,
+    "win_rate_threshold": 0.55,
+    "worst_decile_threshold": -50.0,
+    "baseline_delta_bps": 10.0,
+    "min_independent_windows": 20,
+    "train_frac": 0.7
+  },
+  "config_identity_sha256": "4ac413e9fd7f45e014971df5cb7605878f80e4fac2b7e26853db72c7944d2197",
+  "timestamp_utc": "2026-05-20T01:53:04.465919+00:00",
+  "null_engine": "cpu",
+  "null_device": "cpu",
+  "payload": {
+    "total_labels": 61531,
+    "source_symbols": [
+      "BTCUSDT",
+      "ETHUSDT"
+    ],
+    "source_streaming": "day_by_day",
+    "day_boundary_tail": "rolling windows retained in per-rule deques"
+  }
+}

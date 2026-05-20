@@ -1,0 +1,5 @@
+{
+  "total_labels": 61531,
+  "note": "All labels are aggTrade-derived (kline was only a prefilter)",
+  "symbol_breakdown": {}
+}

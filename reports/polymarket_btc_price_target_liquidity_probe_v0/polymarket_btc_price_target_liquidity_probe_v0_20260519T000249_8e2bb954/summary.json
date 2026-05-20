@@ -1,0 +1,53 @@
+{
+  "run_id": "polymarket_btc_price_target_liquidity_probe_v0_20260519T000249_8e2bb954",
+  "git_sha": "5a258e61cfef391931153915f4f1d44e5e307e12",
+  "git_branch": "feat/funding-oi-crowding-regime-v0",
+  "dirty": true,
+  "selected_data_path": "MIXED_NAUTILUS_AND_PUBLIC_REST_USED",
+  "nautilus_components_used": [
+    "nautilus_trader.adapters.polymarket.common.gamma_markets",
+    "nautilus_trader.adapters.polymarket.common.parsing",
+    "nautilus_trader.adapters.polymarket.common.symbol"
+  ],
+  "public_rest_components_used": [
+    "gamma-api.polymarket.com",
+    "clob.polymarket.com/book",
+    "api.binance.com"
+  ],
+  "start_utc": "2026-05-19T00:02:49.995933+00:00",
+  "end_utc": "2026-05-19T00:07:50.873498+00:00",
+  "requested_duration_seconds": 300,
+  "actual_duration_seconds": 300.88,
+  "poll_interval_seconds": 5,
+  "btc_proxy_venue": "binance",
+  "btc_proxy_symbol": "BTC/USDT",
+  "total_markets_discovered": 100,
+  "btc_price_target_markets": 1,
+  "btc_updown_markets_excluded": 0,
+  "btc_other_markets_excluded": 0,
+  "non_btc_markets_excluded": 99,
+  "markets_strike_extracted": 1,
+  "markets_sampled": 1,
+  "valid_two_sided_samples": 0,
+  "one_sided_or_empty": 120,
+  "primary_subset_count": 0,
+  "near_strike_near_expiry_count": 0,
+  "convex_danger_zone_count": 0,
+  "spread_status": null,
+  "depth_status": null,
+  "two_sided_status": null,
+  "median_spread_cents": null,
+  "p95_spread_cents": null,
+  "median_top_depth_usd": null,
+  "two_sided_rate": null,
+  "tte_rollup": {
+    ">15m": 120
+  },
+  "distance_rollup": {
+    "deep_below_strike": 120
+  },
+  "final_phase_0_verdict": "NEEDS_MORE_DATA",
+  "verdict_reason": "Insufficient primary subset samples: 0 < 5 minimum",
+  "v1_recommendation": "V1_BLOCKED_BY_INSUFFICIENT_DATA",
+  "include_raw_payloads": false
+}

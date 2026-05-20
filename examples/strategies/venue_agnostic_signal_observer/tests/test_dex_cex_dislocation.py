@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from ..dex_models import DexPoolSnapshot
+
 _NS = 1_000_000_000  # 1 second in ns
 
 

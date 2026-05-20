@@ -194,7 +194,7 @@ def _nearest_oi_at_or_before(snapshots: list[dict], ts_ns: int) -> float | None:
     for s in snapshots:
         snap_ts = s.get("receive_timestamp_ns", 0)
         if snap_ts <= ts_ns and snap_ts > best_ts:
-            best_val = float(s.get("open_interest", 0))
+            best_val = float(s["open_interest"]) if s.get("open_interest") is not None else 0.0
             best_ts = snap_ts
     return best_val
 

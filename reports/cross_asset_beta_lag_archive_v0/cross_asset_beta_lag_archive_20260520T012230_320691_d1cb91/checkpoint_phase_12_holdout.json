@@ -1,0 +1,1030 @@
+{
+  "phase": "12_holdout",
+  "study_id": "cross_asset_beta_lag_archive_v0",
+  "git_sha": "acec8a011774bed7492e754c6e494a23eabf60be",
+  "precommitment_sha": "74eac2f485de2fbc93a09dfd8a9a5b34e1ae23b16be2fe44de0d602010cdf4a7",
+  "config_identity": {
+    "study_id": "cross_asset_beta_lag_archive_v0",
+    "source_symbols": [
+      "BTCUSDT",
+      "ETHUSDT"
+    ],
+    "target_symbols": [
+      "AVAXUSDT",
+      "DOGEUSDT",
+      "LINKUSDT",
+      "SOLUSDT"
+    ],
+    "calendar_start": "2024-01-01",
+    "calendar_end": "2026-04-30",
+    "stress_rules": [
+      {
+        "name": "30s_30bps",
+        "lookback_seconds": 30,
+        "threshold_bps": 30.0
+      },
+      {
+        "name": "60s_50bps",
+        "lookback_seconds": 60,
+        "threshold_bps": 50.0
+      }
+    ],
+    "stress_dedup_cooldown_seconds": 30,
+    "independent_window_separation_seconds": 1800,
+    "entry_delay_seconds": 1,
+    "cost_total_bps": 50,
+    "horizons_ms": [
+      30000,
+      60000,
+      300000
+    ],
+    "stress_window_seconds": [
+      30,
+      60
+    ],
+    "directions": [
+      "bearish",
+      "bullish"
+    ],
+    "family_size": 96,
+    "seed": 42,
+    "null_iterations": 1000,
+    "fdr_alpha": 0.05,
+    "null_alpha": 0.05,
+    "min_events_per_cell": 50,
+    "min_events_holdout": 20,
+    "win_rate_threshold": 0.55,
+    "worst_decile_threshold": -50.0,
+    "baseline_delta_bps": 10.0,
+    "min_independent_windows": 20,
+    "train_frac": 0.7
+  },
+  "config_identity_sha256": "4ac413e9fd7f45e014971df5cb7605878f80e4fac2b7e26853db72c7944d2197",
+  "timestamp_utc": "2026-05-20T01:59:02.950298+00:00",
+  "null_engine": "cpu",
+  "null_device": "cpu",
+  "payload": {
+    "holdout_results": {
+      "BTCUSDT->SOLUSDT/30s/bullish/30000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -47.98450597823554,
+        "holdout_win_rate": 0.060991105463786534,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-47.98",
+          "holdout_wr_too_low:0.0610<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/30s/bullish/60000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -46.635904359959255,
+        "holdout_win_rate": 0.09783989834815757,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-46.64",
+          "holdout_wr_too_low:0.0978<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/30s/bullish/300000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -41.47502965742063,
+        "holdout_win_rate": 0.21473951715374842,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-41.48",
+          "holdout_wr_too_low:0.2147<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/30s/bearish/30000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -52.51563495192776,
+        "holdout_win_rate": 0.04341736694677871,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-52.52",
+          "holdout_wr_too_low:0.0434<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/30s/bearish/60000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -54.47071289062411,
+        "holdout_win_rate": 0.08263305322128851,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-54.47",
+          "holdout_wr_too_low:0.0826<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/30s/bearish/300000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -56.4027398430517,
+        "holdout_win_rate": 0.18207282913165265,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-56.40",
+          "holdout_wr_too_low:0.1821<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/60s/bullish/30000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -44.07776441426754,
+        "holdout_win_rate": 0.10091743119266056,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-44.08",
+          "holdout_wr_too_low:0.1009<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/60s/bullish/60000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -41.653962354505744,
+        "holdout_win_rate": 0.13761467889908258,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-41.65",
+          "holdout_wr_too_low:0.1376<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/60s/bullish/300000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -26.701627973708263,
+        "holdout_win_rate": 0.3211009174311927,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-26.70",
+          "holdout_wr_too_low:0.3211<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/60s/bearish/30000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -51.613112820335694,
+        "holdout_win_rate": 0.12941176470588237,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-51.61",
+          "holdout_wr_too_low:0.1294<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/60s/bearish/60000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -43.68146454516571,
+        "holdout_win_rate": 0.18823529411764706,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-43.68",
+          "holdout_wr_too_low:0.1882<0.55"
+        ]
+      },
+      "BTCUSDT->SOLUSDT/60s/bearish/300000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -41.79271964153812,
+        "holdout_win_rate": 0.2823529411764706,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-41.79",
+          "holdout_wr_too_low:0.2824<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/30s/bullish/30000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -45.244178806359145,
+        "holdout_win_rate": 0.06734434561626429,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-45.24",
+          "holdout_wr_too_low:0.0673<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/30s/bullish/60000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -40.78327935541644,
+        "holdout_win_rate": 0.10673443456162643,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-40.78",
+          "holdout_wr_too_low:0.1067<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/30s/bullish/300000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -18.545689602246277,
+        "holdout_win_rate": 0.24015247776365947,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-18.55",
+          "holdout_wr_too_low:0.2402<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/30s/bearish/30000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -46.25605566131018,
+        "holdout_win_rate": 0.07563025210084033,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-46.26",
+          "holdout_wr_too_low:0.0756<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/30s/bearish/60000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -42.80710571074099,
+        "holdout_win_rate": 0.09103641456582633,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-42.81",
+          "holdout_wr_too_low:0.0910<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/30s/bearish/300000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -29.6833261484691,
+        "holdout_win_rate": 0.19467787114845939,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-29.68",
+          "holdout_wr_too_low:0.1947<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/60s/bullish/30000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -45.67527114667415,
+        "holdout_win_rate": 0.1743119266055046,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-45.68",
+          "holdout_wr_too_low:0.1743<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/60s/bullish/60000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -37.33434003719345,
+        "holdout_win_rate": 0.23853211009174313,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-37.33",
+          "holdout_wr_too_low:0.2385<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/60s/bullish/300000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -9.934420636289953,
+        "holdout_win_rate": 0.44954128440366975,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-9.93",
+          "holdout_wr_too_low:0.4495<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/60s/bearish/30000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -53.327326754556516,
+        "holdout_win_rate": 0.09411764705882353,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-53.33",
+          "holdout_wr_too_low:0.0941<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/60s/bearish/60000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -65.24359573185053,
+        "holdout_win_rate": 0.1411764705882353,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-65.24",
+          "holdout_wr_too_low:0.1412<0.55"
+        ]
+      },
+      "BTCUSDT->LINKUSDT/60s/bearish/300000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -98.20332314117232,
+        "holdout_win_rate": 0.24705882352941178,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-98.20",
+          "holdout_wr_too_low:0.2471<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/30s/bullish/30000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -44.121424189880756,
+        "holdout_win_rate": 0.0698856416772554,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-44.12",
+          "holdout_wr_too_low:0.0699<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/30s/bullish/60000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -36.53415533342457,
+        "holdout_win_rate": 0.1207115628970775,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-36.53",
+          "holdout_wr_too_low:0.1207<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/30s/bullish/300000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -16.632659477173124,
+        "holdout_win_rate": 0.22744599745870395,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-16.63",
+          "holdout_wr_too_low:0.2274<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/30s/bearish/30000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -45.279317679499364,
+        "holdout_win_rate": 0.06442577030812324,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-45.28",
+          "holdout_wr_too_low:0.0644<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/30s/bearish/60000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -37.94459542640318,
+        "holdout_win_rate": 0.09943977591036414,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-37.94",
+          "holdout_wr_too_low:0.0994<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/30s/bearish/300000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -33.73115228025676,
+        "holdout_win_rate": 0.18487394957983194,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-33.73",
+          "holdout_wr_too_low:0.1849<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/60s/bullish/30000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -36.726414050534665,
+        "holdout_win_rate": 0.1743119266055046,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-36.73",
+          "holdout_wr_too_low:0.1743<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/60s/bullish/60000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -39.280507338160426,
+        "holdout_win_rate": 0.23853211009174313,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-39.28",
+          "holdout_wr_too_low:0.2385<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/60s/bullish/300000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -19.89027655216496,
+        "holdout_win_rate": 0.3853211009174312,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-19.89",
+          "holdout_wr_too_low:0.3853<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/60s/bearish/30000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -70.53790526178227,
+        "holdout_win_rate": 0.09411764705882353,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-70.54",
+          "holdout_wr_too_low:0.0941<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/60s/bearish/60000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -90.47967909181791,
+        "holdout_win_rate": 0.15294117647058825,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-90.48",
+          "holdout_wr_too_low:0.1529<0.55"
+        ]
+      },
+      "BTCUSDT->DOGEUSDT/60s/bearish/300000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -105.45076825350982,
+        "holdout_win_rate": 0.2823529411764706,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-105.45",
+          "holdout_wr_too_low:0.2824<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/30s/bullish/30000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -38.950141500008556,
+        "holdout_win_rate": 0.05717916137229987,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-38.95",
+          "holdout_wr_too_low:0.0572<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/30s/bullish/60000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -25.205749492989316,
+        "holdout_win_rate": 0.09783989834815757,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-25.21",
+          "holdout_wr_too_low:0.0978<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/30s/bullish/300000ms": {
+        "holdout_n": 787,
+        "holdout_mean_net_bps": -6.387207952646103,
+        "holdout_win_rate": 0.19949174078780177,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-6.39",
+          "holdout_wr_too_low:0.1995<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/30s/bearish/30000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -41.65511041737,
+        "holdout_win_rate": 0.06862745098039216,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-41.66",
+          "holdout_wr_too_low:0.0686<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/30s/bearish/60000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -33.547976633091984,
+        "holdout_win_rate": 0.09663865546218488,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-33.55",
+          "holdout_wr_too_low:0.0966<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/30s/bearish/300000ms": {
+        "holdout_n": 714,
+        "holdout_mean_net_bps": -37.07917387669773,
+        "holdout_win_rate": 0.19467787114845939,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-37.08",
+          "holdout_wr_too_low:0.1947<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/60s/bullish/30000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -64.36333651139581,
+        "holdout_win_rate": 0.13761467889908258,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-64.36",
+          "holdout_wr_too_low:0.1376<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/60s/bullish/60000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -75.04074127618892,
+        "holdout_win_rate": 0.21100917431192662,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-75.04",
+          "holdout_wr_too_low:0.2110<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/60s/bullish/300000ms": {
+        "holdout_n": 109,
+        "holdout_mean_net_bps": -78.33481073710789,
+        "holdout_win_rate": 0.3761467889908257,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-78.33",
+          "holdout_wr_too_low:0.3761<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/60s/bearish/30000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -64.4844205140949,
+        "holdout_win_rate": 0.11764705882352941,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-64.48",
+          "holdout_wr_too_low:0.1176<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/60s/bearish/60000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -87.71695394289003,
+        "holdout_win_rate": 0.1411764705882353,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-87.72",
+          "holdout_wr_too_low:0.1412<0.55"
+        ]
+      },
+      "BTCUSDT->AVAXUSDT/60s/bearish/300000ms": {
+        "holdout_n": 85,
+        "holdout_mean_net_bps": -166.2033511385934,
+        "holdout_win_rate": 0.27058823529411763,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-166.20",
+          "holdout_wr_too_low:0.2706<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/30s/bullish/30000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -48.472889129258256,
+        "holdout_win_rate": 0.01978998384491115,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-48.47",
+          "holdout_wr_too_low:0.0198<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/30s/bullish/60000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -48.315189279830946,
+        "holdout_win_rate": 0.0395799676898223,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-48.32",
+          "holdout_wr_too_low:0.0396<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/30s/bullish/300000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -47.544816904962566,
+        "holdout_win_rate": 0.12661550888529888,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-47.54",
+          "holdout_wr_too_low:0.1266<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/30s/bearish/30000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -49.514817812576794,
+        "holdout_win_rate": 0.01897414512093411,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-49.51",
+          "holdout_wr_too_low:0.0190<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/30s/bearish/60000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -49.49243824835106,
+        "holdout_win_rate": 0.039407839866555466,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-49.49",
+          "holdout_wr_too_low:0.0394<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/30s/bearish/300000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -51.03656036056372,
+        "holdout_win_rate": 0.12656380316930776,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-51.04",
+          "holdout_wr_too_low:0.1266<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/60s/bullish/30000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -50.551441811395875,
+        "holdout_win_rate": 0.030303030303030304,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-50.55",
+          "holdout_wr_too_low:0.0303<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/60s/bullish/60000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -50.02223424701169,
+        "holdout_win_rate": 0.048209366391184574,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-50.02",
+          "holdout_wr_too_low:0.0482<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/60s/bullish/300000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -51.971952030139235,
+        "holdout_win_rate": 0.15564738292011018,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-51.97",
+          "holdout_wr_too_low:0.1556<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/60s/bearish/30000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -50.22292878830725,
+        "holdout_win_rate": 0.03626220362622036,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-50.22",
+          "holdout_wr_too_low:0.0363<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/60s/bearish/60000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -50.263655883010294,
+        "holdout_win_rate": 0.05439330543933055,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-50.26",
+          "holdout_wr_too_low:0.0544<0.55"
+        ]
+      },
+      "ETHUSDT->SOLUSDT/60s/bearish/300000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -53.043195110516514,
+        "holdout_win_rate": 0.15341701534170155,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-53.04",
+          "holdout_wr_too_low:0.1534<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/30s/bullish/30000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -48.303782269459205,
+        "holdout_win_rate": 0.02382875605815832,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-48.30",
+          "holdout_wr_too_low:0.0238<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/30s/bullish/60000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -47.57285115970413,
+        "holdout_win_rate": 0.048465266558966075,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-47.57",
+          "holdout_wr_too_low:0.0485<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/30s/bullish/300000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -45.34911646301323,
+        "holdout_win_rate": 0.15892568659127626,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-45.35",
+          "holdout_wr_too_low:0.1589<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/30s/bearish/30000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -49.32903038945508,
+        "holdout_win_rate": 0.024603836530442035,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-49.33",
+          "holdout_wr_too_low:0.0246<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/30s/bearish/60000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -49.314383543999746,
+        "holdout_win_rate": 0.048999165971643034,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-49.31",
+          "holdout_wr_too_low:0.0490<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/30s/bearish/300000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -49.82248671719014,
+        "holdout_win_rate": 0.13949124270225188,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-49.82",
+          "holdout_wr_too_low:0.1395<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/60s/bullish/30000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -48.297528432038135,
+        "holdout_win_rate": 0.03168044077134986,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-48.30",
+          "holdout_wr_too_low:0.0317<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/60s/bullish/60000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -43.13798276491287,
+        "holdout_win_rate": 0.05922865013774105,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-43.14",
+          "holdout_wr_too_low:0.0592<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/60s/bullish/300000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -20.839158390076896,
+        "holdout_win_rate": 0.20523415977961432,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-20.84",
+          "holdout_wr_too_low:0.2052<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/60s/bearish/30000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -44.214696309689316,
+        "holdout_win_rate": 0.043235704323570434,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-44.21",
+          "holdout_wr_too_low:0.0432<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/60s/bearish/60000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -38.936013545095385,
+        "holdout_win_rate": 0.07391910739191074,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-38.94",
+          "holdout_wr_too_low:0.0739<0.55"
+        ]
+      },
+      "ETHUSDT->LINKUSDT/60s/bearish/300000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -43.622299568385166,
+        "holdout_win_rate": 0.16317991631799164,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-43.62",
+          "holdout_wr_too_low:0.1632<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/30s/bullish/30000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -49.06782115571914,
+        "holdout_win_rate": 0.024232633279483037,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-49.07",
+          "holdout_wr_too_low:0.0242<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/30s/bullish/60000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -48.53484790693054,
+        "holdout_win_rate": 0.050282714054927305,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-48.53",
+          "holdout_wr_too_low:0.0503<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/30s/bullish/300000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -47.27390398071966,
+        "holdout_win_rate": 0.15205977382875605,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-47.27",
+          "holdout_wr_too_low:0.1521<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/30s/bearish/30000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -49.50286339870232,
+        "holdout_win_rate": 0.024603836530442035,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-49.50",
+          "holdout_wr_too_low:0.0246<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/30s/bearish/60000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -48.70338206095438,
+        "holdout_win_rate": 0.051084236864053376,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-48.70",
+          "holdout_wr_too_low:0.0511<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/30s/bearish/300000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -48.94843201992027,
+        "holdout_win_rate": 0.1390742285237698,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-48.95",
+          "holdout_wr_too_low:0.1391<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/60s/bullish/30000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -45.57093411242373,
+        "holdout_win_rate": 0.04269972451790634,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-45.57",
+          "holdout_wr_too_low:0.0427<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/60s/bullish/60000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -40.037609378124024,
+        "holdout_win_rate": 0.06887052341597796,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-40.04",
+          "holdout_wr_too_low:0.0689<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/60s/bullish/300000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -21.13565287520219,
+        "holdout_win_rate": 0.19146005509641872,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-21.14",
+          "holdout_wr_too_low:0.1915<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/60s/bearish/30000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -44.65965879497138,
+        "holdout_win_rate": 0.044630404463040445,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-44.66",
+          "holdout_wr_too_low:0.0446<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/60s/bearish/60000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -41.56189859761329,
+        "holdout_win_rate": 0.07252440725244072,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-41.56",
+          "holdout_wr_too_low:0.0725<0.55"
+        ]
+      },
+      "ETHUSDT->DOGEUSDT/60s/bearish/300000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -54.62569012490358,
+        "holdout_win_rate": 0.1589958158995816,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-54.63",
+          "holdout_wr_too_low:0.1590<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/30s/bullish/30000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -48.75294521505083,
+        "holdout_win_rate": 0.02059773828756058,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-48.75",
+          "holdout_wr_too_low:0.0206<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/30s/bullish/60000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -48.58936583492353,
+        "holdout_win_rate": 0.04018578352180937,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-48.59",
+          "holdout_wr_too_low:0.0402<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/30s/bullish/300000ms": {
+        "holdout_n": 4952,
+        "holdout_mean_net_bps": -46.09324309413659,
+        "holdout_win_rate": 0.14781906300484654,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-46.09",
+          "holdout_wr_too_low:0.1478<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/30s/bearish/30000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -48.53073463961114,
+        "holdout_win_rate": 0.020016680567139282,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-48.53",
+          "holdout_wr_too_low:0.0200<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/30s/bearish/60000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -47.98046139232021,
+        "holdout_win_rate": 0.04065888240200167,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-47.98",
+          "holdout_wr_too_low:0.0407<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/30s/bearish/300000ms": {
+        "holdout_n": 4796,
+        "holdout_mean_net_bps": -45.613089823487265,
+        "holdout_win_rate": 0.13135946622185155,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-45.61",
+          "holdout_wr_too_low:0.1314<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/60s/bullish/30000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -37.611657857030195,
+        "holdout_win_rate": 0.04132231404958678,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-37.61",
+          "holdout_wr_too_low:0.0413<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/60s/bullish/60000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -21.0058505523867,
+        "holdout_win_rate": 0.05509641873278237,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-21.01",
+          "holdout_wr_too_low:0.0551<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/60s/bullish/300000ms": {
+        "holdout_n": 726,
+        "holdout_mean_net_bps": -7.702513037184098,
+        "holdout_win_rate": 0.1763085399449036,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-7.70",
+          "holdout_wr_too_low:0.1763<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/60s/bearish/30000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -40.09483158072479,
+        "holdout_win_rate": 0.040446304044630406,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-40.09",
+          "holdout_wr_too_low:0.0404<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/60s/bearish/60000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -32.28457369814271,
+        "holdout_win_rate": 0.07112970711297072,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-32.28",
+          "holdout_wr_too_low:0.0711<0.55"
+        ]
+      },
+      "ETHUSDT->AVAXUSDT/60s/bearish/300000ms": {
+        "holdout_n": 717,
+        "holdout_mean_net_bps": -65.03206823291092,
+        "holdout_win_rate": 0.16317991631799164,
+        "holdout_passed": false,
+        "holdout_reasons": [
+          "holdout_mean_not_positive:-65.03",
+          "holdout_wr_too_low:0.1632<0.55"
+        ]
+      }
+    }
+  }
+}

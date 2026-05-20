@@ -59,9 +59,9 @@ def compute_kline_candidate_days_v1(
             continue
 
         for k in klines:
-            open_price = float(k.get("open", 0))
-            high = float(k.get("high", 0))
-            low = float(k.get("low", 0))
+            open_price = float(k["open"]) if k.get("open") is not None else 0.0
+            high = float(k["high"]) if k.get("high") is not None else 0.0
+            low = float(k["low"]) if k.get("low") is not None else 0.0
 
             if open_price <= 0 or high <= 0 or low <= 0:
                 continue
@@ -117,10 +117,10 @@ def compute_kline_candidate_days_deprecated(
             max_oc = 0.0
 
             for k in bars:
-                o = float(k.get("open", 0))
-                h = float(k.get("high", 0))
-                l_val = float(k.get("low", 0))
-                c = float(k.get("close", 0))
+                o = float(k["open"]) if k.get("open") is not None else 0.0
+                h = float(k["high"]) if k.get("high") is not None else 0.0
+                l_val = float(k["low"]) if k.get("low") is not None else 0.0
+                c = float(k["close"]) if k.get("close") is not None else 0.0
 
                 if o <= 0:
                     continue

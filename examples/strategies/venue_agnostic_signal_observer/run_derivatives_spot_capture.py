@@ -857,8 +857,8 @@ async def poll_binance_oi(
                                     "receive_time": _ts_ns_to_iso(received_ns),
                                     "venue": "binance_perp",
                                     "api_symbol": api_symbol,
-                                    "open_interest": float(body.get("openInterest", 0)),
-                                    "open_interest_value": float(body.get("openInterestValue", 0)) if "openInterestValue" in body else None,
+                                    "open_interest": float(body["openInterest"]) if body.get("openInterest") is not None else 0,
+                                    "open_interest_value": float(body["openInterestValue"]) if body.get("openInterestValue") is not None else None,
                                 }
                                 files[api_symbol].write(json.dumps(row) + "\n")
                                 files[api_symbol].flush()

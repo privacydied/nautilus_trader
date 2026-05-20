@@ -1,0 +1,163 @@
+{
+  "run_id": "cross_asset_beta_lag_archive_20260520T012230_320691_d1cb91",
+  "study_id": "cross_asset_beta_lag_archive_v0",
+  "precommitment_hash": "74eac2f485de2fbc93a09dfd8a9a5b34e1ae23b16be2fe44de0d602010cdf4a7",
+  "git_sha": "acec8a011774bed7492e754c6e494a23eabf60be",
+  "completion_time": "2026-05-20T01:59:17.354647+00:00",
+  "seed": 42,
+  "null_iterations": 1000,
+  "total_stress_labels": 45324,
+  "independent_windows": 10792,
+  "usable_labels": 42951,
+  "all_target_windows": 10105,
+  "total_valid_events": 515412,
+  "powered_cells": 96,
+  "underpowered_cells": 0,
+  "gates_passed_cells": 0,
+  "null_passed_cells": 0,
+  "fdr_passed_cells": 0,
+  "holdout_passed_cells": 0,
+  "all_gates_passed_cells": 0,
+  "best_cells_mean_net": [
+    {
+      "group_key": "BTCUSDT->LINKUSDT/60s/bullish/300000ms",
+      "mean_net_bps": -31.522938229844144,
+      "n": 809
+    },
+    {
+      "group_key": "ETHUSDT->AVAXUSDT/60s/bullish/300000ms",
+      "mean_net_bps": -34.256183241421496,
+      "n": 2161
+    },
+    {
+      "group_key": "BTCUSDT->SOLUSDT/60s/bullish/300000ms",
+      "mean_net_bps": -35.10671625853931,
+      "n": 809
+    },
+    {
+      "group_key": "BTCUSDT->DOGEUSDT/60s/bullish/300000ms",
+      "mean_net_bps": -36.14454080478241,
+      "n": 809
+    },
+    {
+      "group_key": "ETHUSDT->LINKUSDT/60s/bullish/300000ms",
+      "mean_net_bps": -37.603922855953826,
+      "n": 2161
+    },
+    {
+      "group_key": "BTCUSDT->AVAXUSDT/30s/bullish/300000ms",
+      "mean_net_bps": -37.80829865097697,
+      "n": 5194
+    },
+    {
+      "group_key": "ETHUSDT->DOGEUSDT/60s/bullish/300000ms",
+      "mean_net_bps": -38.23596404334396,
+      "n": 2161
+    },
+    {
+      "group_key": "ETHUSDT->AVAXUSDT/60s/bullish/60000ms",
+      "mean_net_bps": -39.03983278598227,
+      "n": 2161
+    },
+    {
+      "group_key": "BTCUSDT->DOGEUSDT/30s/bullish/300000ms",
+      "mean_net_bps": -40.28388541523123,
+      "n": 5194
+    },
+    {
+      "group_key": "BTCUSDT->AVAXUSDT/60s/bullish/300000ms",
+      "mean_net_bps": -40.521810920553904,
+      "n": 809
+    }
+  ],
+  "best_cells_baseline_delta": [
+    {
+      "group_key": "BTCUSDT->LINKUSDT/60s/bullish/300000ms",
+      "baseline_delta_bps": 18.337033136073956,
+      "n": 809
+    },
+    {
+      "group_key": "ETHUSDT->AVAXUSDT/60s/bullish/300000ms",
+      "baseline_delta_bps": 16.15216063556045,
+      "n": 2161
+    },
+    {
+      "group_key": "BTCUSDT->SOLUSDT/60s/bullish/300000ms",
+      "baseline_delta_bps": 14.753255107378791,
+      "n": 809
+    },
+    {
+      "group_key": "BTCUSDT->DOGEUSDT/60s/bullish/300000ms",
+      "baseline_delta_bps": 13.71543056113569,
+      "n": 809
+    },
+    {
+      "group_key": "ETHUSDT->LINKUSDT/60s/bullish/300000ms",
+      "baseline_delta_bps": 12.80442102102812,
+      "n": 2161
+    },
+    {
+      "group_key": "BTCUSDT->AVAXUSDT/30s/bullish/300000ms",
+      "baseline_delta_bps": 12.741956579664667,
+      "n": 5194
+    },
+    {
+      "group_key": "ETHUSDT->DOGEUSDT/60s/bullish/300000ms",
+      "baseline_delta_bps": 12.172379833637983,
+      "n": 2161
+    },
+    {
+      "group_key": "ETHUSDT->AVAXUSDT/60s/bullish/60000ms",
+      "baseline_delta_bps": 11.368511090999675,
+      "n": 2161
+    },
+    {
+      "group_key": "BTCUSDT->DOGEUSDT/30s/bullish/300000ms",
+      "baseline_delta_bps": 10.266369815410407,
+      "n": 5194
+    },
+    {
+      "group_key": "BTCUSDT->LINKUSDT/30s/bullish/300000ms",
+      "baseline_delta_bps": 9.597057384962234,
+      "n": 5194
+    }
+  ],
+  "final_verdict": "SIGNAL_ABSENCE_AT_COST",
+  "registry_updated": false,
+  "test_results": {
+    "run": 0,
+    "passed": 0,
+    "failed": 0
+  },
+  "prefilter_summary": {
+    "full_calendar_retained": true,
+    "kline_prefilter": "source_only_non_verdict_producing",
+    "exact_stress_labels_from_aggtrades": true,
+    "brute_force_mb": 39571.5,
+    "planned_mb": 33594.0,
+    "candidate_days": 489,
+    "exact_stress_labels": 45324,
+    "usable_windows": 10105,
+    "evaluation_reached": true
+  },
+  "null_engine": "cpu",
+  "null_device": "cuda:0",
+  "cuda_available": false,
+  "forward_engine": "cpu",
+  "forward_device": null,
+  "run_elapsed_seconds": 2207.034,
+  "completed_phases": [
+    "01_availability",
+    "04_stress_labels",
+    "02_kline_prefilter",
+    "03_aggtrades",
+    "05_independent_windows",
+    "06_coverage",
+    "07_forward_returns",
+    "08_cell_results",
+    "09_baseline",
+    "10_null",
+    "11_fdr",
+    "12_holdout"
+  ]
+}

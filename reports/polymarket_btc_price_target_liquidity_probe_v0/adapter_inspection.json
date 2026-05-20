@@ -1,0 +1,52 @@
+{
+  "nautilus_inspected": true,
+  "modules_inspected": [
+    "nautilus_trader.adapters.polymarket.common.gamma_markets",
+    "nautilus_trader.adapters.polymarket.common.parsing",
+    "nautilus_trader.adapters.polymarket.common.symbol",
+    "nautilus_trader.adapters.polymarket.providers",
+    "nautilus_trader.adapters.polymarket.config",
+    "nautilus_trader.adapters.polymarket.schemas.book",
+    "nautilus_trader.adapters.polymarket.data",
+    "nautilus_trader.adapters.polymarket.execution",
+    "nautilus_trader.adapters.polymarket.factories",
+    "nautilus_trader.adapters.polymarket.loaders",
+    "nautilus_trader.adapters.polymarket.websocket.client",
+    "nautilus_trader.adapters.polymarket.common.credentials",
+    "nautilus_trader.adapters.polymarket.common.conversion"
+  ],
+  "data_side_components_found": [
+    "nautilus_trader.adapters.polymarket.common.gamma_markets",
+    "nautilus_trader.adapters.polymarket.common.parsing",
+    "nautilus_trader.adapters.polymarket.common.symbol"
+  ],
+  "instrument_components_found": [
+    "nautilus_trader.adapters.polymarket.providers",
+    "nautilus_trader.adapters.polymarket.config"
+  ],
+  "orderbook_components_found": [
+    "nautilus_trader.adapters.polymarket.schemas.book"
+  ],
+  "execution_auth_components_found": [
+    "nautilus_trader.adapters.polymarket.data",
+    "nautilus_trader.adapters.polymarket.execution",
+    "nautilus_trader.adapters.polymarket.factories",
+    "nautilus_trader.adapters.polymarket.loaders",
+    "nautilus_trader.adapters.polymarket.websocket.client",
+    "nautilus_trader.adapters.polymarket.common.credentials",
+    "nautilus_trader.adapters.polymarket.common.conversion"
+  ],
+  "execution_auth_components_avoided": [
+    "nautilus_trader.adapters.polymarket.data",
+    "nautilus_trader.adapters.polymarket.execution",
+    "nautilus_trader.adapters.polymarket.factories",
+    "nautilus_trader.adapters.polymarket.loaders",
+    "nautilus_trader.adapters.polymarket.websocket.client",
+    "nautilus_trader.adapters.polymarket.common.credentials",
+    "nautilus_trader.adapters.polymarket.common.conversion"
+  ],
+  "selected_data_path": "MIXED_NAUTILUS_AND_PUBLIC_REST_USED",
+  "data_path_reason": "Nautilus core importable; safe gamma_markets module available for market discovery. Using mixed mode: gamma_markets for discovery + public CLOB REST for orderbooks.",
+  "nautilus_core_importable": true,
+  "nautilus_core_import_error": null
+}

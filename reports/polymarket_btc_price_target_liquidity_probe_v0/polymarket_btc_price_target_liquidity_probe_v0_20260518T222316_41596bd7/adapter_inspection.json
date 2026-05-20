@@ -1,0 +1,52 @@
+{
+  "nautilus_inspected": true,
+  "modules_inspected": [
+    "nautilus_trader.adapters.polymarket.common.gamma_markets",
+    "nautilus_trader.adapters.polymarket.common.parsing",
+    "nautilus_trader.adapters.polymarket.common.symbol",
+    "nautilus_trader.adapters.polymarket.providers",
+    "nautilus_trader.adapters.polymarket.config",
+    "nautilus_trader.adapters.polymarket.schemas.book",
+    "nautilus_trader.adapters.polymarket.data",
+    "nautilus_trader.adapters.polymarket.execution",
+    "nautilus_trader.adapters.polymarket.factories",
+    "nautilus_trader.adapters.polymarket.loaders",
+    "nautilus_trader.adapters.polymarket.websocket.client",
+    "nautilus_trader.adapters.polymarket.common.credentials",
+    "nautilus_trader.adapters.polymarket.common.conversion"
+  ],
+  "data_side_components_found": [
+    "nautilus_trader.adapters.polymarket.common.gamma_markets",
+    "nautilus_trader.adapters.polymarket.common.parsing",
+    "nautilus_trader.adapters.polymarket.common.symbol"
+  ],
+  "instrument_components_found": [
+    "nautilus_trader.adapters.polymarket.providers",
+    "nautilus_trader.adapters.polymarket.config"
+  ],
+  "orderbook_components_found": [
+    "nautilus_trader.adapters.polymarket.schemas.book"
+  ],
+  "execution_auth_components_found": [
+    "nautilus_trader.adapters.polymarket.data",
+    "nautilus_trader.adapters.polymarket.execution",
+    "nautilus_trader.adapters.polymarket.factories",
+    "nautilus_trader.adapters.polymarket.loaders",
+    "nautilus_trader.adapters.polymarket.websocket.client",
+    "nautilus_trader.adapters.polymarket.common.credentials",
+    "nautilus_trader.adapters.polymarket.common.conversion"
+  ],
+  "execution_auth_components_avoided": [
+    "nautilus_trader.adapters.polymarket.data",
+    "nautilus_trader.adapters.polymarket.execution",
+    "nautilus_trader.adapters.polymarket.factories",
+    "nautilus_trader.adapters.polymarket.loaders",
+    "nautilus_trader.adapters.polymarket.websocket.client",
+    "nautilus_trader.adapters.polymarket.common.credentials",
+    "nautilus_trader.adapters.polymarket.common.conversion"
+  ],
+  "selected_data_path": "PUBLIC_REST_FALLBACK_USED",
+  "data_path_reason": "Nautilus core not importable (No module named 'nautilus_trader.core.data'). Using direct httpx calls to public Gamma and CLOB REST APIs. The Nautilus data-side modules (PolymarketLiveDataClient, PolymarketInstrumentProvider) require ClobClient (authenticated) and are excluded by Phase 0 safety policy regardless.",
+  "nautilus_core_importable": false,
+  "nautilus_core_import_error": "No module named 'nautilus_trader.core.data'"
+}

@@ -6,10 +6,14 @@ Reads JSONL tick files line-by-line to avoid loading all ticks into memory.
 from __future__ import annotations
 
 import json
+import math
 import random
 from collections import deque
 from pathlib import Path
 from typing import Any, Iterator
+
+from .stress_labels import StressLabel
+from .tick_models import TickForwardReturn
 
 SEED = 42
 STRESS_DEDUP_COOLDOWN_NS = 30_000_000_000  # 30 seconds

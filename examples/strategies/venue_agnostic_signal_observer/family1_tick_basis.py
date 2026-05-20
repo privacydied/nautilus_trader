@@ -20,6 +20,7 @@ no trading adapters, no live trading.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 _MS_TO_NS: int = 1_000_000

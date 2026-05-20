@@ -2000,13 +2000,14 @@ def fetch_cex_proxy_price(
         resp.raise_for_status()
         data = resp.json()
         if proxy == "binance":
-            price = float(data.get("price", 0))
+            price = float(data["price"]) if data.get("price") is not None else 0
         elif proxy == "kraken":
             result = data.get("result", {})
             ticker = result.get(next(iter(result)), {}) if result else {}
-            price = (float(ticker.get("b", [0])[0]) + float(ticker.get("a", [0])[0])) / 2 if ticker else None
+            price = ((float(ticker["b"][0]) if ticker.get("b") and ticker["b"] and ticker["b"][0] is not None else 0) + (float(ticker["a"][0]) if ticker.get("a") and ticker["a"] and ticker["a"][0] is not None else 0)) / 2 if ticker else None
         elif proxy == "coinbase":
-            price = float(data.get("data", {}).get("amount", 0))
+            inner = data.get("data", {})
+            price = float(inner["amount"]) if inner.get("amount") is not None else 0
         else:
             return None, REF_CEX_PROXY, f"unsupported_proxy:{proxy}"
         if price and price > 0:

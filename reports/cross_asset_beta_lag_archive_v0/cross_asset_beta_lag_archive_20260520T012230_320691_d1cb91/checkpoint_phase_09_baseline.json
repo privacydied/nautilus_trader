@@ -1,0 +1,934 @@
+{
+  "phase": "09_baseline",
+  "study_id": "cross_asset_beta_lag_archive_v0",
+  "git_sha": "acec8a011774bed7492e754c6e494a23eabf60be",
+  "precommitment_sha": "74eac2f485de2fbc93a09dfd8a9a5b34e1ae23b16be2fe44de0d602010cdf4a7",
+  "config_identity": {
+    "study_id": "cross_asset_beta_lag_archive_v0",
+    "source_symbols": [
+      "BTCUSDT",
+      "ETHUSDT"
+    ],
+    "target_symbols": [
+      "AVAXUSDT",
+      "DOGEUSDT",
+      "LINKUSDT",
+      "SOLUSDT"
+    ],
+    "calendar_start": "2024-01-01",
+    "calendar_end": "2026-04-30",
+    "stress_rules": [
+      {
+        "name": "30s_30bps",
+        "lookback_seconds": 30,
+        "threshold_bps": 30.0
+      },
+      {
+        "name": "60s_50bps",
+        "lookback_seconds": 60,
+        "threshold_bps": 50.0
+      }
+    ],
+    "stress_dedup_cooldown_seconds": 30,
+    "independent_window_separation_seconds": 1800,
+    "entry_delay_seconds": 1,
+    "cost_total_bps": 50,
+    "horizons_ms": [
+      30000,
+      60000,
+      300000
+    ],
+    "stress_window_seconds": [
+      30,
+      60
+    ],
+    "directions": [
+      "bearish",
+      "bullish"
+    ],
+    "family_size": 96,
+    "seed": 42,
+    "null_iterations": 1000,
+    "fdr_alpha": 0.05,
+    "null_alpha": 0.05,
+    "min_events_per_cell": 50,
+    "min_events_holdout": 20,
+    "win_rate_threshold": 0.55,
+    "worst_decile_threshold": -50.0,
+    "baseline_delta_bps": 10.0,
+    "min_independent_windows": 20,
+    "train_frac": 0.7
+  },
+  "config_identity_sha256": "4ac413e9fd7f45e014971df5cb7605878f80e4fac2b7e26853db72c7944d2197",
+  "timestamp_utc": "2026-05-20T01:59:02.939067+00:00",
+  "null_engine": "cpu",
+  "null_device": "cpu",
+  "payload": {
+    "baseline_results": {
+      "BTCUSDT->SOLUSDT/30s/bullish/30000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/30s/bullish/30000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -47.23606400677771,
+        "baseline_delta_bps": 3.3141912238639293
+      },
+      "BTCUSDT->SOLUSDT/30s/bullish/60000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/30s/bullish/60000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -45.922533479400556,
+        "baseline_delta_bps": 4.627721751241083
+      },
+      "BTCUSDT->SOLUSDT/30s/bullish/300000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/30s/bullish/300000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -43.38789152018295,
+        "baseline_delta_bps": 7.162363710458692
+      },
+      "BTCUSDT->SOLUSDT/30s/bearish/30000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/30s/bearish/30000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -50.50442060673037,
+        "baseline_delta_bps": 0.037388310673875935
+      },
+      "BTCUSDT->SOLUSDT/30s/bearish/60000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/30s/bearish/60000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -51.53255799674097,
+        "baseline_delta_bps": -0.9907490793367231
+      },
+      "BTCUSDT->SOLUSDT/30s/bearish/300000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/30s/bearish/300000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -56.54056019743226,
+        "baseline_delta_bps": -5.99875128002801
+      },
+      "BTCUSDT->SOLUSDT/60s/bullish/30000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/60s/bullish/30000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -46.87898465256224,
+        "baseline_delta_bps": 2.980986713355861
+      },
+      "BTCUSDT->SOLUSDT/60s/bullish/60000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/60s/bullish/60000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -44.36809234624582,
+        "baseline_delta_bps": 5.491879019672282
+      },
+      "BTCUSDT->SOLUSDT/60s/bullish/300000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/60s/bullish/300000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -35.10671625853931,
+        "baseline_delta_bps": 14.753255107378791
+      },
+      "BTCUSDT->SOLUSDT/60s/bearish/30000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/60s/bearish/30000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -50.373768455584354,
+        "baseline_delta_bps": -0.5026169973657417
+      },
+      "BTCUSDT->SOLUSDT/60s/bearish/60000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/60s/bearish/60000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -53.6645405062744,
+        "baseline_delta_bps": -3.7933890480557864
+      },
+      "BTCUSDT->SOLUSDT/60s/bearish/300000ms": {
+        "group_key": "BTCUSDT->SOLUSDT/60s/bearish/300000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -63.92810997538973,
+        "baseline_delta_bps": -14.056958517171118
+      },
+      "BTCUSDT->LINKUSDT/30s/bullish/30000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/30s/bullish/30000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -47.37314000411979,
+        "baseline_delta_bps": 3.177115226521849
+      },
+      "BTCUSDT->LINKUSDT/30s/bullish/60000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/30s/bullish/60000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -45.67632353502062,
+        "baseline_delta_bps": 4.8739316956210175
+      },
+      "BTCUSDT->LINKUSDT/30s/bullish/300000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/30s/bullish/300000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -40.953197845679405,
+        "baseline_delta_bps": 9.597057384962234
+      },
+      "BTCUSDT->LINKUSDT/30s/bearish/30000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/30s/bearish/30000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -49.097159417039265,
+        "baseline_delta_bps": 1.4446495003649815
+      },
+      "BTCUSDT->LINKUSDT/30s/bearish/60000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/30s/bearish/60000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -48.710035983530545,
+        "baseline_delta_bps": 1.831772933873701
+      },
+      "BTCUSDT->LINKUSDT/30s/bearish/300000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/30s/bearish/300000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -48.83885688075699,
+        "baseline_delta_bps": 1.702952036647254
+      },
+      "BTCUSDT->LINKUSDT/60s/bullish/30000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/60s/bullish/30000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -46.186646783327745,
+        "baseline_delta_bps": 3.6733245825903538
+      },
+      "BTCUSDT->LINKUSDT/60s/bullish/60000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/60s/bullish/60000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -43.652704577801636,
+        "baseline_delta_bps": 6.207266788116463
+      },
+      "BTCUSDT->LINKUSDT/60s/bullish/300000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/60s/bullish/300000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -31.522938229844144,
+        "baseline_delta_bps": 18.337033136073956
+      },
+      "BTCUSDT->LINKUSDT/60s/bearish/30000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/60s/bearish/30000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -46.45771878593519,
+        "baseline_delta_bps": 3.4134326722834203
+      },
+      "BTCUSDT->LINKUSDT/60s/bearish/60000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/60s/bearish/60000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -47.93749827586023,
+        "baseline_delta_bps": 1.933653182358384
+      },
+      "BTCUSDT->LINKUSDT/60s/bearish/300000ms": {
+        "group_key": "BTCUSDT->LINKUSDT/60s/bearish/300000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -56.692737974522814,
+        "baseline_delta_bps": -6.821586516304201
+      },
+      "BTCUSDT->DOGEUSDT/30s/bullish/30000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/30s/bullish/30000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -47.07172094618289,
+        "baseline_delta_bps": 3.478534284458746
+      },
+      "BTCUSDT->DOGEUSDT/30s/bullish/60000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/30s/bullish/60000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -44.64872948097097,
+        "baseline_delta_bps": 5.901525749670668
+      },
+      "BTCUSDT->DOGEUSDT/30s/bullish/300000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/30s/bullish/300000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -40.28388541523123,
+        "baseline_delta_bps": 10.266369815410407
+      },
+      "BTCUSDT->DOGEUSDT/30s/bearish/30000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/30s/bearish/30000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -49.05690505293061,
+        "baseline_delta_bps": 1.4849038644736368
+      },
+      "BTCUSDT->DOGEUSDT/30s/bearish/60000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/30s/bearish/60000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -48.2547820509226,
+        "baseline_delta_bps": 2.2870268664816464
+      },
+      "BTCUSDT->DOGEUSDT/30s/bearish/300000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/30s/bearish/300000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -50.36264999528392,
+        "baseline_delta_bps": 0.17915892212032958
+      },
+      "BTCUSDT->DOGEUSDT/60s/bullish/30000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/60s/bullish/30000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -46.29970798159139,
+        "baseline_delta_bps": 3.56026338432671
+      },
+      "BTCUSDT->DOGEUSDT/60s/bullish/60000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/60s/bullish/60000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -45.33767067666973,
+        "baseline_delta_bps": 4.522300689248368
+      },
+      "BTCUSDT->DOGEUSDT/60s/bullish/300000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/60s/bullish/300000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -36.14454080478241,
+        "baseline_delta_bps": 13.71543056113569
+      },
+      "BTCUSDT->DOGEUSDT/60s/bearish/30000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/60s/bearish/30000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -50.27841371375854,
+        "baseline_delta_bps": -0.40726225553992634
+      },
+      "BTCUSDT->DOGEUSDT/60s/bearish/60000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/60s/bearish/60000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -53.23440417066765,
+        "baseline_delta_bps": -3.3632527124490394
+      },
+      "BTCUSDT->DOGEUSDT/60s/bearish/300000ms": {
+        "group_key": "BTCUSDT->DOGEUSDT/60s/bearish/300000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -61.47701270369672,
+        "baseline_delta_bps": -11.60586124547811
+      },
+      "BTCUSDT->AVAXUSDT/30s/bullish/30000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/30s/bullish/30000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -46.15681745053806,
+        "baseline_delta_bps": 4.393437780103582
+      },
+      "BTCUSDT->AVAXUSDT/30s/bullish/60000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/30s/bullish/60000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -42.948425862865555,
+        "baseline_delta_bps": 7.601829367776084
+      },
+      "BTCUSDT->AVAXUSDT/30s/bullish/300000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/30s/bullish/300000ms",
+        "baseline_n": 62328,
+        "baseline_mean_net_bps": -50.55025523064164,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012562572198690797,
+        "cell_mean_net_bps": -37.80829865097697,
+        "baseline_delta_bps": 12.741956579664667
+      },
+      "BTCUSDT->AVAXUSDT/30s/bearish/30000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/30s/bearish/30000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -48.183748266666754,
+        "baseline_delta_bps": 2.3580606507374924
+      },
+      "BTCUSDT->AVAXUSDT/30s/bearish/60000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/30s/bearish/60000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -47.18130980796766,
+        "baseline_delta_bps": 3.3604991094365886
+      },
+      "BTCUSDT->AVAXUSDT/30s/bearish/300000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/30s/bearish/300000ms",
+        "baseline_n": 61944,
+        "baseline_mean_net_bps": -50.541808917404246,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012608162211029316,
+        "cell_mean_net_bps": -49.308686010683964,
+        "baseline_delta_bps": 1.2331229067202827
+      },
+      "BTCUSDT->AVAXUSDT/60s/bullish/30000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/60s/bullish/30000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -49.123156884626034,
+        "baseline_delta_bps": 0.7368144812920647
+      },
+      "BTCUSDT->AVAXUSDT/60s/bullish/60000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/60s/bullish/60000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -49.0684777415995,
+        "baseline_delta_bps": 0.7914936243185977
+      },
+      "BTCUSDT->AVAXUSDT/60s/bullish/300000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/60s/bullish/300000ms",
+        "baseline_n": 9708,
+        "baseline_mean_net_bps": -49.8599713659181,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013494025545941491,
+        "cell_mean_net_bps": -40.521810920553904,
+        "baseline_delta_bps": 9.338160445364196
+      },
+      "BTCUSDT->AVAXUSDT/60s/bearish/30000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/60s/bearish/30000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -49.356239537840914,
+        "baseline_delta_bps": 0.5149119203776991
+      },
+      "BTCUSDT->AVAXUSDT/60s/bearish/60000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/60s/bearish/60000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -52.39622901505066,
+        "baseline_delta_bps": -2.525077556832045
+      },
+      "BTCUSDT->AVAXUSDT/60s/bearish/300000ms": {
+        "group_key": "BTCUSDT->AVAXUSDT/60s/bearish/300000ms",
+        "baseline_n": 8640,
+        "baseline_mean_net_bps": -49.87115145821861,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.012962962962962963,
+        "cell_mean_net_bps": -64.3782834100889,
+        "baseline_delta_bps": -14.507131951870285
+      },
+      "ETHUSDT->SOLUSDT/30s/bullish/30000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/30s/bullish/30000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -48.36297266883188,
+        "baseline_delta_bps": 2.0357565015621404
+      },
+      "ETHUSDT->SOLUSDT/30s/bullish/60000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/30s/bullish/60000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -47.86724867281454,
+        "baseline_delta_bps": 2.53148049757948
+      },
+      "ETHUSDT->SOLUSDT/30s/bullish/300000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/30s/bullish/300000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -46.08842817406402,
+        "baseline_delta_bps": 4.31030099633
+      },
+      "ETHUSDT->SOLUSDT/30s/bearish/30000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/30s/bearish/30000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -49.85624645728747,
+        "baseline_delta_bps": 0.5419947544115047
+      },
+      "ETHUSDT->SOLUSDT/30s/bearish/60000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/30s/bearish/60000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -50.29989702676811,
+        "baseline_delta_bps": 0.09834418493086616
+      },
+      "ETHUSDT->SOLUSDT/30s/bearish/300000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/30s/bearish/300000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -53.38063936755577,
+        "baseline_delta_bps": -2.9823981558567993
+      },
+      "ETHUSDT->SOLUSDT/60s/bullish/30000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/60s/bullish/30000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -49.17114571448581,
+        "baseline_delta_bps": 1.237198162496135
+      },
+      "ETHUSDT->SOLUSDT/60s/bullish/60000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/60s/bullish/60000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -49.155570284295884,
+        "baseline_delta_bps": 1.2527735926860615
+      },
+      "ETHUSDT->SOLUSDT/60s/bullish/300000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/60s/bullish/300000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -49.63339742232729,
+        "baseline_delta_bps": 0.7749464546546534
+      },
+      "ETHUSDT->SOLUSDT/60s/bearish/30000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/60s/bearish/30000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -50.508528669020116,
+        "baseline_delta_bps": -0.06368028638249967
+      },
+      "ETHUSDT->SOLUSDT/60s/bearish/60000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/60s/bearish/60000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -51.35026562346194,
+        "baseline_delta_bps": -0.9054172408243204
+      },
+      "ETHUSDT->SOLUSDT/60s/bearish/300000ms": {
+        "group_key": "ETHUSDT->SOLUSDT/60s/bearish/300000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -58.18317010941718,
+        "baseline_delta_bps": -7.738321726779567
+      },
+      "ETHUSDT->LINKUSDT/30s/bullish/30000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/30s/bullish/30000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -48.25095803579092,
+        "baseline_delta_bps": 2.147771134603097
+      },
+      "ETHUSDT->LINKUSDT/30s/bullish/60000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/30s/bullish/60000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -47.403698286766634,
+        "baseline_delta_bps": 2.9950308836273862
+      },
+      "ETHUSDT->LINKUSDT/30s/bullish/300000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/30s/bullish/300000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -45.337993357042706,
+        "baseline_delta_bps": 5.0607358133513145
+      },
+      "ETHUSDT->LINKUSDT/30s/bearish/30000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/30s/bearish/30000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -49.368470947564965,
+        "baseline_delta_bps": 1.029770264134008
+      },
+      "ETHUSDT->LINKUSDT/30s/bearish/60000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/30s/bearish/60000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -49.36157256713469,
+        "baseline_delta_bps": 1.036668644564287
+      },
+      "ETHUSDT->LINKUSDT/30s/bearish/300000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/30s/bearish/300000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -50.780276123591854,
+        "baseline_delta_bps": -0.3820349118928803
+      },
+      "ETHUSDT->LINKUSDT/60s/bullish/30000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/60s/bullish/30000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -48.258495735141416,
+        "baseline_delta_bps": 2.149848141840529
+      },
+      "ETHUSDT->LINKUSDT/60s/bullish/60000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/60s/bullish/60000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -46.428115636822255,
+        "baseline_delta_bps": 3.98022824015969
+      },
+      "ETHUSDT->LINKUSDT/60s/bullish/300000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/60s/bullish/300000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -37.603922855953826,
+        "baseline_delta_bps": 12.80442102102812
+      },
+      "ETHUSDT->LINKUSDT/60s/bearish/30000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/60s/bearish/30000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -47.270416763029544,
+        "baseline_delta_bps": 3.1744316196080717
+      },
+      "ETHUSDT->LINKUSDT/60s/bearish/60000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/60s/bearish/60000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -44.7553474757432,
+        "baseline_delta_bps": 5.689500906894416
+      },
+      "ETHUSDT->LINKUSDT/60s/bearish/300000ms": {
+        "group_key": "ETHUSDT->LINKUSDT/60s/bearish/300000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -48.77412712391485,
+        "baseline_delta_bps": 1.6707212587227644
+      },
+      "ETHUSDT->DOGEUSDT/30s/bullish/30000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/30s/bullish/30000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -48.59077225386002,
+        "baseline_delta_bps": 1.8079569165340033
+      },
+      "ETHUSDT->DOGEUSDT/30s/bullish/60000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/30s/bullish/60000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -47.88843173611375,
+        "baseline_delta_bps": 2.510297434280268
+      },
+      "ETHUSDT->DOGEUSDT/30s/bullish/300000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/30s/bullish/300000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -46.436094954902316,
+        "baseline_delta_bps": 3.962634215491704
+      },
+      "ETHUSDT->DOGEUSDT/30s/bearish/30000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/30s/bearish/30000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -49.533264572507846,
+        "baseline_delta_bps": 0.8649766391911271
+      },
+      "ETHUSDT->DOGEUSDT/30s/bearish/60000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/30s/bearish/60000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -49.398697697866076,
+        "baseline_delta_bps": 0.9995435138328972
+      },
+      "ETHUSDT->DOGEUSDT/30s/bearish/300000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/30s/bearish/300000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -50.84059456494753,
+        "baseline_delta_bps": -0.4423533532485564
+      },
+      "ETHUSDT->DOGEUSDT/60s/bullish/30000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/60s/bullish/30000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -47.555748735312505,
+        "baseline_delta_bps": 2.8525951416694397
+      },
+      "ETHUSDT->DOGEUSDT/60s/bullish/60000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/60s/bullish/60000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -45.78197788999826,
+        "baseline_delta_bps": 4.626365986983686
+      },
+      "ETHUSDT->DOGEUSDT/60s/bullish/300000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/60s/bullish/300000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -38.23596404334396,
+        "baseline_delta_bps": 12.172379833637983
+      },
+      "ETHUSDT->DOGEUSDT/60s/bearish/30000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/60s/bearish/30000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -48.202662303924235,
+        "baseline_delta_bps": 2.242186078713381
+      },
+      "ETHUSDT->DOGEUSDT/60s/bearish/60000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/60s/bearish/60000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -47.1558851137748,
+        "baseline_delta_bps": 3.2889632688628154
+      },
+      "ETHUSDT->DOGEUSDT/60s/bearish/300000ms": {
+        "group_key": "ETHUSDT->DOGEUSDT/60s/bearish/300000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -57.76769318553985,
+        "baseline_delta_bps": -7.322844802902232
+      },
+      "ETHUSDT->AVAXUSDT/30s/bullish/30000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/30s/bullish/30000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -48.46363967222157,
+        "baseline_delta_bps": 1.9350894981724522
+      },
+      "ETHUSDT->AVAXUSDT/30s/bullish/60000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/30s/bullish/60000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -47.82854814201742,
+        "baseline_delta_bps": 2.5701810283766022
+      },
+      "ETHUSDT->AVAXUSDT/30s/bullish/300000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/30s/bullish/300000ms",
+        "baseline_n": 160968,
+        "baseline_mean_net_bps": -50.39872917039402,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013033646439043785,
+        "cell_mean_net_bps": -45.27973265668812,
+        "baseline_delta_bps": 5.118996513705902
+      },
+      "ETHUSDT->AVAXUSDT/30s/bearish/30000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/30s/bearish/30000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -49.07504500423555,
+        "baseline_delta_bps": 1.3231962074634254
+      },
+      "ETHUSDT->AVAXUSDT/30s/bearish/60000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/30s/bearish/60000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -48.84654369156149,
+        "baseline_delta_bps": 1.5516975201374805
+      },
+      "ETHUSDT->AVAXUSDT/30s/bearish/300000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/30s/bearish/300000ms",
+        "baseline_n": 161028,
+        "baseline_mean_net_bps": -50.39824121169897,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013028790024095188,
+        "cell_mean_net_bps": -48.671235342743,
+        "baseline_delta_bps": 1.7270058689559704
+      },
+      "ETHUSDT->AVAXUSDT/60s/bullish/30000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/60s/bullish/30000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -44.98430111353921,
+        "baseline_delta_bps": 5.424042763442735
+      },
+      "ETHUSDT->AVAXUSDT/60s/bullish/60000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/60s/bullish/60000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -39.03983278598227,
+        "baseline_delta_bps": 11.368511090999675
+      },
+      "ETHUSDT->AVAXUSDT/60s/bullish/300000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/60s/bullish/300000ms",
+        "baseline_n": 25932,
+        "baseline_mean_net_bps": -50.408343876981945,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.013111213944161653,
+        "cell_mean_net_bps": -34.256183241421496,
+        "baseline_delta_bps": 16.15216063556045
+      },
+      "ETHUSDT->AVAXUSDT/60s/bearish/30000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/60s/bearish/30000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -45.75152049531114,
+        "baseline_delta_bps": 4.693327887326475
+      },
+      "ETHUSDT->AVAXUSDT/60s/bearish/60000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/60s/bearish/60000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -42.54717370081687,
+        "baseline_delta_bps": 7.897674681820746
+      },
+      "ETHUSDT->AVAXUSDT/60s/bearish/300000ms": {
+        "group_key": "ETHUSDT->AVAXUSDT/60s/bearish/300000ms",
+        "baseline_n": 24864,
+        "baseline_mean_net_bps": -50.444848382637616,
+        "baseline_median_net_bps": -50.0,
+        "baseline_win_rate": 0.01291023166023166,
+        "cell_mean_net_bps": -56.659765084253976,
+        "baseline_delta_bps": -6.21491670161636
+      }
+    }
+  }
+}

@@ -37,7 +37,7 @@ class SignalEvent:
             target_instrument=d["target_instrument"],
             signal_type=d.get("signal_type", "unknown"),
             direction=d.get("direction", "long"),
-            strength=float(d.get("strength", 0.0)),
+            strength=float(d.get("strength") if d.get("strength") is not None else 0.0),
             metadata=d.get("metadata"),
             reason=d.get("reason"),
         )
