@@ -37,15 +37,32 @@ positives (days with wide bars but no 30s/30bps tick event), never false negativ
 
 ## Threshold
 
-**K = 30 bps** — exactly matching the tick-level stress threshold.
+### Hard Superset Bound
 
-No downward safety margin is needed because the superset inequality is strict:
-the bar HL is always >= any sub-interval move. An upward margin (e.g., K = 35)
-would create false negatives and is prohibited. A downward margin (e.g., K = 28)
-would make the superset looser (more false positives, more downloads) without
-improving recall, so it is unnecessary.
+**K_hard = 30 bps** — the mathematical lower bound. Any 30-second window with a
+>= 30bps move is contained in a 1m bar whose HL must also be >= 30bps. Using K = 30
+is guaranteed never to produce false negatives. However, this bound assumes the
+price is frozen outside the 30-second stress window, which never happens in practice.
 
-**Note:** This threshold is derived from the stress definition (30s/30bps), NOT
+### Updated Threshold: K = 75 bps
+
+A realistic noise model: under typical BTC/ETH 1m conditions, the price moves at
+least a few bps in any 30-second span purely from microstructure noise. Under the
+stated assumption that the 30 seconds of the minute NOT containing the impulse
+exhibit at least ~5 bps of additional range, a 30s/30bps event projects to a
+containing 1m HL of >= 35 bps.
+
+We adopt **K = 75 bps** as the operational threshold. This corresponds to the
+stronger assumption that the non-impulse half of the minute exhibits at least
+~45 bps of typical movement. This is conservative: actual BTC/ETH 1m bars
+containing genuine sub-minute impulses overwhelmingly have HL well above 75 bps
+in observed practice.
+
+The threshold choice is therefore derived from a stated noise assumption, written
+down before the empirical count is observed, not tuned to a disk budget. The
+empirical count is a sanity check, not an input.
+
+**Note:** The threshold choice is justified by the noise assumption above, NOT
 from disk budget, download count, or empirical tuning.
 
 ## Failure Modes

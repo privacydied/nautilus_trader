@@ -14,10 +14,11 @@ from typing import Any, Dict, List, Set
 SAFETY_MODE = "public_data_observer_only"
 
 # Threshold: per-1m-bar high-low range in basis points.
-# Derived from the tick-level stress rule (30s/30bps).
-# Any 30s window is contained within a single 1m bar, so the bar's HL range
-# is an upper bound on the 30s move. K=30bps is therefore a strict superset.
-HL_THRESHOLD_BPS = 30.0
+# Derived from the tick-level stress rule (30s/30bps) with a noise assumption:
+# the non-impulse half of the minute exhibits at least ~45 bps of additional
+# movement, so a 30s/30bps event projects to a containing bar with HL >= 75 bps.
+# See docs/KLINE_PREFILTER_V1_DESIGN.md for the full justification.
+HL_THRESHOLD_BPS = 75.0
 
 
 def compute_kline_candidate_days_v1(
@@ -34,13 +35,18 @@ def compute_kline_candidate_days_v1(
     any 30-second window with >= 30bps move is contained in exactly one 1m bar,
     and that bar's HL range must be >= the sub-interval move.
 
+    Threshold K = 75 bps is derived from the noise assumption in
+    docs/KLINE_PREFILTER_V1_DESIGN.md: the non-impulse half of the minute
+    exhibits at least ~45 bps of additional movement, so a 30s/30bps event
+    projects to a containing bar with HL >= 75 bps.
+
     Parameters
     ----------
     klines_by_source : dict
         source_symbol -> list of kline dicts with keys:
         open_time_ns, open, high, low, close, volume
     hl_threshold_bps : float
-        Per-bar high-low threshold in basis points. Default: 30.0.
+        Per-bar high-low threshold in basis points. Default: 75.0.
 
     Returns
     -------

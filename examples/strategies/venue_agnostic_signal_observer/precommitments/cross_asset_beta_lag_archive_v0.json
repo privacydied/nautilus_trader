@@ -53,5 +53,8 @@
     "null_p_le": 0.05
   },
   "bearish_execution_status": "diagnostic_only_spot_short_not_assumed",
-  "forbidden_verdicts": ["TRADE_READY", "EXECUTION_READY", "BOT_READY"]
+  "forbidden_verdicts": ["TRADE_READY", "EXECUTION_READY", "BOT_READY"],
+  "prefilter_version": "v1_per_bar_hl_K75",
+  "prefilter_K_bps": 75.0,
+  "prefilter_design_note_sha": "a824799e7970f283d7b26ac96b1b761ca0b48dffaa22fb5a0dbdd3d9480e518e"
 }

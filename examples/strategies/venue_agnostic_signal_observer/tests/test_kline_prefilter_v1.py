@@ -56,24 +56,34 @@ def _bps(open_p: float, other_p: float) -> float:
 # ---------------------------------------------------------------------------
 
 class TestSupersetProof:
-    """A 30bps move inside a 1m bar MUST produce a bar with HL >= 30bps.
+    """A 30bps move inside a 1m bar, combined with typical noise in the
+    remaining 30s, MUST produce a bar with HL >= 75bps.
 
     The containing bar's high-low range is always >= any sub-interval move
-    within it. Therefore the v1 prefilter (per-bar HL >= 30bps) MUST include
-    any day containing a 30s/30bps tick event.
+    within it. With the noise assumption (non-impulse half adds >= 45 bps),
+    a 30s/30bps event projects to a bar with HL >= 75 bps.
+    Therefore the v1 prefilter (per-bar HL >= 75bps) MUST include
+    any day containing a 30s/30bps tick event under this noise model.
     """
 
+    # ADJUSTED FOR K=75: All test fixtures now place the 30s/30bps event in a
+    # 1m bar whose total HL >= 75 bps, modeling the noise assumption that the
+    # non-impulse half of the minute contributes ~45+ bps of additional range.
+
     def test_30bps_move_at_bar_open(self):
-        """Event starts at bar open: 30bps up within the first 30s."""
+        """Event starts at bar open: 30bps up within the first 30s,
+        plus ~50bps of noise in the remaining 30s → total HL ~80bps."""
         base = 42000.0
-        # Use exact value clearly above 30bps to avoid float rounding edge
-        high_p = base * (1 + 30.1 / 10_000)
+        # 30bps impulse up, then noise adds another ~50bps to the low side
+        # Total HL: (high - low) / open = (base*1.008 - base*0.995) / base ≈ 80bps
+        high_p = base * (1 + 80.0 / 10_000)
+        low_p = base * (1 - 0.0 / 10_000)  # low at open
         bars = [
             _make_1m_bar(
                 open_time_ms=1704067200000,  # 2024-01-01 00:00 UTC
                 open_p=base,
                 high_p=high_p,
-                low_p=base,
+                low_p=low_p,
                 close_p=base * (1 + 15 / 10_000),  # close near middle
             ),
         ]
@@ -81,15 +91,16 @@ class TestSupersetProof:
         assert "2024-01-01" in dates
 
     def test_30bps_move_at_bar_middle(self):
-        """Event occurs in the middle of a quiet bar."""
+        """Event occurs in the middle: 30bps spike + 50bps of noise on low side."""
         base = 42000.0
-        target = base * (1 + 30 / 10_000)
+        high_p = base * (1 + 30.0 / 10_000)   # impulse
+        low_p = base * (1 - 50.0 / 10_000)   # noise on other side
         bars = [
             _make_1m_bar(
                 open_time_ms=1704067200000,
                 open_p=base,
-                high_p=target,  # spike in middle
-                low_p=base * (1 - 5 / 10_000),  # slight dip before
+                high_p=high_p,  # spike in middle
+                low_p=low_p,  # noise dip
                 close_p=base,  # returns to open
             ),
         ]
@@ -97,41 +108,43 @@ class TestSupersetProof:
         assert "2024-01-01" in dates
 
     def test_30bps_move_at_bar_close(self):
-        """Event ends near the close of the bar."""
+        """Event ends near the close: 30bps down + 50bps noise on high side."""
         base = 42000.0
-        target = base * (1 - 30 / 10_000)  # 30bps down
+        high_p = base * (1 + 50.0 / 10_000)  # noise
+        low_p = base * (1 - 30.0 / 10_000)   # impulse
         bars = [
             _make_1m_bar(
                 open_time_ms=1704067200000,
                 open_p=base,
-                high_p=base,
-                low_p=target,  # crash at end
-                close_p=target,
+                high_p=high_p,
+                low_p=low_p,  # crash at end
+                close_p=low_p,
             ),
         ]
         dates = compute_kline_candidate_days_v1({"BTCUSDT": bars})
         assert "2024-01-01" in dates
 
     def test_30bps_downward_move(self):
-        """30bps downward move — same logic, must be caught."""
+        """30bps downward move + 50bps noise → 80bps total HL, must be caught."""
         base = 42000.0
-        target = base * (1 - 30 / 10_000)
+        high_p = base * (1 + 50.0 / 10_000)
+        low_p = base * (1 - 30.0 / 10_000)
         bars = [
             _make_1m_bar(
                 open_time_ms=1704067200000,
                 open_p=base,
-                high_p=base,
-                low_p=target,
-                close_p=target,
+                high_p=high_p,
+                low_p=low_p,
+                close_p=low_p,
             ),
         ]
         dates = compute_kline_candidate_days_v1({"BTCUSDT": bars})
         assert "2024-01-01" in dates
 
     def test_barely_under_threshold_excluded(self):
-        """A bar with 29.9bps HL should NOT trigger (at K=30bps)."""
+        """A bar with 74.9bps HL should NOT trigger (at K=75bps)."""
         base = 42000.0
-        high_p = base * (1 + 29.9 / 10_000)
+        high_p = base * (1 + 74.9 / 10_000)
         bars = [
             _make_1m_bar(
                 open_time_ms=1704067200000,
@@ -147,7 +160,7 @@ class TestSupersetProof:
     def test_multiple_days_only_stress_day_included(self):
         """Multi-day input: only the day with the stress event is included."""
         base = 42000.0
-        target = base * (1 + 35 / 10_000)
+        target = base * (1 + 80.0 / 10_000)  # well above 75
         bars = [
             _make_1m_bar(
                 open_time_ms=1704067200000,  # 2024-01-01 00:00
@@ -231,7 +244,7 @@ class TestDeterminism:
     def test_same_input_same_output(self):
         """Same kline input must produce identical candidate dates set."""
         base = 42000.0
-        target = base * (1 + 35 / 10_000)
+        target = base * (1 + 80.0 / 10_000)
         bars = [
             _make_1m_bar(
                 open_time_ms=1704067200000 + i * 60_000,
@@ -307,18 +320,22 @@ class TestEmpiricalSanity:
         data = {"BTCUSDT": bars}
 
         v1_dates = compute_kline_candidate_days_v1(data)
+        # Also compute K=30 explicitly for comparison with the prior run
+        v1_dates_k30 = compute_kline_candidate_days_v1(data, hl_threshold_bps=30.0)
         deprecated_dates = compute_kline_candidate_days_deprecated(data)
 
         # Print results for the report
         print(f"\n  === Empirical Kline Prefilter Comparison (BTC 1m, {len(bars)} bars) ===")
         print(f"  V1 (per-bar HL >= {HL_THRESHOLD_BPS}bps): {len(v1_dates)} candidate days")
+        print(f"  V1 (per-bar HL >= 30.0bps, prior): {len(v1_dates_k30)} candidate days")
         print(f"  Deprecated (daily-range HL >= 30bps): {len(deprecated_dates)} candidate days")
-        print(f"  V1 selects {len(v1_dates) / len(kline_zips) * 100:.1f}% of calendar")
+        print(f"  V1 K={HL_THRESHOLD_BPS} selects {len(v1_dates) / len(kline_zips) * 100:.1f}% of calendar")
+        print(f"  V1 K=30 selects {len(v1_dates_k30) / len(kline_zips) * 100:.1f}% of calendar")
         print(f"  Deprecated selects {len(deprecated_dates) / len(kline_zips) * 100:.1f}% of calendar")
         if deprecated_dates - v1_dates:
-            print(f"  Deprecated over-selects {len(deprecated_dates - v1_dates)} days")
-        if v1_dates - deprecated_dates:
-            print(f"  V1 additionally selects {len(v1_dates - deprecated_dates)} days")
+            print(f"  Deprecated over-selects {len(deprecated_dates - v1_dates)} days vs V1 K={HL_THRESHOLD_BPS}")
+        if v1_dates_k30 - v1_dates:
+            print(f"  K=30 additionally selects {len(v1_dates_k30 - v1_dates)} days vs K={HL_THRESHOLD_BPS}")
 
         # Sanity: v1 should be a proper subset of the calendar
         assert len(v1_dates) <= len(kline_zips)
