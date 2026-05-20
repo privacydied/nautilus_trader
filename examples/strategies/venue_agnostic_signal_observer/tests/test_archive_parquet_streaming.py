@@ -9,6 +9,23 @@ import pytest
 from examples.strategies.venue_agnostic_signal_observer import archive_parquet_streaming as streaming
 
 
+def test_symbol_day_parquet_files_supports_actual_lowercase_archive_layout(tmp_path: Path) -> None:
+    symbol_dir = tmp_path / "btcusdt"
+    symbol_dir.mkdir()
+    expected = symbol_dir / "btcusdt_aggTrades_2024-01-02.parquet"
+    expected.write_bytes(b"placeholder")
+    (symbol_dir / "btcusdt_aggTrades_2024-01-03.parquet").write_bytes(b"placeholder")
+
+    files = streaming.symbol_day_parquet_files(
+        tmp_path,
+        "BTCUSDT",
+        candidate_dates={"2024-01-02"},
+    )
+
+    assert files == [expected]
+    assert streaming.date_from_parquet_path(expected) == "2024-01-02"
+
+
 @dataclass(frozen=True)
 class DummyStressLabel:
     label_id: str

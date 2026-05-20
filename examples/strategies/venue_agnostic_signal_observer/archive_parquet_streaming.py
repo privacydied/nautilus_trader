@@ -21,7 +21,10 @@ import numpy as np
 SEED = 42
 NS_PER_SECOND = 1_000_000_000
 DEFAULT_MEMORY_GUARD_LIMIT_BYTES = 8 * 1024**3
-_FILENAME_RE = re.compile(r"^(?P<symbol>[A-Z0-9]+)_(?P<date>\d{4}-\d{2}-\d{2})_aggTrades\.parquet$")
+_FILENAME_RE = re.compile(
+    r"^(?P<symbol_a>[A-Za-z0-9]+)_(?P<date_a>\d{4}-\d{2}-\d{2})_aggTrades\.parquet$"
+    r"|^(?P<symbol_b>[A-Za-z0-9]+)_aggTrades_(?P<date_b>\d{4}-\d{2}-\d{2})\.parquet$"
+)
 
 
 class ArchiveStreamingMemoryGuardTriggered(RuntimeError):
@@ -98,48 +101,75 @@ def check_archive_streaming_memory_guard(
     return rss
 
 
+def _filename_parts(path: Path) -> tuple[str, str] | None:
+    match = _FILENAME_RE.match(path.name)
+    if not match:
+        return None
+    symbol = match.group("symbol_a") or match.group("symbol_b")
+    date = match.group("date_a") or match.group("date_b")
+    if symbol is None or date is None:
+        return None
+    return symbol.upper(), date
+
+
 def symbol_day_parquet_files(
     parquet_dir: Path,
     symbol: str,
     *,
     candidate_dates: set[str] | None = None,
 ) -> list[Path]:
-    """Find SYMBOL_YYYY-MM-DD_aggTrades.parquet files in flat or per-symbol layout."""
-    search_roots = [parquet_dir / symbol.lower(), parquet_dir / symbol, parquet_dir]
+    """Find supported symbol-day aggTrades parquet files in flat or per-symbol layout."""
+    symbol_upper = symbol.upper()
+    symbol_lower = symbol.lower()
+    search_roots = [parquet_dir / symbol_lower, parquet_dir / symbol_upper, parquet_dir / symbol, parquet_dir]
     files: list[Path] = []
     seen: set[Path] = set()
-    pattern = f"{symbol}_*_aggTrades.parquet"
+    patterns = (
+        f"{symbol_upper}_*_aggTrades.parquet",
+        f"{symbol_lower}_*_aggTrades.parquet",
+        f"{symbol.upper()}_*_aggTrades.parquet",
+        f"{symbol.lower()}_*_aggTrades.parquet",
+        f"{symbol_upper}_aggTrades_*.parquet",
+        f"{symbol_lower}_aggTrades_*.parquet",
+        f"{symbol.upper()}_aggTrades_*.parquet",
+        f"{symbol.lower()}_aggTrades_*.parquet",
+    )
     for root in search_roots:
         if not root.exists():
             continue
-        for path in root.glob(pattern):
-            resolved = path.resolve()
-            if resolved in seen:
-                continue
-            match = _FILENAME_RE.match(path.name)
-            if not match or match.group("symbol") != symbol:
-                continue
-            if candidate_dates is not None and match.group("date") not in candidate_dates:
-                continue
-            files.append(path)
-            seen.add(resolved)
-    return sorted(files, key=lambda p: _FILENAME_RE.match(p.name).group("date") if _FILENAME_RE.match(p.name) else p.name)
+        for pattern in patterns:
+            for path in root.glob(pattern):
+                resolved = path.resolve()
+                if resolved in seen:
+                    continue
+                parts = _filename_parts(path)
+                if parts is None:
+                    continue
+                path_symbol, path_date = parts
+                if path_symbol != symbol_upper:
+                    continue
+                if candidate_dates is not None and path_date not in candidate_dates:
+                    continue
+                files.append(path)
+                seen.add(resolved)
+    return sorted(files, key=lambda p: _filename_parts(p)[1] if _filename_parts(p) else p.name)
 
 
 def date_from_parquet_path(path: Path) -> str:
-    match = _FILENAME_RE.match(path.name)
-    if not match:
+    parts = _filename_parts(path)
+    if parts is None:
         raise ValueError(f"Unexpected parquet filename: {path.name}")
-    return match.group("date")
+    return parts[1]
 
 
 def read_symbol_day_parquet(path: Path) -> SymbolDayTicks:
     """Read exactly one symbol-day Parquet file and extract required columns."""
     import pyarrow.parquet as pq  # noqa: PLC0415
 
-    match = _FILENAME_RE.match(path.name)
-    if not match:
+    parts = _filename_parts(path)
+    if parts is None:
         raise ValueError(f"Unexpected parquet filename: {path.name}")
+    symbol, date = parts
     table = pq.read_table(path, columns=["ts_event", "price", "size", "is_buyer_maker"])
     ts = table["ts_event"].to_numpy(zero_copy_only=False).astype(np.int64, copy=False)
     prices = table["price"].to_numpy(zero_copy_only=False).astype(np.float64, copy=False)
@@ -158,8 +188,8 @@ def read_symbol_day_parquet(path: Path) -> SymbolDayTicks:
         sizes = sizes[order]
         maker = maker[order]
     return SymbolDayTicks(
-        symbol=match.group("symbol"),
-        date=match.group("date"),
+        symbol=symbol,
+        date=date,
         timestamps=ts,
         prices=prices,
         sizes=sizes,
