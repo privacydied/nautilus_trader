@@ -59,7 +59,8 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 | **Family 2 funding crowding reversal** | Binance BTCUSDT funding-rate extremes → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M funding + spot) | **REJECTED** | 60 BTC primary cells evaluated Jun 2020–Apr 2026 window (180-day past-only percentile warmup). Approved run (2026-05-18): 25 NEEDS_MORE_DATA, 11 REJECTED, 23 NULL_REJECTED_DIAGNOSTIC, 1 FDR_BLOCKED_DIAGNOSTIC, **0 CANDIDATE_FOR_LONGER_OBSERVATION**. No cell passed all pre-null gates (mean_net > 0, median > 0, win_rate >= 0.55, worst_decile > -50, baseline_delta >= 10). Positive-funding cells uniformly negative. Negative-funding cells had mixed sign but sub-threshold win rates. Full 60-cell evidence: no edge survives after 50 bps cost under frozen precommitted design. | `family2-funding-crowding-reversal-rejected` |
 || **Cross-exchange funding dispersion carry v1** | Binance vs Bybit perp funding spread carry (short high/long low) | Binance Vision + Bybit v5 archive (BTC & ETH) | **NEEDS_MORE_DATA_OR_NO_TAIL** | Gate A (Stage 1): zero dispersion events at all frozen thresholds (5/10/20/40 bps) for both BTC and ETH. Absolute funding spread never exceeded 5 bps across 1,261 aligned settlements (2024-01 to 2025-05). BTC max: 4.14 bps; ETH max: 4.49 bps. Gate B, null, FDR, holdout never reached. | `cross-exchange-funding-dispersion-carry-v1-no-tail` |
 || **Family 3 funding × OI crowding regime v0** | Binance BTCUSDT funding extremes × OI regime (rising/falling) → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M metrics + funding + spot) | **SIGNAL_ABSENCE_AT_COST** | 6 primary cells (2 directions × 1 OI regime × 3 horizons). All 6 cells failed evaluation gates (mean net bps < 0). Best cell: negative_extreme × rising_oi 48h = -19.3 bps mean net, 48.4% win rate. All mean net bps negative (range: -19 to -126 bps). 2/6 cells passed null test (negative extremes less bad than random at p<0.05) but still negative. No cell reached FDR or holdout. Blocker: cost wall + signal absence. 456 aligned extreme × rising events (226 neg) adequate for detection but directional mapping does not overcome 50 bps cost. See run `funding_oi_crowding_regime_v0_20260519T010334_54ceff`. Precommitment SHA: `5f911c3f`. Tag: `family3-funding-oi-crowding-regime-signal-absence` |
-|| **Family 3 v1 funding × falling-OI unwind mapping** | Binance BTCUSDT negative funding extreme × falling OI → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M metrics + funding + spot) | **REJECTED** | 2 primary cells, 24h and 48h. Stage A POPULATION_SUFFICIENT after ms/µs spot-kline parser fix and preflight. Both cells GATES_FAILED at 50 bps primary cost: 24h mean_net -45.14 bps, WR 0.395; 48h mean_net -38.00 bps, WR 0.435. Both beat timestamp-shuffle null (p=0.010 / 0.035), but remained economically negative. "Less bad than random," not tradeable. | `family3-funding-falling-oi-unwind-v1-rejected` |
+||| **Family 3 v1 funding × falling-OI unwind mapping** | Binance BTCUSDT funding-rate extremes → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M metrics + funding + spot) | **REJECTED** | 2 primary cells, 24h and 48h. Stage A POPULATION_SUFFICIENT after ms/µs spot-kline parser fix and preflight. Both cells GATES_FAILED at 50 bps primary cost: 24h mean_net -45.14 bps, WR 0.395; 48h mean_net -38.00 bps, WR 0.435. Both beat timestamp-shuffle null (p=0.010 / 0.035), but remained economically negative. "Less bad than random," not tradeable. | `family3-funding-falling-oi-unwind-v1-rejected` |
+||| **Cross-asset beta-lag archive v0** | BTC/ETH spot stress impulses → alt spot forward returns (SOL, LINK, DOGE, AVAX) | Binance Vision archive (aggTrades parquet) | **SIGNAL_ABSENCE_AT_COST** | 96 powered cells, 10,105 usable windows, 515K events. Best cell BTC→LINK/60s/bullish/300s: +18.34 bps baseline delta, -31.52 bps net at 50 bps cost. All cells fail null/FDR/holdout gates. Raw directional signal beats random entry but dies at the cost wall. Flip-point: ~18-20 bps round-trip. | `cross-asset-beta-lag-archive-v0-signal-absence` |
 
 ## Rejection Details
 
@@ -514,11 +515,93 @@ is negative and inconsistent.
 
 **Run artifacts:**
 - Phase 0 / preflight commit: `e5e077cff7a81fcfb8b1bffb4f7040a5860b2463`
-- Stage B commit: `1f0668053e82e9b72c9a1c27878cbe5ab2f3a60b`
-- Stage B run: `funding_falling_oi_unwind_v1_20260519T020343_a62a61`
-- Precommitment SHA: `c26c02281e2b27316b102fead1a09a4d4226af1ff9c150603695de68b41b58b1`
-- Seed: 42
-- Safety: `public_data_observer_only`
+|- Stage B commit: `1f0668053e82e9b72c9a1c27878cbe5ab2f3a60b`
+|- Stage B run: `funding_falling_oi_unwind_v1_20260519T020343_a62a61`
+|- Precommitment SHA: `c26c02281e2b27316b102fead1a09a4d4226af1ff9c150603695de68b41b58b1`
+|- Seed: 42
+|- Safety: `public_data_observer_only`
+
+### Cross-Asset Beta-Lag Archive v0
+
+**Tag:** `cross-asset-beta-lag-archive-v0-signal-absence`
+
+**Verdict:** `SIGNAL_ABSENCE_AT_COST`
+
+**Hypothesis:** When Binance BTC/ETH spot experience stress impulses (rolling 30s/60s
+price moves exceeding 30/50 bps thresholds), higher-beta spot assets (SOL, LINK,
+DOGE, AVAX) exhibit delayed repricing over 30s to 5m forward horizons that can
+be captured after accounting for realistic spot execution costs.
+
+**Tested conditions (frozen precommitment design):**
+- Family size: 96 primary cells (2 source × 4 target × 2 stress windows × 2 directions × 3 horizons)
+- Source: BTCUSDT, ETHUSDT (Binance Vision aggTrades parquet archive)
+- Targets: SOLUSDT, LINKUSDT, DOGEUSDT, AVAXUSDT (Binance Vision aggTrades parquet)
+- Stress rules: 30s window ≥30 bps, 60s window ≥50 bps
+- Stress dedup cooldown: 30s
+- Independent window separation: 1800s
+- Forward horizons: 30s, 60s, 300s
+- Cost model: 40 bps fee + 5 bps slippage + 5 bps quote mismatch = 50 bps all-in floor
+- Calendar: 2024-01-01 to 2026-04-30 (851 days)
+- Prefilter: K=75 bps per-bar high-low on 1m klines → 489 candidate stress days
+- Data source: Binance Vision public aggTrades archive (day-by-day streaming parquet)
+- Null: Timestamp-shift null, 1000 iterations, CPU, alpha=0.05, seed=42
+- FDR: Benjamini-Yekutieli across 96 cells, alpha=0.05
+- Split: Chronological 70/30 train/holdout
+- Run: `cross_asset_beta_lag_archive_20260520T012230_320691_d1cb91`
+- Precommitment hash: `74eac2f485de2fbc93a09dfd8a9a5b34e1ae23b16be2fe44de0d602010cdf4a7`
+- Git SHA: `acec8a0117`
+
+**Key result:** 96 powered cells, 0 underpowered. All 96 cells failed every gate
+(null, FDR, holdout). The study was properly powered:
+
+| Metric | Value |
+|---|---|
+| Total stress labels | 45,324 |
+| Independent windows | 10,792 |
+| All-target usable windows | 10,105 |
+| Total valid forward-return events | 515,412 |
+
+Best cell by baseline delta (beat-random signal strength):
+
+| Cell | Baseline Delta | Mean Net | N |
+|---|---|---|---|
+| BTCUSDT→LINKUSDT/60s/bullish/300s | **+18.34 bps** | **-31.52 bps** | 809 |
+
+The raw signal is real: BTC→LINK 60s bullish events beat random entry by
++18.34 bps on average over the 300s horizon. But at 50 bps all-in cost, the
+net return is -31.52 bps. The signal exists but is structurally below the
+retail cost wall.
+
+The cost tier that would flip this cell is ~18-20 bps round-trip — below which
+the raw edge survives. That is not a standard retail taker fee, but it is within
+reach of maker rebates, direct market access, or a venue with lower spread.
+
+**What this rejects:**
+- The cross-asset beta-lag hypothesis under this exact frozen archive design:
+  851-day calendar, K=75 prefilter, 50 bps all-in cost, timestamp-shift null,
+  BY FDR across 96 cells, 70/30 chronological split, spot-only execution.
+
+**What this does NOT reject:**
+- **Live stress windows.** The stage2 gate watcher is still active. A genuine
+  volatile-window capture may show tighter spreads, better fill conditions,
+  and lower effective costs than the archive's assumed 50 bps. This archive
+  result is a useful prior: "the raw signal exists, costs are the wall."
+- **Lower cost tiers.** Maker/rebate execution, sub-20 bps round-trip cost
+  models were never tested. The +18 bps baseline delta tells you exactly what
+  cost tier would be interesting.
+- **Different signal framing.** Volume-spike stress definitions, order-book
+  imbalance triggers, or multi-source ensemble stress detection were not tested.
+- **Different target universe.** Altcoins outside the SOL/LINK/DOGE/AVAX set
+  may exhibit stronger beta-lag responses.
+- **Perp-market stress as source.** Using perp funding shocks, liquidation
+  cascades, or OI shifts as stress definitions was not tested (though perp
+  execution is FCA-restricted for UK retail).
+
+**Run artifacts:**
+- Report: `reports/cross_asset_beta_lag_archive_v0/cross_asset_beta_lag_archive_20260520T012230_320691_d1cb91/`
+- Summary: `summary.json` (verified: verdict matches, gate counts reconcile)
+- Precommitment: `precommitments/cross_asset_beta_lag_archive_v0.json`
+- Streaming module: `archive_parquet_streaming.py` (day-by-day parquet, RSS bounded at 2.3 GiB vs prior 27 GB)
 
 ---
 
@@ -544,14 +627,17 @@ is negative and inconsistent.
 
 10. **Family 2 funding crowding reversal v1** (frozen design: 60 BTC cells, spot return leg, 50 bps primary cost, Binance Vision archive, timestamp-shuffle null, BY FDR). 0 candidates; 1 FDR-blocked cell confirmed. Do not reopen by changing thresholds, horizons, window, seed, or cost within the v1 protocol. Revisiting requires a materially different precommitment — a perp return leg with explicit funding-paid-while-held modeling, a maker/rebate cost tier, a different instrument universe, or a different crowding feature.
 
-11. **Cross-exchange funding dispersion carry v1** (Binance vs Bybit, BTC/ETH, thresholds 5/10/20/40 bps, holds 3/6/12 settlements, 50 bps cost, event-vector shift null, BY FDR). Zero dispersion events at every threshold for both assets. Maximum absolute spread was 4.49 bps — below the 5 bps minimum threshold. The data does not contain a tail to test. Do not reopen by merely lowering thresholds or adding venues within the v1 protocol. Revisiting requires a materially different precommitment — different venue pairs (OKX, three-venue), altcoins, stress-regime conditioning, sub-5 bps cost models, or a convergence-triggered exit mechanism.\n
+11. **Cross-exchange funding dispersion carry v1** (Binance vs Bybit, BTC/ETH, thresholds 5/10/20/40 bps, holds 3/6/12 settlements, 50 bps cost, event-vector shift null, BY FDR). Zero dispersion events at every threshold for both assets. Maximum absolute spread was 4.49 bps — below the 5 bps minimum threshold. The data does not contain a tail to test. Do not reopen by merely lowering thresholds or adding venues within the v1 protocol. Revisiting requires a materially different precommitment — different venue pairs (OKX, three-venue), altcoins, stress-regime conditioning, sub-5 bps cost models, or a convergence-triggered exit mechanism.\\n
+
 12. **Family 3 funding × OI crowding regime v0** (Binance BTCUSDT funding extremes × OI change regime → spot BTC forward returns, 6 primary cells, rising OI only, 50 bps cost, failing-oi diagnostic). All 6 primary cells failed evaluation gates — mean net bps negative across all horizons (best: -19 bps for neg_extreme × rising_oi 48h). Signal absence at cost: the OI conditioning does not rescue the funding-extreme reversal hypothesis. Do not reopen without a materially different mechanism: tick-level OI, cross-exchange OI divergence, multi-asset OI conditioning, or a perp return leg with explicit funding-paid-while-held modeling. Do not reopen by merely changing thresholds, horizons, lookbacks, OI regime cutoffs, or cost.
 
 13. **Family 3 v1 funding × falling-OI unwind mapping** — BTCUSDT negative-funding + falling-OI → spot BTC 24h/48h forward returns. Both primary cells GATES_FAILED at frozen 50 bps cost despite passing timestamp-shuffle null. Mean net remained negative (−45.14 / −38.00 bps), win rates were sub-threshold (0.395 / 0.435), and worst decile losses were large (−491 / −605 bps). Do not reopen this exact BTCUSDT 2-cell archive design by changing split, seed, horizons, OI cutoff, funding percentile, null iterations, or cost. Reopening requires a materially different mechanism: multi-asset portfolio, perp return leg with funding-paid-while-held, cross-exchange OI divergence, tick-level OI, or materially different fee/execution model.
 
+14. **Cross-asset beta-lag archive v0** (BTC/ETH spot stress impulses → SOL/LINK/DOGE/AVAX spot forward returns, 96-cell family, frozen 851-day calendar 2024-2026, K=75 prefilter, 50 bps all-in cost, timestamp-shift null × 1000 CPU, BY FDR, 70/30 chronological split). 96 powered cells, 0 underpowered, 0 passed any gate. Best cell BTC→LINK/60s/bullish/300s: +18.34 bps baseline delta (raw signal beats random entry) but -31.52 bps net after cost. 515K valid events, 10,105 usable windows. Do not reopen this exact archive design by changing split, seed, prefilter K, cost, null iterations, stress window definitions, or target set within the v0 protocol. Reopening requires a materially different cost model (sub-20 bps round-trip, maker rebate tier, direct market access), live stress-window capture via the stage2 gate watcher with observed tighter spreads during genuine volatility, a different signal framing (volume-spike stress, order-book imbalance triggers, multi-source ensemble), or a genuinely different target universe outside the SOL/LINK/DOGE/AVAX set.
+
 ## Still Open
 
-- **Cross-asset beta lag under stress** — BTC/ETH shock leads slower repricing in higher-beta assets over 30s to 5m. Distinct from same-asset derivatives-to-spot lead-lag. Only testable during genuine stress windows. See `CROSS_ASSET_BETA_LAG_PRECOMMITMENT.md`.
+- **Cross-asset beta lag under stress** — BTC/ETH shock leads slower repricing in higher-beta assets over 30s to 5m. Distinct from same-asset derivatives-to-spot lead-lag. Only testable during genuine stress windows. See `CROSS_ASSET_BETA_LAG_PRECOMMITMENT.md`. **Archive v0 prior (SIGNAL_ABSENCE_AT_COST):** The full-archive evaluation produced +18.34 bps baseline delta (raw signal beats random entry) but -31.52 bps net at 50 bps cost. The raw directional signal is confirmed real — costs are the wall. Live stress-window capture via the stage2 gate watcher may show tighter spreads and better fills during genuine volatility. The stage2 watcher path is explicitly alive.
 - **Cross-asset spot impulse v1** — Quiet/moderate-regime diagnostic only. BTC/ETH source movement during the actual capture was ~9-17 bps, below the 30 bps source-range gate required to test stress beta-lag. The 50 pairs with overlap all failed after the 50bps cost wall (best -43.98 bps), but this is diagnostic evidence from a quiet market, not a structural rejection. Open for a genuine volatile/stress-window retest only.
 - **Polymarket BTC Price Target strike-distance liquidity/mispricing** — Phase 0 probe found 1 active market with empty CLOB book. Hypothesis untested. Parked behind cheap market-availability monitor. Reopen gate: active strike-bearing markets with observable two-sided CLOB depth. First test on reopen: near-expiry depth vs $100 floor.
 - OI + price regime classification (filter, not standalone trade)
