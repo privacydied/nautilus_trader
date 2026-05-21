@@ -1,4 +1,5 @@
-"""Shared Family 1 same-venue quote-basis tick-level signal computation.
+"""
+Shared Family 1 same-venue quote-basis tick-level signal computation.
 
 Precommitted signal definition:
 
@@ -20,7 +21,9 @@ no trading adapters, no live trading.
 
 from __future__ import annotations
 
+import math
 from typing import Any
+
 
 _MS_TO_NS: int = 1_000_000
 
@@ -40,7 +43,8 @@ def compute_family1_tick_signal(
     horizon_ms: int,
     cost_total: float,
 ) -> tuple[list[float], list[float], int, int, list[str]]:
-    """Compute Family 1 tick-basis signal and forward returns.
+    """
+    Compute Family 1 tick-basis signal and forward returns.
 
     Parameters
     ----------
@@ -151,7 +155,8 @@ def _basis_bps(price_a: float, price_b: float) -> float:
 def _first_at_or_after(
     points: list[Any], timestamp_ns: int
 ) -> float | None:
-    """Return the price of the first point at or after *timestamp_ns*.
+    """
+    Return the price of the first point at or after *timestamp_ns*.
 
     Each *point* must have ``.timestamp_ns`` (int) and ``.price`` (float).
     Returns ``None`` if no such point exists.

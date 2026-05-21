@@ -1,4 +1,5 @@
-"""GPU-accelerated trade-flow impulse signal generation.
+"""
+GPU-accelerated trade-flow impulse signal generation.
 
 Pure compute. No network. No file writes. No capture logic.
 No order/trading imports. No live logic. No auth.
@@ -21,26 +22,30 @@ from __future__ import annotations
 
 import math
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING
 
-from .tick_models import TickSignalEvent, TradeTickLite
-from .trade_flow_impulse import (
-    TradeFlowImpulseConfig,
-    _finite_notional,
-    _MS_TO_NS,
-)
+from .tick_models import TickSignalEvent
+from .tick_models import TradeTickLite
+from .trade_flow_impulse import _MS_TO_NS
+from .trade_flow_impulse import TradeFlowImpulseConfig
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 def _resolve_direction(trades, idx, lookback_ms, signal_type=None):
-    """Resolve signal direction from source price move over the lookback.
-    CPU-ported from TradeFlowImpulseSignalGenerator._resolve_direction."""
+    """
+    Resolve signal direction from source price move over the lookback.
+    CPU-ported from TradeFlowImpulseSignalGenerator._resolve_direction.
+    """
     lookback_ns = lookback_ms * _MS_TO_NS
     if idx > 0:
         ts = trades[idx].ts_event
         ref_idx = idx
         while ref_idx > 0 and ts - trades[ref_idx].ts_event <= lookback_ns:
             ref_idx -= 1
-        ref_idx = ref_idx + 1 if ref_idx + 1 <= idx else idx
+        ref_idx = min(ref_idx + 1, idx)
         ref_price = trades[ref_idx].price
         curr_price = trades[idx].price
         if curr_price >= ref_price:
@@ -54,13 +59,11 @@ def _resolve_direction(trades, idx, lookback_ms, signal_type=None):
 
 SAFETY_MODE = "public_data_observer_only"
 
-_MS_TO_NS = 1_000_000
-
 
 def check_cuda_available(device: str = "cuda:0") -> tuple[bool, str]:
     """Return (available, reason). Never raises."""
     try:
-        import torch  # noqa: PLC0415
+        import torch
     except ImportError:
         return False, "torch_not_installed"
     if not hasattr(torch, "cuda") or torch.cuda is None:
@@ -101,13 +104,14 @@ def _check_all_devices(devices_str: str) -> list[str]:
 def _trades_to_tensors(
     trades: list[TradeTickLite],
     device: str,
-) -> tuple["torch.Tensor", "torch.Tensor", "torch.Tensor", "torch.Tensor", "torch.Tensor"]:
-    """Convert trade list to GPU tensors.
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Convert trade list to GPU tensors.
 
     Returns (ts, price, size, notional, signed_notional, side_long).
     side_long = 1.0 for buy, -1.0 for sell, 0.0 for unknown.
     """
-    import torch  # noqa: PLC0415
+    import torch
     n = len(trades)
     ts = torch.zeros(n, dtype=torch.int64, device=device)
     price = torch.zeros(n, dtype=torch.float64, device=device)
@@ -139,13 +143,15 @@ def _apply_cooldown(
     trades_ts: list[int],
     cooldown_ns: int,
 ) -> list[int]:
-    """Filter candidate indices by cooldown: suppress any candidate
-    within cooldown_ns of the previous emitted candidate."""
+    """
+    Filter candidate indices by cooldown: suppress any candidate
+    within cooldown_ns of the previous emitted candidate.
+    """
     if not candidate_indices:
         return []
     result = [candidate_indices[0]]
     last_ts = candidate_timestamps[0]
-    for idx, ts in zip(candidate_indices[1:], candidate_timestamps[1:]):
+    for idx, ts in zip(candidate_indices[1:], candidate_timestamps[1:], strict=False):
         if ts - last_ts >= cooldown_ns:
             result.append(idx)
             last_ts = ts
@@ -162,19 +168,19 @@ def notional_burst_gpu(
     config: TradeFlowImpulseConfig,
     device: str = "cuda:0",
 ) -> list[TickSignalEvent]:
-    """GPU-accelerated notional_burst signal generation.
+    """
+    GPU-accelerated notional_burst signal generation.
 
     Exact semantic parity with TradeFlowImpulseSignalGenerator._notional_burst.
     CPU remains default. GPU only when explicitly requested.
     """
-    import torch  # noqa: PLC0415
+    import torch
     events: list[TickSignalEvent] = []
     cooldown_ns = config.cooldown_ms * _MS_TO_NS
     ts_cpu = [t.ts_event for t in trades]
     ts_gpu, price_gpu, size_gpu, notional_gpu, _ = _trades_to_tensors(trades, device)
 
     for lookback_ms in config.flow_lookbacks_ms or []:
-        param_key = f"notional_burst_{lookback_ms}"
         last_ts = -1
         lookback_ns = lookback_ms * _MS_TO_NS
         bl_ns = config.baseline_window_ms * _MS_TO_NS
@@ -288,16 +294,15 @@ def notional_burst_gpu(
 # ---------------------------------------------------------------------------
 
 
-def large_trade_gpu(
+def large_trade_gpu(  # noqa: C901 - intentionally mirrors CPU large-trade gate logic.
     trades: list[TradeTickLite],
     config: TradeFlowImpulseConfig,
     device: str = "cuda:0",
 ) -> list[TickSignalEvent]:
     """GPU-accelerated large_trade signal generation."""
-    import torch  # noqa: PLC0415
+    import torch
     events: list[TickSignalEvent] = []
     cooldown_ns = config.cooldown_ms * _MS_TO_NS
-    param_key = "large_trade"
     last_ts = -1
     bl_ns = config.baseline_window_ms * _MS_TO_NS
 
@@ -399,7 +404,7 @@ def signed_imbalance_gpu(
     device: str = "cuda:0",
 ) -> list[TickSignalEvent]:
     """GPU-accelerated signed_imbalance signal generation."""
-    import torch  # noqa: PLC0415
+    import torch
     events: list[TickSignalEvent] = []
     cooldown_ns = config.cooldown_ms * _MS_TO_NS
     ts_cpu = [t.ts_event for t in trades]
@@ -418,7 +423,6 @@ def signed_imbalance_gpu(
     prefix_signed[1:] = torch.cumsum(signed_notional, dim=0)
 
     for lookback_ms in config.flow_lookbacks_ms or []:
-        param_key = f"signed_imbalance_{lookback_ms}"
         last_ts = -1
         lookback_ns = lookback_ms * _MS_TO_NS
 
@@ -502,7 +506,8 @@ def generate_signals_gpu(
     config: TradeFlowImpulseConfig,
     device: str = "cuda:0",
 ) -> list[TickSignalEvent]:
-    """Generate all signal types via GPU acceleration.
+    """
+    Generate all signal types via GPU acceleration.
 
     Only signed_imbalance is currently GPU-accelerated (fully vectorized
     prefix-sum approach). notional_burst and large_trade use per-index

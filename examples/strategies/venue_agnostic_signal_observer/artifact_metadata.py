@@ -1,4 +1,5 @@
-"""Shared metadata injection for capture manifests and evaluation summaries.
+"""
+Shared metadata injection for capture manifests and evaluation summaries.
 
 Every JSON/JSONL artifact written by the research pipeline must carry a
 small, forward-compatible metadata block so that downstream consumers
@@ -31,72 +32,64 @@ safety_mode : str
 """
 from __future__ import annotations
 
-import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 
 CURRENT_SCHEMA_VERSION = "1.0.0"
 SAFETY_MODE = "public_data_observer_only"
+_GIT_TIMEOUT_SECONDS = 5
 
 # Schema version compatibility — bump SUPPORTED_SCHEMA_VERSIONS when
 # the reader explicitly supports reading older artifacts.
 SUPPORTED_SCHEMA_VERSIONS = frozenset({"1.0.0", "v0"})
 
 
-def _get_git_sha() -> str:
-    """Return abbreviated HEAD SHA, or '' if not in a git repo."""
+def _run_git_command(args: list[str]) -> subprocess.CompletedProcess[str] | None:
+    """Run a git metadata command and return None on unavailable git/repo errors."""
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short=12", "HEAD"],
+        return subprocess.run(  # noqa: S603 - fixed git metadata subcommands only.
+            ["/usr/bin/git", *args],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=_GIT_TIMEOUT_SECONDS,
+            check=False,
         )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _get_git_sha() -> str:
+    """Return abbreviated HEAD SHA, or '' if not in a git repo."""
+    result = _run_git_command(["rev-parse", "--short=12", "HEAD"])
+    if result is not None and result.returncode == 0:
+        return result.stdout.strip()
     return ""
 
 
 def _get_git_sha_dirty() -> str:
-    """Return git SHA with ``-dirty`` suffix when the working tree has uncommitted changes.
+    """
+    Return git SHA with ``-dirty`` suffix when the working tree has uncommitted changes.
 
     Returns ``""`` if not in a git repo.
     """
     sha = _get_git_sha()
     if not sha:
         return ""
-    try:
-        dirty_result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if dirty_result.returncode == 0 and dirty_result.stdout.strip():
-            return f"{sha}-dirty"
-    except Exception:
-        pass
+    dirty_result = _run_git_command(["status", "--porcelain"])
+    if dirty_result is not None and dirty_result.returncode == 0 and dirty_result.stdout.strip():
+        return f"{sha}-dirty"
     return sha
 
 
 def _get_git_branch() -> str:
     """Return current branch name, or '' if not in a git repo."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except Exception:
-        pass
+    result = _run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
+    if result is not None and result.returncode == 0:
+        return result.stdout.strip()
     return ""
 
 
@@ -132,7 +125,8 @@ def build_metadata(
     volatility_gate_snapshot: dict[str, Any] | None = None,
     preflight_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build the standard metadata block shared across all artifacts.
+    """
+    Build the standard metadata block shared across all artifacts.
 
     Parameters
     ----------
@@ -152,7 +146,7 @@ def build_metadata(
     """
     return {
         "schema_version": CURRENT_SCHEMA_VERSION,
-        "created_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+        "created_at_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
         "git_sha": _get_git_sha(),
         "git_branch": _get_git_branch(),
         "capture_mode": capture_mode,
@@ -171,7 +165,8 @@ def inject_metadata_into_manifest(
     volatility_gate_snapshot: dict[str, Any] | None = None,
     preflight_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Add metadata to an existing capture manifest dict (mutates in-place and returns it).
+    """
+    Add metadata to an existing capture manifest dict (mutates in-place and returns it).
 
     This is a convenience wrapper for backward-compat usage where the manifest
     dict is constructed imperatively.
@@ -186,7 +181,8 @@ def inject_metadata_into_manifest(
 
 
 def get_metadata(obj: dict[str, Any]) -> dict[str, Any]:
-    """Extract metadata from a loaded manifest/summary, with backward compat.
+    """
+    Extract metadata from a loaded manifest/summary, with backward compat.
 
     Returns an empty dict if no metadata is present (old-format artifacts).
     Never raises — missing keys return None.
@@ -198,7 +194,8 @@ def get_metadata(obj: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_metadata_field(obj: dict[str, Any], field: str, default: Any = None) -> Any:
-    """Read a single metadata field from a manifest/summary dict.
+    """
+    Read a single metadata field from a manifest/summary dict.
 
     Returns *default* if the field is absent (including when the entire
     _metadata block is missing — i.e. old-format artifacts).
@@ -218,7 +215,8 @@ def check_schema_version(
     supported: frozenset[str] | None = None,
     allow_missing: bool = False,
 ) -> tuple[bool, str]:
-    """Check an artifact's schema version for compatibility.
+    """
+    Check an artifact's schema version for compatibility.
 
     Parameters
     ----------

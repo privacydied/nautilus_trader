@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 Polymarket BTC Up/Down CLOB liquidity probe — CLI runner.
 
 Observer-only. Public data. No orders. No execution.
@@ -33,22 +33,26 @@ import argparse
 import asyncio
 import logging
 import sys
+import time
 from pathlib import Path
 
-from .polymarket_btc_updown_liquidity_probe import (
-    capture_loop,
-    compute_summary,
-    discover_btc_updown_markets,
-    fetch_cex_proxy_price,
-    write_chainlink_ticks,
-    write_discovered_markets,
-    write_manifest,
-    write_orderbook_samples,
-    write_summary_json,
-    write_summary_md,
-    DEFAULT_DURATION,
-    DEFAULT_POLL_INTERVAL,
-)
+from .polymarket_btc_updown_liquidity_probe import DEFAULT_DURATION
+from .polymarket_btc_updown_liquidity_probe import DEFAULT_POLL_INTERVAL
+from .polymarket_btc_updown_liquidity_probe import BTCMarket
+from .polymarket_btc_updown_liquidity_probe import CaptureManifest
+from .polymarket_btc_updown_liquidity_probe import OrderbookSample
+from .polymarket_btc_updown_liquidity_probe import ProbeSummary
+from .polymarket_btc_updown_liquidity_probe import capture_loop
+from .polymarket_btc_updown_liquidity_probe import compute_summary
+from .polymarket_btc_updown_liquidity_probe import discover_btc_updown_markets
+from .polymarket_btc_updown_liquidity_probe import fetch_cex_proxy_price
+from .polymarket_btc_updown_liquidity_probe import write_chainlink_ticks
+from .polymarket_btc_updown_liquidity_probe import write_discovered_markets
+from .polymarket_btc_updown_liquidity_probe import write_manifest
+from .polymarket_btc_updown_liquidity_probe import write_orderbook_samples
+from .polymarket_btc_updown_liquidity_probe import write_summary_json
+from .polymarket_btc_updown_liquidity_probe import write_summary_md
+
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +158,7 @@ async def main() -> int:
     )
 
     out_dir = Path(args.out)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    _mkdir_sync(out_dir)
 
     # Step 1: Discover BTC Up/Down markets
     logger.info(
@@ -273,7 +277,7 @@ async def main() -> int:
             avg_price = sum(prices) / len(prices) if prices else 0
             logger.info("Chainlink BTC/USD: %d ticks, avg ~$%.2f", len(cl_valid), avg_price)
 
-    logger.info("Done. Output directory: %s", out_dir.resolve())
+    logger.info("Done. Output directory: %s", _resolve_sync(out_dir))
 
     # Step 5: Post-capture verification (TTE, distance, two-axis grid)
     verification_status = None
@@ -307,29 +311,28 @@ def _run_verification(
     _proxy_prices: list | None = None,
     _raw_payloads: list | None = None,
 ) -> str | None:
-    """Run post-capture verification: TTE, distance, two-axis grid, duration.
+    """
+    Run post-capture verification: TTE, distance, two-axis grid, duration.
 
     Returns verification status string, or None if not computed.
     """
-    from .polymarket_btc_updown_liquidity_probe import (
-        _compute_tte_buckets,
-        _compute_near_expiry_rollup,
-        _compute_distance_to_strike_buckets,
-        _compute_two_axis_grid,
-        _get_danger_zone_cell,
-        _compute_duration_coverage,
-        _compute_verification_status_v2,
-        write_tte_bucket_summary_json,
-        write_tte_bucket_summary_md,
-        write_distance_bucket_summary_json,
-        write_distance_bucket_summary_md,
-        write_two_axis_grid_json,
-        write_two_axis_grid_md,
-        write_duration_coverage_md,
-        write_raw_payloads,
-        write_raw_payload_audit,
-        REF_UNAVAILABLE,
-    )
+    from .polymarket_btc_updown_liquidity_probe import REF_UNAVAILABLE
+    from .polymarket_btc_updown_liquidity_probe import _compute_distance_to_strike_buckets
+    from .polymarket_btc_updown_liquidity_probe import _compute_duration_coverage
+    from .polymarket_btc_updown_liquidity_probe import _compute_near_expiry_rollup
+    from .polymarket_btc_updown_liquidity_probe import _compute_tte_buckets
+    from .polymarket_btc_updown_liquidity_probe import _compute_two_axis_grid
+    from .polymarket_btc_updown_liquidity_probe import _compute_verification_status_v2
+    from .polymarket_btc_updown_liquidity_probe import _get_danger_zone_cell
+    from .polymarket_btc_updown_liquidity_probe import write_distance_bucket_summary_json
+    from .polymarket_btc_updown_liquidity_probe import write_distance_bucket_summary_md
+    from .polymarket_btc_updown_liquidity_probe import write_duration_coverage_md
+    from .polymarket_btc_updown_liquidity_probe import write_raw_payload_audit
+    from .polymarket_btc_updown_liquidity_probe import write_raw_payloads
+    from .polymarket_btc_updown_liquidity_probe import write_tte_bucket_summary_json
+    from .polymarket_btc_updown_liquidity_probe import write_tte_bucket_summary_md
+    from .polymarket_btc_updown_liquidity_probe import write_two_axis_grid_json
+    from .polymarket_btc_updown_liquidity_probe import write_two_axis_grid_md
 
     # Collect reference prices
     proxy_prices: list[tuple[float, float]] = []
@@ -453,6 +456,16 @@ def _run_verification(
 def _fetch_proxy_price(client, proxy: str) -> tuple:
     """Fetch a single proxy price."""
     return fetch_cex_proxy_price(client, proxy)
+
+
+def _mkdir_sync(path: Path) -> None:
+    """Create a local output directory before asynchronous network work starts."""
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _resolve_sync(path: Path) -> Path:
+    """Resolve a local output path for final logging."""
+    return path.resolve()
 
 
 def _fmt(val: float | None) -> str:
