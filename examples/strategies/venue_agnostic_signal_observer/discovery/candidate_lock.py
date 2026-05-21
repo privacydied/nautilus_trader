@@ -31,6 +31,7 @@ from .exceptions import (
     CandidateHashMismatchError,
     CandidateLockValidationError,
     CaptureFingerprintError,
+    GridCellCountMismatchError,
     GridLockValidationError,
 )
 from .grid_lock import DiscoveryGridLock, validate_grid_lock, GRID_LOCK_TYPE
@@ -155,14 +156,14 @@ def validate_selected_cells(
         extra = cell_keys - _SELECTED_CELL_KEY_SET
         if extra:
             raise CandidateLockValidationError(
-                f"Selected cell {i} has extra key(s): {sorted(extra)}"
+                f"Selected cell {i} has unexpected keys: {sorted(extra)}"
             )
 
         # Missing keys
         missing = _SELECTED_CELL_KEY_SET - cell_keys
         if missing:
             raise CandidateLockValidationError(
-                f"Selected cell {i} is missing key(s): {sorted(missing)}"
+                f"Selected cell {i} has missing keys: {sorted(missing)}"
             )
 
         # Validate each value against parent grid axis
@@ -179,7 +180,7 @@ def validate_selected_cells(
         canonical = canonical_selected_cell_json(cell)
         if canonical in seen_canonical:
             raise CandidateLockValidationError(
-                f"Selected cell {i} is a duplicate of an earlier cell "
+                f"Selected cell {i} is a duplicate cell of an earlier cell "
                 f"(canonical: {canonical})"
             )
         seen_canonical.add(canonical)
@@ -268,10 +269,11 @@ def create_candidate_lock(
     candidate_id: str,
     grid_spec: DiscoveryGridSpec,
     grid_lock: DiscoveryGridLock,
-    selected_cells: list[dict[str, Any]],
+    selected_cells: list[dict[str, Any]] | tuple[dict[str, Any], ...],
     cluster_summary: dict[str, Any],
     selection_reason: str,
-    capture_paths: list[str | Path],
+    capture_paths: list[str | Path] | tuple[str | Path, ...] | None = None,
+    discovery_capture_refs: tuple[CaptureManifestRef, ...] | list[CaptureManifestRef] | None = None,
     frozen_at_utc: str | None = None,
 ) -> DiscoveryCandidateLock:
     """Create a candidate lock from validated inputs.
@@ -292,6 +294,10 @@ def create_candidate_lock(
         Why this cluster was selected.
     capture_paths : list[str | Path]
         Paths to capture manifest files on disk.
+    discovery_capture_refs : tuple[CaptureManifestRef, ...] | None
+        Pre-built capture manifest references.  Preserves legacy
+        ``capture_paths`` support while allowing tests/callers to pass refs
+        without path-dependent hash semantics.
     frozen_at_utc : str | None
         Optional timestamp override.  Defaults to current UTC ISO-8601.
 
@@ -309,12 +315,17 @@ def create_candidate_lock(
     validate_grid_lock(grid_spec, grid_lock)
 
     # --- Validate selected cells ---
-    validate_selected_cells(selected_cells, grid_spec)
+    selected_cell_list = list(selected_cells)
+    validate_selected_cells(selected_cell_list, grid_spec)
 
     # Must have at least some captures
-    if not capture_paths:
+    if capture_paths and discovery_capture_refs:
         raise CandidateLockValidationError(
-            "At least one discovery capture manifest path is required"
+            "Provide either capture_paths or discovery_capture_refs, not both"
+        )
+    if not capture_paths and not discovery_capture_refs:
+        raise CandidateLockValidationError(
+            "At least one discovery capture manifest ref or path is required"
         )
 
     # --- Validate cluster_summary is JSON-serializable ---
@@ -327,9 +338,12 @@ def create_candidate_lock(
 
     # --- Build capture manifest refs ---
     capture_refs: list[CaptureManifestRef] = []
-    for cp in capture_paths:
-        ref = build_capture_manifest_ref(cp)
-        capture_refs.append(ref)
+    if discovery_capture_refs is not None:
+        capture_refs = list(discovery_capture_refs)
+    else:
+        for cp in capture_paths or ():
+            ref = build_capture_manifest_ref(cp)
+            capture_refs.append(ref)
 
     if frozen_at_utc is None:
         frozen_at_utc = datetime.now(timezone.utc).isoformat()
@@ -345,7 +359,7 @@ def create_candidate_lock(
         parent_grid_primary_cell_count=enumerate_primary_cell_count(grid_spec),
         parent_grid_cost_sensitivity_cell_count=enumerate_cost_sensitivity_cell_count(grid_spec),
         schema_version=CANDIDATE_SCHEMA_VERSION,
-        selected_cells=tuple(selected_cells),
+        selected_cells=tuple(selected_cell_list),
         cluster_summary=cluster_summary,
         selection_reason=selection_reason,
         discovery_captures=tuple(capture_refs),
@@ -453,13 +467,13 @@ def validate_candidate_lock(
     # --- Cross-check parent_grid_primary_cell_count ---
     recomputed_primary = enumerate_primary_cell_count(grid_spec)
     if candidate_lock.parent_grid_primary_cell_count != recomputed_primary:
-        raise CandidateLockValidationError(
+        raise GridCellCountMismatchError(
             f"parent_grid_primary_cell_count mismatch against recomputed grid spec: "
             f"lock has {candidate_lock.parent_grid_primary_cell_count}, "
             f"recomputed {recomputed_primary}"
         )
     if candidate_lock.parent_grid_primary_cell_count != grid_lock.primary_cell_count:
-        raise CandidateLockValidationError(
+        raise GridCellCountMismatchError(
             f"parent_grid_primary_cell_count mismatch against grid lock: "
             f"lock has {candidate_lock.parent_grid_primary_cell_count}, "
             f"grid lock has {grid_lock.primary_cell_count}"
@@ -468,7 +482,7 @@ def validate_candidate_lock(
     # --- Cross-check parent_grid_cost_sensitivity_cell_count ---
     recomputed_cost = enumerate_cost_sensitivity_cell_count(grid_spec)
     if candidate_lock.parent_grid_cost_sensitivity_cell_count != recomputed_cost:
-        raise CandidateLockValidationError(
+        raise GridCellCountMismatchError(
             f"parent_grid_cost_sensitivity_cell_count mismatch against "
             f"recomputed grid spec: "
             f"lock has {candidate_lock.parent_grid_cost_sensitivity_cell_count}, "
@@ -478,7 +492,7 @@ def validate_candidate_lock(
         candidate_lock.parent_grid_cost_sensitivity_cell_count
         != grid_lock.cost_sensitivity_cell_count
     ):
-        raise CandidateLockValidationError(
+        raise GridCellCountMismatchError(
             f"parent_grid_cost_sensitivity_cell_count mismatch against grid lock: "
             f"lock has {candidate_lock.parent_grid_cost_sensitivity_cell_count}, "
             f"grid lock has {grid_lock.cost_sensitivity_cell_count}"

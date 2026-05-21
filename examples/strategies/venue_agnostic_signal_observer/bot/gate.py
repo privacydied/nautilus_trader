@@ -89,8 +89,8 @@ class BotGate:
 
         # Step 2: Candidate state check
         is_tradeable = replay.is_approved(candidate_hash)
+        state = replay.get_state(candidate_hash)
         if not is_tradeable:
-            state = replay.get_state(candidate_hash)
             reason = "Candidate not found in ledger"
             if state is not None:
                 if state.is_revoked:
@@ -152,6 +152,33 @@ class BotGate:
                 manifest_present=True,
                 manifest_expired=False,
                 fail_reason="Candidate not found in manifest",
+            )
+
+        if state is None or not state.evidence_events:
+            return GateResult(
+                authorized=False,
+                candidate_hash=candidate_hash,
+                manifest_record=record,
+                ledger_replay_success=True,
+                candidate_state_tradeable=False,
+                manifest_present=True,
+                manifest_expired=False,
+                fail_reason="Candidate lacks current estimator evidence",
+            )
+
+        if record.grid_hash != state.grid_hash:
+            return GateResult(
+                authorized=False,
+                candidate_hash=candidate_hash,
+                manifest_record=record,
+                ledger_replay_success=True,
+                candidate_state_tradeable=False,
+                manifest_present=True,
+                manifest_expired=False,
+                fail_reason=(
+                    f"Manifest grid_hash mismatch: manifest has {record.grid_hash}, "
+                    f"ledger state has {state.grid_hash}"
+                ),
             )
 
         # Step 4: Expiry check

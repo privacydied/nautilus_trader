@@ -65,9 +65,11 @@ class TestLedgerAppend:
     def test_missing_ledger_replay_fails_closed(self, tmp_path):
         ledger = EvidenceLedger(tmp_path / "nonexistent.jsonl")
         result = replay_ledger(ledger)
-        # Missing ledger → success=True with no events (empty is valid)
-        assert result.success
+        # Missing ledger → fail-closed with an error message
+        assert not result.success
         assert result.events_processed == 0
+        assert result.error_message is not None
+        assert "not found" in result.error_message.lower()
 
     def test_corrupt_jsonl_fails_closed(self, tmp_path):
         ledger = _fresh_ledger(tmp_path)

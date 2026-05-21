@@ -29,6 +29,7 @@ from ..governance import (
     EvidenceLedger,
     make_grid_lock_event,
     make_candidate_lock_event,
+    make_estimator_evidence_event,
     make_approval_event,
     make_revocation_event,
     make_demotion_event,
@@ -64,7 +65,8 @@ def _approved_ledger(tmp_path: Path) -> Path:
     ledger = EvidenceLedger(path)
     ledger.append(make_grid_lock_event(0, "g1"))
     ledger.append(make_candidate_lock_event(1, "c1", "g1"))
-    ledger.append(make_approval_event(2, "c1", "g1"))
+    ledger.append(make_estimator_evidence_event(2, "c1", "g1", "dsr", "1.0.0", "cfg", {"status": "PASS"}))
+    ledger.append(make_approval_event(3, "c1", "g1"))
     return path
 
 
@@ -92,8 +94,9 @@ class TestBotGateSafety:
         ledger_path = tmp_path / "ledger.jsonl"
         gate = BotGate(ledger_path, manifest_path)
         result = gate.authorize("c1")
-        # Missing ledger → empty ledger (success=True but c1 not approved)
+        # Missing ledger fails closed before manifest-only approval can authorize.
         assert not result.authorized
+        assert not result.ledger_replay_success
 
     def test_full_authorized_path(self, tmp_path):
         ledger_path = _approved_ledger(tmp_path)
@@ -179,3 +182,41 @@ class TestBotGateSafety:
         result = gate.authorize("c1")
         assert not result.authorized
         assert not result.candidate_state_tradeable
+
+    def test_tampered_manifest_record_hash_fails(self, tmp_path):
+        ledger_path = _approved_ledger(tmp_path)
+        manifest_path = _make_manifest(tmp_path, "c1")
+        data = json.loads(manifest_path.read_text())
+        data[0]["rule_description"] = "tampered rule"
+        manifest_path.write_text(json.dumps(data))
+        gate = BotGate(ledger_path, manifest_path)
+        result = gate.authorize("c1")
+        assert not result.authorized
+        assert "hash mismatch" in result.fail_reason.lower()
+
+    def test_manifest_grid_hash_mismatch_fails(self, tmp_path):
+        ledger_path = _approved_ledger(tmp_path)
+        manifest_path = _make_manifest(tmp_path, "c1")
+        from ..bot.manifest import _compute_manifest_hash
+        data = json.loads(manifest_path.read_text())
+        data[0]["grid_hash"] = "g2"
+        data[0]["manifest_hash"] = _compute_manifest_hash([
+            {**data[0], "manifest_hash": "placeholder"}
+        ])
+        manifest_path.write_text(json.dumps(data))
+        gate = BotGate(ledger_path, manifest_path)
+        result = gate.authorize("c1")
+        assert not result.authorized
+        assert "grid_hash mismatch" in result.fail_reason
+
+    def test_approved_candidate_without_estimator_evidence_fails(self, tmp_path):
+        path = tmp_path / "ledger.jsonl"
+        ledger = EvidenceLedger(path)
+        ledger.append(make_grid_lock_event(0, "g1"))
+        ledger.append(make_candidate_lock_event(1, "c1", "g1"))
+        ledger.append(make_approval_event(2, "c1", "g1"))
+        manifest_path = _make_manifest(tmp_path, "c1")
+        gate = BotGate(path, manifest_path)
+        result = gate.authorize("c1")
+        assert not result.authorized
+        assert "estimator evidence" in result.fail_reason.lower()

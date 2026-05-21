@@ -174,6 +174,11 @@ class TickSignalEvent:
     @classmethod
     def from_dict(cls, d: dict) -> TickSignalEvent:
         """Construct a ``TickSignalEvent`` from a plain dict."""
+        if "direction" not in d or d["direction"] is None:
+            raise ValueError("TickSignalEvent.direction is required")
+        direction = str(d["direction"])
+        if direction not in {"long", "short"}:
+            raise ValueError(f"Invalid TickSignalEvent.direction {direction!r}; expected 'long' or 'short'")
         return cls(
             signal_id=d["signal_id"],
             ts_event=int(d["ts_event"]),
@@ -183,7 +188,7 @@ class TickSignalEvent:
             target_symbol=d["target_symbol"],
             asset=d["asset"],
             signal_type=d.get("signal_type", "tick_lead_lag"),
-            direction=d["direction"],
+            direction=direction,
             lookback_ms=int(d["lookback_ms"]),
             threshold_bps=float(d["threshold_bps"]),
             source_move_bps=float(d["source_move_bps"]),

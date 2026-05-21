@@ -17,11 +17,28 @@ import json
 import os
 import urllib.request
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, Dict
 
 from .tick_models import TradeTickLite
+
+
+class ArchiveFileStatus(str, Enum):
+    AVAILABLE = "available"
+    MISSING_FILE = "missing_file"
+    PARSE_ERROR = "parse_error"
+    SCHEMA_ERROR = "schema_error"
+
+
+@dataclass(frozen=True)
+class ArchiveParseResult:
+    status: ArchiveFileStatus
+    ticks: List[TradeTickLite]
+    error: str | None = None
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -332,6 +349,28 @@ def parse_agg_trade_csv(
         ))
 
     return ticks
+
+
+def parse_agg_trade_csv_with_status(
+    zip_bytes: bytes | None,
+    symbol: str,
+    venue: str = "binance_spot_archive",
+) -> ArchiveParseResult:
+    """Parse aggTrade CSV with typed missing/parse/schema status.
+
+    ``zip_bytes is None`` represents a known-missing archive file. Malformed zip
+    payloads are parse errors. Well-formed CSVs with no valid rows are schema
+    errors, preserving the distinction for availability manifests.
+    """
+    if zip_bytes is None:
+        return ArchiveParseResult(ArchiveFileStatus.MISSING_FILE, [], "archive file missing")
+    try:
+        ticks = parse_agg_trade_csv(zip_bytes, symbol, venue=venue)
+    except (zipfile.BadZipFile, UnicodeDecodeError, OSError) as exc:
+        return ArchiveParseResult(ArchiveFileStatus.PARSE_ERROR, [], str(exc))
+    if not ticks:
+        return ArchiveParseResult(ArchiveFileStatus.SCHEMA_ERROR, [], "no valid aggTrade rows parsed")
+    return ArchiveParseResult(ArchiveFileStatus.AVAILABLE, ticks, None)
 
 
 def parse_1m_klines_csv(zip_bytes: bytes) -> List[dict[str, Any]]:

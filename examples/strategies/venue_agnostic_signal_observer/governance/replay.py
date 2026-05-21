@@ -75,6 +75,15 @@ def replay_ledger(ledger: EvidenceLedger) -> ReplayResult:
 
     Fails closed on any integrity error, unknown event type, or missing ledger.
     """
+    if not ledger.path.exists():
+        return ReplayResult(
+            success=False,
+            candidate_states={},
+            grid_locks=[],
+            events_processed=0,
+            error_message=f"Ledger file not found: {ledger.path}",
+        )
+
     try:
         events = ledger.read_all()
     except LedgerIntegrityError as exc:

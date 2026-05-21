@@ -52,7 +52,12 @@ from .kline_prefilter_v1 import (
     compute_kline_candidate_days_deprecated,  # A/B comparison
 )
 from .binance_vision_archive import append_ticks_jsonl, tick_file_path
-from .streaming_stress_labels import generate_stress_labels_streaming
+from .streaming_stress_labels import (
+    generate_stress_labels_streaming,
+    check_target_coverage_from_ts_prices,
+    compute_forward_returns_from_ts_prices,
+    generate_baseline_from_ts_prices,
+)
 from .cross_asset_beta_lag_archive import (
     ALL_SYMBOLS,
     SOURCE_SYMBOLS,
@@ -69,6 +74,9 @@ from .cross_asset_beta_lag_archive import (
     FAMILY_SIZE,
     VENUE,
     TOTAL_COST_BPS,
+    FEE_BPS,
+    SLIPPAGE_BPS,
+    QUOTE_MISMATCH_BUFFER_BPS,
     SEED,
     NULL_ITERATIONS,
     FDR_ALPHA,
@@ -93,6 +101,9 @@ from .cross_asset_beta_lag_archive import (
     generate_baseline_events,
     run_null_test,
     run_null_test_gpu,
+    NULL_METHOD_CHOICES,
+    default_null_method_for_engine,
+    validate_null_engine_method,
     apply_by_fdr,
     reconcile_event_vector,
     write_report,
@@ -109,6 +120,7 @@ from .cross_asset_beta_lag_archive import (
     write_checkpoint_manifest,
     load_checkpoint_manifest,
     compute_resume_phase,
+    discover_checkpoint_phases,
     validate_checkpoint_config,
 )
 
@@ -184,6 +196,199 @@ def _reconstruct_labels_from_checkpoint(output_dir: Path) -> List[StressLabel]:
     return labels
 
 
+def _load_parquet_ticks_to_jsonl(
+    symbol: str,
+    dates: list[str],
+    parquet_dir: Path,
+    output_dir: Path,
+) -> int:
+    """Load parquet aggTrade files for symbol+dates and write JSONL.
+
+    Parquet schema: ts_event (int64, ns), price (float), size (float), is_buyer_maker (bool).
+    Returns total tick count written.
+
+    Processes one parquet file at a time, flushing JSONL immediately —
+    avoids holding entire symbol's data in memory.
+    """
+    import pyarrow.parquet as pq  # noqa: PLC0415
+
+    import pandas as pd  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
+
+    jsonl_path = tick_file_path(output_dir, symbol)
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    sym_lower = symbol.lower()
+    venue_str = str(VENUE)
+    total = 0
+
+    with open(jsonl_path, "a", encoding="utf-8") as f:
+        for d in dates:
+            pq_path = parquet_dir / sym_lower / f"{sym_lower}_aggTrades_{d}.parquet"
+            if not pq_path.exists():
+                continue
+            table = pq.read_table(pq_path)
+            n = table.num_rows
+            if n == 0:
+                continue
+
+            # Extract columns
+            ts_arr = table.column("ts_event").to_numpy()
+            pr_arr = table.column("price").to_numpy()
+            sz_arr = table.column("size").to_numpy()
+            bm_arr = table.column("is_buyer_maker").to_numpy()
+
+            sides = np.where(bm_arr, "sell", "buy")
+
+            # Build DataFrame and write JSONL for this single file
+            df = pd.DataFrame({
+                "ts_event": ts_arr,
+                "venue": venue_str,
+                "symbol": symbol,
+                "price": pr_arr,
+                "size": sz_arr,
+                "side": sides,
+                "trade_id": None,
+            })
+
+            # Write to string buffer, then write to file
+            json_str = df.to_json(orient="records", lines=True, double_precision=10)
+            f.write(json_str)
+            f.flush()
+            total += n
+            # Print progress every 50 files
+            if (dates.index(d) + 1) % 50 == 0:
+                print(f"  {symbol}: {total:,} ticks written ({dates.index(d)+1}/{len(dates)} files)")
+
+    return total
+
+
+def _load_parquet_ts_prices(
+    symbol: str,
+    dates: list[str],
+    parquet_dir: Path,
+) -> tuple:
+    """Load (timestamps, prices) arrays directly from Parquet files.
+
+    Parquet schema: ts_event (int64, ns), price (float).
+    Returns (numpy.ndarray[int64], numpy.ndarray[float64]).
+    Skips non-finite prices.
+    """
+    import pyarrow.parquet as pq  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
+    import math as _math  # noqa: PLC0415
+
+    sym_lower = symbol.lower()
+    ts_chunks = []
+    pr_chunks = []
+
+    for d in dates:
+        pq_path = parquet_dir / sym_lower / f"{sym_lower}_aggTrades_{d}.parquet"
+        if not pq_path.exists():
+            continue
+        table = pq.read_table(pq_path, columns=["ts_event", "price"])
+        ts_arr = table.column("ts_event").to_numpy()
+        pr_arr = table.column("price").to_numpy()
+        # Filter non-finite prices
+        mask = np.isfinite(pr_arr)
+        ts_chunks.append(ts_arr[mask])
+        pr_chunks.append(pr_arr[mask])
+
+    if not ts_chunks:
+        return np.array([], dtype=np.int64), np.array([], dtype=np.float64)
+
+    ts = np.concatenate(ts_chunks)
+    pr = np.concatenate(pr_chunks)
+
+    # Sort by timestamp (parquet files are date-ordered, but within-day is already sorted)
+    sort_idx = np.argsort(ts, kind="stable")
+    return ts[sort_idx], pr[sort_idx]
+
+
+def _generate_stress_labels_from_parquet(
+    symbol: str,
+    dates: list[str],
+    parquet_dir: Path,
+    source_symbol: str,
+    *,
+    lookback_seconds: int,
+    threshold_bps: float,
+    StressLabel,
+) -> list:
+    """Generate stress labels by streaming Parquet files one at a time.
+
+    Equivalent to generate_stress_labels_streaming but reads Parquet directly.
+    Maintains a rolling deque across file boundaries.
+    """
+    import pyarrow.parquet as pq  # noqa: PLC0415
+    import random  # noqa: PLC0415
+    import math  # noqa: PLC0415
+    from collections import deque  # noqa: PLC0415
+
+    SEED = 42
+    STRESS_DEDUP_COOLDOWN_NS = 30_000_000_000  # 30 seconds
+    lookback_ns = lookback_seconds * 1_000_000_000
+
+    sym_lower = symbol.lower()
+    window: deque = deque()
+    labels = []
+    last_label_ts = None
+    rng = random.Random(SEED)
+
+    for d in dates:
+        pq_path = parquet_dir / sym_lower / f"{sym_lower}_aggTrades_{d}.parquet"
+        if not pq_path.exists():
+            continue
+        table = pq.read_table(pq_path, columns=["ts_event", "price"])
+        ts_arr = table.column("ts_event").to_numpy()
+        pr_arr = table.column("price").to_numpy()
+
+        for ts_ns, price in zip(ts_arr, pr_arr):
+            price = float(price)
+            ts_ns = int(ts_ns)
+            if not math.isfinite(price):
+                continue
+
+            window.append((ts_ns, price))
+            cutoff = ts_ns - lookback_ns
+            while window and window[0][0] < cutoff:
+                window.popleft()
+
+            if len(window) < 2:
+                continue
+
+            start_ts = window[0][0]
+            start_price = window[0][1]
+            end_price = price
+            move_bps = ((end_price - start_price) / start_price) * 10_000 if start_price else 0.0
+            abs_move = abs(move_bps)
+
+            if abs_move < threshold_bps:
+                continue
+            if last_label_ts is not None and (ts_ns - last_label_ts) < STRESS_DEDUP_COOLDOWN_NS:
+                continue
+
+            direction = "bullish" if move_bps > 0 else "bearish"
+            window_id = f"iw_{source_symbol}_{lookback_seconds}s_{start_ts}_{ts_ns}_{rng.randint(0, 999999):06d}"
+
+            label = StressLabel(
+                label_id=f"sl_{source_symbol}_{lookback_seconds}s_{ts_ns}_{rng.randint(0, 999999):06d}",
+                source_symbol=source_symbol,
+                stress_start_ns=start_ts,
+                stress_end_ns=ts_ns,
+                stress_window_seconds=lookback_seconds,
+                source_move_bps=move_bps,
+                direction=direction,
+                source_start_price=start_price,
+                source_end_price=end_price,
+                independent_window_id=window_id,
+                rule_name=f"{lookback_seconds}s_{int(threshold_bps)}bps",
+            )
+            labels.append(label)
+            last_label_ts = ts_ns
+
+    return labels
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Cross-asset beta-lag archive v0 study runner"
@@ -229,8 +434,20 @@ def main() -> None:
         help="Resume from last completed checkpoint",
     )
     parser.add_argument(
+        "--tick-source", choices=["binance_vision", "parquet"], default="binance_vision",
+        help="Data source: binance_vision (download) or parquet (local, default: binance_vision)",
+    )
+    parser.add_argument(
+        "--tick-source-dir", default=None,
+        help="Local parquet directory (required when --tick-source parquet)",
+    )
+    parser.add_argument(
         "--null-engine", choices=["cpu", "gpu"], default="cpu",
         help="Null test engine: cpu (default) or gpu. GPU requires CUDA.",
+    )
+    parser.add_argument(
+        "--null-method", choices=NULL_METHOD_CHOICES, default=None,
+        help="Explicit null semantics. Defaults to engine-compatible method: CPU=timestamp_shift, GPU=return_vector_shift.",
     )
     parser.add_argument(
         "--null-device", default="cuda:0",
@@ -242,10 +459,16 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # ── GPU null engine check ────────────────────────────────────────────────
+    # ── Null engine/method validation ────────────────────────────────────────
     null_engine: str = args.null_engine
+    null_method: str = args.null_method or default_null_method_for_engine(null_engine)
     null_device: str = args.null_device
     null_batch_size: int = args.null_batch_size if args.null_batch_size > 0 else 4096
+
+    try:
+        validate_null_engine_method(null_engine, null_method)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if args.null_engine == "gpu":
         try:
@@ -254,13 +477,13 @@ def main() -> None:
         except ImportError:
             cuda_ok, cuda_reason = False, "permutation_null_gpu_import_failed"
         if not cuda_ok:
-            print(f"GPU_UNAVAILABLE_DIAGNOSTIC: {cuda_reason}")
-            print("Falling back to CPU null.")
-            null_engine = "cpu"
-        else:
-            print(f"GPU null enabled: {null_device} (batch_size={null_batch_size})")
+            parser.error(f"GPU null requested but unavailable: {cuda_reason}")
+        print(
+            f"GPU null enabled: {null_device} (batch_size={null_batch_size}, "
+            f"method={null_method})"
+        )
     else:
-        print("Null engine: CPU")
+        print(f"Null engine: CPU (method={null_method})")
 
     # Print start info
     git_sha = _get_git_sha()
@@ -298,6 +521,7 @@ def main() -> None:
                     git_sha=git_sha,
                     precommitment_sha="",
                     null_engine=null_engine,
+                    null_method=null_method,
                 )
                 if is_valid:
                     rp = compute_resume_phase(cand)
@@ -308,6 +532,8 @@ def main() -> None:
                         manifest = load_checkpoint_manifest(cand)
                         if manifest:
                             completed_phases = manifest.get("completed_phases", [])
+                        else:
+                            completed_phases = discover_checkpoint_phases(cand)
                         print(f"\n[Resume] Found valid checkpoint in {output_dir}")
                         print(f"  Resume phase: {resume_phase}")
                         print(f"  Completed phases: {completed_phases}")
@@ -355,7 +581,7 @@ def main() -> None:
         {"common_start": common_start, "common_end": common_end,
          "common_days": common_days, "all_symbols": ALL_SYMBOLS,
          "availability_summary": {sym: {"days": v.get("days_available", 0)} for sym, v in availability.items()}},
-        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
     completed_phases.append("01_availability")
 
     # Check minimum calendar
@@ -447,51 +673,99 @@ def main() -> None:
         print(f"  Planned files: {planned_files} ({planned_mb:.1f} MB)")
         print(f"  Reduction ratio: {reduction_ratio}x")
 
-        # Phase 4D: Volume gate on planned download
-        print(f"\n[Phase 4D] Checking planned download volume...")
-        max_planned_mb = args.max_planned_download_gb * 1024
-        if planned_mb > max_planned_mb:
-            print(f"  PREFILTERED VOLUME EXCEEDS CAP: {planned_mb:.1f} > {max_planned_mb:.0f} MB")
-            _write_prefilter_report(output_dir, run_id, git_sha, precommitment_sha,
-                                    availability, dl_plan, kline_manifest, candidate_days,
-                                    brute_files, brute_mb)
-            verdict = "ARCHIVE_PREFILTERED_DATA_VOLUME_TOO_LARGE"
-            _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict,
-                           early_stop=f"prefiltered_volume_{planned_mb:.0f}mb_exceeds_{max_planned_mb:.0f}mb")
-            print(f"\n=== VERDICT: {verdict} ===")
-            return
+        # Phase 4D: Volume gate on planned download (skip in parquet mode — no download occurs)
+        if args.tick_source != "parquet":
+            print(f"\n[Phase 4D] Checking planned download volume...")
+            max_planned_mb = args.max_planned_download_gb * 1024
+            if planned_mb > max_planned_mb:
+                print(f"  PREFILTERED VOLUME EXCEEDS CAP: {planned_mb:.1f} > {max_planned_mb:.0f} MB")
+                _write_prefilter_report(output_dir, run_id, git_sha, precommitment_sha,
+                                        availability, dl_plan, kline_manifest, candidate_days,
+                                        brute_files, brute_mb)
+                verdict = "ARCHIVE_PREFILTERED_DATA_VOLUME_TOO_LARGE"
+                _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict,
+                               early_stop=f"prefiltered_volume_{planned_mb:.0f}mb_exceeds_{max_planned_mb:.0f}mb")
+                print(f"\n=== VERDICT: {verdict} ===")
+                return
+        else:
+            print(f"\n[Phase 4D] Skipping volume gate (parquet source — no download)")
 
-        # Phase 4E: Download planned aggTrades
-        print(f"\n[Phase 4E] Downloading planned aggTrades...")
-        all_tick_counts: Dict[str, int] = {sym: 0 for sym in ALL_SYMBOLS}
-        file_manifest: List[Dict[str, Any]] = []
-        total_files = 0
-        failed_files = 0
+        # Phase 4E: Download or load planned aggTrades
+        parquet_dir = None
+        if args.tick_source == "parquet":
+            print(f"\n[Phase 4E] Loading planned aggTrades from parquet...")
+            parquet_dir = Path(args.tick_source_dir)
+            if not parquet_dir.exists():
+                print(f"ERROR: Parquet directory not found: {parquet_dir}")
+                _write_early_stop(output_dir, run_id, "PARQUET_DIR_NOT_FOUND", git_sha)
+                return
+            # Get candidate dates for download plan
+            candidate_date_set = set(d["date"] for d in candidate_days)
+            # Also include all calendar dates for target symbols (needed for forward returns)
+            all_needed_dates = sorted(candidate_date_set)
+            print(f"  Parquet dir: {parquet_dir}")
+            print(f"  Candidate source dates: {len(candidate_date_set)}")
 
-        for entry in dl_plan["required_files"]:
-            sym = entry["symbol"]
-            d = entry["date"]
-            force = args.force_refresh_aggtrades
+            # Source symbols: only candidate dates (stress label generation)
+            all_tick_counts = {sym: 0 for sym in ALL_SYMBOLS}
+            file_manifest = []
+            total_files = 0
+            failed_files = 0
 
-            data, sha = download_daily_agg_trades(sym, d, cache=not force)
-            if data is None:
-                failed_files += 1
+            # Parquet-native: no JSONL intermediate, just count files
+            for src_sym in SOURCE_SYMBOLS:
+                count = 0
+                src_lower = src_sym.lower()
+                for d in all_needed_dates:
+                    pq_path = parquet_dir / src_lower / f"{src_lower}_aggTrades_{d}.parquet"
+                    if pq_path.exists():
+                        count += 1
+                all_tick_counts[src_sym] = count
+                print(f"  {src_sym}: {count} parquet files available ({len(all_needed_dates)} planned)")
+                total_files += count
+
+            # Target symbols: need full calendar for forward returns
+            for tgt_sym in TARGET_SYMBOLS:
+                count = 0
+                tgt_lower = tgt_sym.lower()
+                for d in date_list:
+                    pq_path = parquet_dir / tgt_lower / f"{tgt_lower}_aggTrades_{d}.parquet"
+                    if pq_path.exists():
+                        count += 1
+                all_tick_counts[tgt_sym] = count
+                print(f"  {tgt_sym}: {count} parquet files available ({len(date_list)} planned)")
+                total_files += count
+        else:
+            print(f"\n[Phase 4E] Downloading planned aggTrades...")
+            all_tick_counts: Dict[str, int] = {sym: 0 for sym in ALL_SYMBOLS}
+            file_manifest: List[Dict[str, Any]] = []
+            total_files = 0
+            failed_files = 0
+
+            for entry in dl_plan["required_files"]:
+                sym = entry["symbol"]
+                d = entry["date"]
+                force = args.force_refresh_aggtrades
+
+                data, sha = download_daily_agg_trades(sym, d, cache=not force)
+                if data is None:
+                    failed_files += 1
+                    file_manifest.append({
+                        "symbol": sym, "date": d, "source": "aggTrades",
+                        "status": "not_found", "sha256": None, "size_bytes": None, "row_count": 0,
+                    })
+                    continue
+
+                ticks = parse_agg_trade_csv(data, sym, venue=VENUE)
+                append_ticks_jsonl(tick_file_path(output_dir, sym), ticks)
+                all_tick_counts[sym] = all_tick_counts.get(sym, 0) + len(ticks)
+
                 file_manifest.append({
                     "symbol": sym, "date": d, "source": "aggTrades",
-                    "status": "not_found", "sha256": None, "size_bytes": None, "row_count": 0,
+                    "status": "downloaded", "sha256": sha,
+                    "size_bytes": len(data), "row_count": len(ticks),
                 })
-                continue
-
-            ticks = parse_agg_trade_csv(data, sym, venue=VENUE)
-            append_ticks_jsonl(tick_file_path(output_dir, sym), ticks)
-            all_tick_counts[sym] = all_tick_counts.get(sym, 0) + len(ticks)
-
-            file_manifest.append({
-                "symbol": sym, "date": d, "source": "aggTrades",
-                "status": "downloaded", "sha256": sha,
-                "size_bytes": len(data), "row_count": len(ticks),
-            })
-            total_files += 1
+                total_files += 1
 
         print(f"  Files: {total_files} OK, {failed_files} failed")
         total_tick_count = sum(all_tick_counts.values())
@@ -511,24 +785,39 @@ def main() -> None:
         print(f"\n[Phase 4F] Reconstructing exact stress labels from aggTrades...")
         all_labels: List[StressLabel] = []
         for src_sym in SOURCE_SYMBOLS:
-            jsonl = tick_file_path(output_dir, src_sym)
-            if not jsonl.exists() or jsonl.stat().st_size == 0:
-                print(f"  WARNING: No JSONL tick file for {src_sym}")
-                continue
-            for rule_name, lookback_sec, threshold in STRESS_RULES:
-                labels = generate_stress_labels_streaming(
-                    jsonl, src_sym,
-                    lookback_seconds=lookback_sec,
-                    threshold_bps=threshold,
-                    StressLabel=StressLabel,
+            if args.tick_source == "parquet" and parquet_dir is not None:
+                # Parquet-native: stream parquet files directly
+                labels = _generate_stress_labels_from_parquet(
+                    src_sym, all_needed_dates, parquet_dir, src_sym,
+                    lookback_seconds=30, threshold_bps=30.0, StressLabel=StressLabel,
                 )
                 all_labels.extend(labels)
-                print(f"  {src_sym} {rule_name}: {len(labels)} labels")
+                print(f"  {src_sym} 30s_30bps: {len(labels)} labels")
+                labels = _generate_stress_labels_from_parquet(
+                    src_sym, all_needed_dates, parquet_dir, src_sym,
+                    lookback_seconds=60, threshold_bps=50.0, StressLabel=StressLabel,
+                )
+                all_labels.extend(labels)
+                print(f"  {src_sym} 60s_50bps: {len(labels)} labels")
+            else:
+                jsonl = tick_file_path(output_dir, src_sym)
+                if not jsonl.exists() or jsonl.stat().st_size == 0:
+                    print(f"  WARNING: No JSONL tick file for {src_sym}")
+                    continue
+                for rule_name, lookback_sec, threshold in STRESS_RULES:
+                    labels = generate_stress_labels_streaming(
+                        jsonl, src_sym,
+                        lookback_seconds=lookback_sec,
+                        threshold_bps=threshold,
+                        StressLabel=StressLabel,
+                    )
+                    all_labels.extend(labels)
+                    print(f"  {src_sym} {rule_name}: {len(labels)} labels")
 
         # Checkpoint: 04_stress_labels (before dedup — raw labels exist)
         write_checkpoint(output_dir, "04_stress_labels",
             {"total_labels": len(all_labels), "source_symbols": SOURCE_SYMBOLS},
-            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
         completed_phases.append("04_stress_labels")
 
         if not all_labels:
@@ -551,12 +840,12 @@ def main() -> None:
         write_checkpoint(output_dir, "02_kline_prefilter",
             {"candidate_days": len(candidate_days), "reduction_ratio": reduction_ratio,
              "planned_files": planned_files, "planned_mb": planned_mb},
-            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
         completed_phases.append("02_kline_prefilter")
         write_checkpoint(output_dir, "03_aggtrades",
             {"total_files": total_files, "failed_files": failed_files,
              "per_sym_tick_counts": {sym: all_tick_counts.get(sym, 0) for sym in ALL_SYMBOLS}},
-            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
         completed_phases.append("03_aggtrades")
 
         # Note: evaluation continues from Phase 3 below
@@ -647,7 +936,7 @@ def main() -> None:
     write_checkpoint(output_dir, "05_independent_windows",
         {"window_count": len(independent_window_ids), "label_count": len(windowed),
          "label_rows": label_rows_cp},
-        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
     completed_phases.append("05_independent_windows")
 
     if len(independent_window_ids) < MIN_INDEPENDENT_WINDOWS:
@@ -677,16 +966,21 @@ def main() -> None:
             "total_checked": len(windowed),
         }
 
-    # Pre-load all target (timestamps, prices) from JSONL
+    # Pre-load all target (timestamps, prices)
     target_data = {}
     for sym in TARGET_SYMBOLS:
-        jpath = tick_file_path(output_dir, sym)
-        if jpath.exists() and jpath.stat().st_size > 0:
-            ts, pr = _load_ts_prices_from_jsonl(jpath)
+        if args.tick_source == "parquet" and parquet_dir is not None:
+            ts, pr = _load_parquet_ts_prices(sym, date_list, parquet_dir)
             target_data[sym] = (ts, pr)
-            print(f"  {sym}: {len(ts)} ticks from JSONL")
+            print(f"  {sym}: {len(ts)} ticks from parquet")
         else:
-            target_data[sym] = ([], [])
+            jpath = tick_file_path(output_dir, sym)
+            if jpath.exists() and jpath.stat().st_size > 0:
+                ts, pr = _load_ts_prices_from_jsonl(jpath)
+                target_data[sym] = (ts, pr)
+                print(f"  {sym}: {len(ts)} ticks from JSONL")
+            else:
+                target_data[sym] = ([], [])
 
     for lbl in windowed:
         # Use max horizon for coverage
@@ -698,7 +992,7 @@ def main() -> None:
         )
 
         for sym, ci in coverage_intervals.items():
-            if ci.has_coverage:
+            if ci["has_coverage"]:
                 coverage_summary["per_target"][sym]["available_count"] += 1
 
         if all_covered:
@@ -714,7 +1008,7 @@ def main() -> None:
     # Checkpoint: 06_coverage
     write_checkpoint(output_dir, "06_coverage",
         coverage_summary,
-        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+        git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
     completed_phases.append("06_coverage")
 
     if all_target_windows < MIN_INDEPENDENT_WINDOWS:
@@ -744,11 +1038,17 @@ def main() -> None:
 
         # Per-target loop: load one target, process all labels, discard
         for tgt_sym in TARGET_SYMBOLS:
-            jpath = tick_file_path(output_dir, tgt_sym)
-            if not jpath.exists() or jpath.stat().st_size == 0:
-                print(f"  SKIP {tgt_sym}: no JSONL")
-                continue
-            ts_arr, pr_arr = _load_ts_prices_from_jsonl(jpath)
+            if args.tick_source == "parquet" and parquet_dir is not None:
+                ts_arr, pr_arr = _load_parquet_ts_prices(tgt_sym, date_list, parquet_dir)
+                if len(ts_arr) == 0:
+                    print(f"  SKIP {tgt_sym}: no parquet data")
+                    continue
+            else:
+                jpath = tick_file_path(output_dir, tgt_sym)
+                if not jpath.exists() or jpath.stat().st_size == 0:
+                    print(f"  SKIP {tgt_sym}: no JSONL")
+                    continue
+                ts_arr, pr_arr = _load_ts_prices_from_jsonl(jpath)
             print(f"  {tgt_sym}: {len(ts_arr)} ticks for forward returns")
 
             for lbl in usable_labels:
@@ -799,7 +1099,7 @@ def main() -> None:
         write_checkpoint(output_dir, "07_forward_returns",
             {"forward_row_count": len(forward_rows), "usable_label_count": len(usable_labels),
              "forward_rows": forward_rows},
-            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
         completed_phases.append("07_forward_returns")
 
     # Split train/holdout by stress event chronological order
@@ -930,7 +1230,7 @@ def main() -> None:
         # Checkpoint: 08_cell_results
         write_checkpoint(output_dir, "08_cell_results",
             {"cell_results": cell_results, "powered_cells": sum(1 for c in cell_results.values() if c.get("valid_count", 0) >= MIN_EVENTS_PER_CELL)},
-            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
         completed_phases.append("08_cell_results")
 
     # Phase 7: Baseline (resume-aware)
@@ -951,12 +1251,16 @@ def main() -> None:
             src_sym = cell.get("source_symbol", "")
             baseline_targets = {}
             for tgt_sym in TARGET_SYMBOLS:
-                jpath = tick_file_path(output_dir, tgt_sym)
-                if jpath.exists() and jpath.stat().st_size > 0:
-                    ts_arr, pr_arr = _load_ts_prices_from_jsonl(jpath)
+                if args.tick_source == "parquet" and parquet_dir is not None:
+                    ts_arr, pr_arr = _load_parquet_ts_prices(tgt_sym, date_list, parquet_dir)
                     baseline_targets[tgt_sym] = (ts_arr, pr_arr)
                 else:
-                    baseline_targets[tgt_sym] = ([], [])
+                    jpath = tick_file_path(output_dir, tgt_sym)
+                    if jpath.exists() and jpath.stat().st_size > 0:
+                        ts_arr, pr_arr = _load_ts_prices_from_jsonl(jpath)
+                        baseline_targets[tgt_sym] = (ts_arr, pr_arr)
+                    else:
+                        baseline_targets[tgt_sym] = ([], [])
 
             baseline_frs = generate_baseline_from_ts_prices(
                 baseline_targets, src_sym, n,
@@ -1001,7 +1305,7 @@ def main() -> None:
         # Checkpoint: 09_baseline
         write_checkpoint(output_dir, "09_baseline",
             {"baseline_results": baseline_results},
-            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
         completed_phases.append("09_baseline")
 
     # Phase 8: Null test (resume-aware)
@@ -1047,7 +1351,7 @@ def main() -> None:
         # Checkpoint: 10_null
         write_checkpoint(output_dir, "10_null",
             {"null_results": null_results},
-            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
         completed_phases.append("10_null")
 
     # Phase 9: FDR (resume-aware)
@@ -1077,7 +1381,7 @@ def main() -> None:
         # Checkpoint: 11_fdr
         write_checkpoint(output_dir, "11_fdr",
             {"fdr_results": fdr_results, "pvalues_checked": len(pvalues)},
-            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
         completed_phases.append("11_fdr")
 
     # Phase 10: Holdout evaluation (resume-aware)
@@ -1121,7 +1425,7 @@ def main() -> None:
         # Checkpoint: 12_holdout
         write_checkpoint(output_dir, "12_holdout",
             {"holdout_results": holdout_results},
-            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine)
+            git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine, null_method=null_method)
         completed_phases.append("12_holdout")
 
     # Phase 11: Event vector reconciliation
@@ -1326,6 +1630,7 @@ def main() -> None:
         "test_results": {"run": 0, "passed": 0, "failed": 0},
         "prefilter_summary": prefilter_summary,
         "null_engine": null_engine,
+        "null_method": null_method,
         "null_device": null_device,
         "cuda_available": null_engine == "gpu",
         "completed_phases": completed_phases,
@@ -1333,10 +1638,32 @@ def main() -> None:
 
     _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict, summary=summary)
 
+    _write_canonical_report_bridge(
+        output_dir=output_dir,
+        run_id=run_id,
+        precommitment_sha=precommitment_sha,
+        git_sha=git_sha,
+        availability=availability,
+        file_manifest=file_manifest,
+        stress_labels=windowed,
+        independent_window_ids=independent_window_ids,
+        coverage_summary=coverage_summary,
+        forward_rows=forward_rows,
+        cell_results=cell_results,
+        baseline_results=baseline_results,
+        null_results=null_results,
+        fdr_results=fdr_results,
+        holdout_results=holdout_results,
+        reconciliation=reconciliation_result,
+        summary=summary,
+        final_verdict=verdict,
+    )
+
     # Write checkpoint manifest
     write_checkpoint_manifest(
         output_dir, completed_phases,
         git_sha=git_sha, precommitment_sha=precommitment_sha, null_engine=null_engine,
+        null_method=null_method,
     )
     print(f"\n=== DONE: {verdict} ===")
     print(f"Report: {output_dir}")
@@ -1396,10 +1723,8 @@ def _write_data_report(
     })
 
 
-def _write_stress_label_report(
-    output_dir: Path, labels: List[StressLabel], window_ids: List[str],
-) -> None:
-    label_rows = [{
+def _stress_label_rows(labels: List[StressLabel]) -> List[Dict[str, Any]]:
+    return [{
         "label_id": l.label_id,
         "source_symbol": l.source_symbol,
         "stress_end_ns": l.stress_end_ns,
@@ -1407,7 +1732,63 @@ def _write_stress_label_report(
         "source_move_bps": l.source_move_bps,
         "direction": l.direction,
         "independent_window_id": l.independent_window_id,
+        "rule_name": l.rule_name,
     } for l in labels]
+
+
+def _write_canonical_report_bridge(
+    *,
+    output_dir: Path,
+    run_id: str,
+    precommitment_sha: str,
+    git_sha: str,
+    availability: Dict[str, Any],
+    file_manifest: List[Dict[str, Any]],
+    stress_labels: List[StressLabel],
+    independent_window_ids: List[str],
+    coverage_summary: Dict[str, Any],
+    forward_rows: List[Dict[str, Any]],
+    cell_results: Dict[str, Dict[str, Any]],
+    baseline_results: Dict[str, Dict[str, Any]],
+    null_results: Dict[str, Dict[str, Any]],
+    fdr_results: Dict[str, Dict[str, Any]],
+    holdout_results: Dict[str, Dict[str, Any]],
+    reconciliation: Dict[str, Any],
+    summary: Dict[str, Any],
+    final_verdict: str,
+) -> None:
+    """Bridge active runner outputs into the canonical write_report contract."""
+    label_rows = _stress_label_rows(stress_labels)
+    independent_windows = [{"independent_window_id": wid} for wid in sorted(independent_window_ids)]
+    write_report(
+        output_dir=output_dir,
+        run_id=run_id,
+        precommitment_hash=precommitment_sha,
+        availability=availability,
+        file_manifest=file_manifest,
+        stress_labels=label_rows,
+        independent_windows=independent_windows,
+        coverage_summary=coverage_summary,
+        signal_rows=label_rows,
+        forward_return_rows=forward_rows,
+        cell_results=cell_results,
+        baseline_results=baseline_results,
+        null_results=null_results,
+        fdr_results=fdr_results,
+        holdout_results=holdout_results,
+        reconciliation=reconciliation,
+        summary=summary,
+        final_verdict=final_verdict,
+        git_sha=git_sha,
+        end_sha=_get_git_sha(),
+        dirty_status="unknown_not_checked_by_runner_bridge",
+    )
+
+
+def _write_stress_label_report(
+    output_dir: Path, labels: List[StressLabel], window_ids: List[str],
+) -> None:
+    label_rows = _stress_label_rows(labels)
     atomic_write_jsonl(output_dir / "stress_labels.jsonl", label_rows)
     atomic_write_json(output_dir / "independent_windows.json", {
         "window_count": len(window_ids),

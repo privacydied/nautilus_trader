@@ -1178,6 +1178,73 @@ class TestSourceSizing:
             assert fb.lower() not in content.lower(), f"Contains '{fb}'"
 
 
+class TestCanonicalReportBridge:
+    def test_canonical_report_bridge_writes_expected_artifacts(self, tmp_path):
+        """Active runner bridge writes canonical write_report artifacts and FINAL_REPORT.md."""
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import StressLabel
+        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_beta_lag_archive import (
+            _write_canonical_report_bridge,
+        )
+        lbl = StressLabel(
+            label_id="l1",
+            source_symbol="BTCUSDT",
+            stress_start_ns=0,
+            stress_end_ns=1_000_000_000,
+            stress_window_seconds=1,
+            source_move_bps=100.0,
+            direction="bullish",
+            source_start_price=100.0,
+            source_end_price=101.0,
+            independent_window_id="w1",
+            rule_name="r1",
+        )
+        summary = {"run_id": "run", "study_id": "cross_asset_beta_lag_archive_v0", "final_verdict": "NEEDS_MORE_DATA"}
+
+        _write_canonical_report_bridge(
+            output_dir=tmp_path,
+            run_id="run",
+            precommitment_sha="pre",
+            git_sha="sha",
+            availability={"common_start": "2024-01-01", "common_end": "2024-01-02", "common_days": 2},
+            file_manifest=[{"symbol": "BTCUSDT", "date": "2024-01-01"}],
+            stress_labels=[lbl],
+            independent_window_ids=["w1"],
+            coverage_summary={"usable_labels": 1},
+            forward_rows=[{"group_key": "g", "net_bps": 1.0, "valid": True}],
+            cell_results={"g": {"valid_count": 1}},
+            baseline_results={"g": {}},
+            null_results={"g": {"p_value": None}},
+            fdr_results={"g": {}},
+            holdout_results={"g": {}},
+            reconciliation={"reconciled": True},
+            summary=summary,
+            final_verdict="NEEDS_MORE_DATA",
+        )
+
+        for name in [
+            "PRECOMMITMENT_SHA256.txt",
+            "preflight.json",
+            "archive_availability.json",
+            "archive_file_manifest.json",
+            "stress_labels.jsonl",
+            "independent_windows.jsonl",
+            "coverage_summary.json",
+            "signals.jsonl",
+            "forward_returns.jsonl",
+            "cell_results.json",
+            "baseline_results.json",
+            "null_results.json",
+            "fdr_results.json",
+            "holdout_results.json",
+            "event_vector_reconciliation.json",
+            "summary.json",
+            "FINAL_REPORT.md",
+        ]:
+            assert (tmp_path / name).exists(), name
+        assert json.loads((tmp_path / "summary.json").read_text("utf-8"))["final_verdict"] == "NEEDS_MORE_DATA"
+        assert "FINAL REPORT" in (tmp_path / "FINAL_REPORT.md").read_text("utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Checkpoint / resume tests
 # ---------------------------------------------------------------------------
@@ -1274,6 +1341,26 @@ class TestCheckpointConfigMismatch:
         assert not is_valid
         assert "no_checkpoint_manifest" in reason
 
+    def test_partial_phase_checkpoint_without_manifest_is_valid(self, tmp_path):
+        """Partial run dirs with phase files but no final manifest are resumable."""
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint,
+            validate_checkpoint_config,
+            compute_resume_phase,
+            discover_checkpoint_phases,
+        )
+        output_dir = tmp_path / "partial"
+        output_dir.mkdir()
+        write_checkpoint(output_dir, "01_availability", {}, git_sha="sha", precommitment_sha="pre")
+        write_checkpoint(output_dir, "05_independent_windows", {"label_rows": []}, git_sha="sha", precommitment_sha="pre")
+
+        is_valid, reason = validate_checkpoint_config(output_dir, git_sha="sha", precommitment_sha="pre")
+
+        assert is_valid, reason
+        assert reason == "valid_partial_checkpoints"
+        assert discover_checkpoint_phases(output_dir) == ["01_availability", "05_independent_windows"]
+        assert compute_resume_phase(output_dir) == "05_independent_windows"
+
 
 class TestResumePhaseComputation:
     def test_resume_phase_returns_latest_complete(self, tmp_path):
@@ -1344,6 +1431,21 @@ class TestResumePhaseComputation:
         resume = compute_resume_phase(output_dir)
         # Should skip corrupt "03" and return "05"
         assert resume == "05_independent_windows"
+    def test_partial_checkpoint_config_mismatch_rejected(self, tmp_path):
+        """Partial checkpoint files still validate config identity."""
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint,
+            compute_resume_phase,
+        )
+        output_dir = tmp_path / "partial_mismatch"
+        output_dir.mkdir()
+        write_checkpoint(output_dir, "01_availability", {}, git_sha="sha", precommitment_sha="pre")
+        cp = output_dir / "checkpoint_phase_01_availability.json"
+        data = json.loads(cp.read_text("utf-8"))
+        data["config_identity_sha256"] = "bad"
+        cp.write_text(json.dumps(data), encoding="utf-8")
+
+        assert compute_resume_phase(output_dir) is None
 
 
 class TestForwardRowsCheckpoint:
@@ -1411,6 +1513,34 @@ class TestNullEngineSelection:
         result = run_null_test([1.0, -1.0, 2.0, -2.0, 1.0], iterations=20, seed=42)
         assert result["engine"] == "cpu"
         assert result["iterations"] == 20
+
+    def test_null_engine_method_validation(self):
+        """Null method names make engine semantics explicit and incompatible combos fail."""
+        import pytest
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            default_null_method_for_engine,
+            validate_null_engine_method,
+        )
+        assert default_null_method_for_engine("cpu") == "timestamp_shift"
+        assert default_null_method_for_engine("gpu") == "return_vector_shift"
+        validate_null_engine_method("cpu", "timestamp_shift")
+        validate_null_engine_method("gpu", "return_vector_shift")
+        with pytest.raises(ValueError):
+            validate_null_engine_method("cpu", "return_vector_shift")
+        with pytest.raises(ValueError):
+            validate_null_engine_method("gpu", "timestamp_shift")
+
+    def test_checkpoint_records_null_method(self, tmp_path):
+        """Checkpoint metadata records explicit null method as well as engine."""
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint,
+        )
+        output_dir = tmp_path / "null_method_cp"
+        output_dir.mkdir()
+        write_checkpoint(output_dir, "01_availability", {}, git_sha="sha", precommitment_sha="pre")
+        data = json.loads((output_dir / "checkpoint_phase_01_availability.json").read_text("utf-8"))
+        assert data["null_engine"] == "cpu"
+        assert data["null_method"] == "timestamp_shift"
 
     def test_gpu_null_requires_torch(self):
         """GPU null function exists and handles import gracefully."""

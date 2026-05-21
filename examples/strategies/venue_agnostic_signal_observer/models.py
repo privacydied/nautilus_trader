@@ -28,6 +28,11 @@ class SignalEvent:
 
     @classmethod
     def from_dict(cls, d: dict) -> "SignalEvent":
+        if "direction" not in d or d["direction"] is None:
+            raise ValueError("SignalEvent.direction is required; refusing to default to long")
+        direction = str(d["direction"])
+        if direction not in {"long", "short"}:
+            raise ValueError(f"Invalid SignalEvent.direction {direction!r}; expected 'long' or 'short'")
         return cls(
             signal_id=d["signal_id"],
             timestamp=float(d["timestamp"]),
@@ -36,7 +41,7 @@ class SignalEvent:
             target_venue=d["target_venue"],
             target_instrument=d["target_instrument"],
             signal_type=d.get("signal_type", "unknown"),
-            direction=d.get("direction", "long"),
+            direction=direction,
             strength=float(d.get("strength", 0.0)),
             metadata=d.get("metadata"),
             reason=d.get("reason"),

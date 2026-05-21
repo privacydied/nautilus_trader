@@ -1007,9 +1007,39 @@ _CHECKPOINT_CONFIG_FIELDS: List[str] = [
     "min_independent_windows",
     "train_frac",
     "null_engine",
+    "null_method",
     "null_device",
     "null_batch_size",
 ]
+
+NULL_METHOD_TIMESTAMP_SHIFT = "timestamp_shift"
+NULL_METHOD_RETURN_VECTOR_SHIFT = "return_vector_shift"
+NULL_METHOD_CHOICES: List[str] = [
+    NULL_METHOD_TIMESTAMP_SHIFT,
+    NULL_METHOD_RETURN_VECTOR_SHIFT,
+]
+NULL_ENGINE_METHOD_COMPATIBILITY: Dict[str, str] = {
+    "cpu": NULL_METHOD_TIMESTAMP_SHIFT,
+    "gpu": NULL_METHOD_RETURN_VECTOR_SHIFT,
+}
+
+
+def default_null_method_for_engine(null_engine: str) -> str:
+    """Return the explicit null method for a supported engine."""
+    try:
+        return NULL_ENGINE_METHOD_COMPATIBILITY[null_engine]
+    except KeyError as exc:
+        raise ValueError(f"unsupported null engine: {null_engine}") from exc
+
+
+def validate_null_engine_method(null_engine: str, null_method: str) -> None:
+    """Validate that engine and method semantics are not silently substituted."""
+    expected = default_null_method_for_engine(null_engine)
+    if null_method != expected:
+        raise ValueError(
+            f"null engine '{null_engine}' supports null method '{expected}', "
+            f"not '{null_method}'"
+        )
 
 
 def _build_checkpoint_config_identity() -> Dict[str, Any]:
@@ -1063,10 +1093,13 @@ def write_checkpoint(
     git_sha: str,
     precommitment_sha: str,
     null_engine: str = "cpu",
+    null_method: Optional[str] = None,
     null_device: str = "cpu",
     null_batch_size: int = 0,
 ) -> None:
     """Atomically write a checkpoint artifact with metadata."""
+    effective_null_method = null_method or default_null_method_for_engine(null_engine)
+    validate_null_engine_method(null_engine, effective_null_method)
     config_id = _build_checkpoint_config_identity()
 
     artifact = {
@@ -1078,6 +1111,7 @@ def write_checkpoint(
         "config_identity_sha256": _sha256_json(config_id),
         "timestamp_utc": _now_utc_iso(),
         "null_engine": null_engine,
+        "null_method": effective_null_method,
         "null_device": null_device,
         "payload": payload,
     }
@@ -1103,8 +1137,11 @@ def write_checkpoint_manifest(
     git_sha: str,
     precommitment_sha: str,
     null_engine: str = "cpu",
+    null_method: Optional[str] = None,
 ) -> None:
     """Write the checkpoint manifest tracking completed phases."""
+    effective_null_method = null_method or default_null_method_for_engine(null_engine)
+    validate_null_engine_method(null_engine, effective_null_method)
     config_id = _build_checkpoint_config_identity()
 
     manifest = {
@@ -1113,6 +1150,7 @@ def write_checkpoint_manifest(
         "precommitment_sha": precommitment_sha,
         "config_identity_sha256": _sha256_json(config_id),
         "null_engine": null_engine,
+        "null_method": effective_null_method,
         "completed_phases": completed_phases,
         "timestamp_utc": _now_utc_iso(),
     }
@@ -1120,44 +1158,42 @@ def write_checkpoint_manifest(
     atomic_write_json(path, manifest)
 
 
-def compute_resume_phase(output_dir: Path) -> Optional[str]:
-    """Determine which phase to resume from.
-
-    Returns the name of the latest completed phase, or None if no valid
-    checkpoint exists. Validates config identity.
-    """
-    manifest = load_checkpoint_manifest(output_dir)
-    if manifest is None:
-        return None
-
-    # Validate config identity
+def discover_checkpoint_phases(output_dir: Path) -> List[str]:
+    """Discover valid phase checkpoint files, independent of manifest presence."""
     expected_id = _sha256_json(_build_checkpoint_config_identity())
-    stored_id = manifest.get("config_identity_sha256", "")
-    if stored_id != expected_id:
-        return None  # Config mismatch — caller should reject
-
-    completed = manifest.get("completed_phases", [])
-    if not completed:
-        return None
-
-    # Validate each completed checkpoint file exists
     valid_phases: List[str] = []
-    for phase in completed:
+    for phase in CHECKPOINT_PHASES:
         cp_path = _checkpoint_path(output_dir, phase)
-        if cp_path.exists():
-            try:
-                data = json.loads(cp_path.read_text("utf-8"))
-                cp_cfg = data.get("config_identity_sha256", "")
-                if cp_cfg == expected_id:
-                    valid_phases.append(phase)
-            except (json.JSONDecodeError, OSError):
-                pass
+        if not cp_path.exists():
+            continue
+        try:
+            data = json.loads(cp_path.read_text("utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if data.get("phase") != phase:
+            continue
+        if data.get("config_identity_sha256", "") != expected_id:
+            continue
+        valid_phases.append(phase)
+    return valid_phases
+
+
+def compute_resume_phase(output_dir: Path) -> Optional[str]:
+    """Determine latest completed phase from manifest or partial checkpoint files."""
+    expected_id = _sha256_json(_build_checkpoint_config_identity())
+    manifest = load_checkpoint_manifest(output_dir)
+    if manifest is not None:
+        stored_id = manifest.get("config_identity_sha256", "")
+        if stored_id != expected_id:
+            return None
+        discovered = set(discover_checkpoint_phases(output_dir))
+        valid_phases = [phase for phase in manifest.get("completed_phases", []) if phase in discovered]
+    else:
+        valid_phases = discover_checkpoint_phases(output_dir)
 
     if not valid_phases:
         return None
 
-    # Return the latest completed phase
-    # Sort by order in CHECKPOINT_PHASES
     phase_order = {p: i for i, p in enumerate(CHECKPOINT_PHASES)}
     valid_phases.sort(key=lambda p: phase_order.get(p, len(CHECKPOINT_PHASES)))
     return valid_phases[-1]
@@ -1169,22 +1205,48 @@ def validate_checkpoint_config(
     git_sha: str,
     precommitment_sha: str,
     null_engine: str = "cpu",
+    null_method: Optional[str] = None,
 ) -> Tuple[bool, str]:
     """Validate that existing checkpoint matches requested config.
 
-    Returns (is_valid, reason_string).
+    Returns (is_valid, reason_string). Supports partial phase checkpoint
+    directories that do not yet have a final checkpoint_manifest.json.
     """
-    manifest = load_checkpoint_manifest(output_dir)
-    if manifest is None:
-        return False, "no_checkpoint_manifest"
+    requested_method = null_method or default_null_method_for_engine(null_engine)
+    try:
+        validate_null_engine_method(null_engine, requested_method)
+    except ValueError as exc:
+        return False, f"null_engine_method_mismatch:{exc}"
 
     config_id = _build_checkpoint_config_identity()
     expected_id = _sha256_json(config_id)
-    stored_id = manifest.get("config_identity_sha256", "")
-    if stored_id != expected_id:
-        return False, f"checkpoint_config_mismatch:{stored_id[:8]}.._vs_{expected_id[:8]}.."
+    manifest = load_checkpoint_manifest(output_dir)
+    if manifest is not None:
+        stored_id = manifest.get("config_identity_sha256", "")
+        if stored_id != expected_id:
+            return False, f"checkpoint_config_mismatch:{stored_id[:8]}.._vs_{expected_id[:8]}.."
+        stored_engine = manifest.get("null_engine", null_engine)
+        stored_method = manifest.get("null_method", default_null_method_for_engine(stored_engine))
+        if stored_engine != null_engine or stored_method != requested_method:
+            return False, "checkpoint_null_semantics_mismatch"
+        return True, "valid"
 
-    return True, "valid"
+    phases = discover_checkpoint_phases(output_dir)
+    if not phases:
+        return False, "no_checkpoint_manifest_or_phase_checkpoints"
+
+    for phase in reversed(phases):
+        try:
+            data = json.loads(_checkpoint_path(output_dir, phase).read_text("utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        stored_engine = data.get("null_engine", null_engine)
+        stored_method = data.get("null_method", default_null_method_for_engine(stored_engine))
+        if stored_engine != null_engine or stored_method != requested_method:
+            return False, "checkpoint_null_semantics_mismatch"
+        return True, "valid_partial_checkpoints"
+
+    return False, "no_valid_phase_checkpoints"
 
 
 # ---------------------------------------------------------------------------

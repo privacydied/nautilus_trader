@@ -6,6 +6,7 @@ Reads JSONL tick files line-by-line to avoid loading all ticks into memory.
 from __future__ import annotations
 
 import json
+import math
 import random
 from collections import deque
 from pathlib import Path
@@ -13,6 +14,13 @@ from typing import Any, Iterator
 
 SEED = 42
 STRESS_DEDUP_COOLDOWN_NS = 30_000_000_000  # 30 seconds
+
+
+def _validate_monotonic_timestamps(timestamps, *, name: str = "timestamps") -> None:
+    """Fail fast when callers pass unsorted timestamp arrays to bisect-based helpers."""
+    for i in range(1, len(timestamps)):
+        if timestamps[i] < timestamps[i - 1]:
+            raise ValueError(f"{name} must be sorted in non-decreasing timestamp order")
 
 
 def _compute_move_bps_from_jsonl(
@@ -115,6 +123,8 @@ def compute_forward_returns_from_ts_prices(
     """
     from bisect import bisect_left  # noqa: PLC0415
 
+    _validate_monotonic_timestamps(timestamps)
+
     entry_ts_ns = stress_label.stress_end_ns + ENTRY_DELAY_NS
     results = []
 
@@ -209,8 +219,15 @@ def generate_baseline_from_ts_prices(
     SLIPPAGE_BPS,
     QUOTE_MISMATCH_BUFFER_BPS,
     HORIZONS_MS,
+    baseline_requests: list[dict[str, Any]] | None = None,
 ) -> list:
-    """Generate baseline forward returns from (timestamps, prices) arrays."""
+    """Generate baseline forward returns from (timestamps, prices) arrays.
+
+    By default, samples random timestamps/symbols from the supplied target arrays.
+    For exact-cell comparability, pass ``baseline_requests`` rows containing
+    ``target_symbol``, ``signal_ts`` and optional ``horizons_ms``. Returned rows
+    always preserve the real target symbol and requested horizon.
+    """
     import random as _random  # noqa: PLC0415
     from bisect import bisect_left  # noqa: PLC0415
 
@@ -219,51 +236,67 @@ def generate_baseline_from_ts_prices(
 
     rng = _random.Random(seed)
 
-    all_ts = []
-    all_prices_by_ts = {}
+    # Use sorted arrays per symbol instead of monolithic dict
+    symbol_arrays = {}
     for sym, (ts_arr, pr_arr) in target_data.items():
-        if ts_arr:
-            all_ts.extend(ts_arr)
-            for t, p in zip(ts_arr, pr_arr):
-                all_prices_by_ts[t] = p
+        if ts_arr.size > 0:
+            _validate_monotonic_timestamps(ts_arr, name=f"target_data[{sym!r}].timestamps")
+            symbol_arrays[sym] = (ts_arr, pr_arr)
 
-    if not all_ts:
+    if not symbol_arrays:
         return []
 
-    min_ts = min(all_ts)
-    max_ts = max(all_ts)
-    sorted_ts = sorted(all_ts)
+    # Get global time range for random sampling
+    min_ts = min(arr[0][0] for arr in symbol_arrays.values())
+    max_ts = max(arr[0][-1] for arr in symbol_arrays.values())
 
     baseline_frs = []
-    for i in range(label_count):
-        entry_ts_ns = rng.randint(min_ts, max_ts)
-        # Find closest tick at or after entry_ts_ns
-        idx = bisect_left(sorted_ts, entry_ts_ns)
-        if idx >= len(sorted_ts):
+    if baseline_requests is not None:
+        samples = [
+            (i, int(req["signal_ts"]), str(req["target_symbol"]), list(req.get("horizons_ms", HORIZONS_MS)))
+            for i, req in enumerate(baseline_requests)
+        ]
+    else:
+        sym_keys = list(symbol_arrays.keys())
+        samples = [
+            (
+                i,
+                rng.randint(int(min_ts), int(max_ts)),
+                sym_keys[rng.randint(0, len(sym_keys) - 1)],
+                list(HORIZONS_MS),
+            )
+            for i in range(label_count)
+        ]
+
+    for i, rand_ts_ns, tgt_sym, horizons_ms in samples:
+        if tgt_sym not in symbol_arrays:
+            raise ValueError(f"baseline target_symbol {tgt_sym!r} not present in target_data")
+        ts_arr, pr_arr = symbol_arrays[tgt_sym]
+        idx = bisect_left(ts_arr, rand_ts_ns)
+        if idx >= len(ts_arr):
             continue
-        actual_entry_ts = sorted_ts[idx]
-        entry_price = all_prices_by_ts.get(actual_entry_ts)
-        if entry_price is None or entry_price <= 0 or not math.isfinite(entry_price):
+        entry_price = float(pr_arr[idx])
+        if entry_price <= 0 or not math.isfinite(entry_price):
             continue
 
         total_cost = FEE_BPS + SLIPPAGE_BPS + QUOTE_MISMATCH_BUFFER_BPS
 
-        for horizon_ms in HORIZONS_MS:
-            horizon_ns = actual_entry_ts + horizon_ms * MS_TO_NS
-            exit_idx = bisect_left(sorted_ts, horizon_ns)
-            if exit_idx >= len(sorted_ts):
+        for horizon_ms in horizons_ms:
+            horizon_ns = rand_ts_ns + horizon_ms * MS_TO_NS
+            exit_idx = bisect_left(ts_arr, horizon_ns)
+            if exit_idx >= len(ts_arr):
                 continue
-            forward_price = all_prices_by_ts.get(sorted_ts[exit_idx])
-            if forward_price is None:
+            forward_price = float(pr_arr[exit_idx])
+            if forward_price <= 0 or not math.isfinite(forward_price):
                 continue
             raw_return = ((forward_price - entry_price) / entry_price) * 10_000
             net_return = raw_return - total_cost
 
             baseline_frs.append(TickForwardReturn(
                 signal_id=f"baseline_{source_symbol}_{i}_{horizon_ms}",
-                signal_ts=actual_entry_ts,
+                signal_ts=rand_ts_ns,
                 target_venue=VENUE,
-                target_symbol="BASELINE",
+                target_symbol=tgt_sym,
                 horizon_ms=horizon_ms,
                 entry_reference_price=entry_price,
                 forward_price=forward_price,
@@ -293,13 +326,15 @@ def check_target_coverage_from_ts_prices(
     coverage = {}
 
     for sym, (ts_arr, pr_arr) in target_data.items():
-        if not ts_arr:
+        if ts_arr.size == 0:
             coverage[sym] = {
                 "symbol": sym, "tick_count": 0,
                 "first_ts_ns": 0, "last_ts_ns": 0,
                 "has_coverage": False,
             }
             continue
+
+        _validate_monotonic_timestamps(ts_arr, name=f"target_data[{sym!r}].timestamps")
 
         first_ts = ts_arr[0]
         last_ts = ts_arr[-1]

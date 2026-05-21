@@ -64,4 +64,13 @@ def load_manifest(path: Path) -> ApprovedManifest:
         raise ValueError("Manifest must be a JSON array of records")
     records = [ManifestRecord(**r) for r in data]
     file_hash = _compute_manifest_hash(data)
+    for record_data, record in zip(data, records, strict=True):
+        expected_record_hash = _compute_manifest_hash([
+            {**record_data, "manifest_hash": "placeholder"}
+        ])
+        if record.manifest_hash != expected_record_hash:
+            raise ValueError(
+                f"Manifest record hash mismatch for candidate {record.candidate_hash}: "
+                f"stored={record.manifest_hash} expected={expected_record_hash}"
+            )
     return ApprovedManifest(records=records, manifest_file_hash=file_hash)
