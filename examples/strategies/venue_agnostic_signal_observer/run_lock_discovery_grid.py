@@ -1,5 +1,6 @@
 # Copyright (C) 2026. All rights reserved.
-"""CLI entrypoint to create a discovery grid lock.
+"""
+CLI entrypoint to create a discovery grid lock.
 
 Usage
 -----
@@ -21,18 +22,22 @@ import json
 import sys
 from pathlib import Path
 
+from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import create_grid_lock
+from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import load_grid_lock
+from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import (
+    locks_are_semantically_identical,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import save_grid_lock
 from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
     enumerate_cost_sensitivity_cell_count,
-    enumerate_primary_cell_count,
-    grid_sha256,
-    load_grid_spec,
-    validate_grid_spec,
 )
-from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import (
-    create_grid_lock,
-    load_grid_lock,
-    locks_are_semantically_identical,
-    save_grid_lock,
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
+    enumerate_primary_cell_count,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import grid_sha256
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import load_grid_spec
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
+    validate_grid_spec,
 )
 
 

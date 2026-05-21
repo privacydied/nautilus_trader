@@ -29,15 +29,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
-import statistics
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
+
 
 logger = logging.getLogger(__name__)
 
@@ -428,7 +428,8 @@ def _get_git_sha() -> str:
 
 
 def _is_btc_updown_market(market_slug: str, question: str) -> str | None:
-    """Check if a Polymarket market is a BTC Up/Down binary option.
+    """
+    Check if a Polymarket market is a BTC Up/Down binary option.
 
     Polymarket BTC Up/Down markets have slugs like:
       btc-updown-15m-1778794200
@@ -458,7 +459,8 @@ def _is_btc_updown_market(market_slug: str, question: str) -> str | None:
 
 
 def _parse_updown_tokens(market: dict) -> tuple[str | None, str | None]:
-    """Parse YES/NO CLOB token IDs from a Gamma API market dict.
+    """
+    Parse YES/NO CLOB token IDs from a Gamma API market dict.
 
     The Gamma API returns ``clobTokenIds`` as a JSON array string like
     ``'["id1", "id2"]'`` and ``outcomes`` as a JSON array string or list
@@ -497,7 +499,8 @@ def _parse_updown_tokens(market: dict) -> tuple[str | None, str | None]:
 
 
 def _extract_price_to_beat(question: str) -> float | None:
-    """Try to extract the strike/target price from the market question.
+    """
+    Try to extract the strike/target price from the market question.
 
     E.g. 'Will BTC be above $105,000?' -> 105000.0
          'Will BTC be above $100K?'   -> 100000.0
@@ -521,13 +524,13 @@ def _extract_price_to_beat(question: str) -> float | None:
 
     amounts = []
     # Match $100,000 or $100K or $100M
-    for match in re.finditer(r'\$([0-9,]+\.?[0-9]*[KkMmBb]?)', question):
+    for match in re.finditer(r"\$([0-9,]+\.?[0-9]*[KkMmBb]?)", question):
         val = _parse_amount(match.group(1))
         if val is not None:
             amounts.append(val)
     # Also match standalone 100K (without $ sign) — require word boundary to avoid
     # sub-matches like "50k" inside Pattern 1's "$150k"
-    for match in re.finditer(r'(?<!\$)(?<!\d)(\d+\.?\d*)\s*([KkMmBb])', question):
+    for match in re.finditer(r"(?<!\$)(?<!\d)(\d+\.?\d*)\s*([KkMmBb])", question):
         raw = match.group(1) + match.group(2)
         val = _parse_amount(raw)
         if val is not None:
@@ -549,7 +552,8 @@ def discover_btc_updown_markets(
     tag: str = "btc",
     max_markets: int = 200,
 ) -> list[BTCMarket]:
-    """Discover active BTC price-target markets via the Gamma API events endpoint.
+    """
+    Discover active BTC price-target markets via the Gamma API events endpoint.
 
     The Gamma API ``/markets`` endpoint does not filter by tag correctly.
     This uses ``/events?tag=btc`` to get BTC-related events, then walks
@@ -601,7 +605,7 @@ def discover_btc_updown_markets(
         condition_id = raw.get("conditionId", "") or ""
         market_id = str(raw.get("id", ""))
         end_date = raw.get("endDate") or raw.get("end_date")
-        is_closed = raw.get("closed", False)
+        raw.get("closed", False)
         is_active = raw.get("active", False)
         outcomes_raw = raw.get("outcomes", [])
 
@@ -659,7 +663,8 @@ def discover_btc_updown_markets(
 
 
 def fetch_orderbook(token_id: str, client: httpx.Client) -> dict[str, Any] | None:
-    """Fetch the orderbook for a token via the CLOB REST API.
+    """
+    Fetch the orderbook for a token via the CLOB REST API.
 
     Returns parsed JSON dict, or None on failure.
     """
@@ -685,7 +690,8 @@ def parse_orderbook_sample(
     token_id: str,
     ts_event: float,
 ) -> OrderbookSample:
-    """Parse a raw orderbook response into an OrderbookSample.
+    """
+    Parse a raw orderbook response into an OrderbookSample.
 
     Handles missing, empty, crossed, and stale books.
     """
@@ -815,7 +821,8 @@ def _token_side(market: BTCMarket, token_id: str) -> str | None:
 def _normalize_levels(
     levels: list[Any],
 ) -> list[dict[str, float]]:
-    """Normalize orderbook levels to [{'price': ..., 'size': ...}, ...].
+    """
+    Normalize orderbook levels to [{'price': ..., 'size': ...}, ...].
 
     Handles both [price, size] arrays and {'price': ..., 'size': ...} dicts.
     """
@@ -846,7 +853,8 @@ def _normalize_levels(
 
 
 def fetch_chainlink_btc_price(client: httpx.Client) -> ChainlinkTick:
-    """Fetch a CLOB token price (proxy approximation).
+    """
+    Fetch a CLOB token price (proxy approximation).
 
     The public Polymarket REST API does not expose a Chainlink BTC/USD
     reference endpoint. The ``/price`` endpoint requires a token_id+side.
@@ -884,12 +892,13 @@ async def capture_loop(
     list[RawPayloadRecord],
     list[str | None],  # raw CLOB response dicts per sample
 ]:
-    """Run the capture loop: poll orderbooks and optionally Chainlink prices.
+    """
+    Run the capture loop: poll orderbooks and optionally Chainlink prices.
 
     Returns (markets, samples, chainlink_ticks, manifest, proxy_prices,
              raw_payloads, raw_responses).
     """
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
     started_ts = time.time()
 
     feeds_requested: list[str] = []
@@ -938,12 +947,11 @@ async def capture_loop(
                             feed_stats[fname].first_sample_ts = sample.ts_event
                         feed_stats[fname].last_sample_ts = sample.ts_event
 
-                    if sample.rejection_reason:
-                        if fname not in errors:
-                            errors.append(
-                                f"{fname}: {sample.rejection_reason} "
-                                f"(ts={sample.ts_event})"
-                            )
+                    if sample.rejection_reason and fname not in errors:
+                        errors.append(
+                            f"{fname}: {sample.rejection_reason} "
+                            f"(ts={sample.ts_event})"
+                        )
 
                     token_ids_captured.add(tid)
 
@@ -1006,7 +1014,7 @@ async def capture_loop(
             sleep_needed = max(0, poll_interval - elapsed)
             await asyncio.sleep(sleep_needed)
 
-    ended_at = datetime.now(timezone.utc).isoformat()
+    ended_at = datetime.now(UTC).isoformat()
     actual_duration = time.time() - started_ts
 
     # Compute overlap between CLOB and Chainlink feeds
@@ -1052,13 +1060,14 @@ def compute_summary(
     samples: list[OrderbookSample],
     raw_payloads: list[RawPayloadRecord] | None = None,
 ) -> ProbeSummary:
-    """Compute liquidity statistics and diagnostic classification.
+    """
+    Compute liquidity statistics and diagnostic classification.
 
     Also computes TTE bucket breakdown and verification status
     if raw_payloads are provided.
     """
     markets_discovered = len([m for m in markets if m.reason_skipped is None])
-    all_markets = len(markets)
+    len(markets)
     markets_with_tokens = len([m for m in markets if m.has_tokens])
     samples_collected = len(samples)
 
@@ -1192,7 +1201,8 @@ def _classify_liquidity(
     ask_depths: list[float],
     total_valid: int,
 ) -> str:
-    """Classify liquidity into GREEN/YELLOW/RED/NEEDS_MORE_DATA/CAPTURE_UNUSABLE.
+    """
+    Classify liquidity into GREEN/YELLOW/RED/NEEDS_MORE_DATA/CAPTURE_UNUSABLE.
 
     Rules (fixed before capture):
     - GREEN: median spread <= 3c AND depth is non-dust (bid+ask >= $100)
@@ -1531,8 +1541,8 @@ def _format_payload(p: RawPayloadRecord) -> list[str]:
     lines.append("")
     lines.append("#### Parser Selection")
     lines.append("")
-    lines.append(f"| Field | Value |")
-    lines.append(f"|-------|-------|")
+    lines.append("| Field | Value |")
+    lines.append("|-------|-------|")
     lines.append(f"| best_bid | {_fmt(p.computed_best_bid)} |")
     lines.append(f"| best_ask | {_fmt(p.computed_best_ask)} |")
     lines.append(f"| spread_price_units | {_fmt(p.computed_spread_price_units)} |")
@@ -1559,20 +1569,21 @@ def _format_payload(p: RawPayloadRecord) -> list[str]:
 
 
 def _parse_expiry_to_tte(expiry_str: str | None, ts_event: float) -> float | None:
-    """Parse an ISO 8601 expiry string and compute time-to-expiry in seconds.
+    """
+    Parse an ISO 8601 expiry string and compute time-to-expiry in seconds.
 
     Returns None if expiry cannot be parsed.
     """
     if not expiry_str:
         return None
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
         clean = str(expiry_str)[:26].replace("Z", "+00:00")
         if "+" not in clean and clean.count("-") == 2:
             clean += "+00:00"
         expiry_dt = datetime.fromisoformat(clean)
         if expiry_dt.tzinfo is None:
-            expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+            expiry_dt = expiry_dt.replace(tzinfo=UTC)
         tte_s = (expiry_dt.timestamp() - ts_event)
         return max(tte_s, 0.0) if tte_s >= 0 else 0.0
     except (ValueError, TypeError, IndexError):
@@ -1602,7 +1613,8 @@ def _check_tte_sanity(
     markets: list[BTCMarket],
     bucket_samples: dict[str, list[OrderbookSample]],
 ) -> None:
-    """Check if short-duration markets have anomalous TTE distributions.
+    """
+    Check if short-duration markets have anomalous TTE distributions.
 
     If a 5m-duration market has ALL its samples in TTE_GT_15M, that means
     the market was far from expiry during the capture window — the samples
@@ -1669,7 +1681,8 @@ def _compute_tte_buckets(
     markets: list[BTCMarket],
     samples: list[OrderbookSample],
 ) -> dict[str, dict[str, Any]]:
-    """Compute TTE bucket statistics from samples.
+    """
+    Compute TTE bucket statistics from samples.
 
     Returns dict mapping TTE bucket label -> bucket stats.
     """
@@ -1772,7 +1785,8 @@ def _compute_tte_buckets(
 def _compute_near_expiry_rollup(
     tte_buckets: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    """Compute a near-expiry rollup (tte <= 120s) from TTE buckets.
+    """
+    Compute a near-expiry rollup (tte <= 120s) from TTE buckets.
 
     Aggregates tte_0s_to_30s + tte_30s_to_1m + tte_1m_to_2m buckets.
     """
@@ -1844,7 +1858,8 @@ def _compute_verification_status(
     raw_payload_count: int,
     tte_buckets: dict[str, dict[str, Any]],
 ) -> str:
-    """Compute the verification gate status.
+    """
+    Compute the verification gate status.
 
     Logic:
     - RAW_PAYLOAD_VERIFIED if raw payloads > 0
@@ -1930,8 +1945,8 @@ def write_tte_bucket_summary_md(
             continue
         lines.append(f"## {label}")
         lines.append("")
-        lines.append(f"| Metric | Value |")
-        lines.append(f"|--------|-------|")
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
         lines.append(f"| Sample count | {count} |")
         lines.append(f"| Valid samples | {bucket.get('valid_sample_count', 0)} |")
         lines.append(f"| Two-sided rate | {bucket.get('two_sided_rate', 0):.1f}% |")
@@ -1954,8 +1969,8 @@ def write_tte_bucket_summary_md(
     lines.append("")
     lines.append(f"**Definition:** {near_expiry.get('near_expiry_definition', 'N/A')}")
     lines.append("")
-    lines.append(f"| Metric | Value |")
-    lines.append(f"|--------|-------|")
+    lines.append("| Metric | Value |")
+    lines.append("|--------|-------|")
     lines.append(f"| Sample count | {near_expiry.get('near_expiry_sample_count', 0)} |")
     lines.append(f"| Valid samples | {near_expiry.get('near_expiry_valid_sample_count', 0)} |")
     lines.append(f"| Median spread (cents) | {_fmt(near_expiry.get('near_expiry_median_spread_cents'))} |")
@@ -1981,7 +1996,8 @@ def fetch_cex_proxy_price(
     client: httpx.Client,
     proxy: str = "binance",
 ) -> tuple[float | None, str, str]:
-    """Fetch a BTC price from a public CEX as a settlement proxy.
+    """
+    Fetch a BTC price from a public CEX as a settlement proxy.
 
     This is NOT Chainlink settlement truth. It is labelled CEX_PROXY_REFERENCE.
 
@@ -2022,7 +2038,8 @@ def fetch_cex_proxy_price(
 
 
 def _classify_duration(market_slug: str) -> str:
-    """Classify a market's duration from its slug pattern.
+    """
+    Classify a market's duration from its slug pattern.
 
     E.g. 'btc-updown-5m-12345' -> '5m'
          'btc-updown-15m-12345' -> '15m'
@@ -2085,7 +2102,8 @@ def compute_distance_to_strike(
     token_mid: float | None,
     token_side: str | None,
 ) -> float | None:
-    """Compute distance from current token price to binary strike in bps.
+    """
+    Compute distance from current token price to binary strike in bps.
 
     For a YES token: distance = |strike_price - cex_price| / cex_price * 10000
     This requires both the CEX reference price and the token's implied price.
@@ -2107,7 +2125,8 @@ def _compute_distance_to_strike_buckets(
     reference_prices: list[tuple[float, float]],  # [(ts, price), ...]
     reference_source: str,
 ) -> dict[str, dict[str, Any]]:
-    """Compute distance-to-strike buckets.
+    """
+    Compute distance-to-strike buckets.
 
     reference_prices: list of (timestamp, cex_price) pairs captured during run.
     """
@@ -2116,7 +2135,7 @@ def _compute_distance_to_strike_buckets(
                     "reference_source": reference_source} for b in DIST_BUCKET_LABELS}
 
     # Build market price-to-beat lookup
-    strike_map: dict[str, float | None] = {m.market_slug: m.price_to_beat for m in markets}
+    {m.market_slug: m.price_to_beat for m in markets}
 
     # For each sample, find nearest reference price and compute distance
     ref_ts_sorted = sorted(reference_prices, key=lambda x: x[0])
@@ -2200,7 +2219,8 @@ def _compute_two_axis_grid(
     tte_buckets: dict[str, dict[str, Any]],
     distance_buckets: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Compute a two-axis liquidity grid: TTE rows x distance columns.
+    """
+    Compute a two-axis liquidity grid: TTE rows x distance columns.
 
     For now, computes a simplified grid from bucket-level aggregates.
     A full per-sample cross-bucketing requires both TTE and distance
@@ -2366,7 +2386,8 @@ def _validate_artifact_set(
     out_dir: Path,
     required_files: list[str],
 ) -> tuple[bool, dict[str, int]]:
-    """Validate that all required artifact files exist and have rows.
+    """
+    Validate that all required artifact files exist and have rows.
 
     Returns (all_exist_and_nonempty, {filename: row_count}).
     """
@@ -2393,7 +2414,8 @@ def _compute_verification_status_v2(
     duration_coverage: dict[str, dict[str, Any]],
     instrumented_flags: dict[str, bool],
 ) -> str:
-    """Compute verification gate status based on real artifact evidence.
+    """
+    Compute verification gate status based on real artifact evidence.
 
     Rules:
     - LIQUIDITY_GATE_VERIFIED requires:
@@ -2559,10 +2581,10 @@ def write_two_axis_grid_md(
     lines.append("")
     lines.append("## Convex Danger Zone Cell")
     lines.append("")
-    lines.append(f"**Definition:** tte <= 120s AND distance <= 10 bps")
+    lines.append("**Definition:** tte <= 120s AND distance <= 10 bps")
     lines.append("")
-    lines.append(f"| Metric | Value |")
-    lines.append(f"|--------|-------|")
+    lines.append("| Metric | Value |")
+    lines.append("|--------|-------|")
     lines.append(f"| Sample count | {danger_zone_cell.get('sample_count', 0)} |")
     lines.append(f"| Median spread (cents) | {_fmt(danger_zone_cell.get('median_spread_cents'))} |")
     lines.append(f"| Classification | {danger_zone_cell.get('classification', 'N/A')} |")

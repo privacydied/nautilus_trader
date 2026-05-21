@@ -1,4 +1,5 @@
-"""Download public OHLCV data for the lead-lag experiment.
+"""
+Download public OHLCV data for the lead-lag experiment.
 
 Fetches 1-minute bars from Binance and Kraken for BTC, ETH, SOL and saves
 them as CSVs that the sweep runner can consume.
@@ -16,11 +17,14 @@ respects rate limits.  Run it once, then reuse the CSVs offline.
 from __future__ import annotations
 
 import argparse
-import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 from pathlib import Path
 
-from .data_adapters import download_public_klines, save_venue_csv
+from .data_adapters import download_public_klines
+from .data_adapters import save_venue_csv
+
 
 # Mapping from asset slug to venue-specific symbols
 _BINANCE_SYMBOLS = {
@@ -81,9 +85,9 @@ def main():
     data_dir.mkdir(parents=True, exist_ok=True)
 
     if args.end_ts:
-        end_dt = datetime.fromisoformat(args.end_ts.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(args.end_ts)
     else:
-        end_dt = datetime.now(timezone.utc)
+        end_dt = datetime.now(UTC)
 
     start_dt = end_dt - timedelta(days=args.days)
     start_ms = int(start_dt.timestamp() * 1000)
@@ -127,7 +131,7 @@ def main():
 
     print(f"\nDownloading {len(tasks)} datasets...")
 
-    for venue, asset, symbol, kwargs in tasks:
+    for venue, asset, symbol, _kwargs in tasks:
         label = f"{venue}/{asset}"
         print(f"\n[{label}] Downloading {args.interval} bars...")
         try:

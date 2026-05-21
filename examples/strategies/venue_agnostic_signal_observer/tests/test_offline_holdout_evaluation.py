@@ -7,52 +7,113 @@ from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import compute_data_corpus_hash
-from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
-    OFFLINE_DATA_SCHEMA_VERSION,
-    RESOLUTION_BAR,
-    RESOLUTION_TRADE,
-    WINDOW_MODE_CAUSAL,
-    OfflinePrepareManifest,
-    OfflineSourceFile,
+from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import (
+    compute_data_corpus_hash,
 )
 from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
     DISCOVERY_SCHEMA_VERSION,
-    CostConfig,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import CostConfig
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
     OfflineDiscoveryPlan,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
     OfflineDiscoveryPlanCell,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
     compute_window_index_hash,
 )
-from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
-    OFFLINE_STRESS_WINDOW_SCHEMA_VERSION,
-    STATUS_OFFLINE_STRESS_INDEX_READY,
-    OfflineStressWindow,
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    OFFLINE_DATA_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    RESOLUTION_BAR,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    RESOLUTION_TRADE,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    WINDOW_MODE_CAUSAL,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    OfflinePrepareManifest,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    OfflineSourceFile,
 )
 from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     HOLDOUT_EVALUATION_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_CONDITIONING_NOT_RUN_PHASE_2B2B2,
-    STATUS_DATA_CORPUS_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_DISCOVERY_PLAN_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_INPUT_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_INSUFFICIENT_HOLDOUT_EVENTS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_LATENCY_GATE_REQUIRED_NOT_RUN,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_NO_EVALUABLE_SURVIVORS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_NO_HOLDOUT_WINDOWS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_NO_TRAIN_SURVIVORS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_OFFLINE_HOLDOUT_EVALUATION_READY,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_SURVIVOR_FREEZE_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_TRAIN_EVALUATION_HASH_MISMATCH,
-    STATUS_UNSUPPORTED_SURVIVOR_CELL,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_UNUSABLE_SURVIVOR_FREEZE,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     STATUS_WINDOW_INDEX_HASH_MISMATCH,
-    build_offline_holdout_evaluation_manifest_payload,
-    build_offline_holdout_evaluation_report,
-    compute_holdout_evaluation_hash,
-    write_offline_holdout_evaluation_outputs,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
     _summarize_event_returns,
 )
-from examples.strategies.venue_agnostic_signal_observer.offline_train_evaluation import EVALUATION_SCHEMA_VERSION
-from examples.strategies.venue_agnostic_signal_observer.offline_train_survivor_freeze import FREEZE_SCHEMA_VERSION
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
+    build_offline_holdout_evaluation_manifest_payload,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
+    build_offline_holdout_evaluation_report,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
+    compute_holdout_evaluation_hash,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_holdout_evaluation import (
+    write_offline_holdout_evaluation_outputs,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
+    OFFLINE_STRESS_WINDOW_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
+    STATUS_OFFLINE_STRESS_INDEX_READY,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
+    OfflineStressWindow,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_evaluation import (
+    EVALUATION_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_survivor_freeze import (
+    FREEZE_SCHEMA_VERSION,
+)
+
 
 NS = 1_000_000_000
 
@@ -1017,7 +1078,8 @@ def test_event_net_bps_exported_for_successful_holdout_cell(tmp_path: Path):
 
 
 def test_summary_metrics_derived_from_event_vectors(tmp_path: Path):
-    """Tests 3-7: Summary metrics are derived from event_net_bps and event_raw_bps.
+    """
+    Tests 3-7: Summary metrics are derived from event_net_bps and event_raw_bps.
 
     The event vectors are the single source of truth. All summary stats must
     match what _summarize_event_returns computes from those vectors.
@@ -1051,9 +1113,11 @@ def test_summary_metrics_derived_from_event_vectors(tmp_path: Path):
 
 
 def test_excluded_cells_have_empty_event_vectors(tmp_path: Path):
-    """Test 8: Excluded survivor cells (in excluded_survivor_cells) have
+    """
+    Test 8: Excluded survivor cells (in excluded_survivor_cells) have
     no cell_result entries. Verified through existing exclusion tests
-    that produce excluded cells."""
+    that produce excluded cells.
+    """
     # Family 4 exclusion test already proves excluded cells are handled
     survivor = _family4_cell()
     freeze_cell = _holdout_cell_from_plan(survivor)
@@ -1082,7 +1146,8 @@ def test_net_events_derived_from_raw_events_minus_costs(tmp_path: Path):
 
 
 def test_summarize_event_returns_is_production_summary_path(tmp_path: Path):
-    """Test 10: The production summary uses _summarize_event_returns.
+    """
+    Test 10: The production summary uses _summarize_event_returns.
 
     Verify by confirming that _summarize_event_returns produces the same
     metrics as found in actual evaluation output.

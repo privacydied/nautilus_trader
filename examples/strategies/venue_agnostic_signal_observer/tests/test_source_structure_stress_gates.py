@@ -4,34 +4,60 @@ from __future__ import annotations
 
 import json
 import math
-import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
 from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
     ALLOWED_VERDICTS,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
     FORBIDDEN_VERDICTS,
-    SourceStructureStressConfig,
-    SourceReturnBucket,
-    VolatilityEvent,
-    HawkesIntensityPoint,
-    PermutationEntropyPoint,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
     HawkesStressLabel,
-    HawkesStressWindow,
-    build_source_return_buckets,
-    build_volatility_events,
-    compute_hawkes_intensity,
-    compute_permutation_entropy_points,
-    build_hawkes_stress_labels,
-    merge_hawkes_stress_windows,
-    write_source_structure_stress_artifacts,
-    load_hawkes_stress_labels,
-    validate_verdict,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    PermutationEntropyPoint,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    SourceStructureStressConfig,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    VolatilityEvent,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
     _compute_permutation_entropy,
 )
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    build_hawkes_stress_labels,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    build_source_return_buckets,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    build_volatility_events,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    compute_hawkes_intensity,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    compute_permutation_entropy_points,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    load_hawkes_stress_labels,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    merge_hawkes_stress_windows,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    validate_verdict,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    write_source_structure_stress_artifacts,
+)
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +72,7 @@ def _make_tick(ts_ns: int, price: float, symbol: str = "BTCUSDT", venue: str = "
 
 
 def _make_constant_price_ticks(n: int, base_price: float = 50000.0, interval_ns: int = 100_000_000) -> list[TradeTickLite]:
-    """n ticks at constant price, spaced by interval_ns."""
+    """N ticks at constant price, spaced by interval_ns."""
     return [_make_tick(i * interval_ns, base_price) for i in range(n)]
 
 
@@ -91,7 +117,7 @@ class TestConfig:
         assert abs(c.hawkes_alpha - 0.5 / 30.0) < 1e-10
 
     def test_alpha_derived_not_independent(self):
-        """alpha is always eta / tau, never independently settable."""
+        """Alpha is always eta / tau, never independently settable."""
         c = SourceStructureStressConfig(
             hawkes_branching_ratio=0.7,
             hawkes_tau_seconds=20.0,
@@ -529,16 +555,16 @@ class TestMergeWindows:
 
     def test_close_labels_merged(self):
         """Labels 10s apart should be merged."""
-        base = dict(
-            source_venue="BINANCE", source_symbol="BTCUSDT",
-            hawkes_tau_seconds=30, hawkes_branching_ratio=0.5,
-            hawkes_alpha=0.5/30, intensity_lambda=1.0, mu=0.5,
-            lambda_over_mu=2.0, prior_event_count=5,
-            abs_return_bps=10.0, signed_return_bps=10.0,
-            bucket_size_seconds=1.0, event_threshold_bps=5.0,
-            entropy_value=0.5, entropy_status="computed",
-            reason="test", config_hash="abc",
-        )
+        base = {
+            "source_venue": "BINANCE", "source_symbol": "BTCUSDT",
+            "hawkes_tau_seconds": 30, "hawkes_branching_ratio": 0.5,
+            "hawkes_alpha": 0.5/30, "intensity_lambda": 1.0, "mu": 0.5,
+            "lambda_over_mu": 2.0, "prior_event_count": 5,
+            "abs_return_bps": 10.0, "signed_return_bps": 10.0,
+            "bucket_size_seconds": 1.0, "event_threshold_bps": 5.0,
+            "entropy_value": 0.5, "entropy_status": "computed",
+            "reason": "test", "config_hash": "abc",
+        }
         labels = [
             HawkesStressLabel(label_id=f"l{i}", ts_ns=i * 10_000_000_000, ts_utc="", **base)
             for i in range(5)
@@ -549,16 +575,16 @@ class TestMergeWindows:
 
     def test_far_labels_not_merged(self):
         """Labels 60s apart should NOT be merged."""
-        base = dict(
-            source_venue="BINANCE", source_symbol="BTCUSDT",
-            hawkes_tau_seconds=30, hawkes_branching_ratio=0.5,
-            hawkes_alpha=0.5/30, intensity_lambda=1.0, mu=0.5,
-            lambda_over_mu=2.0, prior_event_count=5,
-            abs_return_bps=10.0, signed_return_bps=10.0,
-            bucket_size_seconds=1.0, event_threshold_bps=5.0,
-            entropy_value=0.5, entropy_status="computed",
-            reason="test", config_hash="abc",
-        )
+        base = {
+            "source_venue": "BINANCE", "source_symbol": "BTCUSDT",
+            "hawkes_tau_seconds": 30, "hawkes_branching_ratio": 0.5,
+            "hawkes_alpha": 0.5/30, "intensity_lambda": 1.0, "mu": 0.5,
+            "lambda_over_mu": 2.0, "prior_event_count": 5,
+            "abs_return_bps": 10.0, "signed_return_bps": 10.0,
+            "bucket_size_seconds": 1.0, "event_threshold_bps": 5.0,
+            "entropy_value": 0.5, "entropy_status": "computed",
+            "reason": "test", "config_hash": "abc",
+        }
         labels = [
             HawkesStressLabel(label_id=f"l{i}", ts_ns=i * 60_000_000_000, ts_utc="", **base)
             for i in range(4)
@@ -570,16 +596,16 @@ class TestMergeWindows:
 
     def test_window_preserves_per_label_values(self):
         """Merged window should preserve per-label causal values."""
-        base = dict(
-            source_venue="BINANCE", source_symbol="BTCUSDT",
-            hawkes_tau_seconds=30, hawkes_branching_ratio=0.5,
-            hawkes_alpha=0.5/30, intensity_lambda=1.0, mu=0.5,
-            prior_event_count=5,
-            abs_return_bps=10.0, signed_return_bps=10.0,
-            bucket_size_seconds=1.0, event_threshold_bps=5.0,
-            entropy_status="computed",
-            reason="test", config_hash="abc",
-        )
+        base = {
+            "source_venue": "BINANCE", "source_symbol": "BTCUSDT",
+            "hawkes_tau_seconds": 30, "hawkes_branching_ratio": 0.5,
+            "hawkes_alpha": 0.5/30, "intensity_lambda": 1.0, "mu": 0.5,
+            "prior_event_count": 5,
+            "abs_return_bps": 10.0, "signed_return_bps": 10.0,
+            "bucket_size_seconds": 1.0, "event_threshold_bps": 5.0,
+            "entropy_status": "computed",
+            "reason": "test", "config_hash": "abc",
+        }
         labels = [
             HawkesStressLabel(
                 label_id=f"l{i}", ts_ns=i * 10_000_000_000, ts_utc="",
@@ -694,7 +720,9 @@ class TestArtifactIO:
 
 class TestSafetyScan:
     def test_no_private_keys_in_module(self):
-        import ast, inspect
+        import ast
+        import inspect
+
         import examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates as mod
         src = inspect.getsource(mod)
         tree = ast.parse(src)
@@ -715,6 +743,7 @@ class TestSafetyScan:
 
     def test_no_private_keys_in_runner(self):
         import inspect
+
         import examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates as mod
         src = inspect.getsource(mod)
         forbidden = [
@@ -739,7 +768,7 @@ class TestDeterminism:
         ]
         b1 = build_source_return_buckets(ticks)
         b2 = build_source_return_buckets(ticks)
-        for a, b in zip(b1, b2):
+        for a, b in zip(b1, b2, strict=False):
             assert asdict(a) == asdict(b)
 
     def test_config_serialization_roundtrip(self):

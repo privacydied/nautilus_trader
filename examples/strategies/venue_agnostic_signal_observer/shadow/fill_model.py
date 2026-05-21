@@ -15,10 +15,9 @@ uncertainty/error bars. Shadow must not place orders.
 
 from __future__ import annotations
 
-import math
 import random
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from dataclasses import field
 
 
 @dataclass
@@ -53,6 +52,7 @@ class FillEvent:
 @dataclass
 class CrossVenueFillModel:
     """Cross-venue fill model for a single signal/candidate configuration."""
+
     config: FillModelConfig
     _rng: random.Random = field(default_factory=lambda: random.Random(42), repr=False)
 
@@ -64,7 +64,8 @@ class CrossVenueFillModel:
         trigger_time_seconds: float,
         target_mid_move_bps: float,
     ) -> FillEvent:
-        """Simulate one fill cycle: source trigger → target entry → exit.
+        """
+        Simulate one fill cycle: source trigger → target entry → exit.
 
         Parameters
         ----------
@@ -80,7 +81,7 @@ class CrossVenueFillModel:
         cfg = self.config
 
         # Staleness: how stale is the target book at the moment of entry
-        entry_time = trigger_time_seconds + cfg.entry_delay_seconds
+        trigger_time_seconds + cfg.entry_delay_seconds
         staleness = self._rng.expovariate(1.0 / (cfg.max_staleness_seconds / 2))
 
         if staleness > cfg.max_staleness_seconds:

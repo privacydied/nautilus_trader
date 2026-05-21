@@ -1,4 +1,5 @@
-"""JSONL loading/saving, tick sorting, deduplication, and stale tick rejection.
+"""
+JSONL loading/saving, tick sorting, deduplication, and stale tick rejection.
 
 This module provides **storage and loading utilities only** for managing
 JSONL files containing tick-level data used by the signal observer.
@@ -18,12 +19,12 @@ live-trading code** is present in or invoked by this module.
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
 from pathlib import Path
 
-from .tick_models import QuoteTickLite, TradeTickLite
+from .tick_models import QuoteTickLite
+from .tick_models import TradeTickLite
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +33,8 @@ from .tick_models import QuoteTickLite, TradeTickLite
 
 
 def load_trades_jsonl(path: str) -> list[TradeTickLite]:
-    """Load TradeTickLite objects from a JSONL file.
+    """
+    Load TradeTickLite objects from a JSONL file.
 
     - Reads one JSON object per line using TradeTickLite.from_dict()
     - Sorts results by ts_event ascending
@@ -56,7 +58,7 @@ def load_trades_jsonl(path: str) -> list[TradeTickLite]:
                 continue
             try:
                 tick = TradeTickLite.from_dict(json.loads(stripped))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 print(
                     f"WARNING: skipping malformed trade line {lineno} in "
                     f"{path}: {exc}",
@@ -75,7 +77,8 @@ def load_trades_jsonl(path: str) -> list[TradeTickLite]:
 
 
 def load_quotes_jsonl(path: str) -> list[QuoteTickLite]:
-    """Load QuoteTickLite objects from a JSONL file.
+    """
+    Load QuoteTickLite objects from a JSONL file.
 
     - Reads one JSON object per line using QuoteTickLite.from_dict()
     - Sorts results by ts_event ascending
@@ -128,7 +131,7 @@ def load_quotes_jsonl(path: str) -> list[QuoteTickLite]:
 
             try:
                 tick = QuoteTickLite.from_dict(data)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 print(
                     f"WARNING: skipping quote line {lineno} in {path}: {exc}",
                     file=sys.stderr,
@@ -146,7 +149,8 @@ def load_quotes_jsonl(path: str) -> list[QuoteTickLite]:
 
 
 def save_trades_jsonl(path: str, trades: list[TradeTickLite]) -> None:
-    """Serialize TradeTickLite objects to a JSONL file.
+    """
+    Serialize TradeTickLite objects to a JSONL file.
 
     Creates intermediate parent directories if they do not exist.
 
@@ -158,12 +162,12 @@ def save_trades_jsonl(path: str, trades: list[TradeTickLite]) -> None:
     parent.mkdir(parents=True, exist_ok=True)
 
     with open(path, "w") as f:
-        for tick in trades:
-            f.write(tick.to_json() + "\n")
+        f.writelines(tick.to_json() + "\n" for tick in trades)
 
 
 def save_quotes_jsonl(path: str, quotes: list[QuoteTickLite]) -> None:
-    """Serialize QuoteTickLite objects to a JSONL file.
+    """
+    Serialize QuoteTickLite objects to a JSONL file.
 
     Creates intermediate parent directories if they do not exist.
 
@@ -175,8 +179,7 @@ def save_quotes_jsonl(path: str, quotes: list[QuoteTickLite]) -> None:
     parent.mkdir(parents=True, exist_ok=True)
 
     with open(path, "w") as f:
-        for tick in quotes:
-            f.write(tick.to_json() + "\n")
+        f.writelines(tick.to_json() + "\n" for tick in quotes)
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +195,8 @@ def _sort_ticks[T: TradeTickLite | QuoteTickLite](ticks: list[T]) -> list[T]:
 def sort_by_ts(
     ticks: list[TradeTickLite | QuoteTickLite],
 ) -> list[TradeTickLite | QuoteTickLite]:
-    """Return a new list sorted by ts_event ascending.
+    """
+    Return a new list sorted by ts_event ascending.
 
     Works with mixed lists containing TradeTickLite and/or QuoteTickLite.
 
@@ -214,7 +218,8 @@ def reject_stale_ticks(
     ticks: list,
     max_age_ns: int = 60_000_000_000,
 ) -> list:
-    """Remove ticks that are stale relative to the next tick in the series.
+    """
+    Remove ticks that are stale relative to the next tick in the series.
 
     A tick is considered stale when the gap between it and the *next* tick
     exceeds *max_age_ns* nanoseconds.  This detects data gaps where a tick
@@ -268,7 +273,8 @@ def merge_and_sort_ticks(
     trades: list[TradeTickLite],
     quotes: list[QuoteTickLite],
 ) -> list:
-    """Merge trade and quote tick lists into one timeline sorted by ts_event.
+    """
+    Merge trade and quote tick lists into one timeline sorted by ts_event.
 
     Each item is annotated with a ``tick_type`` attribute at runtime
     (``"trade"`` or ``"quote"``) so downstream consumers can distinguish
@@ -324,7 +330,8 @@ def tick_file_discovery(
     symbol: str,
     tick_type: str = "trades",
 ) -> list[str]:
-    """Discover JSONL tick files matching the expected naming convention.
+    """
+    Discover JSONL tick files matching the expected naming convention.
 
     Expected filename pattern::
 

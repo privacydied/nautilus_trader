@@ -20,6 +20,7 @@ Public data observer only. No auth. No orders. No execution.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import sys
@@ -28,15 +29,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .stage2_precommitment_utils import (
-    CollectionLock,
-    load_precommitment,
-    get_signal_family,
-    _get_git_sha,
-)
-from .run_artifacts import atomic_write_json, atomic_write_text
-from .quarantine import get_quarantined_run_ids
-from .burn import burn_corpus, get_burned_run_ids
+from .burn import burn_corpus
+from .run_artifacts import atomic_write_json
+from .run_artifacts import atomic_write_text
+from .stage2_precommitment_utils import CollectionLock
+from .stage2_precommitment_utils import _get_git_sha
+from .stage2_precommitment_utils import get_signal_family
+from .stage2_precommitment_utils import load_precommitment
 
 
 def _ts_now_iso() -> str:
@@ -67,7 +66,8 @@ def run_discovery_check(
     test_run_ids: list[str] | None = None,
     lock: CollectionLock | None = None,
 ) -> dict[str, Any]:
-    """Run the discovery criteria check.
+    """
+    Run the discovery criteria check.
 
     Returns a result dict with keys including:
         mode, status, frozen_configs, survivors, burn_record, errors.
@@ -94,7 +94,7 @@ def run_discovery_check(
     same_sign_frac = discovery_accept.get(
         "minimum_same_sign_capture_fraction", 0.70
     )
-    same_sign_rounding = discovery_accept.get("same_sign_rounding", "ceil")
+    discovery_accept.get("same_sign_rounding", "ceil")
     worst_floor = discovery_accept.get("worst_capture_mean_net_bps_floor", -5.0)
     requires_bh = discovery_accept.get("requires_primary_bh_survival", True)
 
@@ -338,7 +338,8 @@ def run_holdout_check(
     *,
     lock: CollectionLock | None = None,
 ) -> dict[str, Any]:
-    """Run the holdout criteria check.
+    """
+    Run the holdout criteria check.
 
     Returns a result dict with keys including:
         mode, status, survivors, errors.
@@ -508,10 +509,8 @@ def main() -> None:
                 if d.is_dir():
                     sp = d / "summary.json"
                     if sp.exists():
-                        try:
+                        with contextlib.suppress(json.JSONDecodeError, OSError):
                             summaries.append(_load_json(sp))
-                        except (json.JSONDecodeError, OSError):
-                            pass
 
         result = run_discovery_check(
             precommit=precommit,
@@ -576,7 +575,7 @@ def main() -> None:
         frozen_path = out_dir / "frozen_discovery_configs.json"
         atomic_write_json(frozen_path, result.get("frozen_configs", []))
 
-        print(f"  Mode:            discovery")
+        print("  Mode:            discovery")
         print(f"  Status:          {result.get('status', '?')}")
         print(f"  Frozen configs:  {result.get('frozen_config_count', 0)}")
         print(f"  Burned:          {result.get('burn_record', {}).get('burned', False)}")
@@ -603,10 +602,8 @@ def main() -> None:
                 if d.is_dir():
                     sp = d / "summary.json"
                     if sp.exists():
-                        try:
+                        with contextlib.suppress(json.JSONDecodeError, OSError):
                             summaries.append(_load_json(sp))
-                        except (json.JSONDecodeError, OSError):
-                            pass
 
         result = run_holdout_check(
             precommit=precommit,
@@ -619,7 +616,7 @@ def main() -> None:
         holdout_path = out_dir / "stage2_holdout_criteria_summary.json"
         atomic_write_json(holdout_path, result)
 
-        print(f"  Mode:            holdout")
+        print("  Mode:            holdout")
         print(f"  Status:          {result.get('status', '?')}")
         print(f"  Survivors:       {result.get('survivor_count', 0)}")
         for err in result.get("errors", []):

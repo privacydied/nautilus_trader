@@ -1,4 +1,5 @@
-"""CLI runner for derivatives lead-lag signal research.
+"""
+CLI runner for derivatives lead-lag signal research.
 
 **RESEARCH MEASUREMENT TOOL ONLY.**  No orders, no execution, no live trading.
 
@@ -29,18 +30,17 @@ import json
 import math
 import statistics
 import time
-from dataclasses import asdict, field, dataclass
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
-from typing import Any
 
+from .derivatives_lead_lag import DerivativesImpulseGenerator
+from .derivatives_lead_lag import impulse_to_tick_signal
 from .derivatives_models import DerivativeTradeTick
-from .derivatives_lead_lag import DerivativesImpulseGenerator, impulse_to_tick_signal
+from .event_study import evaluate_candidate_group
+from .event_study import evaluate_tick_signal
+from .event_study import generate_random_baseline as _orig_random_baseline
 from .tick_models import TickForwardReturn
-from .event_study import (
-    evaluate_tick_signal,
-    generate_random_baseline as _orig_random_baseline,
-    evaluate_candidate_group,
-)
 
 
 VALID_INSTRUMENT_TYPES = {"spot", "perp", "futures", "unknown"}
@@ -80,9 +80,11 @@ def _split_strings(s: str) -> list[str]:
 
 
 def load_deriv_ticks(path: str) -> list[DerivativeTradeTick]:
-    """Load DerivativeTradeTick from JSONL.  Tolerates plain dicts with
+    """
+    Load DerivativeTradeTick from JSONL.  Tolerates plain dicts with
     the same keys as TradeTickLite (ts_event, venue, symbol, price,
-    size, side, trade_id).  """
+    size, side, trade_id).
+    """
     ticks: list[DerivativeTradeTick] = []
     p = Path(path)
     if not p.exists():

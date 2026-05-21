@@ -9,13 +9,15 @@ recomputed for each corpus — it is not a constant.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 
 
 @dataclass
 class CaptureRecord:
     """Result of one capture window for one candidate."""
+
     capture_id: str
     candidate_hash: str
     grid_hash: str
@@ -64,7 +66,8 @@ def _std(xs: list[float]) -> float | None:
 
 
 def _effective_trials(captures: list[CaptureRecord], threshold: float = 0.7) -> int | None:
-    """Recompute effective_trial_count from cross-capture return-series correlation.
+    """
+    Recompute effective_trial_count from cross-capture return-series correlation.
 
     Uses the same correlation-cluster method as the Phase 1 estimator, applied
     to the cross-capture dimension rather than the cross-cell dimension.
@@ -74,7 +77,9 @@ def _effective_trials(captures: list[CaptureRecord], threshold: float = 0.7) -> 
     if not series:
         return None
 
-    from ..validator.effective_trials import compute_effective_trial_count
+    from venue_agnostic_signal_observer.validator.effective_trials import (
+        compute_effective_trial_count,
+    )
     result = compute_effective_trial_count(series, correlation_threshold=threshold)
     return result.effective_trial_count
 
@@ -85,7 +90,8 @@ def aggregate_corpus(
     demotion_threshold_recurrence: float = 0.3,
     correlation_threshold: float = 0.7,
 ) -> CorpusAggregationResult:
-    """Aggregate repeated captures for one candidate.
+    """
+    Aggregate repeated captures for one candidate.
 
     Parameters
     ----------
@@ -127,7 +133,7 @@ def aggregate_corpus(
     n_pos = len(positive)
     recurrence = n_pos / len(captures)
 
-    mean_returns_list = [m for m in means]
+    mean_returns_list = list(means)
     agg_mr = _mean(mean_returns_list)
     best_mr = max(mean_returns_list) if mean_returns_list else None
     worst_mr = min(mean_returns_list) if mean_returns_list else None

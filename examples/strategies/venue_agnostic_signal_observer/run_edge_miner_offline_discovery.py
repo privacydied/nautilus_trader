@@ -1,4 +1,5 @@
-"""Offline Edge Miner discovery runner.
+"""
+Offline Edge Miner discovery runner.
 
 This runner wires the existing observer-side Edge Miner phases into a first
 end-to-end offline discovery path. It only reads local/captured files or, when
@@ -14,61 +15,71 @@ import bisect
 import hashlib
 import json
 import math
-import random
 import re
 import sys
 from collections import defaultdict
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime, timedelta
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
+from typing import Iterable
+from typing import Sequence
+
 
 PROJECT_ROOT = str(Path(__file__).resolve().parents[3])
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from examples.strategies.venue_agnostic_signal_observer.corpus.aggregator import (
-    CaptureRecord,
-    aggregate_corpus,
-)
+from examples.strategies.venue_agnostic_signal_observer.corpus.aggregator import CaptureRecord
+from examples.strategies.venue_agnostic_signal_observer.corpus.aggregator import aggregate_corpus
 from examples.strategies.venue_agnostic_signal_observer.governance.events import (
     make_estimator_evidence_event,
+)
+from examples.strategies.venue_agnostic_signal_observer.governance.events import (
     make_grid_lock_event,
 )
 from examples.strategies.venue_agnostic_signal_observer.governance.ledger import EvidenceLedger
-from examples.strategies.venue_agnostic_signal_observer.miner.grid import (
-    GridCell,
-    GridSpec,
-    build_grid,
-)
-from examples.strategies.venue_agnostic_signal_observer.miner.sweep import (
-    CellResult,
-    SweepResult,
-    run_sweep,
-)
+from examples.strategies.venue_agnostic_signal_observer.miner.grid import GridCell
+from examples.strategies.venue_agnostic_signal_observer.miner.grid import GridSpec
+from examples.strategies.venue_agnostic_signal_observer.miner.grid import build_grid
+from examples.strategies.venue_agnostic_signal_observer.miner.sweep import CellResult
+from examples.strategies.venue_agnostic_signal_observer.miner.sweep import SweepResult
+from examples.strategies.venue_agnostic_signal_observer.miner.sweep import run_sweep
 from examples.strategies.venue_agnostic_signal_observer.shadow.fill_model import FillModelConfig
 from examples.strategies.venue_agnostic_signal_observer.shadow.shadow_executor import run_shadow
-from examples.strategies.venue_agnostic_signal_observer.stress_corpus import load_stress_corpus_manifest
-from examples.strategies.venue_agnostic_signal_observer.stress_corpus_accumulator import load_accumulated_corpus_manifest
-from examples.strategies.venue_agnostic_signal_observer.stress_labels import (
-    StressLabelResult,
-    build_stress_labels,
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (
+    load_stress_corpus_manifest,
 )
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus_accumulator import (
+    load_accumulated_corpus_manifest,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import StressLabelResult
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import build_stress_labels
 from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
 from examples.strategies.venue_agnostic_signal_observer.tick_store import load_trades_jsonl
 from examples.strategies.venue_agnostic_signal_observer.validator.cpcv import compute_cpcv
 from examples.strategies.venue_agnostic_signal_observer.validator.dsr import compute_dsr
+from examples.strategies.venue_agnostic_signal_observer.validator.embargo import TimeInterval
 from examples.strategies.venue_agnostic_signal_observer.validator.embargo import (
-    TimeInterval,
     TimestampedObservation,
 )
 from examples.strategies.venue_agnostic_signal_observer.validator.summary import run_validator
 from examples.strategies.venue_agnostic_signal_observer.validator.synthetic import (
     make_decaying_signal_population,
+)
+from examples.strategies.venue_agnostic_signal_observer.validator.synthetic import (
     make_null_population,
+)
+from examples.strategies.venue_agnostic_signal_observer.validator.synthetic import (
     make_planted_signal_population,
+)
+from examples.strategies.venue_agnostic_signal_observer.validator.synthetic import (
     make_planted_untradeable_population,
 )
+
 
 RUNNER_VERSION = "1.0.0"
 REPORT_PREFIX = "edge_miner_offline_discovery"
@@ -196,7 +207,7 @@ def _append_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
 
 def _asset_from_symbol(symbol: str) -> str | None:
     raw = symbol.upper().replace("UNRESOLVED:", "")
-    token = re.split(r'[-/:]', raw)[0]
+    token = re.split(r"[-/:]", raw)[0]
     aliases = {"XBT": "BTC", "XXBT": "BTC", "XDG": "DOGE"}
     return aliases.get(token, token) if token else None
 
@@ -258,7 +269,7 @@ def _load_real_corpus(data_dirs: Sequence[Path]) -> LoadedCorpus | None:
             continue
         try:
             ticks = load_trades_jsonl(str(path))
-        except Exception as exc:  # noqa: BLE001 - fail one file, not the offline run
+        except Exception as exc:
             warnings.append(f"failed_to_load {path}: {exc}")
             continue
         ticks_by_asset[asset].extend(ticks)
@@ -478,7 +489,7 @@ def _load_stress_corpus_manifest(path: Path, allow_diagnostic: bool) -> dict[str
             except ValueError:
                 try:
                     manifest = json.loads(path.read_text())
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     raise accumulated_error from exc
                 required = {"corpus_id", "corpus_hash", "status", "stress_window_count", "usable_window_count", "stress_windows"}
                 if required.issubset(manifest):
@@ -826,10 +837,10 @@ def _write_final_report(
         "# Edge Miner Offline Discovery Report",
         "",
         f"- run_status: {status}",
-        f"- observer_only: true",
-        f"- no_orders_were_placed: true",
-        f"- no_exchange_connections_were_made: true",
-        f"- no_live_capture_was_run: true",
+        "- observer_only: true",
+        "- no_orders_were_placed: true",
+        "- no_exchange_connections_were_made: true",
+        "- no_live_capture_was_run: true",
         f"- no_{'private' + '_' + 'key'}_flow_was_used: true",
         f"- corpus_used: {corpus.corpus_kind}",
         f"- corpus_status: {corpus.status}",

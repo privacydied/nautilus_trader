@@ -1,4 +1,5 @@
-"""Tests for GPU-accelerated trade-flow impulse signal generation.
+"""
+Tests for GPU-accelerated trade-flow impulse signal generation.
 
 Covers parity against CPU for all signal types, edge cases,
 device parsing, and determinism.
@@ -6,26 +7,18 @@ device parsing, and determinism.
 
 from __future__ import annotations
 
-import copy
-import math
 import random
-import sys
-from pathlib import Path
 
 import pytest
 
-from ..tick_models import TradeTickLite, TickSignalEvent
-from ..trade_flow_impulse import (
-    TradeFlowImpulseConfig,
-    TradeFlowImpulseSignalGenerator,
-)
-from ..trade_flow_impulse_gpu import (
-    notional_burst_gpu,
-    large_trade_gpu,
-    signed_imbalance_gpu,
-    generate_signals_gpu,
-    check_cuda_available,
-)
+from venue_agnostic_signal_observer.tick_models import TradeTickLite
+from venue_agnostic_signal_observer.trade_flow_impulse import TradeFlowImpulseConfig
+from venue_agnostic_signal_observer.trade_flow_impulse import TradeFlowImpulseSignalGenerator
+from venue_agnostic_signal_observer.trade_flow_impulse_gpu import check_cuda_available
+from venue_agnostic_signal_observer.trade_flow_impulse_gpu import generate_signals_gpu
+from venue_agnostic_signal_observer.trade_flow_impulse_gpu import large_trade_gpu
+from venue_agnostic_signal_observer.trade_flow_impulse_gpu import notional_burst_gpu
+from venue_agnostic_signal_observer.trade_flow_impulse_gpu import signed_imbalance_gpu
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +116,9 @@ def test_cuda_available():
 @pytest.mark.skipif(not _HAS_CUDA, reason="CUDA not available")
 def test_gpu_imports():
     """GPU signal module imports cleanly with torch."""
-    from ..trade_flow_impulse_gpu import notional_burst_gpu, large_trade_gpu, signed_imbalance_gpu
+    from venue_agnostic_signal_observer.trade_flow_impulse_gpu import large_trade_gpu
+    from venue_agnostic_signal_observer.trade_flow_impulse_gpu import notional_burst_gpu
+    from venue_agnostic_signal_observer.trade_flow_impulse_gpu import signed_imbalance_gpu
     assert callable(notional_burst_gpu)
     assert callable(large_trade_gpu)
     assert callable(signed_imbalance_gpu)
@@ -164,7 +159,7 @@ def _signal_fields_match(cpu_sigs, gpu_sigs) -> list[str]:
         if len(cpu_list) != len(gpu_list):
             mismatches.append(f"lb={lb}ms count: cpu={len(cpu_list)} gpu={len(gpu_list)}")
             continue
-        for ci, gi in zip(cpu_list, gpu_list):
+        for ci, gi in zip(cpu_list, gpu_list, strict=False):
             for field in ["ts_event", "direction", "lookback_ms", "signal_type"]:
                 cv = getattr(ci, field)
                 gv = getattr(gi, field)
@@ -220,7 +215,7 @@ class TestParity:
         gpu1 = notional_burst_gpu(dense_trades, cfg, device="cuda:0")
         gpu2 = notional_burst_gpu(dense_trades, cfg, device="cuda:0")
         assert len(gpu1) == len(gpu2)
-        for s1, s2 in zip(gpu1, gpu2):
+        for s1, s2 in zip(gpu1, gpu2, strict=False):
             assert s1.ts_event == s2.ts_event
             assert s1.direction == s2.direction
 

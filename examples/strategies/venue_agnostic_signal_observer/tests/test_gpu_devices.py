@@ -1,4 +1,5 @@
-"""Tests for the shared multi-GPU device helpers.
+"""
+Tests for the shared multi-GPU device helpers.
 
 Pure unit tests — no CUDA required. Validates parsing, splitting,
 seed derivation, and benchmark metadata shape.
@@ -10,13 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.gpu_devices import (
-    benchmark_metadata,
-    derive_per_device_seeds,
-    parse_cuda_devices,
-    split_work_evenly,
-    validate_cuda_devices,
-)
+from examples.strategies.venue_agnostic_signal_observer.gpu_devices import benchmark_metadata
+from examples.strategies.venue_agnostic_signal_observer.gpu_devices import derive_per_device_seeds
+from examples.strategies.venue_agnostic_signal_observer.gpu_devices import parse_cuda_devices
+from examples.strategies.venue_agnostic_signal_observer.gpu_devices import split_work_evenly
+from examples.strategies.venue_agnostic_signal_observer.gpu_devices import validate_cuda_devices
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +99,7 @@ class TestSplitWorkEvenly:
 
     def test_single_device(self):
         ranges = split_work_evenly(100, 1)
-        assert ranges == [range(0, 100)]
+        assert ranges == [range(100)]
 
     def test_more_devices_than_items(self):
         ranges = split_work_evenly(2, 4)

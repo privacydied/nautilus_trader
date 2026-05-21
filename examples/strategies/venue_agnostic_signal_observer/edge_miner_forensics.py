@@ -1,4 +1,5 @@
-"""Failure forensics for offline Edge Miner discovery reports.
+"""
+Failure forensics for offline Edge Miner discovery reports.
 
 This module reads already-written offline discovery artifacts and produces an
 auditable explanation of why a stress-only run produced no survivors. It does not
@@ -13,7 +14,10 @@ import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
+from typing import Iterable
+from typing import Sequence
+
 
 PROJECT_ROOT = str(Path(__file__).resolve().parents[3])
 if PROJECT_ROOT not in sys.path:

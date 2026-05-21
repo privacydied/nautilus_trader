@@ -1,4 +1,5 @@
-"""Cross-asset spot impulse lead-lag evaluator.
+"""
+Cross-asset spot impulse lead-lag evaluator.
 
 **RESEARCH MEASUREMENT TOOL ONLY.**  Scans source-asset spot trade ticks (BTC,
 ETH) for trade-flow impulse signals and measures forward returns on *different*
@@ -22,24 +23,19 @@ spot signal.
 
 from __future__ import annotations
 
-import json
 import math
-import random
 import statistics
-import uuid
-from bisect import bisect_left
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 from typing import Any
 
-from .tick_models import TickForwardReturn, TickSignalEvent, TradeTickLite
-from .symbol_aliases import same_asset
-from .trade_flow_impulse import TradeFlowImpulseConfig, TradeFlowImpulseSignalGenerator
-from .event_study import (
-    evaluate_tick_signal,
-    generate_random_baseline,
-    evaluate_candidate_group,
-)
+from .tick_models import TickForwardReturn
+from .tick_models import TickSignalEvent
+from .tick_models import TradeTickLite
+from .trade_flow_impulse import TradeFlowImpulseConfig
+from .trade_flow_impulse import TradeFlowImpulseSignalGenerator
+
 
 _MS_TO_NS = 1_000_000
 _SOURCE_ASSETS = {"BTC", "ETH"}
@@ -126,7 +122,8 @@ def generate_source_impulses(
     baseline_window_ms: int,
     cooldown_ms: int,
 ) -> list[TickSignalEvent]:
-    """Generate trade-flow impulse signals on source-asset tick data.
+    """
+    Generate trade-flow impulse signals on source-asset tick data.
 
     Returns a list of TickSignalEvent with target fields left as source
     (they get remapped during cross-asset pairing).
@@ -156,7 +153,7 @@ def generate_source_impulses(
             # Overwrite target fields -- they'll be set per-pair later
             evt.target_venue = "__CROSS_ASSET__"
             evt.target_symbol = "__CROSS_ASSET__"
-            meta_val = evt.metadata.get('flow_signal_type', 'trade_flow_impulse') if evt.metadata else 'trade_flow_impulse'
+            meta_val = evt.metadata.get("flow_signal_type", "trade_flow_impulse") if evt.metadata else "trade_flow_impulse"
             evt.signal_type = f"cross_asset_{meta_val}"
         events.extend(raw_events)
 
@@ -164,7 +161,8 @@ def generate_source_impulses(
 
 
 def _resolve_source_asset(symbol: str) -> str | None:
-    """Extract the base asset from a symbol like 'BTC/USD' or 'ETH-USD'.
+    """
+    Extract the base asset from a symbol like 'BTC/USD' or 'ETH-USD'.
 
     Returns None if the symbol doesn't match our source assets.
     """
@@ -184,7 +182,8 @@ def _resolve_source_asset(symbol: str) -> str | None:
 
 
 def _is_same_symbol(source_symbol: str, target_symbol: str) -> bool:
-    """Check if source and target symbols resolve to the same asset.
+    """
+    Check if source and target symbols resolve to the same asset.
 
     For cross-asset, we skip any pairing where source and target are the
     same asset (e.g., BTC/USD -> BTC/USD).
@@ -202,7 +201,8 @@ def _remap_signal_for_target(
     target_symbol: str,
     pair_idx: int,
 ) -> TickSignalEvent:
-    """Clone a source signal for a specific target pair.
+    """
+    Clone a source signal for a specific target pair.
 
     Direction propagation uses positive-beta: source long -> target long,
     source short -> target short.  The long-executable vs diagnostic-only
@@ -306,7 +306,8 @@ class PairResult:
         return dur is not None and dur > 0
 
     def has_sufficient_range(self, min_source_range_bps: float, min_target_range_bps: float) -> tuple[bool, str]:
-        """Check whether actual source/target range meets the stress-test thresholds.
+        """
+        Check whether actual source/target range meets the stress-test thresholds.
 
         Returns (False, reason) when either asset moved less than the minimum
         required to meaningfully test the stress-beta-lag mechanism.
@@ -366,7 +367,8 @@ def compute_verdict(
     min_target_range_bps: float,
     min_events: int,
 ) -> CrossAssetVerdict:
-    """Apply verdict logic across all evaluated pairs.
+    """
+    Apply verdict logic across all evaluated pairs.
 
     Returns a CrossAssetVerdict with the appropriate verdict and reasons.
     """
@@ -592,7 +594,7 @@ def _determine_verdict(
 
     # We have sufficient data and events. Check candidate results.
     num_candidates = len(candidate_pairs)
-    num_long = sum(1 for cp in candidate_pairs if any(r for r in pair_results if r.pair_key == cp and r.long_executable_count > 0))
+    sum(1 for cp in candidate_pairs if any(r for r in pair_results if r.pair_key == cp and r.long_executable_count > 0))
 
     if num_candidates == 1 and total_long + total_diag >= min_events:
         # Only one pair looks promising
@@ -683,7 +685,6 @@ def generate_markdown_report(
     num_pairs_evaluated: int,
 ) -> str:
     """Generate a human-readable markdown report for the cross-asset impulse study."""
-
     v = verdict_obj
     lines: list[str] = []
 

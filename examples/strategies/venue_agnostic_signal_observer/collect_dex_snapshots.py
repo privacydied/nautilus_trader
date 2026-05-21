@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Collect DEX pool snapshots over a time window and write JSONL.
+"""
+Collect DEX pool snapshots over a time window and write JSONL.
 
 **Observer-only. No execution, no keys, no orders, no live trading.**
 
@@ -26,8 +27,8 @@ from pathlib import Path
 
 import httpx
 
-from .dex_adapters import search_dexscreener_by_symbols, _RATE_LIMIT_DELAY
-from .dex_models import DexPoolSnapshot
+from .dex_adapters import _RATE_LIMIT_DELAY
+from .dex_adapters import search_dexscreener_by_symbols
 
 
 def collect_snapshots(
@@ -38,7 +39,8 @@ def collect_snapshots(
     min_volume_1h_usd: float,
     out_path: str,
 ) -> tuple[int, list[str]]:
-    """Run a timed collection loop polling DEX Screener.
+    """
+    Run a timed collection loop polling DEX Screener.
 
     Returns (snapshot_count, warnings).
     Writes each valid snapshot to the JSONL file immediately.

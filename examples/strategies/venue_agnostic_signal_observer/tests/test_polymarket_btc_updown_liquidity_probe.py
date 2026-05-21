@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Tests for the Polymarket BTC Up/Down CLOB liquidity probe.
+"""
+Tests for the Polymarket BTC Up/Down CLOB liquidity probe.
 
 Safety tests (no forbidden patterns) and functional tests
 (discovery, filtering, spread calculation, summary classification).
@@ -8,69 +9,101 @@ Safety tests (no forbidden patterns) and functional tests
 from __future__ import annotations
 
 import json
-import os
 import tempfile
-import time
 from pathlib import Path
-from typing import Any
 
-import httpx
 import pytest
 
-from ..polymarket_btc_updown_liquidity_probe import (
-    FORBIDDEN_VERDICTS,
-    GREEN_DIAG,
-    YELLOW_DIAG,
-    RED_DIAG,
-    NEEDS_MORE_DATA,
-    CAPTURE_UNUSABLE,
-    SPREAD_GREEN_MAX,
-    SPREAD_YELLOW_MAX,
-    SPREAD_RED_P95,
-    MIN_NON_DUST_DEPTH_USD,
-    BTCMarket,
-    OrderbookSample,
-    ChainlinkTick,
-    CaptureManifest,
-    FeedStats,
-    ProbeSummary,
-    discover_btc_updown_markets,
-    fetch_orderbook,
-    parse_orderbook_sample,
-    compute_summary,
-    _is_btc_updown_market,
-    _parse_updown_tokens,
-    _extract_price_to_beat,
-    _normalize_levels,
-    _classify_liquidity,
-    _get_git_sha,
-    _parse_expiry_to_tte,
-    _classify_tte_bucket,
-    _compute_tte_buckets,
-    _compute_verification_status_v2,
-    _compute_near_expiry_rollup,
-    _compute_duration_coverage,
-    _check_tte_sanity,
-    _classify_duration,
-    _get_danger_zone_cell,
-    write_discovered_markets,
-    write_orderbook_samples,
-    write_chainlink_ticks,
-    write_manifest,
-    write_summary_json,
-    write_summary_md,
-    write_raw_payloads,
-    write_raw_payload_audit,
-    write_tte_bucket_summary_json,
-    write_tte_bucket_summary_md,
-    RawPayloadRecord,
-    DUR_5M, DUR_15M,
-    LIQUIDITY_GATE_VERIFIED,
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import CAPTURE_UNUSABLE
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import DUR_5M
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import FORBIDDEN_VERDICTS
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import GREEN_DIAG
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
     LIQUIDITY_GATE_NOT_VERIFIED,
-    LIQUIDITY_GATE_PENDING_TWO_AXIS_VERIFICATION,
-    TTE_GT_15M, TTE_5M_TO_15M, TTE_2M_TO_5M, TTE_1M_TO_2M,
-    TTE_30S_TO_1M, TTE_0S_TO_30S, TTE_EXPIRED, TTE_UNKNOWN,
 )
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    LIQUIDITY_GATE_PENDING_TWO_AXIS_VERIFICATION,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    LIQUIDITY_GATE_VERIFIED,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    MIN_NON_DUST_DEPTH_USD,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import NEEDS_MORE_DATA
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import RED_DIAG
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import SPREAD_GREEN_MAX
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import SPREAD_RED_P95
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import SPREAD_YELLOW_MAX
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import TTE_0S_TO_30S
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import TTE_1M_TO_2M
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import TTE_2M_TO_5M
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import TTE_5M_TO_15M
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import TTE_30S_TO_1M
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import TTE_EXPIRED
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import TTE_GT_15M
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import TTE_UNKNOWN
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import YELLOW_DIAG
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import BTCMarket
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import CaptureManifest
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import ChainlinkTick
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import FeedStats
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import OrderbookSample
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import ProbeSummary
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import RawPayloadRecord
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import _check_tte_sanity
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import _classify_duration
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import _classify_liquidity
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    _classify_tte_bucket,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    _compute_tte_buckets,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    _compute_verification_status_v2,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    _extract_price_to_beat,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import _get_git_sha
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    _is_btc_updown_market,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import _normalize_levels
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    _parse_expiry_to_tte,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    _parse_updown_tokens,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import compute_summary
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    parse_orderbook_sample,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    write_chainlink_ticks,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    write_discovered_markets,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import write_manifest
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    write_orderbook_samples,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    write_raw_payload_audit,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import write_raw_payloads
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import write_summary_json
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import write_summary_md
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    write_tte_bucket_summary_json,
+)
+from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+    write_tte_bucket_summary_md,
+)
+
 
 # ===================================================================
 # Safety: no forbidden patterns in new code
@@ -78,7 +111,8 @@ from ..polymarket_btc_updown_liquidity_probe import (
 
 
 class TestSafetyNoOrders:
-    """Verify the new probe module contains no trading/order/auth code.
+    """
+    Verify the new probe module contains no trading/order/auth code.
 
     Checks non-comment, non-docstring code lines only.
     """
@@ -162,7 +196,8 @@ class TestSafetyNoOrders:
             )
 
     def test_no_trade_candidate_strings(self):
-        """Verify no forbidden verdict strings appear in new code.
+        """
+        Verify no forbidden verdict strings appear in new code.
 
         Allows forbidden verdicts inside:
         - FORBIDDEN_VERDICTS constant definition
@@ -202,9 +237,8 @@ class TestSafetyNoOrders:
                 if any(
                     v.lower() in lower
                     for v in ["no ", "cannot produce", "cannot"]
-                ):
-                    if any(v in stripped for v in FORBIDDEN_VERDICTS):
-                        continue
+                ) and any(v in stripped for v in FORBIDDEN_VERDICTS):
+                    continue
 
                 clean_lines.append(line)
 
@@ -629,7 +663,9 @@ class TestNoForbiddenVerdictsInSummary:
 
     def test_allowed_diagnostics_only(self):
         """Verify only allowed diagnostic strings are used."""
-        from ..polymarket_btc_updown_liquidity_probe import ALLOWED_DIAGNOSTICS
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+            ALLOWED_DIAGNOSTICS,
+        )
 
         # Test each allowed diagnostic
         for diag in [GREEN_DIAG, YELLOW_DIAG, RED_DIAG, NEEDS_MORE_DATA, CAPTURE_UNUSABLE]:
@@ -1043,7 +1079,8 @@ class TestOrderbookSampleFields:
 
 
 class TestParserRegressionUnorderedArrays:
-    """Verify best-bid/ask selection is independent of array order.
+    """
+    Verify best-bid/ask selection is independent of array order.
 
     Polymarket CLOB /book returns bids ASCENDING and asks DESCENDING.
     Using bids[0]/asks[0] would select WORST prices.
@@ -1060,7 +1097,7 @@ class TestParserRegressionUnorderedArrays:
         )
 
     def test_ascending_bids_selects_max_price(self):
-        """bids ascending [0.01, 0.47, 0.48] -> best_bid = 0.48"""
+        """Bids ascending [0.01, 0.47, 0.48] -> best_bid = 0.48"""
         raw = {
             "bids": [{"price": "0.01", "size": "14000"}, {"price": "0.47", "size": "570"}, {"price": "0.48", "size": "560"}],
             "asks": [{"price": "0.99", "size": "14000"}, {"price": "0.50", "size": "558"}, {"price": "0.49", "size": "570"}],
@@ -1077,7 +1114,7 @@ class TestParserRegressionUnorderedArrays:
         assert sample.estimated_top_ask_depth_usd == pytest.approx(0.49 * 570, abs=0.01)
 
     def test_descending_bids_selects_max_price(self):
-        """bids descending [0.50, 0.40, 0.30] -> best_bid = 0.50"""
+        """Bids descending [0.50, 0.40, 0.30] -> best_bid = 0.50"""
         raw = {
             "bids": [{"price": "0.50", "size": "100"}, {"price": "0.40", "size": "200"}, {"price": "0.30", "size": "300"}],
             "asks": [{"price": "0.51", "size": "100"}, {"price": "0.52", "size": "200"}, {"price": "0.53", "size": "300"}],
@@ -1088,7 +1125,7 @@ class TestParserRegressionUnorderedArrays:
         assert sample.spread_price_units == pytest.approx(0.01, abs=1e-6)
 
     def test_shuffled_bids_selects_max_price(self):
-        """bids shuffled [0.30, 0.50, 0.40] -> best_bid = 0.50"""
+        """Bids shuffled [0.30, 0.50, 0.40] -> best_bid = 0.50"""
         raw = {
             "bids": [{"price": "0.30", "size": "300"}, {"price": "0.50", "size": "100"}, {"price": "0.40", "size": "200"}],
             "asks": [{"price": "0.55", "size": "100"}, {"price": "0.60", "size": "200"}, {"price": "0.65", "size": "300"}],
@@ -1098,7 +1135,7 @@ class TestParserRegressionUnorderedArrays:
         assert sample.best_ask == pytest.approx(0.55, abs=1e-6)
 
     def test_ascending_asks_selects_min_price(self):
-        """asks ascending [0.48, 0.50, 0.52] -> best_ask = 0.48"""
+        """Asks ascending [0.48, 0.50, 0.52] -> best_ask = 0.48"""
         raw = {
             "bids": [{"price": "0.40", "size": "100"}, {"price": "0.42", "size": "200"}, {"price": "0.45", "size": "300"}],
             "asks": [{"price": "0.48", "size": "100"}, {"price": "0.50", "size": "200"}, {"price": "0.52", "size": "300"}],
@@ -1109,7 +1146,7 @@ class TestParserRegressionUnorderedArrays:
         assert sample.spread_price_units == pytest.approx(0.03, abs=1e-6)
 
     def test_descending_asks_selects_min_price(self):
-        """asks descending [0.55, 0.50, 0.48] -> best_ask = 0.48"""
+        """Asks descending [0.55, 0.50, 0.48] -> best_ask = 0.48"""
         raw = {
             "bids": [{"price": "0.40", "size": "100"}, {"price": "0.42", "size": "200"}, {"price": "0.45", "size": "300"}],
             "asks": [{"price": "0.55", "size": "300"}, {"price": "0.50", "size": "200"}, {"price": "0.48", "size": "100"}],
@@ -1118,7 +1155,8 @@ class TestParserRegressionUnorderedArrays:
         assert sample.best_ask == pytest.approx(0.48, abs=1e-6)
 
     def test_worst_price_cannot_reproduce_98c_bug(self):
-        """Even with worst-case arrays, max/min prevents 98-cent spread.
+        """
+        Even with worst-case arrays, max/min prevents 98-cent spread.
 
         With bids=[0.01] and asks=[0.99], correct parsing gives spread=0.98.
         But with multiple levels, max/min picks the BEST prices.
@@ -1160,7 +1198,8 @@ class TestTteBucketAssignment:
 
     def test_future_expiry(self):
         tte = _parse_expiry_to_tte("2099-12-31T12:00:00Z", 1000.0)
-        assert tte is not None and tte > 0
+        assert tte is not None
+        assert tte > 0
 
     def test_past_expiry_returns_zero(self):
         tte = _parse_expiry_to_tte("2020-01-01T00:00:00Z", 2000000000.0)
@@ -1334,7 +1373,8 @@ class TestTteSanityCheck:
 
 
 class TestVerificationStatus:
-    """Test _compute_verification_status_v2 function.
+    """
+    Test _compute_verification_status_v2 function.
 
     Tests for artifact gates, near-expiry, distance-to-strike, two-axis grid,
     duration coverage, and convex danger zone.
@@ -1363,7 +1403,20 @@ class TestVerificationStatus:
 
     def _make_distance_buckets_with_data(self) -> dict:
         """Distance buckets with some samples."""
-        from ..polymarket_btc_updown_liquidity_probe import DIST_LTE_5, DIST_5_TO_10, DIST_10_TO_25, DIST_25_TO_50, DIST_GT_50, DIST_UNKNOWN
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+            DIST_5_TO_10,
+        )
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+            DIST_10_TO_25,
+        )
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+            DIST_25_TO_50,
+        )
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import DIST_GT_50
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import DIST_LTE_5
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+            DIST_UNKNOWN,
+        )
         return {
             DIST_LTE_5: {"sample_count": 5, "valid_sample_count": 5, "market_count": 2, "market_slugs": ["test"], "median_spread_cents": 2.0, "p95_spread_cents": 3.0, "bucket_classification": GREEN_DIAG, "reference_source": "CEX_PROXY_REFERENCE"},
             DIST_5_TO_10: {"sample_count": 5, "valid_sample_count": 5, "market_count": 2, "market_slugs": ["test"], "median_spread_cents": 2.0, "p95_spread_cents": 3.0, "bucket_classification": GREEN_DIAG, "reference_source": "CEX_PROXY_REFERENCE"},
@@ -1381,7 +1434,10 @@ class TestVerificationStatus:
 
     def _make_two_axis_green(self) -> dict:
         """Two-axis grid with danger zone data."""
-        from ..polymarket_btc_updown_liquidity_probe import DIST_LTE_5, DIST_5_TO_10
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+            DIST_5_TO_10,
+        )
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import DIST_LTE_5
         green_cell = {"sample_count": 3, "classification": GREEN_DIAG, "median_spread_cents": 2.0}
         return {
             TTE_0S_TO_30S: {DIST_LTE_5: green_cell, DIST_5_TO_10: green_cell},
@@ -1527,7 +1583,12 @@ class TestVerificationStatus:
 
     def test_cex_proxy_label_not_chainlink(self):
         """CEX proxy is labelled CEX_PROXY_REFERENCE, not Chainlink."""
-        from ..polymarket_btc_updown_liquidity_probe import REF_CEX_PROXY, REF_CHAINLINK
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+            REF_CEX_PROXY,
+        )
+        from venue_agnostic_signal_observer.polymarket_btc_updown_liquidity_probe import (
+            REF_CHAINLINK,
+        )
         assert REF_CEX_PROXY == "CEX_PROXY_REFERENCE"
         assert REF_CHAINLINK == "CHAINLINK_REFERENCE"
         assert REF_CEX_PROXY != REF_CHAINLINK
@@ -1540,7 +1601,7 @@ class TestVerificationStatus:
         in_docstring = False
         for l in source.split("\n"):
             stripped = l.strip()
-            if stripped.startswith('"""') or stripped.startswith("'''"):
+            if stripped.startswith(('"""', "'''")):
                 if stripped.count('"""') >= 2 or stripped.count("'''") >= 2:
                     continue  # single-line docstring
                 in_docstring = not in_docstring

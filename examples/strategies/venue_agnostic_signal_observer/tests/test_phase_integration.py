@@ -12,31 +12,22 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, UTC
-from pathlib import Path
+from datetime import UTC
+from datetime import datetime
 
-import pytest
-
-from ..miner import GridCell, GridSpec, build_grid, run_sweep
-from ..validator import (
-    compute_dsr,
-    compute_cpcv,
-    compute_pbo,
-    run_validator,
-    TimeInterval,
-    make_null_population,
-    make_planted_signal_population,
-)
-from ..validator.embargo import TimestampedObservation
-from ..governance import (
-    EvidenceLedger,
-    make_grid_lock_event,
-    make_candidate_lock_event,
-    make_estimator_evidence_event,
-    make_approval_event,
-    replay_ledger,
-)
-from ..bot import BotGate
+from venue_agnostic_signal_observer.bot import BotGate
+from venue_agnostic_signal_observer.governance import EvidenceLedger
+from venue_agnostic_signal_observer.governance import make_approval_event
+from venue_agnostic_signal_observer.governance import make_candidate_lock_event
+from venue_agnostic_signal_observer.governance import make_estimator_evidence_event
+from venue_agnostic_signal_observer.governance import make_grid_lock_event
+from venue_agnostic_signal_observer.miner import GridCell
+from venue_agnostic_signal_observer.miner import GridSpec
+from venue_agnostic_signal_observer.miner import build_grid
+from venue_agnostic_signal_observer.miner import run_sweep
+from venue_agnostic_signal_observer.validator import compute_dsr
+from venue_agnostic_signal_observer.validator import make_planted_signal_population
+from venue_agnostic_signal_observer.validator import run_validator
 
 
 def _make_cell(cell_id):
@@ -183,7 +174,7 @@ class TestEndToEndPipeline:
             ledger.append(make_approval_event(3, candidate_hash, grid.grid_hash))
 
         # 4. Bot gate check
-        from ..bot.manifest import _compute_manifest_hash
+        from venue_agnostic_signal_observer.bot.manifest import _compute_manifest_hash
         manifest_record = {
             "candidate_hash": candidate_hash,
             "grid_hash": grid.grid_hash,

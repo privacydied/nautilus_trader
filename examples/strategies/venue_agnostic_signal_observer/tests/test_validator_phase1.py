@@ -15,27 +15,25 @@ Covers:
 
 from __future__ import annotations
 
-import math
-from datetime import datetime, timedelta, UTC
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 
-import pytest
-
-from ..validator import (
-    TimeInterval,
-    purge_train_obs,
-    embargo_train_obs,
-    compute_effective_trial_count,
-    compute_dsr,
-    DiagnosticStatus,
-    compute_cpcv,
-    compute_pbo,
-    make_null_population,
-    make_planted_signal_population,
-    make_planted_untradeable_population,
-    make_decaying_signal_population,
-    run_validator,
-)
-from ..validator.embargo import TimestampedObservation, compute_embargo_seconds
+from venue_agnostic_signal_observer.validator import DiagnosticStatus
+from venue_agnostic_signal_observer.validator import TimeInterval
+from venue_agnostic_signal_observer.validator import compute_cpcv
+from venue_agnostic_signal_observer.validator import compute_dsr
+from venue_agnostic_signal_observer.validator import compute_effective_trial_count
+from venue_agnostic_signal_observer.validator import compute_pbo
+from venue_agnostic_signal_observer.validator import embargo_train_obs
+from venue_agnostic_signal_observer.validator import make_decaying_signal_population
+from venue_agnostic_signal_observer.validator import make_null_population
+from venue_agnostic_signal_observer.validator import make_planted_signal_population
+from venue_agnostic_signal_observer.validator import make_planted_untradeable_population
+from venue_agnostic_signal_observer.validator import purge_train_obs
+from venue_agnostic_signal_observer.validator import run_validator
+from venue_agnostic_signal_observer.validator.embargo import TimestampedObservation
+from venue_agnostic_signal_observer.validator.embargo import compute_embargo_seconds
 
 
 # ---------------------------------------------------------------------------
@@ -274,8 +272,8 @@ class TestCPCV:
         # CPCV uses (n_splits choose n_test_splits) combinations
         # PBO uses (n_blocks choose n_blocks//2) combinations
         # They must not share code — verified structurally: cpcv.py imports nothing from pbo.py
-        from ..validator import cpcv as cpcv_mod
-        from ..validator import pbo as pbo_mod
+        from venue_agnostic_signal_observer.validator import cpcv as cpcv_mod
+        from venue_agnostic_signal_observer.validator import pbo as pbo_mod
         assert not hasattr(cpcv_mod, "compute_pbo")
         assert not hasattr(pbo_mod, "compute_cpcv")
 
@@ -339,7 +337,8 @@ class TestPBO:
     def test_pbo_does_not_apply_purging(self):
         # PBO must not import or use purging/embargo — verify structurally
         import inspect
-        from ..validator import pbo as pbo_mod
+
+        from venue_agnostic_signal_observer.validator import pbo as pbo_mod
         src = inspect.getsource(pbo_mod)
         assert "purge_train_obs" not in src
         assert "embargo_train_obs" not in src
@@ -444,7 +443,8 @@ class TestValidatorSummary:
         assert "dsr" in summary.estimator_versions
 
     def test_to_dict_serializable(self):
-        import random, json
+        import json
+        import random
         rng = random.Random(0)
         returns = [rng.gauss(0.005, 0.002) for _ in range(100)]
         dsr = compute_dsr(returns=returns, raw_trial_count=50, effective_trial_count=5)

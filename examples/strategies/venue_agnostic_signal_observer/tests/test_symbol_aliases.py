@@ -1,18 +1,17 @@
-"""Tests for symbol_aliases.py module.
+"""
+Tests for symbol_aliases.py module.
 
 Explicit mapping layer for venue-specific symbols to canonical (asset, quote) pairs.
 """
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.symbol_aliases import (
-    CanonicalSymbol,
-    quote_mismatch,
-    resolve_symbol,
-    same_asset,
-    same_quote,
-    symbols_match,
-)
+from examples.strategies.venue_agnostic_signal_observer.symbol_aliases import CanonicalSymbol
+from examples.strategies.venue_agnostic_signal_observer.symbol_aliases import quote_mismatch
+from examples.strategies.venue_agnostic_signal_observer.symbol_aliases import resolve_symbol
+from examples.strategies.venue_agnostic_signal_observer.symbol_aliases import same_asset
+from examples.strategies.venue_agnostic_signal_observer.symbol_aliases import same_quote
+from examples.strategies.venue_agnostic_signal_observer.symbol_aliases import symbols_match
 
 
 class TestSymbolResolution:

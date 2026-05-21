@@ -1,4 +1,5 @@
-"""Phase 2B-2B2 holdout-only evaluation for frozen train survivors.
+"""
+Phase 2B-2B2 holdout-only evaluation for frozen train survivors.
 
 Consumes Phase 1/2A/2B-1/2B-2A/2B-2B1 artifacts and evaluates only frozen
 train survivors on holdout windows. No survivor mutation, no train evaluation,
@@ -11,24 +12,29 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from statistics import median
-from typing import Any, Optional
+from typing import Any
 
 from .family1_tick_basis import compute_family1_tick_signal
 from .offline_corpus_hash import compute_data_corpus_hash
-from .offline_discovery_plan import CostConfig, OfflineDiscoveryPlan, OfflineDiscoveryPlanCell, compute_window_index_hash
-from .offline_historical_models import (
-    OFFLINE_DATA_SCHEMA_VERSION,
-    RESOLUTION_AGG_TRADE,
-    RESOLUTION_BAR,
-    RESOLUTION_TRADE,
-    OfflinePrepareManifest,
-    OfflineSourceFile,
-)
-from .run_artifacts import atomic_write_json, safe_output_dir
+from .offline_discovery_plan import CostConfig
+from .offline_discovery_plan import OfflineDiscoveryPlan
+from .offline_discovery_plan import OfflineDiscoveryPlanCell
+from .offline_discovery_plan import compute_window_index_hash
+from .offline_historical_models import OFFLINE_DATA_SCHEMA_VERSION
+from .offline_historical_models import RESOLUTION_AGG_TRADE
+from .offline_historical_models import RESOLUTION_BAR
+from .offline_historical_models import RESOLUTION_TRADE
+from .offline_historical_models import OfflinePrepareManifest
+from .offline_historical_models import OfflineSourceFile
+from .run_artifacts import atomic_write_json
+from .run_artifacts import safe_output_dir
+
 
 HOLDOUT_EVALUATION_SCHEMA_VERSION = "offline_holdout_evaluation_v1"
 
@@ -62,15 +68,15 @@ class OfflineHoldoutEvaluationCellResult:
     valid_event_count: int
     lookback_ms: int
     horizon_ms: int
-    signal_variant: Optional[str]
+    signal_variant: str | None
     required_resolution: str
     latency_gate_required: bool
-    raw_mean_bps: Optional[float]
-    raw_median_bps: Optional[float]
-    net_mean_bps: Optional[float]
-    net_median_bps: Optional[float]
-    win_rate: Optional[float]
-    worst_net_bps: Optional[float]
+    raw_mean_bps: float | None
+    raw_median_bps: float | None
+    net_mean_bps: float | None
+    net_median_bps: float | None
+    win_rate: float | None
+    worst_net_bps: float | None
     fee_bps: float
     slippage_bps: float
     quote_mismatch_buffer_bps: float
@@ -123,7 +129,7 @@ def _sha256_json(obj: Any) -> str:
 
 
 def _now_utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _get_git_sha() -> str:
@@ -202,7 +208,7 @@ def _load_price_series(source_config_path: Path) -> dict[tuple[str, str], list[_
     return series
 
 
-def _find_price_at_or_after(points: list[_PricePoint], timestamp_ns: int) -> Optional[float]:
+def _find_price_at_or_after(points: list[_PricePoint], timestamp_ns: int) -> float | None:
     for point in points:
         if point.timestamp_ns >= timestamp_ns:
             return point.price
@@ -217,7 +223,7 @@ def _cost_total_bps(cost_config: CostConfig) -> float:
     return float(cost_config.fees_bps + cost_config.slippage_bps + cost_config.quote_mismatch_bps)
 
 
-def _returns_summary(raw_returns_bps: list[float], net_returns_bps: list[float]) -> dict[str, Optional[float]]:
+def _returns_summary(raw_returns_bps: list[float], net_returns_bps: list[float]) -> dict[str, float | None]:
     if not raw_returns_bps or not net_returns_bps:
         return {
             "raw_mean_bps": None,
@@ -237,8 +243,9 @@ def _returns_summary(raw_returns_bps: list[float], net_returns_bps: list[float])
     }
 
 
-def _summarize_event_returns(raw_bps: list[float], net_bps: list[float]) -> dict[str, Optional[float]]:
-    """Single shared helper for deriving summary metrics from event return vectors.
+def _summarize_event_returns(raw_bps: list[float], net_bps: list[float]) -> dict[str, float | None]:
+    """
+    Single shared helper for deriving summary metrics from event return vectors.
 
     This is the only path to summary metrics for a holdout evaluation cell.
     The event vectors are the single source of truth. A fake event vector
@@ -274,7 +281,7 @@ def _empty_report(
         holdout_window_ids=list(holdout_window_ids),
         holdout_evaluation_hash="",
         metadata=metadata,
-        run_id=f"offline_holdout_evaluation_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
+        run_id=f"offline_holdout_evaluation_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}",
         generated_at_utc=_now_utc_iso(),
         git_sha=_get_git_sha(),
         data_corpus_hash=data_corpus_hash,
@@ -919,7 +926,7 @@ def build_offline_holdout_evaluation_report(
         holdout_window_ids=holdout_window_ids,
         holdout_evaluation_hash="",
         metadata=metadata,
-        run_id=f"offline_holdout_evaluation_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
+        run_id=f"offline_holdout_evaluation_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}",
         generated_at_utc=_now_utc_iso(),
         git_sha=_get_git_sha(),
         data_corpus_hash=data_corpus_hash,

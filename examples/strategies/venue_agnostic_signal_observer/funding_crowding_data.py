@@ -23,11 +23,12 @@ import io
 import json
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import httpx
+
 
 # ---------------------------------------------------------------------------
 # Archive URL templates (Binance Vision)
@@ -59,7 +60,8 @@ class FundingRateRow:
 
 @dataclass(frozen=True)
 class SpotKlineRow:
-    """One 1-hour spot kline from a Binance Vision archive CSV.
+    """
+    One 1-hour spot kline from a Binance Vision archive CSV.
 
     Binance Vision spot kline timestamps are in **microseconds**.
     They are converted to nanoseconds on parsing.
@@ -125,7 +127,8 @@ _HTTP_TIMEOUT_SEC = 120.0
 
 
 def _fetch_bytes(url: str) -> bytes:
-    """Download *url* and return raw bytes.
+    """
+    Download *url* and return raw bytes.
 
     Raises
     ------
@@ -146,7 +149,8 @@ def _fetch_bytes(url: str) -> bytes:
 
 
 class ArchiveCache:
-    """Cache layer for Binance Vision archive downloads.
+    """
+    Cache layer for Binance Vision archive downloads.
 
     Each downloaded file is cached by URL. The cache records a SHA-256
     content hash so that subsequent runs detect corruption or drift.
@@ -167,7 +171,8 @@ class ArchiveCache:
         return self._cache_dir
 
     def get_or_fetch(self, url: str) -> tuple[bytes, str]:
-        """Return (data_bytes, sha256_hex) for *url*.
+        """
+        Return (data_bytes, sha256_hex) for *url*.
 
         Fetches from the network if not cached, or if the cached file's
         content hash does not match the manifest record.
@@ -221,7 +226,8 @@ class ArchiveCache:
 
 
 def parse_funding_rate_csv(csv_text: str) -> list[FundingRateRow]:
-    """Parse Binance Vision funding rate CSV text.
+    """
+    Parse Binance Vision funding rate CSV text.
 
     Binance Vision CSV columns:
         calc_time (ms), funding_interval_hours, last_funding_rate
@@ -254,7 +260,8 @@ def parse_funding_rate_csv(csv_text: str) -> list[FundingRateRow]:
 
 
 def parse_spot_kline_csv(csv_text: str) -> list[SpotKlineRow]:
-    """Parse Binance Vision 1h spot kline CSV text.
+    """
+    Parse Binance Vision 1h spot kline CSV text.
 
     Binance Vision CSV columns (12 columns):
         open_time, open, high, low, close, volume,
@@ -343,7 +350,8 @@ def fetch_and_parse_funding_month(
     year: int,
     month: int,
 ) -> tuple[list[FundingRateRow], str]:
-    """Fetch and parse one month of funding rate data.
+    """
+    Fetch and parse one month of funding rate data.
 
     Returns (rows, content_hash_hex).
     """
@@ -360,7 +368,8 @@ def fetch_and_parse_spot_klines_month(
     year: int,
     month: int,
 ) -> tuple[list[SpotKlineRow], str]:
-    """Fetch and parse one month of 1h spot klines.
+    """
+    Fetch and parse one month of 1h spot klines.
 
     Returns (rows, content_hash_hex).
     """
@@ -384,12 +393,13 @@ def fetch_funding_range(
     end_year: int | None = None,
     end_month: int | None = None,
 ) -> tuple[list[FundingRateRow], dict[str, str]]:
-    """Fetch funding rate data for a range of months.
+    """
+    Fetch funding rate data for a range of months.
 
     Returns (all_rows_chronological, content_hashes_by_url).
     """
     if end_year is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         end_year = now.year
         end_month = now.month
 
@@ -403,7 +413,7 @@ def fetch_funding_range(
             all_rows.extend(rows)
             url = FUNDING_ARCHIVE_URL_TEMPLATE.format(symbol=symbol, year=year, month=month)
             hashes[url] = ch
-        except Exception as e:
+        except Exception:
             # Month may not exist (e.g. future month, or gap in archives)
             # Log and continue
             pass
@@ -425,12 +435,13 @@ def fetch_spot_klines_range(
     end_year: int | None = None,
     end_month: int | None = None,
 ) -> tuple[list[SpotKlineRow], dict[str, str]]:
-    """Fetch 1h spot klines for a range of months.
+    """
+    Fetch 1h spot klines for a range of months.
 
     Returns (all_rows_chronological, content_hashes_by_url).
     """
     if end_year is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         end_year = now.year
         end_month = now.month
 
@@ -474,14 +485,14 @@ class FundingCoverageStats:
     def earliest_dt(self) -> str | None:
         if self.earliest_timestamp_ns is None:
             return None
-        dt = datetime.fromtimestamp(self.earliest_timestamp_ns / 1_000_000_000, tz=timezone.utc)
+        dt = datetime.fromtimestamp(self.earliest_timestamp_ns / 1_000_000_000, tz=UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
     @property
     def latest_dt(self) -> str | None:
         if self.latest_timestamp_ns is None:
             return None
-        dt = datetime.fromtimestamp(self.latest_timestamp_ns / 1_000_000_000, tz=timezone.utc)
+        dt = datetime.fromtimestamp(self.latest_timestamp_ns / 1_000_000_000, tz=UTC)
         return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -505,7 +516,7 @@ def compute_funding_coverage(
     # Extract unique year-month combos
     seen: set[tuple[int, int]] = set()
     for r in rows:
-        dt = datetime.fromtimestamp(r.timestamp_ns / 1_000_000_000, tz=timezone.utc)
+        dt = datetime.fromtimestamp(r.timestamp_ns / 1_000_000_000, tz=UTC)
         seen.add((dt.year, dt.month))
 
     return FundingCoverageStats(

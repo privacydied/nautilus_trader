@@ -8,10 +8,8 @@ import sys
 from pathlib import Path
 
 from .offline_stress_windows import _load_prepare_manifest
-from .offline_train_evaluation import (
-    build_offline_train_evaluation_report,
-    write_offline_train_evaluation_outputs,
-)
+from .offline_train_evaluation import build_offline_train_evaluation_report
+from .offline_train_evaluation import write_offline_train_evaluation_outputs
 
 
 def run(args: argparse.Namespace) -> int:
@@ -21,7 +19,9 @@ def run(args: argparse.Namespace) -> int:
     discovery_plan_manifest = json.loads(Path(args.discovery_plan_manifest).read_text(encoding="utf-8"))
     discovery_plan_payload = json.loads(Path(args.discovery_plan).read_text(encoding="utf-8"))
 
-    from .offline_discovery_plan import OfflineDiscoveryPlan, OfflineDiscoveryPlanCell, CostConfig
+    from .offline_discovery_plan import CostConfig
+    from .offline_discovery_plan import OfflineDiscoveryPlan
+    from .offline_discovery_plan import OfflineDiscoveryPlanCell
 
     plan_cells = [
         OfflineDiscoveryPlanCell(

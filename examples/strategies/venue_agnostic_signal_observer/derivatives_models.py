@@ -1,11 +1,13 @@
-"""Lightweight models for derivatives-market data.
+"""
+Lightweight models for derivatives-market data.
 
 **Observer-only. No execution, no orders, no private endpoints.**
 """
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -15,11 +17,13 @@ from typing import Any
 
 @dataclass
 class DerivativeTradeTick:
-    """A single trade tick on a derivatives venue.
+    """
+    A single trade tick on a derivatives venue.
 
     ts_event is always nanoseconds.  side is buy/sell/unknown as reported by
     the venue or inferred via tick-rule proxy.
     """
+
     ts_event: int          # nanosecond epoch
     venue: str
     symbol: str
@@ -42,7 +46,7 @@ class DerivativeTradeTick:
         return json.dumps(self.to_dict(), default=str)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "DerivativeTradeTick":
+    def from_dict(cls, d: dict) -> DerivativeTradeTick:
         return cls(
             ts_event=int(d["ts_event"]),
             venue=d["venue"],
@@ -88,6 +92,7 @@ class FundingSnapshot:
 @dataclass
 class DerivativeImpulseEvent:
     """A detected impulse event on a derivatives venue."""
+
     signal_id: str
     ts_event: int
     source_venue: str
@@ -115,6 +120,7 @@ class DerivativeImpulseEvent:
 @dataclass
 class DerivativeLeadLagResult:
     """One forward-return observation for an impulse event."""
+
     signal_id: str
     signal_ts: int
     source_venue: str

@@ -1,4 +1,5 @@
-"""Kline prefilter V1 — per-bar high-low candidate day filter.
+"""
+Kline prefilter V1 — per-bar high-low candidate day filter.
 
 Replaces compute_kline_candidate_days (which used daily-range and was too loose).
 
@@ -9,7 +10,12 @@ SAFETY_MODE = "public_data_observer_only" — no network, no orders, no auth.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set
+from datetime import UTC
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Set
+
 
 SAFETY_MODE = "public_data_observer_only"
 
@@ -26,7 +32,8 @@ def compute_kline_candidate_days_v1(
     *,
     hl_threshold_bps: float = HL_THRESHOLD_BPS,
 ) -> Set[str]:
-    """Identify candidate stress days using per-bar high-low range.
+    """
+    Identify candidate stress days using per-bar high-low range.
 
     A day is included if ANY single 1-minute bar within that day has a
     high-low range >= hl_threshold_bps basis points (relative to the bar's open).
@@ -54,7 +61,7 @@ def compute_kline_candidate_days_v1(
     """
     candidate_dates: Set[str] = set()
 
-    for src_sym, klines in klines_by_source.items():
+    for klines in klines_by_source.values():
         if not klines:
             continue
 
@@ -72,9 +79,9 @@ def compute_kline_candidate_days_v1(
                 # Extract calendar date from the bar's open time
                 ts_ns = k.get("open_time_ns", 0)
                 ts_sec = ts_ns // 1_000_000_000
-                from datetime import datetime, timezone
+                from datetime import datetime
 
-                dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
+                dt = datetime.fromtimestamp(ts_sec, tz=UTC)
                 date_key = dt.strftime("%Y-%m-%d")
                 candidate_dates.add(date_key)
 
@@ -92,15 +99,16 @@ def compute_kline_candidate_days_deprecated(
     hl_threshold_bps: float = 30.0,
     oc_threshold_bps: float = 50.0,
 ) -> Set[str]:
-    """Original daily-range prefilter. DEPRECATED — too loose for pruning.
+    """
+    Original daily-range prefilter. DEPRECATED — too loose for pruning.
 
     Returns set of candidate dates (simplified interface).
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     candidate_dates: Set[str] = set()
 
-    for src_sym, klines in klines_by_source.items():
+    for klines in klines_by_source.values():
         if not klines:
             continue
 
@@ -108,7 +116,7 @@ def compute_kline_candidate_days_deprecated(
         for k in klines:
             ts_ns = k.get("open_time_ns", 0)
             ts_sec = ts_ns // 1_000_000_000
-            dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
+            dt = datetime.fromtimestamp(ts_sec, tz=UTC)
             date_key = dt.strftime("%Y-%m-%d")
             day_bars.setdefault(date_key, []).append(k)
 

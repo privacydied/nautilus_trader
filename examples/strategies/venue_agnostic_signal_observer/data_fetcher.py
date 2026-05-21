@@ -1,4 +1,5 @@
-"""Download public OHLCV data from Binance and Kraken REST APIs.
+"""
+Download public OHLCV data from Binance and Kraken REST APIs.
 
 No authentication required — these are public market data endpoints.
 
@@ -10,11 +11,11 @@ Kraken OHLC:   POST /0/public/OHLC
 """
 import csv
 import time
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import httpx
+
 
 # ---------------------------------------------------------------------------
 # Binance klines (public, no auth)
@@ -35,11 +36,12 @@ _BINANCE_INTERVALS = {
 def fetch_binance_klines(
     symbol: str,
     interval: str,
-    start_time: Optional[int] = None,
-    end_time: Optional[int] = None,
+    start_time: int | None = None,
+    end_time: int | None = None,
     limit: int = 1000,
 ) -> List[dict]:
-    """Fetch klines from Binance.
+    """
+    Fetch klines from Binance.
 
     Args:
         symbol: e.g. "BTCUSDT", "ETHUSDT", "SOLUSDT"
@@ -126,9 +128,10 @@ _KRAKEN_SYMBOLS = {
 def fetch_kraken_ohlc(
     pair: str,
     interval: str,
-    start_time: Optional[int] = None,
+    start_time: int | None = None,
 ) -> List[dict]:
-    """Fetch OHLC from Kraken.
+    """
+    Fetch OHLC from Kraken.
 
     Args:
         pair: e.g. "BTCUSD", "ETHUSD", "SOLUSD"
@@ -148,7 +151,7 @@ def fetch_kraken_ohlc(
     kraken_pair = _KRAKEN_SYMBOLS.get(pair, pair)
 
     all_rows: List[dict] = []
-    last_id: Optional[str] = None
+    last_id: str | None = None
     since = start_time
 
     with httpx.Client(timeout=30.0) as client:

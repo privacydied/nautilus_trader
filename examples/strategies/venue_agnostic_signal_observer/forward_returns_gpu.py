@@ -1,4 +1,5 @@
-"""GPU-accelerated forward-return kernel for venue_agnostic_signal_observer.
+"""
+GPU-accelerated forward-return kernel for venue_agnostic_signal_observer.
 
 Pure compute. No network. No file writes. No capture logic.
 No order/trading imports. No live logic. No auth.
@@ -21,7 +22,11 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
-from .tick_models import TickForwardReturn, TickSignalEvent, TradeTickLite, QuoteTickLite
+from .tick_models import QuoteTickLite
+from .tick_models import TickForwardReturn
+from .tick_models import TickSignalEvent
+from .tick_models import TradeTickLite
+
 
 if TYPE_CHECKING:
     pass  # torch imported lazily at call time
@@ -47,7 +52,7 @@ DEFAULT_CHUNK_SIZE: int = 16_384
 def check_cuda_available(device: str = "cuda:0") -> tuple[bool, str]:
     """Return (available, reason). Never raises."""
     try:
-        import torch  # noqa: PLC0415
+        import torch
     except ImportError:
         return False, "torch_not_installed"
 
@@ -92,7 +97,8 @@ def batch_evaluate_signals_gpu(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     device: str = "cuda:0",
 ) -> list[TickForwardReturn]:
-    """GPU-accelerated drop-in replacement for the evaluate_tick_signal loop.
+    """
+    GPU-accelerated drop-in replacement for the evaluate_tick_signal loop.
 
     Evaluates all signals against all horizons in one batched pass using
     torch.searchsorted on the CUDA device. Events are processed in chunks of
@@ -130,7 +136,7 @@ def batch_evaluate_signals_gpu(
         One per (signal, horizon), in signal × horizon order.
         Length = len(signals) * len(horizons_ms).
     """
-    import torch  # noqa: PLC0415
+    import torch
 
     if not signals or not target_ticks or not horizons_ms:
         return []
@@ -147,7 +153,7 @@ def batch_evaluate_signals_gpu(
 
     # Filter non-finite and zero/negative prices from target (match CPU semantics)
     valid_pairs = [
-        (ts, pr) for ts, pr in zip(raw_ts, raw_pr)
+        (ts, pr) for ts, pr in zip(raw_ts, raw_pr, strict=False)
         if math.isfinite(pr) and pr > 0
     ]
     if not valid_pairs:
@@ -211,7 +217,7 @@ def batch_evaluate_signals_gpu(
         entry_pr_valid_cpu = entry_pr_valid.cpu().tolist()
         entry_pr_cpu = entry_pr_gpu.cpu().tolist()
 
-        for h_idx, (horizon_ms, horizon_ns) in enumerate(zip(horizons_ms, horizons_ns)):
+        for h_idx, (horizon_ms, horizon_ns) in enumerate(zip(horizons_ms, horizons_ns, strict=False)):
             fwd_ts_gpu = entry_ts_gpu + horizon_ns              # [chunk_len]
             fwd_idx = torch.searchsorted(tgt_ts_gpu, fwd_ts_gpu)
             fwd_in_bounds = fwd_idx < T                         # [chunk_len]
@@ -362,7 +368,8 @@ def batch_evaluate_signals_multi_gpu(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     devices: list[str] | None = None,
 ) -> list[TickForwardReturn]:
-    """Multi-GPU wrapper around :func:`batch_evaluate_signals_gpu`.
+    """
+    Multi-GPU wrapper around :func:`batch_evaluate_signals_gpu`.
 
     Coarse-shards the event list contiguously across ``devices`` (preserving
     signal-major ordering), runs the existing per-device kernel on each
@@ -376,7 +383,7 @@ def batch_evaluate_signals_multi_gpu(
     No silent CPU fallback. Caller must validate device availability
     upfront (see :func:`gpu_devices.validate_cuda_devices`).
     """
-    from .gpu_devices import split_work_evenly  # noqa: PLC0415
+    from .gpu_devices import split_work_evenly
 
     if not signals or not target_ticks or not horizons_ms:
         return []
@@ -399,7 +406,7 @@ def batch_evaluate_signals_multi_gpu(
     H = len(horizons_ms)
     shards = split_work_evenly(len(signals), len(devices))
     out: list[TickForwardReturn] = []
-    for dev_str, shard in zip(devices, shards):
+    for dev_str, shard in zip(devices, shards, strict=False):
         if len(shard) == 0:
             continue
         shard_signals = signals[shard.start:shard.stop]

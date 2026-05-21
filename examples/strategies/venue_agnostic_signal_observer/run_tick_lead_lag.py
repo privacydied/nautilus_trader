@@ -1,4 +1,5 @@
-"""CLI sweep runner for tick-level lead-lag signal research.
+"""
+CLI sweep runner for tick-level lead-lag signal research.
 
 **RESEARCH MEASUREMENT TOOL ONLY.**  This script scans tick data for
 cross-venue lead-lag relationships, computes forward returns, and
@@ -32,24 +33,28 @@ import os
 import statistics
 import sys
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 from typing import Any
+
+from .event_study import TickLeadLagConfig
+from .event_study import TickLeadLagGenerator
+from .event_study import evaluate_candidate_group
+from .event_study import evaluate_tick_signal
+from .event_study import generate_random_baseline
 
 # ---------------------------------------------------------------------------
 # Local imports — these must be run from the nautilus_trader repo root or
 # the package must be installed / on sys.path.
 # ---------------------------------------------------------------------------
 # When invoked via ``python -m …`` the package path is auto-resolved.
-from .tick_models import TickForwardReturn, TickSignalEvent, TradeTickLite
-from .tick_store import load_trades_jsonl, tick_file_discovery
-from .event_study import (
-    TickLeadLagConfig,
-    TickLeadLagGenerator,
-    evaluate_candidate_group,
-    evaluate_tick_signal,
-    generate_random_baseline,
-)
+from .tick_models import TickForwardReturn
+from .tick_models import TradeTickLite
+from .tick_store import load_trades_jsonl
+from .tick_store import tick_file_discovery
+
 
 _MS_TO_NS = 1_000_000
 
@@ -92,8 +97,7 @@ def _write_json(path: str, obj: Any) -> None:
 def _write_jsonl(path: str, rows: list[dict]) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
-        for row in rows:
-            f.write(json.dumps(row, default=str) + "\n")
+        f.writelines(json.dumps(row, default=str) + "\n" for row in rows)
 
 
 def _write_csv(path: str, rows: list[dict], fieldnames: list[str] | None = None) -> None:
@@ -240,7 +244,8 @@ def load_tick_data(
     target_venues: list[str],
     symbols: list[str],
 ) -> dict[tuple[str, str], list[TradeTickLite]]:
-    """Discover and load trade tick JSONL files, grouped by (venue, symbol).
+    """
+    Discover and load trade tick JSONL files, grouped by (venue, symbol).
 
     Tries the requested symbol first, then falls back through common aliases
     (e.g. BTC-USD also checks XBT/USD for Kraken) so that venue-specific
@@ -504,7 +509,7 @@ def run_sweep(args: argparse.Namespace) -> TickLeadLagSummary:
                     symbol=symbol,
                     asset=asset,
                 )
-                generator = TickLeadLagGenerator(config)
+                TickLeadLagGenerator(config)
 
                 pair_results: list[dict] = []
                 pair_total_signals = 0
@@ -658,7 +663,6 @@ def run_sweep(args: argparse.Namespace) -> TickLeadLagSummary:
                     # We need the actual forward_returns — rebuild from signals
                     # for the candidate gate. Instead, re-evaluate signals
                     # for each group to get forward returns for gating.
-                    pass
 
                 # 3i. Write per-pair JSON report
                 pair_report = {
@@ -1095,8 +1099,8 @@ def generate_markdown_report(
     # 1. Hypothesis
     h("Hypothesis")
     p(
-        "Tick-level price movements on a \"source\" venue lead equivalent movements "
-        "on a \"target\" venue within a short time window. If this lead-lag relationship "
+        'Tick-level price movements on a "source" venue lead equivalent movements '
+        'on a "target" venue within a short time window. If this lead-lag relationship '
         "is statistically significant and survives cost-adjusted analysis, it may "
         "indicate a microstructure signal worth further investigation."
     )
@@ -1328,24 +1332,24 @@ def generate_markdown_report(
     # 14. Limitations
     h("Limitations")
     p(
-        f"- This analysis uses a single time period. Results may not generalise "
-        f"to other market regimes."
+        "- This analysis uses a single time period. Results may not generalise "
+        "to other market regimes."
     )
     p(
-        f"- Fee, slippage, and quote mismatch assumptions are simplified. "
-        f"Real execution costs may be higher, especially for larger sizes."
+        "- Fee, slippage, and quote mismatch assumptions are simplified. "
+        "Real execution costs may be higher, especially for larger sizes."
     )
     p(
-        f"- The random baseline is a simple sanity check, not a rigorous "
-        f"statistical test. Multiple-comparison bias is not adjusted for."
+        "- The random baseline is a simple sanity check, not a rigorous "
+        "statistical test. Multiple-comparison bias is not adjusted for."
     )
     p(
-        f"- Signals are generated from trade ticks only; quote-level dynamics "
-        f"(spread changes, depth shifts) are not modelled."
+        "- Signals are generated from trade ticks only; quote-level dynamics "
+        "(spread changes, depth shifts) are not modelled."
     )
     p(
-        f"- Cooldown gating may suppress correlated signals, potentially "
-        f"under-counting the true signal frequency."
+        "- Cooldown gating may suppress correlated signals, potentially "
+        "under-counting the true signal frequency."
     )
 
     # 15. Next step
@@ -1387,7 +1391,7 @@ def _format_ts(ts_ns: int) -> str:
     """Format a nanosecond epoch into a human-readable UTC datetime string."""
     import datetime
 
-    dt = datetime.datetime.fromtimestamp(ts_ns / 1e9, tz=datetime.timezone.utc)
+    dt = datetime.datetime.fromtimestamp(ts_ns / 1e9, tz=datetime.UTC)
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 

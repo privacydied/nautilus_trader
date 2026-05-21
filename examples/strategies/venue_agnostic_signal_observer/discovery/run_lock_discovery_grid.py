@@ -1,5 +1,6 @@
 # Copyright (C) 2026. All rights reserved.
-"""CLI entrypoint to create a discovery grid lock.
+r"""
+CLI entrypoint to create a discovery grid lock.
 
 Usage
 -----
@@ -16,15 +17,13 @@ import json
 import sys
 from pathlib import Path
 
-from .grid_lock import create_grid_lock, save_grid_lock
-from .search_space import (
-    DiscoveryGridSpec,
-    enumerate_cost_sensitivity_cell_count,
-    enumerate_primary_cell_count,
-    grid_sha256,
-    load_grid_spec,
-    validate_grid_spec,
-)
+from .grid_lock import create_grid_lock
+from .grid_lock import save_grid_lock
+from .search_space import enumerate_cost_sensitivity_cell_count
+from .search_space import enumerate_primary_cell_count
+from .search_space import grid_sha256
+from .search_space import load_grid_spec
+from .search_space import validate_grid_spec
 
 
 def main() -> int:

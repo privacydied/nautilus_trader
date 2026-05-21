@@ -15,11 +15,13 @@ The bot must derive permission by replaying; a manifest file is not sufficient.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 
-from .events import EventType, LedgerEvent, HIGH_PRECEDENCE_EVENTS
-from .ledger import EvidenceLedger, LedgerIntegrityError
+from .events import EventType
+from .ledger import EvidenceLedger
+from .ledger import LedgerIntegrityError
 
 
 @dataclass
@@ -71,7 +73,8 @@ class ReplayResult:
 
 
 def replay_ledger(ledger: EvidenceLedger) -> ReplayResult:
-    """Replay the evidence ledger to derive current candidate states.
+    """
+    Replay the evidence ledger to derive current candidate states.
 
     Fails closed on any integrity error, unknown event type, or missing ledger.
     """

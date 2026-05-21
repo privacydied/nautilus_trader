@@ -16,6 +16,7 @@ Hard constraints:
 """
 
 import argparse
+import contextlib
 import csv
 import io
 import json
@@ -23,8 +24,11 @@ import os
 import sys
 import urllib.request
 import zipfile
-from collections import Counter, OrderedDict
-from datetime import datetime, timedelta, timezone
+from collections import OrderedDict
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -106,7 +110,7 @@ def probe_url(url, timeout=10):
         if e.code == 404:
             return 404, None
         return e.code, None
-    except Exception as e:
+    except Exception:
         return 0, None  # Network error
 
 
@@ -133,7 +137,7 @@ def extract_csv_from_zip(zip_bytes):
 
 def parse_timestamp(ts_str):
     """Parse create_time field (UTC)."""
-    return datetime.strptime(ts_str.strip(), DT_FMT).replace(tzinfo=timezone.utc)
+    return datetime.strptime(ts_str.strip(), DT_FMT).replace(tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -255,10 +259,8 @@ def run_phase0a():
             if probe_type == "daily" and rows:
                 parsed = []
                 for r in rows:
-                    try:
+                    with contextlib.suppress(ValueError, KeyError):
                         parsed.append(parse_timestamp(r[TIMESTAMP_FIELD]))
-                    except (ValueError, KeyError):
-                        pass
                 if len(parsed) >= 2:
                     diffs = []
                     for i in range(1, min(len(parsed), 50)):
@@ -278,7 +280,7 @@ def run_phase0a():
                 # --- 8h funding grid alignment ---
                 if parsed:
                     day_start = datetime(
-                        parsed[0].year, parsed[0].month, parsed[0].day, tzinfo=timezone.utc
+                        parsed[0].year, parsed[0].month, parsed[0].day, tzinfo=UTC
                     )
                     funding_settlements = [
                         day_start + timedelta(hours=h) for h in FUNDING_HOURS
@@ -322,14 +324,12 @@ def run_phase0a():
                                 if rows2:
                                     parsed2 = []
                                     for r in rows2:
-                                        try:
+                                        with contextlib.suppress(ValueError, KeyError):
                                             parsed2.append(parse_timestamp(r[TIMESTAMP_FIELD]))
-                                        except (ValueError, KeyError):
-                                            pass
                                     if parsed2:
                                         day_start2 = datetime(
                                             parsed2[0].year, parsed2[0].month, parsed2[0].day,
-                                            tzinfo=timezone.utc,
+                                            tzinfo=UTC,
                                         )
                                         fs2 = [day_start2 + timedelta(hours=h) for h in FUNDING_HOURS]
                                         for settlement_ts in fs2:
@@ -359,7 +359,7 @@ def run_phase0a():
                         sorted_offsets = sorted(all_offsets)
                         p95_idx = int(len(sorted_offsets) * 0.95)
                         p95_offset = sorted_offsets[min(p95_idx, len(sorted_offsets) - 1)]
-                        max_offset = max(sorted_offsets)
+                        max(sorted_offsets)
 
                         if p95_offset <= 60:
                             results["alignment_verdict"] = "OI_ALIGNMENT_OK"
@@ -474,7 +474,7 @@ def run_phase0b(phase0a_results):
 
     # We'll probe funding archives for the same fixed dates to get
     # representative funding rate data
-    funding_months = sorted(set(ym_from_date(d) for d in FIXED_PROBE_DATES))
+    funding_months = sorted({ym_from_date(d) for d in FIXED_PROBE_DATES})
     all_funding_rows = []
 
     for ym in funding_months:
@@ -488,7 +488,7 @@ def run_phase0b(phase0a_results):
                     try:
                         calc_time_ms = int(r["calc_time"])
                         funding_rate = float(r["last_funding_rate"])
-                        ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=timezone.utc)
+                        ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=UTC)
                         all_funding_rows.append({
                             "ts": ts,
                             "funding_rate": funding_rate,
@@ -550,7 +550,7 @@ def run_phase0b(phase0a_results):
             # Load a few days around this month
             for day in range(1, 32):
                 try:
-                    day_dt = datetime(year, month, day, tzinfo=timezone.utc)
+                    day_dt = datetime(year, month, day, tzinfo=UTC)
                     date_str = day_dt.strftime(YMD)
                     path = _daily_zip_path(SYMBOL, date_str)
                     url = f"{BASE_URL}/{path}"
@@ -789,53 +789,53 @@ def write_data_availability_md(phase0a, phase0b, output_dir):
     cov = phase0a.get("coverage_estimate", {})
 
     lines = []
-    lines.append(f"# DATA_AVAILABILITY.md")
-    lines.append(f"")
-    lines.append(f"## Study: funding_oi_crowding_regime_v0")
-    lines.append(f"## Label: Family 3 — BTCUSDT Funding × Open Interest Crowding Regime")
+    lines.append("# DATA_AVAILABILITY.md")
+    lines.append("")
+    lines.append("## Study: funding_oi_crowding_regime_v0")
+    lines.append("## Label: Family 3 — BTCUSDT Funding × Open Interest Crowding Regime")
     lines.append(f"## Phase: 0{'A' if phase0b is None else 'AB'}")
-    lines.append(f"")
-    lines.append(f"### Phase 0A: Archive Feasibility Probe")
-    lines.append(f"")
+    lines.append("")
+    lines.append("### Phase 0A: Archive Feasibility Probe")
+    lines.append("")
     lines.append(f"**Symbol:** {SYMBOL}")
     lines.append(f"**Fixed probe dates:** {', '.join(FIXED_PROBE_DATES)}")
-    lines.append(f"")
-    lines.append(f"**Archive path for monthly metrics:** `data/futures/um/monthly/metrics/BTCUSDT/`")
+    lines.append("")
+    lines.append("**Archive path for monthly metrics:** `data/futures/um/monthly/metrics/BTCUSDT/`")
     lines.append(f"- Result: **{phase0a.get('monthly_path_result', 'unknown')}**")
-    lines.append(f"")
-    lines.append(f"**Archive path for daily metrics:** `data/futures/um/daily/metrics/BTCUSDT/`")
+    lines.append("")
+    lines.append("**Archive path for daily metrics:** `data/futures/um/daily/metrics/BTCUSDT/`")
     lines.append(f"- Result: **{phase0a.get('daily_path_result', 'unknown')}**")
-    lines.append(f"")
+    lines.append("")
     lines.append(f"**First successful fixed probe:** {phase0a.get('first_successful_probe', 'none')}")
     lines.append(f"**First failed fixed probe:** {phase0a.get('first_failed_probe', 'none')}")
-    lines.append(f"")
+    lines.append("")
     lines.append(f"**Observed schema fields:** {phase0a.get('schema_fields', 'N/A')}")
     lines.append(f"**Selected primary OI field:** {phase0a.get('selected_oi_field', 'N/A')}")
     lines.append(f"**Observed cadence:** {phase0a.get('observed_cadence', 'N/A')}")
-    lines.append(f"")
-    lines.append(f"**8h funding grid alignment offsets (end bracket, minutes):**")
+    lines.append("")
+    lines.append("**8h funding grid alignment offsets (end bracket, minutes):**")
     lines.append(f"  {phase0a.get('alignment_offsets_end_minutes', [])}")
-    lines.append(f"**8h funding grid alignment offsets (start bracket, minutes):**")
+    lines.append("**8h funding grid alignment offsets (start bracket, minutes):**")
     lines.append(f"  {phase0a.get('alignment_offsets_start_minutes', [])}")
     lines.append(f"**Alignment verdict:** {phase0a.get('alignment_verdict', 'N/A')}")
-    lines.append(f"")
-    lines.append(f"**Coverage estimate:**")
+    lines.append("")
+    lines.append("**Coverage estimate:**")
     if cov:
         lines.append(f"  Earliest probe with data: {cov.get('earliest_probe', 'N/A')}")
         lines.append(f"  Latest probe with data: {cov.get('latest_probe', 'N/A')}")
         lines.append(f"  Coverage span: {cov.get('coverage_span_days', '?')} days")
         lines.append(f"  Estimated settlement slots: {cov.get('estimated_settlement_slots', '?')}")
         lines.append(f"  Meets warmup + 5,500 slot threshold: {cov.get('meets_5500_slots', False)}")
-    lines.append(f"")
+    lines.append("")
     lines.append(f"**Phase 0A verdict:** {verdict}")
-    lines.append(f"")
+    lines.append("")
 
     if phase0b is not None:
-        lines.append(f"### Phase 0B: Blind Population Sizing (Counts-Only)")
-        lines.append(f"")
+        lines.append("### Phase 0B: Blind Population Sizing (Counts-Only)")
+        lines.append("")
         lines.append(f"**Population sizing rule:** {phase0b.get('population_sizing_rule', 'N/A')}")
-        lines.append(f"")
-        lines.append(f"**Counts (sampled evaluation period):**")
+        lines.append("")
+        lines.append("**Counts (sampled evaluation period):**")
         lines.append(f"  Total aligned settlements: {phase0b.get('total_aligned_settlements', '?')}")
         lines.append(f"  Total excluded OI_UNALIGNED: {phase0b.get('total_excluded_oi_unaligned', '?')}")
         lines.append(f"  Positive funding extreme count: {phase0b.get('positive_funding_extreme_count', '?')}")
@@ -844,39 +844,39 @@ def write_data_availability_md(phase0a, phase0b, output_dir):
         lines.append(f"  Positive extreme × falling OI: {phase0b.get('positive_extreme_falling_oi', '?')}")
         lines.append(f"  Negative extreme × rising OI: {phase0b.get('negative_extreme_rising_oi', '?')}")
         lines.append(f"  Negative extreme × falling OI: {phase0b.get('negative_extreme_falling_oi', '?')}")
-        lines.append(f"")
+        lines.append("")
         lines.append(f"**Train 70% counts:** {json.dumps(phase0b.get('train_70_counts', {}))}")
         lines.append(f"**Holdout 30% counts:** {json.dumps(phase0b.get('holdout_30_counts', {}))}")
-        lines.append(f"")
+        lines.append("")
         lines.append(f"**Phase 0B verdict:** {phase0b.get('verdict', 'N/A')}")
         lines.append(f"**Notes:** {', '.join(phase0b.get('notes', []))}")
-        lines.append(f"")
+        lines.append("")
 
-    lines.append(f"### Why Binance REST openInterestHist is rejected")
-    lines.append(f"")
-    lines.append(f"The Binance REST endpoint `openInterestHist` (`GET /futures/data/openInterestHist`) ")
-    lines.append(f"provides open-interest history for a single trailing month only. This design makes it")
-    lines.append(f"unsuitable as a study data source for the following reasons:")
-    lines.append(f"")
-    lines.append(f"- **Trailing month only**: The endpoint returns at most 30 days of history with 5-minute")
-    lines.append(f"  granularity. It cannot serve multi-year archive coverage.")
-    lines.append(f"- **Cannot support 180-day past-only percentile warmup**: The 180-day backward-looking")
-    lines.append(f"  funding-percentile threshold computation requires OI history extending at least 180 days")
-    lines.append(f"  before the first evaluated funding event. A trailing-month API cannot provide this.")
-    lines.append(f"- **Cannot support the multi-year archive study**: The study requires coverage spanning")
-    lines.append(f"  at least 180 days of warmup, then 5,500+ aligned 8h funding settlement slots, reaching")
-    lines.append(f"  at least 2025-01-01. A trailing-month API covers at most ~93 settlement slots.")
-    lines.append(f"- **Not usable as fallback study data**: Even as a diagnostic fallback, the trailing-month")
-    lines.append(f"  window is too short to compute any meaningful 180-day percentile-based conditioning.")
-    lines.append(f"")
-    lines.append(f"Therefore, `openInterestHist` is **rejected** as the study OI data source. The Binance")
-    lines.append(f"Vision daily public archive (`data/futures/um/daily/metrics/BTCUSDT/`) is the required")
-    lines.append(f"and sufficient source for this study.")
-    lines.append(f"")
-    lines.append(f"---")
-    lines.append(f"")
-    lines.append(f"*Generated by run_funding_oi_archive_probe.py — no forward returns, edge stats, null test,")
-    lines.append(f"FDR, evaluation, registry update, private-key, order, execution, or bot path was used.*")
+    lines.append("### Why Binance REST openInterestHist is rejected")
+    lines.append("")
+    lines.append("The Binance REST endpoint `openInterestHist` (`GET /futures/data/openInterestHist`) ")
+    lines.append("provides open-interest history for a single trailing month only. This design makes it")
+    lines.append("unsuitable as a study data source for the following reasons:")
+    lines.append("")
+    lines.append("- **Trailing month only**: The endpoint returns at most 30 days of history with 5-minute")
+    lines.append("  granularity. It cannot serve multi-year archive coverage.")
+    lines.append("- **Cannot support 180-day past-only percentile warmup**: The 180-day backward-looking")
+    lines.append("  funding-percentile threshold computation requires OI history extending at least 180 days")
+    lines.append("  before the first evaluated funding event. A trailing-month API cannot provide this.")
+    lines.append("- **Cannot support the multi-year archive study**: The study requires coverage spanning")
+    lines.append("  at least 180 days of warmup, then 5,500+ aligned 8h funding settlement slots, reaching")
+    lines.append("  at least 2025-01-01. A trailing-month API covers at most ~93 settlement slots.")
+    lines.append("- **Not usable as fallback study data**: Even as a diagnostic fallback, the trailing-month")
+    lines.append("  window is too short to compute any meaningful 180-day percentile-based conditioning.")
+    lines.append("")
+    lines.append("Therefore, `openInterestHist` is **rejected** as the study OI data source. The Binance")
+    lines.append("Vision daily public archive (`data/futures/um/daily/metrics/BTCUSDT/`) is the required")
+    lines.append("and sufficient source for this study.")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    lines.append("*Generated by run_funding_oi_archive_probe.py — no forward returns, edge stats, null test,")
+    lines.append("FDR, evaluation, registry update, private-key, order, execution, or bot path was used.*")
 
     path = os.path.join(output_dir, "DATA_AVAILABILITY.md")
     with open(path, "w") as f:
@@ -929,7 +929,7 @@ def main():
         write_data_availability_md(phase0a, None, args.output_dir)
         sys.exit(1 if phase0a_verdict.startswith("ARCHIVE") else 0)
 
-    print(f"\nPhase 0A passed. Daily archive metrics are usable.")
+    print("\nPhase 0A passed. Daily archive metrics are usable.")
 
     phase0b = None
     if args.population_sizing:
@@ -937,8 +937,8 @@ def main():
         print("Phase 0B: Blind Population Sizing (Counts-Only)")
         print("=" * 70)
         print("WARNING: This makes outbound HTTP requests to Binance Vision CDN")
-        print(f"  for daily metrics files matching the evaluation period.")
-        print(f"  This may be slow for large date ranges.")
+        print("  for daily metrics files matching the evaluation period.")
+        print("  This may be slow for large date ranges.")
         print()
 
         phase0b = run_phase0b(phase0a)
@@ -953,7 +953,7 @@ def main():
         if phase0b["verdict"] != "PHASE0B_POPULATION_FEASIBILITY_PASSED":
             print(f"\nPhase 0B HARD STOP: {phase0b['verdict']}")
     else:
-        print(f"\nSkipping Phase 0B (use --population-sizing to run).")
+        print("\nSkipping Phase 0B (use --population-sizing to run).")
 
     # Write reports
     write_report_json(phase0a, phase0b, args.output_dir)

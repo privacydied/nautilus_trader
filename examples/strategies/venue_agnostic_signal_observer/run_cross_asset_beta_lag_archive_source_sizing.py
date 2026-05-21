@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Source-only exact stress population sizing for cross-asset beta-lag archive v0.
+"""
+Source-only exact stress population sizing for cross-asset beta-lag archive v0.
 
 This is NOT a hypothesis evaluation.
 This is NOT a rejection.
@@ -19,53 +20,46 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import math
 import os
-import statistics
 import sys
-import time
-from bisect import bisect_left
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+from typing import Dict
+from typing import List
+
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, os.path.dirname(_THIS_DIR))
 
+from .binance_vision_archive import _iter_date_range
+from .binance_vision_archive import download_daily_agg_trades
+from .binance_vision_archive import estimate_file_size_mb
+from .binance_vision_archive import parse_agg_trade_csv
+from .cross_asset_beta_lag_archive import CALENDAR_END
+from .cross_asset_beta_lag_archive import CALENDAR_START
+from .cross_asset_beta_lag_archive import SOURCE_SYMBOLS
+from .cross_asset_beta_lag_archive import STRESS_RULES
+from .cross_asset_beta_lag_archive import TARGET_SYMBOLS
+from .cross_asset_beta_lag_archive import VENUE
+from .cross_asset_beta_lag_archive import StressLabel
+from .cross_asset_beta_lag_archive import _get_git_sha
+from .cross_asset_beta_lag_archive import _now_utc_iso
+from .cross_asset_beta_lag_archive import _sha256_json
+from .cross_asset_beta_lag_archive import assign_independent_windows
+from .cross_asset_beta_lag_archive import deduplicate_labels
+from .cross_asset_beta_lag_archive import generate_stress_labels
+from .run_artifacts import atomic_write_json
+from .run_artifacts import atomic_write_jsonl
+from .run_artifacts import atomic_write_text
+from .run_artifacts import create_run_id
 from .tick_models import TradeTickLite
-from .binance_vision_archive import (
-    download_daily_agg_trades,
-    parse_agg_trade_csv,
-    _iter_date_range,
-    estimate_file_size_mb,
-)
-from .cross_asset_beta_lag_archive import (
-    SOURCE_SYMBOLS,
-    TARGET_SYMBOLS,
-    ALL_SYMBOLS,
-    CALENDAR_START,
-    CALENDAR_END,
-    STRESS_RULES,
-    StressLabel,
-    generate_stress_labels,
-    deduplicate_labels,
-    assign_independent_windows,
-    VENUE,
-    FAMILY_SIZE,
-    _get_git_sha,
-    _now_utc_iso,
-    _sha256_json,
-)
-from .run_artifacts import (
-    create_run_id,
-    atomic_write_json,
-    atomic_write_text,
-    atomic_write_jsonl,
-)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -83,7 +77,7 @@ def _harmonic_sum(n: int) -> float:
 
 def _date_from_ns(ts_ns: int) -> str:
     ts_sec = ts_ns // 1_000_000_000
-    dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
+    dt = datetime.fromtimestamp(ts_sec, tz=UTC)
     return dt.strftime("%Y-%m-%d")
 
 
@@ -158,11 +152,11 @@ def main() -> None:
             "max_source_gb": args.max_source_download_gb,
             "status": "VOLUME_GATE_STOPPED",
         })
-        print(f"\n=== VERDICT: SOURCE_EXACT_STRESS_SIZING_VOLUME_TOO_LARGE ===")
+        print("\n=== VERDICT: SOURCE_EXACT_STRESS_SIZING_VOLUME_TOO_LARGE ===")
         return
 
     # Phase 2: Download source aggTrades
-    print(f"\n[Phase 2] Downloading source aggTrades...")
+    print("\n[Phase 2] Downloading source aggTrades...")
     source_ticks: Dict[str, List[TradeTickLite]] = {}
     source_manifest: List[Dict[str, Any]] = []
     total_bytes = 0
@@ -198,7 +192,7 @@ def main() -> None:
     print(f"  Total source ticks: {sum(len(t) for t in source_ticks.values())}")
 
     # Phase 3: Reconstruct exact stress labels
-    print(f"\n[Phase 3] Reconstructing exact stress labels from aggTrades...")
+    print("\n[Phase 3] Reconstructing exact stress labels from aggTrades...")
     all_labels: List[StressLabel] = []
 
     for src_sym in SOURCE_SYMBOLS:
@@ -231,7 +225,7 @@ def main() -> None:
     # Dedup and assign independent windows
     deduped = deduplicate_labels(all_labels)
     windowed = assign_independent_windows(deduped)
-    independent_window_ids = sorted(set(l.independent_window_id for l in windowed))
+    independent_window_ids = sorted({l.independent_window_id for l in windowed})
 
     # Count by source/direction/rule
     by_rule: Dict[str, int] = Counter()
@@ -261,7 +255,7 @@ def main() -> None:
     print(f"  By source/direction: {dict(by_source_dir)}")
 
     # Phase 4: Estimate target download plan
-    print(f"\n[Phase 4] Estimating target download plan...")
+    print("\n[Phase 4] Estimating target download plan...")
     # For each stress day, estimate target files needed
     # Each stress day: 4 target symbols × 1 file each = 4 files
     # Plus next-day buffer for day-end windows: +4 files
@@ -270,7 +264,7 @@ def main() -> None:
     for day in stress_days_sorted:
         target_days_set.add(day)
         # Next-day buffer for forward coverage
-        dt = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        dt = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=UTC)
         next_dt = dt + timedelta(days=1)
         next_day = next_dt.strftime("%Y-%m-%d")
         if next_day in date_list:
@@ -305,7 +299,7 @@ def main() -> None:
     print(f"  Verdict: {verdict}")
 
     # Phase 5: Write artifacts
-    print(f"\n[Phase 5] Writing artifacts...")
+    print("\n[Phase 5] Writing artifacts...")
 
     # preflight.json
     atomic_write_json(output_dir / "preflight.json", {
@@ -408,27 +402,27 @@ def main() -> None:
 
     # FINAL_REPORT.md
     report_lines = [
-        f"# Cross-Asset Beta-Lag Archive v0 — Source Exact Stress Sizing",
-        f"",
+        "# Cross-Asset Beta-Lag Archive v0 — Source Exact Stress Sizing",
+        "",
         f"**Run ID:** {run_id}",
-        f"**Study:** cross_asset_beta_lag_archive_v0_source_sizing",
-        f"**Branch:** feat/cross-asset-beta-lag-archive-v0",
+        "**Study:** cross_asset_beta_lag_archive_v0_source_sizing",
+        "**Branch:** feat/cross-asset-beta-lag-archive-v0",
         f"**Starting SHA:** {git_sha}",
-        f"**Safety posture:** public_data_observer_only",
+        "**Safety posture:** public_data_observer_only",
         f"**Precommitment SHA:** {precommitment_sha}",
-        f"",
-        f"## Calendar",
+        "",
+        "## Calendar",
         f"- Full calendar retained: {CALENDAR_START} to {CALENDAR_END}",
         f"- Total calendar days: {total_days}",
-        f"",
-        f"## Source Download",
+        "",
+        "## Source Download",
         f"- Source symbols: {SOURCE_SYMBOLS}",
         f"- Source files required: {source_files_total}",
         f"- Source files downloaded: {total_files}",
         f"- Source MB downloaded: {total_mb:.1f}",
         f"- Failed downloads: {failed_files}",
-        f"",
-        f"## Exact Stress Labels (from aggTrades only)",
+        "",
+        "## Exact Stress Labels (from aggTrades only)",
         f"- Total raw stress labels: {len(all_labels)}",
         f"- After dedup/windowing: {len(windowed)}",
         f"- 30s labels: {by_rule.get('30s_30bps', 0)}",
@@ -437,15 +431,15 @@ def main() -> None:
         f"- Unique stress days: {len(stress_days_sorted)}",
         f"- Independent windows: {len(independent_window_ids)}",
         f"- Windows per month: {dict(sorted(windows_by_month.items()))}",
-        f"",
-        f"## Target Plan Estimate",
+        "",
+        "## Target Plan Estimate",
         f"- Target symbols: {TARGET_SYMBOLS}",
         f"- Target days required: {len(target_days)}",
         f"- Estimated target files: {target_files_est}",
         f"- Estimated target MB: {target_mb_est:.1f}",
         f"- Estimated target GB: {target_gb_est:.1f}",
-        f"",
-        f"## Full Evaluation Cost",
+        "",
+        "## Full Evaluation Cost",
         f"- Total files: {total_full_eval_files}",
         f"- Total MB: {total_full_eval_mb:.1f}",
         f"- Total GB: {total_full_eval_gb:.1f}",
@@ -453,17 +447,17 @@ def main() -> None:
         f"- Practical under 10 GB cap: {caps_practical.get('10 GB', False)}",
         f"- Practical under 20 GB cap: {caps_practical.get('20 GB', False)}",
         f"- Practical under 50 GB cap: {caps_practical.get('50 GB', False)}",
-        f"",
-        f"## Verdict",
+        "",
+        "## Verdict",
         f"**{verdict}**",
-        f"",
-        f"## What This Is Not",
-        f"- Not a hypothesis evaluation",
-        f"- Not a rejection",
-        f"- REJECTED_RESEARCH.md was NOT updated",
-        f"- No target symbols were downloaded",
-        f"- No forward returns, null, FDR, holdout were computed",
-        f"- No thresholds, horizons, costs, or verdict gates were changed",
+        "",
+        "## What This Is Not",
+        "- Not a hypothesis evaluation",
+        "- Not a rejection",
+        "- REJECTED_RESEARCH.md was NOT updated",
+        "- No target symbols were downloaded",
+        "- No forward returns, null, FDR, holdout were computed",
+        "- No thresholds, horizons, costs, or verdict gates were changed",
     ]
     atomic_write_text(output_dir / "FINAL_REPORT.md", "\n".join(report_lines))
 

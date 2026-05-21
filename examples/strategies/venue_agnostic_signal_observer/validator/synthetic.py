@@ -13,18 +13,20 @@ data before any real edge exists. This is the oracle-before-miner approach.
 
 from __future__ import annotations
 
-import math
 import random
 from dataclasses import dataclass
-from datetime import datetime, timedelta, UTC
-from typing import Sequence
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 
-from .embargo import TimeInterval, TimestampedObservation
+from .embargo import TimeInterval
+from .embargo import TimestampedObservation
 
 
 @dataclass(frozen=True)
 class SyntheticObservation(TimestampedObservation):
     """TimestampedObservation with ground-truth label."""
+
     true_signal: bool  # whether the true DGP had a signal at this point
 
 
@@ -101,7 +103,8 @@ def make_planted_signal_population(
     seed: int = 42,
     start: datetime | None = None,
 ) -> list[SyntheticObservation]:
-    """True positive signal with sufficient effect size.
+    """
+    True positive signal with sufficient effect size.
     Validator should score more favorably than null.
     signal_mean >> noise_scale for a clear planted effect.
     """
@@ -129,7 +132,8 @@ def make_planted_untradeable_population(
     seed: int = 42,
     start: datetime | None = None,
 ) -> tuple[list[SyntheticObservation], float]:
-    """Statistically real effect but below cost floor.
+    """
+    Statistically real effect but below cost floor.
     Statistical diagnostics may detect the effect. Verdict logic must
     refuse promotion because net-of-cost edge is dead.
     Returns (observations, cost_floor).
@@ -160,7 +164,8 @@ def make_decaying_signal_population(
     seed: int = 42,
     start: datetime | None = None,
 ) -> list[SyntheticObservation]:
-    """Real signal in early data; weakens or vanishes in late data.
+    """
+    Real signal in early data; weakens or vanishes in late data.
     CPCV and purged folds should expose the non-stationarity.
     Naive in-sample fitting should look better than honest OOS.
     """

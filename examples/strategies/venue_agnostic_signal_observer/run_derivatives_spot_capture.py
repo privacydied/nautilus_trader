@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Combined async capture runner for derivatives-source -> spot-target research.
+"""
+Combined async capture runner for derivatives-source -> spot-target research.
 
 Starts Binance USD-M perp, Kraken spot, Coinbase spot, and optional OI polling
 in one event loop. Writes per-stream JSONL files and a capture_manifest.json
@@ -17,23 +18,24 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
-import os
 import signal
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 
-from .tick_models import TradeTickLite
-from .symbol_aliases import resolve_symbol
 from .artifact_metadata import inject_metadata_into_manifest
-from .run_artifacts import (
-    atomic_write_json,
-    create_run_id,
-    safe_output_dir,
-)
-from .run_index import append_run_index_row, build_run_index_row
+from .run_artifacts import atomic_write_json
+from .run_artifacts import create_run_id
+from .run_artifacts import safe_output_dir
+from .run_index import append_run_index_row
+from .run_index import build_run_index_row
+from .symbol_aliases import resolve_symbol
+from .tick_models import TradeTickLite
+
 
 _MS_TO_NS = 1_000_000
 
@@ -46,11 +48,11 @@ KRAKEN_WS_URL = "wss://ws.kraken.com/v2"
 
 
 def _ts_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 def _ts_ns_to_iso(ts_ns: int) -> str:
-    dt = datetime.fromtimestamp(ts_ns / 1e9, tz=timezone.utc)
+    dt = datetime.fromtimestamp(ts_ns / 1e9, tz=UTC)
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
@@ -116,7 +118,7 @@ async def _ws_connect(url: str, max_reconnects: int = 5, name: str = "ws"):
             return ws, "websockets"
         except ImportError:
             break
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print(f"  [{name}] Timeout attempt {attempt + 1}")
             await asyncio.sleep(min(2 ** attempt, 30))
         except Exception as e:
@@ -149,7 +151,7 @@ async def _ws_recv(ws, backend: str, timeout: float = 2.0) -> str | None:
         else:
             msg = await asyncio.wait_for(ws.receive(), timeout=timeout)
             return msg.data
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return None
     except Exception:
         raise
@@ -196,7 +198,8 @@ async def _with_reconnect_loop(
     stats: dict[str, StreamStats] | None = None,
     stat_keys: list[str] | None = None,
 ) -> str | None:
-    """Run a capture loop with bounded reconnect on socket failures.
+    r"""
+    Run a capture loop with bounded reconnect on socket failures.
 
     Parameters
     ----------
@@ -263,10 +266,8 @@ async def _with_reconnect_loop(
     except Exception as exc:
         reason = f"subscribe_error: {exc}"
         print(f"  [{name}] {reason}")
-        try:
+        with contextlib.suppress(Exception):
             await _ws_close(ws, backend)
-        except Exception:
-            pass
         return reason
 
     # --- main receive loop with reconnect --------------------------------
@@ -277,10 +278,8 @@ async def _with_reconnect_loop(
         except Exception as exc:
             # Socket broke — attempt bounded reconnect
             print(f"  [{name}] Socket error, reconnecting: {exc}")
-            try:
+            with contextlib.suppress(Exception):
                 await _ws_close(ws, backend)
-            except Exception:
-                pass
 
             reconnect_start = time.monotonic()
             ws, backend = None, ""
@@ -312,10 +311,8 @@ async def _with_reconnect_loop(
             except Exception as exc3:
                 reason = f"resubscribe_error: {exc3}"
                 print(f"  [{name}] {reason}")
-                try:
+                with contextlib.suppress(Exception):
                     await _ws_close(ws, backend)
-                except Exception:
-                    pass
                 return reason
 
             # Track recovery
@@ -345,10 +342,8 @@ async def _with_reconnect_loop(
             break
 
     # --- clean exit ------------------------------------------------------
-    try:
+    with contextlib.suppress(Exception):
         await _ws_close(ws, backend)
-    except Exception:
-        pass
 
     if reason:
         print(f"  [{name}] Capture ended early: {reason}")
@@ -432,7 +427,8 @@ async def _binance_perp_handler(raw_to_canonical, files, stats, run_id, out_dir)
 
 
 def build_binance_perp_ws_url(symbols: list[str]) -> str:
-    """Build Binance USD-M perp combined aggTrade WebSocket URL.
+    """
+    Build Binance USD-M perp combined aggTrade WebSocket URL.
 
     Uses the /market routed endpoint as required by Binance USD-M futures
     combined stream API. The unrouted /stream endpoint may connect but
@@ -461,7 +457,8 @@ async def capture_binance_perp(
     duration_seconds: int,
     stop_event: asyncio.Event,
 ) -> str | None:
-    """Capture Binance USD-M perp aggTrade trades via combined WebSocket.
+    """
+    Capture Binance USD-M perp aggTrade trades via combined WebSocket.
 
     WebSocket URL: wss://fstream.binance.com/market/stream?streams=btcusdt@aggTrade/...
     Side from 'm' field: m=True -> seller aggressor -> side='sell'
@@ -526,7 +523,7 @@ async def capture_binance_perp(
                 if stats[k].status == "ok":
                     stats[k].status = "failed"
 
-    print(f"  [BINANCE_PERP] Capture complete")
+    print("  [BINANCE_PERP] Capture complete")
     return reason
 
 
@@ -535,7 +532,8 @@ async def capture_binance_perp(
 # ---------------------------------------------------------------------------
 
 async def _kraken_handler(files, stats, symbols):
-    """Kraken spot message handler for _with_reconnect_loop.
+    """
+    Kraken spot message handler for _with_reconnect_loop.
 
     Uses Kraken WebSocket v2 protocol (wss://ws.kraken.com/v2).
     v2 trade messages are dicts with ``channel`` and ``data`` keys.
@@ -598,7 +596,7 @@ async def _kraken_handler(files, stats, symbols):
                 side = t.get("side", "unknown")
                 ts_str = t.get("timestamp", "")
                 if ts_str:
-                    dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    dt = datetime.fromisoformat(ts_str)
                     ts_ns = int(dt.timestamp() * 1_000_000_000)
                 else:
                     continue
@@ -681,7 +679,7 @@ async def capture_kraken_spot(
                 if stats[k].status == "ok":
                     stats[k].status = "failed"
 
-    print(f"  [KRAKEN] Capture complete")
+    print("  [KRAKEN] Capture complete")
     return reason
 
 
@@ -715,7 +713,7 @@ async def _coinbase_handler(files, stats, product_ids):
             size = float(data["size"])
             side = data.get("side", "unknown")
             time_str = data.get("time", "")
-            dt_match = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+            dt_match = datetime.fromisoformat(time_str)
             ts_ns = int(dt_match.timestamp() * 1e9)
         except (KeyError, ValueError):
             return True
@@ -802,7 +800,7 @@ async def capture_coinbase_spot(
                 if stats[k].status == "ok":
                     stats[k].status = "failed"
 
-    print(f"  [COINBASE] Capture complete")
+    print("  [COINBASE] Capture complete")
     return reason
 
 
@@ -1062,7 +1060,6 @@ def main() -> None:
     interrupted = False
 
     # Signal handling: set stop_event on SIGINT/SIGTERM
-    shutdown_signals = set()
 
     def _handle_signal(signum, frame):
         nonlocal interrupted
@@ -1119,10 +1116,8 @@ def main() -> None:
 
         # Wait for duration, then stop
         print(f"\n  Capturing for {args.duration_seconds} seconds...")
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await asyncio.sleep(args.duration_seconds)
-        except asyncio.CancelledError:
-            pass
         print("  Duration elapsed, stopping streams...")
         stop_event.set()
 
@@ -1154,7 +1149,7 @@ def main() -> None:
 
     # Handle OI counts from poll task and log any task exceptions
     task_exceptions: list[dict] = []
-    for t, r in zip([t for _, t in tasks_and_names], results if results else []):
+    for t, r in zip([t for _, t in tasks_and_names], results if results else [], strict=False):
         task_name = t.get_name()
         if isinstance(r, dict):
             oi_counts.update(r)

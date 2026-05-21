@@ -1,4 +1,5 @@
-"""Source-structure stress gates for cross-asset beta-lag research.
+"""
+Source-structure stress gates for cross-asset beta-lag research.
 
 Phase 0 instrumentation only: Hawkes self-exciting volatility labels
 and permutation entropy measurements on BTC/ETH source tick streams.
@@ -16,14 +17,19 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import random
-from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Sequence
 
-from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
 from examples.strategies.venue_agnostic_signal_observer.artifact_metadata import build_metadata
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
+
 
 # ---------------------------------------------------------------------------
 # Verdict safety
@@ -110,7 +116,8 @@ class SourceStructureStressConfig:
 
     @property
     def hawkes_alpha(self) -> float:
-        """Derive alpha from branching ratio and tau.
+        """
+        Derive alpha from branching ratio and tau.
 
         For exponential kernel alpha * exp(-dt / tau):
         integrated mass = alpha * tau, so eta = alpha * tau.
@@ -136,6 +143,7 @@ class SourceStructureStressConfig:
 @dataclass(frozen=True)
 class SourceReturnBucket:
     """A single 1-second bucket of source tick returns."""
+
     bucket_ts_ns: int  # nanosecond timestamp of bucket end
     venue: str
     symbol: str
@@ -148,6 +156,7 @@ class SourceReturnBucket:
 @dataclass(frozen=True)
 class VolatilityEvent:
     """A source-side volatility event (abs return >= threshold)."""
+
     event_ts_ns: int
     venue: str
     symbol: str
@@ -168,6 +177,7 @@ class HawkesParams:
 @dataclass
 class HawkesIntensityPoint:
     """Hawkes intensity at a specific timestamp."""
+
     ts_ns: int
     intensity_lambda: float
     mu: float
@@ -180,6 +190,7 @@ class HawkesIntensityPoint:
 @dataclass
 class PermutationEntropyPoint:
     """Normalized permutation entropy at a specific timestamp."""
+
     ts_ns: int
     normalized_entropy: float
     pattern_count: int
@@ -191,6 +202,7 @@ class PermutationEntropyPoint:
 @dataclass(frozen=True)
 class HawkesStressLabel:
     """A source-side Hawkes stress label."""
+
     label_id: str
     ts_ns: int
     ts_utc: str
@@ -216,6 +228,7 @@ class HawkesStressLabel:
 @dataclass(frozen=True)
 class HawkesStressWindow:
     """A merged Hawkes stress window."""
+
     window_id: str
     window_start_ts_ns: int
     window_start_utc: str
@@ -236,6 +249,7 @@ class HawkesStressWindow:
 @dataclass
 class SourceStructureStressSummary:
     """Summary of the full Phase 0 analysis."""
+
     study_id: str
     source_symbols: list[str]
     config_hash: str
@@ -264,7 +278,8 @@ def build_source_return_buckets(
     ticks: Sequence[TradeTickLite],
     bucket_size_seconds: float = 1.0,
 ) -> List[SourceReturnBucket]:
-    """Convert source trade ticks into regular return buckets.
+    """
+    Convert source trade ticks into regular return buckets.
 
     Handles multiple symbols by grouping ticks per symbol and computing
     buckets independently per symbol.
@@ -328,9 +343,7 @@ def build_source_return_buckets(
                 abs_return_bps=abs_return_bps,
             ))
 
-            if log_ret is not None:
-                prev_price = last_price
-            elif prev_price is None:
+            if log_ret is not None or prev_price is None:
                 prev_price = last_price
 
     return all_buckets
@@ -344,7 +357,8 @@ def build_volatility_events(
     buckets: Sequence[SourceReturnBucket],
     threshold_bps: float = 5.0,
 ) -> List[VolatilityEvent]:
-    """Convert source buckets into volatility events.
+    """
+    Convert source buckets into volatility events.
 
     Event rule: abs_return_bps >= threshold_bps.
     """
@@ -372,17 +386,16 @@ def compute_hawkes_intensity(
     *,
     min_events: int | None = None,
 ) -> List[HawkesIntensityPoint]:
-    """Compute fixed-parameter Hawkes intensity from source volatility events.
+    """
+    Compute fixed-parameter Hawkes intensity from source volatility events.
 
     Uses only past events (ti <= t). No future leakage.
     """
     tau = config.hawkes_tau_seconds
-    eta = config.hawkes_branching_ratio
     alpha = config.hawkes_alpha  # eta / tau
     mu = config.hawkes_event_threshold_bps / config.hawkes_tau_seconds  # baseline
     min_ev = min_events if min_events is not None else config.hawkes_min_events
     prior_lookback_ns = int(config.hawkes_prior_event_lookback_seconds * _NS_PER_SECOND)
-    min_prior = config.hawkes_min_prior_events
 
     if len(events) < min_ev:
         return []
@@ -434,12 +447,13 @@ def _compute_permutation_entropy(
     m: int = 3,
     delay: int = 1,
 ) -> tuple[float, float, float, int]:
-    """Compute normalized permutation entropy for a sequence.
+    """
+    Compute normalized permutation entropy for a sequence.
 
     Returns (entropy_raw, entropy_max, normalized_entropy, pattern_count).
     """
     n = len(values)
-    needed = m + (m - 1) * (delay - 1) + 1  # minimum length for one pattern
+    m + (m - 1) * (delay - 1) + 1  # minimum length for one pattern
     # Actually: need indices 0, delay, 2*delay, ..., (m-1)*delay
     # So need at least m + (m-1)*(delay-1) = m*delay - delay + m - m = m*delay - (delay-1)
     # Simpler: need last pattern at index (m-1)*delay, so n >= (m-1)*delay + m
@@ -481,7 +495,8 @@ def compute_permutation_entropy_points(
     buckets: Sequence[SourceReturnBucket],
     config: SourceStructureStressConfig,
 ) -> List[PermutationEntropyPoint]:
-    """Compute rolling normalized permutation entropy from source buckets.
+    """
+    Compute rolling normalized permutation entropy from source buckets.
 
     Uses only past buckets (no future leakage).
     """
@@ -538,7 +553,8 @@ def build_hawkes_stress_labels(
     entropy_points: Sequence[PermutationEntropyPoint],
     config: SourceStructureStressConfig,
 ) -> List[HawkesStressLabel]:
-    """Emit Hawkes source-stress labels where gates pass.
+    """
+    Emit Hawkes source-stress labels where gates pass.
 
     Label requires:
     - source volatility event at or near label time
@@ -630,7 +646,8 @@ def merge_hawkes_stress_windows(
     labels: Sequence[HawkesStressLabel],
     merge_gap_seconds: float = 30.0,
 ) -> List[HawkesStressWindow]:
-    """Merge Hawkes labels into windows with gaps <= merge_gap_seconds.
+    """
+    Merge Hawkes labels into windows with gaps <= merge_gap_seconds.
 
     Does NOT recompute Hawkes intensity or entropy over merged span.
     Preserves original per-label causal values.
@@ -748,7 +765,7 @@ def write_source_structure_stress_artifacts(
 
     summary = SourceStructureStressSummary(
         study_id="source_structure_stress_gates_v0",
-        source_symbols=list(set(b.symbol for b in buckets)),
+        source_symbols=list({b.symbol for b in buckets}),
         config_hash=config.config_hash(),
         total_buckets=len(buckets),
         total_volatility_events=len(events),
@@ -788,7 +805,7 @@ def write_source_structure_stress_artifacts(
 def load_hawkes_stress_labels(path: Path) -> List[HawkesStressLabel]:
     """Load Hawkes stress labels from a JSONL file."""
     labels = []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             d = json.loads(line)
             labels.append(HawkesStressLabel(

@@ -1,4 +1,5 @@
-"""Tests for permutation_null module.
+"""
+Tests for permutation_null module.
 
 Tests:
 1. SkipsCostFloorDust — all groups near -50 bps → empty selection
@@ -18,22 +19,15 @@ Tests:
 """
 from __future__ import annotations
 
-import math
 import random
 
 import pytest
 
-from venue_agnostic_signal_observer.permutation_null import (
-    DEFAULT_COST_FLOOR_BPS,
-    DEFAULT_ITERATIONS,
-    DEFAULT_MIN_EVENTS,
-    block_time_shift,
-    circular_time_shift,
-    compute_null_distribution,
-    is_null_worthy_group,
-    run_null_test_for_group,
-    select_null_candidate_groups,
-)
+from venue_agnostic_signal_observer.permutation_null import block_time_shift
+from venue_agnostic_signal_observer.permutation_null import circular_time_shift
+from venue_agnostic_signal_observer.permutation_null import is_null_worthy_group
+from venue_agnostic_signal_observer.permutation_null import run_null_test_for_group
+from venue_agnostic_signal_observer.permutation_null import select_null_candidate_groups
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +200,7 @@ class TestCircularShiftDiffersFromOriginal:
         # they're not *always* identical
         assert len(shifted) == len(ts)
         # At least some elements should differ (offset > 0 almost always)
-        differences = sum(1 for a, b in zip(ts, shifted) if a != b)
+        differences = sum(1 for a, b in zip(ts, shifted, strict=False) if a != b)
         assert differences > 0, "Shifted result should differ from original"
 
     def test_identical_timestamps_unchanged(self):
@@ -279,7 +273,8 @@ class TestRealBelowNullP95DoesNotSurvive:
 
 class TestRealAboveNullP95CanSurvive:
     def test_all_gates_pass_candidate_survives(self):
-        """ALL gates passing → candidate_survives_null=True.
+        """
+        ALL gates passing → candidate_survives_null=True.
 
         This is a structural test: we create synthetic data where by construction
         the signal timing is irrelevant (constant prices), so the null distribution
@@ -449,6 +444,6 @@ class TestBlockShiftWithBlockSizeOne:
         ts = [1_000_000_000 + i * 300_000_000 for i in range(20)]
         rng = random.Random(7)
         shifted = block_time_shift(ts, block_size=1, rng=rng)
-        differences = sum(1 for a, b in zip(ts, shifted) if a != b)
+        differences = sum(1 for a, b in zip(ts, shifted, strict=False) if a != b)
         # With block_size=1 on a series of 20, most elements should move
         assert differences > 0

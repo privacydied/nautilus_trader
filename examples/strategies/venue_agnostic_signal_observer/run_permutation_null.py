@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Permutation null test CLI — test whether candidate signal groups survive time-shifted nulls.
+"""
+Permutation null test CLI — test whether candidate signal groups survive time-shifted nulls.
 
 Usage:
     python -m examples.strategies.venue_agnostic_signal_observer.run_permutation_null \
@@ -23,21 +24,19 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .permutation_null import (
-    select_null_candidate_groups,
-    compute_null_distribution,
-    DEFAULT_COST_FLOOR_BPS,
-    DEFAULT_MIN_EVENTS,
-)
-from .permutation_null_gpu import (
-    check_cuda_available,
-    compute_null_distribution_gpu,
-    compute_null_distribution_multi_gpu,
-    gpu_unavailable_diagnostic,
-)
-from .gpu_devices import parse_cuda_devices, validate_cuda_devices
-from .mcpt_export import _load_jsonl, _load_summary_json, _slugify
-from .artifact_metadata import build_metadata, get_metadata, get_metadata_field
+from .artifact_metadata import build_metadata
+from .artifact_metadata import get_metadata
+from .artifact_metadata import get_metadata_field
+from .gpu_devices import parse_cuda_devices
+from .gpu_devices import validate_cuda_devices
+from .mcpt_export import _load_jsonl
+from .mcpt_export import _slugify
+from .permutation_null import compute_null_distribution
+from .permutation_null import select_null_candidate_groups
+from .permutation_null_gpu import check_cuda_available
+from .permutation_null_gpu import compute_null_distribution_gpu
+from .permutation_null_gpu import compute_null_distribution_multi_gpu
+from .permutation_null_gpu import gpu_unavailable_diagnostic
 from .run_derivatives_spot_lead_lag import load_capture_data
 
 
@@ -172,7 +171,8 @@ def _group_slug(group: dict[str, Any]) -> str:
 
 
 def _determine_direction(group: dict[str, Any], matching_signals: list[dict]) -> str:
-    """Determine the direction for a group from signals or group metadata.
+    """
+    Determine the direction for a group from signals or group metadata.
 
     Falls back to 'long' if not determinable.
     """
@@ -296,7 +296,7 @@ def main() -> None:
         return
 
     # ---- 2. Get capture_mode from metadata -------------------------------
-    meta_obj = get_metadata(summary)
+    get_metadata(summary)
     capture_mode = get_metadata_field(summary, "capture_mode", "")
     if not capture_mode:
         capture_mode = summary.get("capture_mode", "")
@@ -367,9 +367,8 @@ def main() -> None:
     if signals_path.exists():
         all_signals = _load_jsonl(signals_path)
 
-    all_fwd_returns: list[dict] = []
     if fwd_path.exists():
-        all_fwd_returns = _load_jsonl(fwd_path)
+        _load_jsonl(fwd_path)
 
     # ---- 5. Load capture data once (all venues/symbols) ------------------
     all_source_venues = list({g.get("source_venue", "") for g in selected})
@@ -569,7 +568,7 @@ def main() -> None:
         pctls = null_dist.get("percentiles", {})
 
         valid_null_means = [x for x in null_means if math.isfinite(x)]
-        valid_null_win_rates = [x for x in null_win_rates if math.isfinite(x)]
+        [x for x in null_win_rates if math.isfinite(x)]
 
         # Empirical p-value
         if math.isfinite(real_mean_net_bps) and len(valid_null_means) > 0:

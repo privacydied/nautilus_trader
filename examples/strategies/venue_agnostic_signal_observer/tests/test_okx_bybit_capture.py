@@ -1,4 +1,5 @@
-"""Tests for OKX/Bybit public-trade capture support.
+"""
+Tests for OKX/Bybit public-trade capture support.
 
 These tests cover the venue-expansion patch for ``cross_asset_beta_lag_v1``:
 - OKX/Bybit trade-payload parsing into ``TradeTickLite``.
@@ -18,17 +19,15 @@ from pathlib import Path
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer import symbol_aliases
-from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import (
-    _CaptureStats,
-    _FEED_TASKS,
-    _map_bybit_symbol,
-    _map_okx_symbol,
-    _write_manifest,
-    bybit_symbol,
-    okx_symbol,
-    parse_bybit_trade,
-    parse_okx_trade,
-)
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import _FEED_TASKS
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import _CaptureStats
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import _map_bybit_symbol
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import _map_okx_symbol
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import _write_manifest
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import bybit_symbol
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import okx_symbol
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import parse_bybit_trade
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import parse_okx_trade
 
 
 ASSETS = ["BTC", "ETH", "SOL", "LINK", "DOGE", "AVAX"]
@@ -191,7 +190,8 @@ def test_manifest_records_stream_health(tmp_path):
 
 
 def test_manifest_overlap_semantics(tmp_path):
-    """Pairwise + per-asset overlap is the analytically-relevant metric;
+    """
+    Pairwise + per-asset overlap is the analytically-relevant metric;
     global overlap is retained only as a diagnostic.
 
     Scenario: 3 streams for the same asset BTC across 3 venues, where

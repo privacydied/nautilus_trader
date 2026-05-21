@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Cross-asset spot impulse lead-lag runner.
+r"""
+Cross-asset spot impulse lead-lag runner.
 
 **RESEARCH MEASUREMENT TOOL ONLY.**  Orchestrates the full cross-asset spot
 impulse pipeline:
@@ -48,32 +49,28 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import logging
-import statistics
+import math
 import sys
 import time
 from collections import defaultdict
 from pathlib import Path
 
-from .cross_asset_impulse import (
-    CrossAssetVerdict,
-    PairResult,
-    PairKey,
-    generate_markdown_report,
-    compute_overlap,
-    compute_verdict,
-    generate_source_impulses,
-    StreamHealth,
-    _format_optional_bps,
-    _remap_signal_for_target,
-)
-from .tick_store import load_trades_jsonl, tick_file_discovery
-from .event_study import (
-    evaluate_tick_signal,
-    generate_random_baseline,
-    evaluate_candidate_group,
-)
+from .cross_asset_impulse import PairKey
+from .cross_asset_impulse import PairResult
+from .cross_asset_impulse import StreamHealth
+from .cross_asset_impulse import _format_optional_bps
+from .cross_asset_impulse import _remap_signal_for_target
+from .cross_asset_impulse import compute_overlap
+from .cross_asset_impulse import compute_verdict
+from .cross_asset_impulse import generate_markdown_report
+from .cross_asset_impulse import generate_source_impulses
+from .event_study import evaluate_candidate_group
+from .event_study import evaluate_tick_signal
+from .event_study import generate_random_baseline
+from .tick_store import load_trades_jsonl
+from .tick_store import tick_file_discovery
+
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +99,8 @@ def load_tick_data(
     venues: list[str],
     symbols: list[str],
 ) -> dict[tuple[str, str], list]:
-    """Discover and load JSONL trade files, grouped by (venue, symbol).
+    """
+    Discover and load JSONL trade files, grouped by (venue, symbol).
 
     Normalizes symbols using symbol_aliases.  Deduplicates and sorts by
     timestamp.
@@ -158,7 +156,8 @@ def build_stream_health(
 
 
 def _is_same_symbol(source_symbol: str, target_symbol: str) -> bool:
-    """Check if source and target symbols resolve to the same asset.
+    """
+    Check if source and target symbols resolve to the same asset.
 
     For cross-asset, we skip any pairing where source and target are the
     same asset (e.g., BTC/USD -> BTC/USD).
@@ -458,7 +457,7 @@ def _run(args: argparse.Namespace) -> None:
             continue
 
         # Remap signals for this target
-        pair_idx = sum(1 for s in src_signals if s.signal_id.startswith(
+        sum(1 for s in src_signals if s.signal_id.startswith(
             pair.source_venue + "_"
         ))
         remapped_signals = [
@@ -661,8 +660,7 @@ def _run(args: argparse.Namespace) -> None:
     # Forward returns JSONL
     fr_path = out_dir / "cross_asset_forward_returns.jsonl"
     with open(fr_path, "w") as fh:
-        for rd in all_forward_returns_dicts:
-            fh.write(json.dumps(rd) + "\n")
+        fh.writelines(json.dumps(rd) + "\n" for rd in all_forward_returns_dicts)
 
     # Summary JSON
     summary_dict = {

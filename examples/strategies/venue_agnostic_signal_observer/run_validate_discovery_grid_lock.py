@@ -1,4 +1,5 @@
-"""CLI entrypoint to validate a discovery grid spec against its lock.
+"""
+CLI entrypoint to validate a discovery grid spec against its lock.
 
 Usage:
     python run_validate_discovery_grid_lock.py <grid_spec.json> <grid_lock.json>
@@ -12,13 +13,13 @@ from __future__ import annotations
 import json
 import sys
 
-from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
-    load_grid_spec,
-    validate_grid_spec,
-)
+from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import load_grid_lock
 from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import (
-    load_grid_lock,
     validate_grid_spec_against_lock,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import load_grid_spec
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
+    validate_grid_spec,
 )
 
 

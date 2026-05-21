@@ -1,5 +1,6 @@
 # Copyright (C) 2026. All rights reserved.
-"""Grid-level lock file for the discovery freeze.
+"""
+Grid-level lock file for the discovery freeze.
 
 A ``DiscoveryGridLock`` freezes the full search space and the FDR
 denominator before any discovery scan begins.  It records the grid
@@ -20,31 +21,29 @@ from __future__ import annotations
 
 import json
 import subprocess
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .exceptions import (
-    GridCellCountMismatchError,
-    GridHashMismatchError,
-    GridLockValidationError,
-    GridSpecValidationError,
-)
-from .search_space import (
-    DiscoveryGridSpec,
-    canonical_grid_json,
-    enumerate_cost_sensitivity_cell_count,
-    enumerate_primary_cell_count,
-    grid_sha256,
-    validate_grid_spec,
-)
+from .exceptions import GridCellCountMismatchError
+from .exceptions import GridHashMismatchError
+from .exceptions import GridLockValidationError
+from .search_space import DiscoveryGridSpec
+from .search_space import enumerate_cost_sensitivity_cell_count
+from .search_space import enumerate_primary_cell_count
+from .search_space import grid_sha256
+from .search_space import validate_grid_spec
+
 
 GRID_LOCK_TYPE = "DISCOVERY_GRID_LOCK"
 
 
 def _get_git_sha() -> str | None:
-    """Return ``git rev-parse HEAD`` or ``None`` if unavailable.
+    """
+    Return ``git rev-parse HEAD`` or ``None`` if unavailable.
 
     Never raises.  Never falls back to any other command.
     """
@@ -64,7 +63,8 @@ def _get_git_sha() -> str | None:
 
 @dataclass(frozen=True)
 class DiscoveryGridLock:
-    """Frozen lock that records a discovery grid hash and cell counts.
+    """
+    Frozen lock that records a discovery grid hash and cell counts.
 
     Validated fields
     ----------------
@@ -106,7 +106,8 @@ def create_grid_lock(
     *,
     locked_at_utc: str | None = None,
 ) -> DiscoveryGridLock:
-    """Create a grid lock from a validated grid spec.
+    """
+    Create a grid lock from a validated grid spec.
 
     Parameters
     ----------
@@ -126,7 +127,7 @@ def create_grid_lock(
     """
     validate_grid_spec(spec)
     if locked_at_utc is None:
-        locked_at_utc = datetime.now(timezone.utc).isoformat()
+        locked_at_utc = datetime.now(UTC).isoformat()
 
     grid_hash = grid_sha256(spec)
     primary = enumerate_primary_cell_count(spec)
@@ -155,7 +156,8 @@ def validate_grid_lock(
     spec: DiscoveryGridSpec,
     lock: DiscoveryGridLock,
 ) -> None:
-    """Validate that a grid spec matches an existing grid lock.
+    """
+    Validate that a grid spec matches an existing grid lock.
 
     Raises
     ------
@@ -253,7 +255,8 @@ def lock_file_is_semantically_identical(
 
 
 def save_grid_lock(lock: DiscoveryGridLock, path: str | Path) -> None:
-    """Write a grid lock to a JSON file.
+    """
+    Write a grid lock to a JSON file.
 
     Raises
     ------

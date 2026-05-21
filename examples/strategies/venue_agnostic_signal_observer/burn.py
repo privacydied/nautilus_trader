@@ -26,7 +26,8 @@ DEFAULT_BURN_PATH = Path("reports") / "research_run_burned.jsonl"
 
 
 def _compute_json_sha256(payload: dict[str, Any] | None) -> str:
-    """Compute SHA-256 of a JSON-serialised dict.
+    """
+    Compute SHA-256 of a JSON-serialised dict.
 
     Sorts keys for deterministic output.
     """
@@ -61,7 +62,8 @@ def burn_corpus(
     burned_by: str | None = None,
     notes: str | None = None,
 ) -> Path:
-    """Add a burn record to the burn file.
+    """
+    Add a burn record to the burn file.
 
     Parameters
     ----------
@@ -128,7 +130,8 @@ def burn_corpus(
 
 
 def read_burned(path: Path | None = None) -> list[dict[str, Any]]:
-    """Read all burn rows.
+    """
+    Read all burn rows.
 
     Returns a list of parsed dicts.  Returns an empty list if the
     file does not exist.
@@ -153,7 +156,8 @@ def read_burned(path: Path | None = None) -> list[dict[str, Any]]:
 
 
 def get_burned_run_ids(path: Path | None = None) -> set[str]:
-    """Return the set of all run IDs mentioned in any burn record.
+    """
+    Return the set of all run IDs mentioned in any burn record.
 
     Aggregates ``run_ids``, ``discovery_run_ids``, and ``test_run_ids``
     from every burn row.

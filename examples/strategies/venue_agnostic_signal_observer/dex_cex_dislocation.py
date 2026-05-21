@@ -1,4 +1,5 @@
-"""DEX-CEX spot dislocation signal generator.
+"""
+DEX-CEX spot dislocation signal generator.
 
 Takes a stream of DexPoolSnapshot objects and emits DexDislocationEvent
 when price/volume/liquidity crosses configured thresholds.
@@ -7,11 +8,12 @@ when price/volume/liquidity crosses configured thresholds.
 """
 from __future__ import annotations
 
+import math
 import statistics
 import uuid
-import math
 
-from .dex_models import DexPoolSnapshot, DexDislocationEvent
+from .dex_models import DexDislocationEvent
+from .dex_models import DexPoolSnapshot
 
 
 # ---------------------------------------------------------------------------
@@ -19,7 +21,8 @@ from .dex_models import DexPoolSnapshot, DexDislocationEvent
 # ---------------------------------------------------------------------------
 
 class DexCexDislocationDetector:
-    """Scan DEX pool snapshots for dislocation events.
+    """
+    Scan DEX pool snapshots for dislocation events.
 
     Three signal types:
       - dex_price_shock: price change over a snapshot window exceeds threshold
@@ -53,7 +56,8 @@ class DexCexDislocationDetector:
         self,
         snapshots: list[DexPoolSnapshot],
     ) -> tuple[list[DexDislocationEvent], list[str]]:
-        """Scan a list of snapshots for dislocation events.
+        """
+        Scan a list of snapshots for dislocation events.
 
         Returns (events, warnings).
         Snapshots should be roughly sorted by ts_event.

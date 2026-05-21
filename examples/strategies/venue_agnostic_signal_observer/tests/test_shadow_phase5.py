@@ -14,25 +14,24 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
-
-from ..shadow import run_shadow, FillModelConfig, CrossVenueFillModel
+from venue_agnostic_signal_observer.shadow import FillModelConfig
+from venue_agnostic_signal_observer.shadow import run_shadow
 
 
 def _config(**kwargs) -> FillModelConfig:
-    defaults = dict(
-        source_venue="binance",
-        target_venue="kraken",
-        entry_delay_seconds=5.0,
-        max_staleness_seconds=2.0,
-        maker_probability=0.6,
-        maker_rebate_bps=2.0,
-        taker_fee_bps=8.0,
-        spread_bps=4.0,
-        exit_horizon_seconds=180.0,
-        slippage_model_std_bps=3.0,
-        fill_model_uncertainty_bps=15.0,
-    )
+    defaults = {
+        "source_venue": "binance",
+        "target_venue": "kraken",
+        "entry_delay_seconds": 5.0,
+        "max_staleness_seconds": 2.0,
+        "maker_probability": 0.6,
+        "maker_rebate_bps": 2.0,
+        "taker_fee_bps": 8.0,
+        "spread_bps": 4.0,
+        "exit_horizon_seconds": 180.0,
+        "slippage_model_std_bps": 3.0,
+        "fill_model_uncertainty_bps": 15.0,
+    }
     defaults.update(kwargs)
     return FillModelConfig(**defaults)
 
@@ -44,7 +43,8 @@ def _events(n=50, move_bps=20.0):
 class TestShadowMustNotPlaceOrders:
     def test_no_order_placement_in_source(self):
         import inspect
-        from ..shadow import shadow_executor as mod
+
+        from venue_agnostic_signal_observer.shadow import shadow_executor as mod
         src = inspect.getsource(mod)
         forbidden = ["submit_order", "place_order", "send_order", "create_order",
                      "nautilus_trader", "ccxt.create_order", "private_key"]
@@ -53,7 +53,8 @@ class TestShadowMustNotPlaceOrders:
 
     def test_no_live_execution_clients_imported(self):
         import inspect
-        from ..shadow import fill_model as mod
+
+        from venue_agnostic_signal_observer.shadow import fill_model as mod
         src = inspect.getsource(mod)
         assert "nautilus_trader" not in src
         assert "private_key" not in src

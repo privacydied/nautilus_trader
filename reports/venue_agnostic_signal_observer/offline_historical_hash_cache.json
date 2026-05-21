@@ -16,5 +16,11 @@
     "file_sha256": "834f6ed68f7fcecdeabdab5da5af225093ce3820d6d6a01d6d796123d0e953ea",
     "file_size_bytes": 68,
     "mtime_ns": 1779042656570595020
+  },
+  "/tmp/pytest-of-pry/pytest-31/test_reload_path_rejects_chang0/source.csv|68|1779382658052884776": {
+    "computed_at_utc": "2026-05-21T16:57:38.064652+00:00",
+    "file_sha256": "834f6ed68f7fcecdeabdab5da5af225093ce3820d6d6a01d6d796123d0e953ea",
+    "file_size_bytes": 68,
+    "mtime_ns": 1779382658052884776
   }
 }

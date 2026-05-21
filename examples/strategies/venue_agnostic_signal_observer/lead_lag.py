@@ -1,4 +1,5 @@
-"""Lead-lag signal generator and random baseline.
+"""
+Lead-lag signal generator and random baseline.
 
 Generates signal events when a source venue price moves beyond a threshold
 within a lookback window, then measures whether the target venue follows.
@@ -11,7 +12,8 @@ beats random at the same frequency.
 import bisect
 import math
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 
 from .models import SignalEvent
 
@@ -19,6 +21,7 @@ from .models import SignalEvent
 @dataclass
 class LeadLagConfig:
     """Parameters for the lead-lag experiment sweep."""
+
     lookback_windows: list[float] = field(default_factory=lambda: [10.0, 30.0, 60.0])
     move_thresholds_bps: list[float] = field(default_factory=lambda: [5.0, 10.0, 20.0])
     cooldown_seconds: float = 30.0
@@ -35,7 +38,8 @@ def generate_lead_lag_signals(
     move_threshold_bps: float,
     cooldown_seconds: float = 30.0,
 ) -> list[SignalEvent]:
-    """Generate signals when source venue moves beyond the threshold.
+    """
+    Generate signals when source venue moves beyond the threshold.
 
     A signal fires when the price change over the lookback window exceeds
     move_threshold_bps in either direction.  Cooldown prevents double-counting.
@@ -111,7 +115,8 @@ def generate_random_baseline(
     target_instrument: str,
     seed: int = 42,
 ) -> list[SignalEvent]:
-    """Random baseline: same number of events, random timestamps from the data window.
+    """
+    Random baseline: same number of events, random timestamps from the data window.
 
     Each random event is assigned a random direction (long/short) to match the
     symmetry of the real signal generator.

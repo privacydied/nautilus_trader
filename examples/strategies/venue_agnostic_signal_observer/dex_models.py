@@ -1,11 +1,13 @@
-"""Models for DEX-to-CEX spot dislocation research.
+"""
+Models for DEX-to-CEX spot dislocation research.
 
 **Observer-only. No execution, no orders, no private endpoints, no keys.**
 """
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -16,6 +18,7 @@ from typing import Any
 @dataclass
 class DexPoolSnapshot:
     """A single snapshot of a DEX pool from public data."""
+
     source: str                        # "dexscreener" | "geckoterminal"
     chain: str                         # "ethereum" | "solana" | "base" | ...
     dex: str                           # "uniswap" | "raydium" | ...
@@ -58,7 +61,7 @@ class DexPoolSnapshot:
         return json.dumps(self.to_dict(), default=str)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "DexPoolSnapshot":
+    def from_dict(cls, d: dict) -> DexPoolSnapshot:
         return cls(
             source=d.get("source", ""),
             chain=d.get("chain", ""),
@@ -90,6 +93,7 @@ class DexPoolSnapshot:
 @dataclass
 class DexDislocationEvent:
     """One detected dislocation event from a DEX pool."""
+
     event_id: str
     chain: str
     dex: str
@@ -121,6 +125,7 @@ class DexDislocationEvent:
 @dataclass
 class DexCexForwardResult:
     """One forward-return observation for a DEX dislocation event."""
+
     event_id: str
     asset: str
     source_chain: str

@@ -1,5 +1,6 @@
 # Copyright (C) 2026. All rights reserved.
-"""CLI entrypoint to validate a grid spec against its grid lock.
+r"""
+CLI entrypoint to validate a grid spec against its grid lock.
 
 Usage
 -----
@@ -15,7 +16,8 @@ from __future__ import annotations
 import json
 import sys
 
-from .grid_lock import DiscoveryGridLock, validate_grid_lock
+from .grid_lock import DiscoveryGridLock
+from .grid_lock import validate_grid_lock
 from .search_space import load_grid_spec
 
 

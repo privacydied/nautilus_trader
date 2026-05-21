@@ -1,4 +1,5 @@
-"""Tests for derivatives-source -> spot-target lead-lag evaluation.
+"""
+Tests for derivatives-source -> spot-target lead-lag evaluation.
 
 Covers symbol normalization, quote mismatch, OI bucket classification,
 overlap-window enforcement, quiet-capture verdict, and safety scanning.
@@ -11,18 +12,18 @@ from pathlib import Path
 
 import pytest
 
-from ..symbol_aliases import resolve_symbol, quote_mismatch, same_asset
-from ..tick_models import TradeTickLite, TickSignalEvent, TickForwardReturn
-from ..run_derivatives_spot_lead_lag import (
-    OverlapWindow,
-    compute_pair_overlap,
-    clip_ticks,
-    price_range_bps,
-    classify_oi_bucket,
-    _nearest_oi_at_or_before,
-    load_capture_data,
-    _parse_and_validate_devices,
-)
+from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import OverlapWindow
+from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import _nearest_oi_at_or_before
+from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import _parse_and_validate_devices
+from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import classify_oi_bucket
+from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import clip_ticks
+from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import compute_pair_overlap
+from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import load_capture_data
+from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import price_range_bps
+from venue_agnostic_signal_observer.symbol_aliases import quote_mismatch
+from venue_agnostic_signal_observer.symbol_aliases import resolve_symbol
+from venue_agnostic_signal_observer.symbol_aliases import same_asset
+from venue_agnostic_signal_observer.tick_models import TradeTickLite
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +76,8 @@ class TestSymbolNormalization:
 # ---------------------------------------------------------------------------
 
 class TestBinanceSideInference:
-    """Document the side inference rule from Binance aggTrade 'm' field.
+    """
+    Document the side inference rule from Binance aggTrade 'm' field.
 
     m=true  -> buyer was maker  -> seller aggressor -> side="sell"
     m=false -> buyer was aggressor                   -> side="buy"
@@ -83,11 +85,11 @@ class TestBinanceSideInference:
 
     def test_m_true_means_sell(self):
         # Buyer was maker = passive order, so seller was taker/aggressor
-        assert "sell" == ("sell" if True else "buy")
+        assert ("sell" if True else "buy") == "sell"
 
     def test_m_false_means_buy(self):
         # Buyer was taker/aggressor
-        assert "buy" == ("sell" if False else "buy")
+        assert ("sell" if False else "buy") == "buy"
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +248,7 @@ class TestOIBucket:
 
     def test_no_lookahead_in_oi(self):
         """OI snapshot after signal timestamp must not be used."""
-        src = [
+        [
             _make_tick(100, "v", "X", 100.0),
             _make_tick(200, "v", "X", 101.0),
             _make_tick(300, "v", "X", 102.0),
@@ -389,7 +391,7 @@ class TestParseAndValidateDevices:
         # and ``venue_agnostic_signal_observer.forward_returns_gpu``).  Patch
         # the attribute directly on the same module object the production
         # code's relative import resolves to.
-        from .. import forward_returns_gpu as _frg
+        from venue_agnostic_signal_observer import forward_returns_gpu as _frg
         monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (True, "cuda_available"))
         result = _parse_and_validate_devices("cuda:0", "gpu")
         assert result == ["cuda:0"]
@@ -401,7 +403,7 @@ class TestParseAndValidateDevices:
         # and ``venue_agnostic_signal_observer.forward_returns_gpu``).  Patch
         # the attribute directly on the same module object the production
         # code's relative import resolves to.
-        from .. import forward_returns_gpu as _frg
+        from venue_agnostic_signal_observer import forward_returns_gpu as _frg
         monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (True, "cuda_available"))
         result = _parse_and_validate_devices("cuda:0,cuda:1", "gpu")
         assert result == ["cuda:0", "cuda:1"]
@@ -413,7 +415,7 @@ class TestParseAndValidateDevices:
         # and ``venue_agnostic_signal_observer.forward_returns_gpu``).  Patch
         # the attribute directly on the same module object the production
         # code's relative import resolves to.
-        from .. import forward_returns_gpu as _frg
+        from venue_agnostic_signal_observer import forward_returns_gpu as _frg
         monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (True, "cuda_available"))
         with pytest.raises(SystemExit):
             _parse_and_validate_devices("cuda:0,cuda:0", "gpu")
@@ -425,14 +427,14 @@ class TestParseAndValidateDevices:
         # and ``venue_agnostic_signal_observer.forward_returns_gpu``).  Patch
         # the attribute directly on the same module object the production
         # code's relative import resolves to.
-        from .. import forward_returns_gpu as _frg
+        from venue_agnostic_signal_observer import forward_returns_gpu as _frg
         monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (True, "cuda_available"))
         with pytest.raises(SystemExit):
             _parse_and_validate_devices("cpu", "gpu")
 
     def test_unavailable_device_rejected(self, monkeypatch):
         """Unavailable CUDA device should fail."""
-        from .. import forward_returns_gpu as _frg
+        from venue_agnostic_signal_observer import forward_returns_gpu as _frg
         monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (False, "cuda_device_not_found:cuda:99"))
         with pytest.raises(SystemExit):
             _parse_and_validate_devices("cuda:99", "gpu")
@@ -444,7 +446,7 @@ class TestParseAndValidateDevices:
         # and ``venue_agnostic_signal_observer.forward_returns_gpu``).  Patch
         # the attribute directly on the same module object the production
         # code's relative import resolves to.
-        from .. import forward_returns_gpu as _frg
+        from venue_agnostic_signal_observer import forward_returns_gpu as _frg
         monkeypatch.setattr(_frg, "check_cuda_available", lambda d: (True, "cuda_available"))
         result = _parse_and_validate_devices(" cuda:0 , cuda:1 ", "gpu")
         assert result == ["cuda:0", "cuda:1"]
@@ -457,20 +459,20 @@ class TestParseAndValidateDevices:
 
 class TestForwardDevicesCliArg:
     def test_forward_devices_appears_in_help(self):
-        from ..run_derivatives_spot_lead_lag import build_parser
+        from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import build_parser
         parser = build_parser()
         help_text = parser.format_help()
         assert "--forward-devices" in help_text
         assert "Multi-GPU" in help_text
 
     def test_forward_devices_default_empty(self):
-        from ..run_derivatives_spot_lead_lag import build_parser
+        from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import build_parser
         parser = build_parser()
         args = parser.parse_args(["--capture-dir", "/tmp", "--out", "/tmp"])
         assert args.forward_devices == ""
 
     def test_forward_devices_parsed(self):
-        from ..run_derivatives_spot_lead_lag import build_parser
+        from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import build_parser
         parser = build_parser()
         args = parser.parse_args(["--capture-dir", "/tmp", "--out", "/tmp",
                                   "--forward-engine", "gpu",
@@ -478,7 +480,7 @@ class TestForwardDevicesCliArg:
         assert args.forward_devices == "cuda:0,cuda:1"
 
     def test_single_forward_device_still_works(self):
-        from ..run_derivatives_spot_lead_lag import build_parser
+        from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import build_parser
         parser = build_parser()
         args = parser.parse_args(["--capture-dir", "/tmp", "--out", "/tmp",
                                   "--forward-engine", "gpu",

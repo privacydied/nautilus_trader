@@ -35,14 +35,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .stage2_precommitment_utils import (
-    CollectionLock,
-    load_precommitment,
-    validate_markdown_json_match,
-    _get_git_sha,
-)
-
-from .run_artifacts import atomic_write_json, atomic_write_text
+from .run_artifacts import atomic_write_json
+from .run_artifacts import atomic_write_text
+from .stage2_precommitment_utils import CollectionLock
+from .stage2_precommitment_utils import _get_git_sha
+from .stage2_precommitment_utils import load_precommitment
+from .stage2_precommitment_utils import validate_markdown_json_match
 
 
 def _ts_now_iso() -> str:
@@ -140,7 +138,8 @@ def check_readiness(
     hermex_job_id: str = "85a4d56145fe",
     expected_python_prefix: str = ".venv",
 ) -> dict[str, Any]:
-    """Run all Stage 2 readiness checks.
+    """
+    Run all Stage 2 readiness checks.
 
     Returns a readiness dict with keys:
         ready (bool), hard_blockers (list), warnings (list),

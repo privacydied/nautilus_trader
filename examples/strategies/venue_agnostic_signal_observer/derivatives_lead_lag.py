@@ -1,4 +1,5 @@
-"""Derivatives lead-lag impulse signal generator.
+"""
+Derivatives lead-lag impulse signal generator.
 
 Generates impulse events from derivatives-market trade-tick data and
 converts them into TickSignalEvent so the existing event_study.evaluate_tick_signal
@@ -13,13 +14,12 @@ import math
 import statistics
 import uuid
 
+from .derivatives_models import DerivativeImpulseEvent
+from .derivatives_models import DerivativeTradeTick
+from .derivatives_models import FundingSnapshot
+from .derivatives_models import OpenInterestSnapshot
 from .tick_models import TickSignalEvent
-from .derivatives_models import (
-    DerivativeTradeTick,
-    DerivativeImpulseEvent,
-    OpenInterestSnapshot,
-    FundingSnapshot,
-)
+
 
 _MS_TO_NS = 1_000_000
 
@@ -279,7 +279,7 @@ class DerivativesImpulseGenerator:
         while ref_idx > 0 and ts - trades[ref_idx].ts_event <= lookback_ns:
             ref_idx -= 1
         # ref_idx now points OUTSIDE the lookback window; use ref_idx+1
-        ref_idx = ref_idx + 1 if ref_idx + 1 <= idx else idx
+        ref_idx = min(ref_idx + 1, idx)
         ref_price = trades[ref_idx].price
         curr_price = trades[idx].price
         return "long" if curr_price >= ref_price else "short"

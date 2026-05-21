@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Stage 2 Gate Watcher for derivatives-source -> spot-target research.
+"""
+Stage 2 Gate Watcher for derivatives-source -> spot-target research.
 
 Repeatedly runs the volatility gate and automatically starts the correct
 derivatives v2 workflow only when capture is explicitly permitted.
@@ -10,15 +11,17 @@ Public-data observer only. No auth, no orders, no private keys, no execution.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
-import logging
 import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+
 
 _LOG_DIR = Path("reports", "stage2_gate_watcher_logs")
 _LOCK_PATH = Path("reports", "stage2_collection.lock")
@@ -114,7 +117,7 @@ def run_volatility_gate(python_exe: str) -> dict[str, Any]:
         )
     # Parse JSON from stdout (the last JSON block)
     lines = result.stdout.strip().split("\n")
-    json_lines = [l for l in lines if l.startswith("{") or l.startswith("  ") or l.startswith("}")]
+    json_lines = [l for l in lines if l.startswith(("{", "  ", "}"))]
     raw = "\n".join(json_lines)
     return json.loads(raw)
 
@@ -124,7 +127,8 @@ def run_volatility_gate(python_exe: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def validate_preflight(capture_dir: str) -> bool:
-    """Inspect preflight capture output for minimum viability.
+    """
+    Inspect preflight capture output for minimum viability.
 
     Pass criteria:
     - All three Binance perp source streams have non-zero ticks
@@ -201,13 +205,13 @@ def validate_preflight(capture_dir: str) -> bool:
 def _run_module(python_exe: str, module: str, args: list[str],
                 description: str, timeout: int | None = None) -> tuple[int, str]:
     """Run a module subprocess and return (returncode, combined_stdout)."""
-    cmd = [python_exe, "-m", module] + args
+    cmd = [python_exe, "-m", module, *args]
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=timeout,
             cwd=Path.cwd(),
         )
-    except subprocess.TimeoutExpired as e:
+    except subprocess.TimeoutExpired:
         return -1, f"TIMEOUT after {timeout}s"
     return result.returncode, (result.stdout or "") + (result.stderr or "")
 
@@ -251,17 +255,15 @@ def create_lock(log: WatcherLogger, permission: str, reason: str,
     """Create the collection lock file."""
     import subprocess as _sp
     git_sha = "unknown"
-    try:
+    with contextlib.suppress(Exception):
         git_sha = _sp.run(
             ["git", "rev-parse", "HEAD"],
             capture_output=True, text=True, timeout=5,
             cwd=Path.cwd(),
         ).stdout.strip()
-    except Exception:
-        pass
 
     lock_data = {
-        "created_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "pid": os.getpid(),
         "capture_permission": permission,
         "fast_capture_reason": reason,
@@ -290,7 +292,8 @@ def send_desktop_notification(
     timeout_ms: int,
     log: WatcherLogger,
 ) -> bool:
-    """Send a Wayland desktop notification via notify-send.
+    """
+    Send a Wayland desktop notification via notify-send.
 
     Best-effort only. Returns True on success, False if disabled, missing,
     timed out, or non-zero exit. Never raises.
@@ -342,7 +345,8 @@ def play_sound(
     sound_file: str,
     log: WatcherLogger,
 ) -> bool:
-    """Play an audio file via pw-play/paplay/aplay.
+    """
+    Play an audio file via pw-play/paplay/aplay.
 
     Best-effort only. Returns True on success, False if disabled, file missing,
     command missing, or non-zero exit. Never raises.
@@ -592,13 +596,9 @@ def run_post_evaluation_diagnostics(python_exe: str, log: WatcherLogger,
     )
     previous = [str(p) for p in previous_reports if str(p) != report_dir]
     if previous:
-        all_dirs = previous[:3] + [report_dir]
+        all_dirs = [*previous[:3], report_dir]
         consistency_out = f"{report_dir}/cross_capture_consistency"
-        consistency_args = [
-            "--report-dirs"] + all_dirs + [
-            "--out", consistency_out,
-            "--min-captures", "2",
-        ]
+        consistency_args = ["--report-dirs", *all_dirs, "--out", consistency_out, "--min-captures", "2"]
         log.action(f"Running cross-capture consistency: {consistency_out}")
         rc, _ = _run_module(
             python_exe, _CONSISTENCY_MODULE, consistency_args,
@@ -641,7 +641,7 @@ def _env_snapshot(log: WatcherLogger) -> dict[str, Any]:
     import subprocess as _sp
     data: dict[str, Any] = {
         "pwd": str(Path.cwd()),
-        "start_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "start_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "python_exe": sys.executable,
     }
     log.env("pwd", data["pwd"])
@@ -735,7 +735,7 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    start_ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    start_ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     log = WatcherLogger(_LOG_DIR, start_ts)
 
     try:
@@ -755,7 +755,7 @@ def main() -> None:
 
 
 def _notify_ts() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _main_impl(args: argparse.Namespace, log: WatcherLogger,
@@ -807,7 +807,7 @@ def _main_impl(args: argparse.Namespace, log: WatcherLogger,
         # Permission granted — check lock
         if args.dry_run:
             mode = "FAST_DIAGNOSTIC" if permission == "FAST_DIAGNOSTIC_CAPTURE_ONLY" else "FULL_ACTIVE"
-            capture_dir = _parse_capture_mode_dir(mode, datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S"))
+            capture_dir = _parse_capture_mode_dir(mode, datetime.now(UTC).strftime("%Y%m%d_%H%M%S"))
             log.action(f"[DRY RUN] Would run capture (mode={mode}), "
                        f"capture_dir={capture_dir}, would then evaluate + diagnostics")
             log.finalize("DRY_RUN_COMPLETE", env_data)
@@ -831,7 +831,7 @@ def _main_impl(args: argparse.Namespace, log: WatcherLogger,
         create_lock(log, permission, reason, mode)
 
         # Timestamp for this collection run
-        collection_ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        collection_ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
         # Step 1: Preflight
         preflight_dir = run_preflight(python_exe, log, collection_ts, args)

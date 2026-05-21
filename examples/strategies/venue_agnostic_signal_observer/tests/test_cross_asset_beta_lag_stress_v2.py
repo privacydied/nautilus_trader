@@ -432,7 +432,8 @@ def test_no_live_order_secret_imports_in_new_trigger_code() -> None:
 
 
 def test_spike_and_revert_35bps_fires_trigger() -> None:
-    """35 bps spike + full revert within 25s must fire the trigger.
+    """
+    35 bps spike + full revert within 25s must fire the trigger.
 
     BTC rises 35 bps at t=10, then returns to start price at t=25.
     Endpoint-to-endpoint (t=0 vs t=30) scores ~0 bps.
@@ -459,7 +460,8 @@ def test_spike_and_revert_35bps_fires_trigger() -> None:
 
 
 def test_spike_outside_30s_window_does_not_fire() -> None:
-    """A move that starts before t=0 of the 30s window must not fire.
+    """
+    A move that starts before t=0 of the 30s window must not fire.
 
     Only pairs within [start_ts, start_ts + 30s] are evaluated.
     A spike from t=-5 to t=10 spans 15s but the t=-5 observation is
@@ -481,7 +483,8 @@ def test_spike_outside_30s_window_does_not_fire() -> None:
 
 
 def test_staleness_gap_voids_cycle_not_cross_gap_score() -> None:
-    """snapshot_ticks returns empty when newest observation is stale.
+    """
+    snapshot_ticks returns empty when newest observation is stale.
 
     Simulates a 10s REST outage: newest tick is 10s old, stale_after=8s.
     The evaluator must receive no ticks and return impulse_met=False,
@@ -513,7 +516,8 @@ def test_staleness_gap_voids_cycle_not_cross_gap_score() -> None:
 
 
 def test_insufficient_window_width_returns_waiting() -> None:
-    """snapshot_ticks returns empty when history covers <30s.
+    """
+    snapshot_ticks returns empty when history covers <30s.
 
     Feed has 5 recent observations but all within the last 25s —
     not enough history to compute a 30s move.
@@ -539,7 +543,8 @@ def test_insufficient_window_width_returns_waiting() -> None:
 
 
 def test_count_validated_rejects_zero_overlap_capture(tmp_path: Path) -> None:
-    """A FULL_ACTIVE capture with global_overlap=0 must not count toward corpus.
+    """
+    A FULL_ACTIVE capture with global_overlap=0 must not count toward corpus.
 
     A triggered capture that collected no ticks (zero overlap) inflates
     usable_window_count if the counter only checks mode and quarantine status.

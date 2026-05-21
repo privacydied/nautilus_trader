@@ -25,11 +25,13 @@ No filesystem writes, no network, no ledger, no subprocess.
 from __future__ import annotations
 
 import math
-import json
-from dataclasses import dataclass, field, asdict
-from typing import Any, Sequence
+from dataclasses import asdict
+from dataclasses import dataclass
+from typing import Any
+from typing import Sequence
 
-from .metadata import EstimatorMetadata, make_metadata
+from .metadata import EstimatorMetadata
+from .metadata import make_metadata
 
 
 ESTIMATOR_NAME = "fdr"
@@ -102,7 +104,8 @@ def _validate_pvalues(pvalues: Sequence[float]) -> None:
 
 
 def _bh_adjusted(sorted_pvalues: list[float], m: int) -> list[float]:
-    """Step-up BH adjusted p-values for m already-sorted (ascending) p-values.
+    """
+    Step-up BH adjusted p-values for m already-sorted (ascending) p-values.
 
     Returns adjusted p-values in the same sorted order.
     adj[i] = min(p[i] * m / (i+1), 1.0), enforced monotone from the top.
@@ -126,7 +129,6 @@ def _compute_adjusted(
         return [], None
 
     harmonic = None
-    effective_m = m
 
     if method == "BY":
         harmonic = _harmonic(m)
@@ -172,7 +174,8 @@ def compute_fdr(
     estimator_metadata: EstimatorMetadata | None = None,
     input_metadata: dict[str, Any] | None = None,
 ) -> FDRResult:
-    """Compute FDR-adjusted p-values for a family of hypothesis tests.
+    """
+    Compute FDR-adjusted p-values for a family of hypothesis tests.
 
     Parameters
     ----------

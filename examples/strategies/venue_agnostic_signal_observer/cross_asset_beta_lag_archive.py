@@ -1,4 +1,5 @@
-"""Cross-asset beta-lag archive v0 study implementation.
+"""
+Cross-asset beta-lag archive v0 study implementation.
 
 Study: cross_asset_beta_lag_archive_v0
 
@@ -15,33 +16,23 @@ import json
 import math
 import random
 import statistics
-import time
-from bisect import bisect_left, bisect_right
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from bisect import bisect_left
+from dataclasses import dataclass
+from dataclasses import field
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Tuple
 
-from .tick_models import TickForwardReturn, TickSignalEvent, TradeTickLite
-from .event_study import evaluate_tick_signal
-from .binance_vision_archive import (
-    download_daily_agg_trades,
-    download_daily_klines_1m,
-    parse_agg_trade_csv,
-    parse_1m_klines_csv,
-    scan_archive_availability,
-    compute_common_calendar,
-    build_file_manifest,
-    _iter_date_range,
-    _sha256_file,
-)
-from .run_artifacts import (
-    create_run_id,
-    create_run_dir,
-    atomic_write_json,
-    atomic_write_text,
-    atomic_write_jsonl,
-)
+from .run_artifacts import atomic_write_json
+from .run_artifacts import atomic_write_jsonl
+from .run_artifacts import atomic_write_text
+from .tick_models import TickForwardReturn
+from .tick_models import TradeTickLite
+
 
 # ---------------------------------------------------------------------------
 # Constants (from precommitment)
@@ -115,7 +106,7 @@ def _get_git_sha() -> str:
 
 
 def _now_utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +117,7 @@ def _now_utc_iso() -> str:
 @dataclass(frozen=True)
 class StressLabel:
     """A single archive-based stress label."""
+
     label_id: str
     source_symbol: str
     stress_start_ns: int
@@ -142,6 +134,7 @@ class StressLabel:
 @dataclass
 class CoverageInterval:
     """Tick coverage info for a symbol within a stress window."""
+
     symbol: str
     tick_count: int
     first_ts_ns: int
@@ -152,6 +145,7 @@ class CoverageInterval:
 @dataclass
 class TickerArchiveManifest:
     """Download metadata for files used in this study."""
+
     run_id: str
     study_id: str = "cross_asset_beta_lag_archive_v0"
     source_type: str = "binance_vision_archive"
@@ -171,7 +165,8 @@ class TickerArchiveManifest:
 
 
 def _compute_move_bps(ticks: List[TradeTickLite], lookback_ns: int) -> List[dict[str, Any]]:
-    """Compute rolling absolute move bps over lookback window on tick data.
+    """
+    Compute rolling absolute move bps over lookback window on tick data.
 
     Returns list of dicts: {ts_ns, price, move_bps, start_price, end_price}
     Sorted by ts_ns.
@@ -217,7 +212,8 @@ def generate_stress_labels(
     lookback_seconds: int,
     threshold_bps: float,
 ) -> List[StressLabel]:
-    """Generate stress labels from tick data for one source symbol.
+    """
+    Generate stress labels from tick data for one source symbol.
 
     Returns labels with dedup cooldown applied.
     """
@@ -225,7 +221,7 @@ def generate_stress_labels(
     moves = _compute_move_bps(ticks, lookback_ns)
 
     labels: List[StressLabel] = []
-    last_label_ts: Optional[int] = None
+    last_label_ts: int | None = None
 
     # Independent window tracking
     rng = random.Random(SEED)
@@ -266,7 +262,8 @@ def generate_stress_labels(
 
 
 def deduplicate_labels(labels: List[StressLabel]) -> List[StressLabel]:
-    """Apply cross-label dedup: same source + direction within cooldown.
+    """
+    Apply cross-label dedup: same source + direction within cooldown.
 
     Also assigns independent window IDs with separation >= 30 minutes.
     """
@@ -294,7 +291,8 @@ def deduplicate_labels(labels: List[StressLabel]) -> List[StressLabel]:
 def assign_independent_windows(
     labels: List[StressLabel],
 ) -> List[StressLabel]:
-    """Assign independent window IDs.
+    """
+    Assign independent window IDs.
 
     Any two labels separated by >= 30 minutes get different window IDs.
     """
@@ -305,7 +303,7 @@ def assign_independent_windows(
     result: List[StressLabel] = []
     window_counter = 0
     window_start_ts = sorted_labels[0].stress_end_ns
-    rng = random.Random(SEED)
+    random.Random(SEED)
 
     for lbl in sorted_labels:
         if lbl.stress_end_ns - window_start_ts >= INDEPENDENT_WINDOW_SEPARATION_NS:
@@ -343,7 +341,8 @@ def check_target_coverage(
     *,
     buffer_ns: int = 5_000_000_000,
 ) -> Tuple[bool, Dict[str, CoverageInterval]]:
-    """Check if all targets have tick coverage from entry through horizon.
+    """
+    Check if all targets have tick coverage from entry through horizon.
 
     Returns (all_covered, coverage_map).
     """
@@ -418,7 +417,8 @@ def compute_forward_returns_for_stress(
     target_symbol: str,
     horizons_ms: List[int],
 ) -> List[TickForwardReturn]:
-    """Compute forward returns for a stress label on one target.
+    """
+    Compute forward returns for a stress label on one target.
 
     Entry is fixed 1 second after stress end timestamp.
     Direction adjustment: bullish -> positive beta, bearish -> negative beta.
@@ -555,11 +555,11 @@ class CellStats:
     valid_count: int
     valid_events: List[TickForwardReturn]
     net_returns_bps: List[float]
-    mean_net_bps: Optional[float]
-    median_net_bps: Optional[float]
-    win_rate: Optional[float]
-    worst_decile_net_bps: Optional[float]
-    best_decile_net_bps: Optional[float]
+    mean_net_bps: float | None
+    median_net_bps: float | None
+    win_rate: float | None
+    worst_decile_net_bps: float | None
+    best_decile_net_bps: float | None
     sum_net_bps: float
 
 
@@ -628,7 +628,8 @@ def generate_baseline_events(
     *,
     seed: int = SEED,
 ) -> List[TickForwardReturn]:
-    """Generate random baseline forward returns.
+    """
+    Generate random baseline forward returns.
 
     Random timestamps drawn from available tick range.
     """
@@ -639,7 +640,7 @@ def generate_baseline_events(
 
     # Get eligible timestamp range from target data
     all_ts: List[int] = []
-    for sym, ticks in all_target_ticks.items():
+    for ticks in all_target_ticks.values():
         if ticks:
             all_ts.extend(t.ts_event for t in ticks)
 
@@ -719,7 +720,8 @@ def run_null_test(
     iterations: int = NULL_ITERATIONS,
     seed: int = SEED,
 ) -> dict[str, Any]:
-    """Run circular-shift null test on event return vector.
+    """
+    Run circular-shift null test on event return vector.
 
     Shifts timestamps circularly. Returns dict with p_value and null stats.
     """
@@ -776,14 +778,15 @@ def run_null_test_gpu(
     device: str = "cuda:0",
     batch_size: int = 4096,
 ) -> dict[str, Any]:
-    """GPU-accelerated circular-shift null test. Semantically identical to CPU run_null_test.
+    """
+    GPU-accelerated circular-shift null test. Semantically identical to CPU run_null_test.
 
     Uses torch to batch random circular shifts of the return vector.
     Conservative p-value with +1 correction preserved.
     Seed stability: random offsets precomputed from Python stdlib random.Random,
     identical to the CPU path for a given seed.
     """
-    import torch  # noqa: PLC0415
+    import torch
 
     if len(event_net_returns) < 2:
         return {
@@ -868,7 +871,8 @@ def apply_by_fdr(
     alpha: float = FDR_ALPHA,
     family_size: int = FAMILY_SIZE,
 ) -> Dict[str, dict[str, Any]]:
-    """Apply Benjamini-Yekutieli FDR correction.
+    """
+    Apply Benjamini-Yekutieli FDR correction.
 
     Args:
         pvalues: List of (cell_key, p_value) for p-valued cells only.
@@ -952,10 +956,7 @@ def reconcile_event_vector(cell_stats: CellStats, raw_events: List[TickForwardRe
         return False
     if abs(computed_median - cell_stats.median_net_bps) > 0.001:
         return False
-    if abs(computed_win_rate - cell_stats.win_rate) > 0.001:
-        return False
-
-    return True
+    return not abs(computed_win_rate - cell_stats.win_rate) > 0.001
 
 
 # ---------------------------------------------------------------------------
@@ -1093,7 +1094,7 @@ def write_checkpoint(
     git_sha: str,
     precommitment_sha: str,
     null_engine: str = "cpu",
-    null_method: Optional[str] = None,
+    null_method: str | None = None,
     null_device: str = "cpu",
     null_batch_size: int = 0,
 ) -> None:
@@ -1119,7 +1120,7 @@ def write_checkpoint(
     atomic_write_json(path, artifact)
 
 
-def load_checkpoint_manifest(output_dir: Path) -> Optional[Dict[str, Any]]:
+def load_checkpoint_manifest(output_dir: Path) -> Dict[str, Any] | None:
     """Load the checkpoint manifest if it exists and is valid JSON."""
     path = _checkpoint_manifest_path(output_dir)
     if not path.exists():
@@ -1137,7 +1138,7 @@ def write_checkpoint_manifest(
     git_sha: str,
     precommitment_sha: str,
     null_engine: str = "cpu",
-    null_method: Optional[str] = None,
+    null_method: str | None = None,
 ) -> None:
     """Write the checkpoint manifest tracking completed phases."""
     effective_null_method = null_method or default_null_method_for_engine(null_engine)
@@ -1178,7 +1179,7 @@ def discover_checkpoint_phases(output_dir: Path) -> List[str]:
     return valid_phases
 
 
-def compute_resume_phase(output_dir: Path) -> Optional[str]:
+def compute_resume_phase(output_dir: Path) -> str | None:
     """Determine latest completed phase from manifest or partial checkpoint files."""
     expected_id = _sha256_json(_build_checkpoint_config_identity())
     manifest = load_checkpoint_manifest(output_dir)
@@ -1205,9 +1206,10 @@ def validate_checkpoint_config(
     git_sha: str,
     precommitment_sha: str,
     null_engine: str = "cpu",
-    null_method: Optional[str] = None,
+    null_method: str | None = None,
 ) -> Tuple[bool, str]:
-    """Validate that existing checkpoint matches requested config.
+    """
+    Validate that existing checkpoint matches requested config.
 
     Returns (is_valid, reason_string). Supports partial phase checkpoint
     directories that do not yet have a final checkpoint_manifest.json.
@@ -1375,75 +1377,75 @@ def _build_final_report_md(
 ) -> str:
     """Build FINAL_REPORT.md content."""
     lines: List[str] = []
-    lines.append(f"# Cross-Asset Beta-Lag Archive v0 — FINAL REPORT\n")
+    lines.append("# Cross-Asset Beta-Lag Archive v0 — FINAL REPORT\n")
     lines.append(f"**Run ID:** {run_id}")
-    lines.append(f"**Study:** cross_asset_beta_lag_archive_v0")
-    lines.append(f"**Branch:** feat/cross-asset-beta-lag-archive-v0")
+    lines.append("**Study:** cross_asset_beta_lag_archive_v0")
+    lines.append("**Branch:** feat/cross-asset-beta-lag-archive-v0")
     lines.append(f"**Starting SHA:** {git_sha}")
     lines.append(f"**Ending SHA:** {end_sha}")
     lines.append(f"**Dirty status:** {dirty_status}")
-    lines.append(f"**Safety posture:** public_data_observer_only\n")
+    lines.append("**Safety posture:** public_data_observer_only\n")
 
-    lines.append(f"## Precommitment\n")
+    lines.append("## Precommitment\n")
     lines.append(f"- Hash: `{precommitment_hash}`")
     lines.append(f"- Family size: {FAMILY_SIZE} primary cells\n")
 
-    lines.append(f"## Archive Data\n")
+    lines.append("## Archive Data\n")
     lines.append(f"- Date range: {availability.get('common_start', 'N/A')} to {availability.get('common_end', 'N/A')}")
     lines.append(f"- Common calendar days: {availability.get('common_days', 0)}")
     lines.append(f"- Archive files used: {len(file_manifest)}\n")
 
     stress_count = len(stress_labels)
     win_count = len(independent_windows)
-    lines.append(f"## Stress Labels\n")
+    lines.append("## Stress Labels\n")
     lines.append(f"- Source stress labels: {stress_count}")
     lines.append(f"- Independent windows: {win_count}\n")
 
-    lines.append(f"## Coverage\n")
+    lines.append("## Coverage\n")
     lines.append(f"- Per-target coverage: {json.dumps(coverage_summary.get('per_target', {}), indent=2)}\n")
 
     total_events = summary.get("total_valid_events", 0)
     powered = summary.get("powered_cells", 0)
     underpowered = summary.get("underpowered_cells", 0)
-    lines.append(f"## Events\n")
+    lines.append("## Events\n")
     lines.append(f"- Total valid events: {total_events}")
     lines.append(f"- Powered cells: {powered}")
     lines.append(f"- Underpowered cells: {underpowered}\n")
 
-    lines.append(f"## Best Cells (by mean net bps)\n")
+    lines.append("## Best Cells (by mean net bps)\n")
     best = summary.get("best_cells_mean_net", [])
     for b in best[:5]:
         lines.append(f"- {b.get('group_key', '?')}: {b.get('mean_net_bps', '?')} bps (n={b.get('n', 0)})")
 
-    lines.append(f"\n## Best Cells (by baseline delta)\n")
+    lines.append("\n## Best Cells (by baseline delta)\n")
     best_delta = summary.get("best_cells_baseline_delta", [])
     for b in best_delta[:5]:
         lines.append(f"- {b.get('group_key', '?')}: delta={b.get('baseline_delta_bps', '?')} bps")
 
-    lines.append(f"\n## Null / FDR Outcomes\n")
+    lines.append("\n## Null / FDR Outcomes\n")
     null_passed = summary.get("null_passed_cells", 0)
     fdr_passed = summary.get("fdr_passed_cells", 0)
     lines.append(f"- Cells passing null: {null_passed}")
     lines.append(f"- Cells passing FDR: {fdr_passed}\n")
 
-    lines.append(f"## Holdout Outcomes\n")
+    lines.append("## Holdout Outcomes\n")
     holdout_passed = summary.get("holdout_passed_cells", 0)
     lines.append(f"- Cells passing holdout: {holdout_passed}\n")
 
-    lines.append(f"## Final Verdict\n")
+    lines.append("## Final Verdict\n")
     lines.append(f"**{final_verdict}**\n")
 
     if summary.get("early_stop_reason"):
         lines.append(f"**Early stop reason:** {summary['early_stop_reason']}\n")
 
-    lines.append(f"## What This Rejects\n")
+    lines.append("## What This Rejects\n")
     if "rejected" in final_verdict.lower():
-        lines.append(f"- Cross-asset beta-lag (BTC/ETH -> SOL/LINK/DOGE/AVAX) under archive v0 design")
-        lines.append(f"- Binance Vision archive only, 50bps cost, 96-cell family")
+        lines.append("- Cross-asset beta-lag (BTC/ETH -> SOL/LINK/DOGE/AVAX) under archive v0 design")
+        lines.append("- Binance Vision archive only, 50bps cost, 96-cell family")
     else:
         lines.append("- Nothing — evaluation did not reach a rejection verdict\n")
 
-    lines.append(f"## What This Does NOT Reject\n")
+    lines.append("## What This Does NOT Reject\n")
     lines.append("- Different venues (Coinbase, Kraken)")
     lines.append("- Order-book / microstructure beta-lag")
     lines.append("- Maker/rebate execution")
@@ -1455,10 +1457,10 @@ def _build_final_report_md(
     lines.append("- Shortability/execution feasibility of bearish cells\n")
 
     registry_updated = summary.get("registry_updated", False)
-    lines.append(f"## Registry\n")
+    lines.append("## Registry\n")
     lines.append(f"- REJECTED_RESEARCH.md updated: {registry_updated}\n")
 
-    lines.append(f"## Tests\n")
+    lines.append("## Tests\n")
     tests = summary.get("test_results", {})
     lines.append(f"- Tests run: {tests.get('run', 0)}")
     lines.append(f"- Tests passed: {tests.get('passed', 0)}")
@@ -1467,10 +1469,10 @@ def _build_final_report_md(
     # Prefilter info
     pf = summary.get("prefilter_summary", {})
     if pf:
-        lines.append(f"\n## Kline Prefilter\n")
+        lines.append("\n## Kline Prefilter\n")
         lines.append(f"- Full calendar retained: {pf.get('full_calendar_retained', 'N/A')}")
-        lines.append(f"- Kline prefilter: source-only (non-verdict-producing)")
-        lines.append(f"- Exact stress labels from aggTrades only")
+        lines.append("- Kline prefilter: source-only (non-verdict-producing)")
+        lines.append("- Exact stress labels from aggTrades only")
         lines.append(f"- Brute-force estimate: {pf.get('brute_force_mb', 'N/A')} MB")
         lines.append(f"- Planned download estimate: {pf.get('planned_mb', 'N/A')} MB")
         lines.append(f"- Candidate days: {pf.get('candidate_days', 'N/A')}")
@@ -1494,7 +1496,8 @@ def build_stress_day_download_plan(
     *,
     extra_buffer_days: int = 1,
 ) -> Dict[str, Any]:
-    """Build a download plan from candidate stress days.
+    """
+    Build a download plan from candidate stress days.
 
     Takes candidate days (from kline prefilter) and produces:
     - Deduplicated list of required aggTrade files
@@ -1544,8 +1547,9 @@ def build_stress_day_download_plan(
 
     # Add next-day buffer for each candidate date (forward coverage)
     for d in candidate_dates:
-        from datetime import datetime, timedelta, timezone
-        dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        from datetime import datetime
+        from datetime import timedelta
+        dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=UTC)
         next_dt = dt + timedelta(days=extra_buffer_days)
         next_d = next_dt.strftime("%Y-%m-%d")
         # Only if within calendar
@@ -1566,8 +1570,9 @@ def build_stress_day_download_plan(
 
     # Add previous-day buffer for source symbols (rolling context)
     for d in candidate_dates:
-        from datetime import datetime, timedelta, timezone
-        dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        from datetime import datetime
+        from datetime import timedelta
+        dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=UTC)
         prev_dt = dt - timedelta(days=extra_buffer_days)
         prev_d = prev_dt.strftime("%Y-%m-%d")
         if prev_d in date_list:

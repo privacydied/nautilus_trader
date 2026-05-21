@@ -2,17 +2,19 @@
 import sys
 from pathlib import Path
 
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.config import ObserverConfig, FeeModel
-from examples.strategies.venue_agnostic_signal_observer.signals import CrossMarketSignalGenerator, SignalSourceConfig
+from examples.strategies.venue_agnostic_signal_observer.config import FeeModel
+from examples.strategies.venue_agnostic_signal_observer.config import ObserverConfig
 from examples.strategies.venue_agnostic_signal_observer.data_loading import (
     generate_synthetic_lead_lag,
-    generate_synthetic_noise,
 )
+from examples.strategies.venue_agnostic_signal_observer.data_loading import generate_synthetic_noise
 from examples.strategies.venue_agnostic_signal_observer.observer import SignalObserver
+from examples.strategies.venue_agnostic_signal_observer.signals import CrossMarketSignalGenerator
+from examples.strategies.venue_agnostic_signal_observer.signals import SignalSourceConfig
 
 
 def _run_synthetic(timestamps, source_prices, target_prices, fee_bps=5.0, slippage_bps=1.0):

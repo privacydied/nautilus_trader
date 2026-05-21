@@ -1,4 +1,5 @@
-"""Exception hierarchy for the discovery freeze system.
+"""
+Exception hierarchy for the discovery freeze system.
 
 All discovery-specific exceptions inherit from DiscoveryFreezeError
 so callers can catch the base type or specific subtypes.

@@ -1,5 +1,6 @@
 # Copyright (C) 2026. All rights reserved.
-"""Runtime no-network, no-import-side-effect, and import-dependency tests.
+"""
+Runtime no-network, no-import-side-effect, and import-dependency tests.
 
 Tests 115-119 from the discovery freeze specification plus verification
 that the discovery package has zero import-time dependency on NautilusTrader.
@@ -78,10 +79,10 @@ class TestImportSideEffects:
         # If files were created, the test would have to detect that.
         # We check that .pyc files didn't contain real writes (they do,
         # but __pycache__ is expected and acceptable).
-        pass
 
     def test_117_no_files_written_at_import(self):
-        """Test 117: importing every discovery module writes no new files.
+        """
+        Test 117: importing every discovery module writes no new files.
 
         Python writes .pyc files to __pycache__, which is expected. This
         test verifies no non-cache files were created.
@@ -121,7 +122,8 @@ class TestImportSideEffects:
             sp.run = original_run
 
     def test_119_no_side_effects_at_import(self):
-        """Test 119: importing discovery modules is side-effect free.
+        """
+        Test 119: importing discovery modules is side-effect free.
 
         Verifies that after import:
         - No socket was opened (tested via TestNoNetwork)
@@ -133,7 +135,7 @@ class TestImportSideEffects:
         mod_count_before = len(sys.modules)
         for mod_name in DISCOVERY_MODULES:
             importlib.import_module(mod_name)
-        mods_added = len(sys.modules) - mod_count_before
+        len(sys.modules) - mod_count_before
         # Some stdlib modules may be lazily imported — that's fine
         # We just verify no nautilus_trader was added
         for mod_name in list(sys.modules.keys()):
@@ -169,7 +171,8 @@ class TestNoNetwork:
             sock_mod.socket = original_socket
 
     def test_116_no_socket_at_cli_runtime(self):
-        """Test 116: running CLI entrypoints under monkeypatched socket.
+        """
+        Test 116: running CLI entrypoints under monkeypatched socket.
 
         Runs each CLI with --help or with missing args to verify the entrypoint
         itself doesn't open a socket; actual execution failures from invalid args
@@ -189,7 +192,7 @@ class TestNoNetwork:
         try:
             for cli_path in CLI_SCRIPTS:
                 # Run with --help (fast, no socket needed)
-                result = subprocess.run(
+                subprocess.run(
                     [sys.executable, str(cli_path), "--help"],
                     capture_output=True,
                     text=True,

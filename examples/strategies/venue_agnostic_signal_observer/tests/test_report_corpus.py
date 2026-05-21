@@ -1,4 +1,5 @@
-"""Tests for run_report_corpus module (aggregate_corpus, corpus_config_key, etc.).
+"""
+Tests for run_report_corpus module (aggregate_corpus, corpus_config_key, etc.).
 
 Tests:
 1. GroupsExactConfigKeys — groups match on (source_venue, target_venue, signal_type, lookback_ms, horizon_ms)
@@ -14,12 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from venue_agnostic_signal_observer.run_report_corpus import (
-    CorpusAggregation,
-    aggregate_corpus,
-    corpus_config_key,
-    format_corpus_report,
-)
+from venue_agnostic_signal_observer.run_report_corpus import aggregate_corpus
+from venue_agnostic_signal_observer.run_report_corpus import corpus_config_key
+from venue_agnostic_signal_observer.run_report_corpus import format_corpus_report
 
 
 # ---------------------------------------------------------------------------

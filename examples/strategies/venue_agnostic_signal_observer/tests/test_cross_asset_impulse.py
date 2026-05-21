@@ -1,27 +1,27 @@
-"""Tests for cross-asset spot impulse lead-lag.
+"""
+Tests for cross-asset spot impulse lead-lag.
 
 Tests synthetic fixtures, direction propagation, verdict logic, safety guards,
 and integration behavior.  No live data, no exchange APIs, no orders.
 """
 from __future__ import annotations
 
-import json
-import statistics
 import uuid
 
-import pytest
-
-from examples.strategies.venue_agnostic_signal_observer.tick_models import TickForwardReturn, TickSignalEvent, TradeTickLite
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import PairResult
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import StreamHealth
 from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import (
-    PairResult,
-    StreamHealth,
     _remap_signal_for_target,
-    compute_overlap,
-    compute_verdict,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import compute_overlap
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import compute_verdict
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import (
     generate_source_impulses,
 )
 from examples.strategies.venue_agnostic_signal_observer.event_study import evaluate_tick_signal
-from examples.strategies.venue_agnostic_signal_observer.trade_flow_impulse import _infer_tick_rule_side
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TickForwardReturn
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TickSignalEvent
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -125,24 +125,32 @@ class TestSameSymbolSkip:
     """Same-asset spot/spot lead-lag is a locked rejected gate."""
 
     def test_btc_to_btc_skipped(self):
-        from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import _is_same_symbol
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import (
+            _is_same_symbol,
+        )
 
         # BTC/USD -> BTC/USD must be same
         assert _is_same_symbol("BTC/USD", "BTC/USD") is True
 
     def test_btc_to_eth_allowed(self):
-        from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import _is_same_symbol
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import (
+            _is_same_symbol,
+        )
 
         # BTC/USD -> ETH/USD is different asset
         assert _is_same_symbol("BTC/USD", "ETH/USD") is False
 
     def test_btc_to_sol_allowed(self):
-        from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import _is_same_symbol
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import (
+            _is_same_symbol,
+        )
 
         assert _is_same_symbol("BTC/USD", "SOL/USD") is False
 
     def test_eth_to_link_allowed(self):
-        from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import _is_same_symbol
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_impulse import (
+            _is_same_symbol,
+        )
 
         assert _is_same_symbol("ETH/USD", "LINK/USD") is False
 
@@ -831,6 +839,7 @@ class TestNoForbiddenImports:
 
     def test_cross_asset_impulse_no_forbidden(self):
         import inspect
+
         from examples.strategies.venue_agnostic_signal_observer import cross_asset_impulse
 
         source = inspect.getsource(cross_asset_impulse)
@@ -839,6 +848,7 @@ class TestNoForbiddenImports:
 
     def test_run_cross_asset_impulse_no_forbidden(self):
         import inspect
+
         from examples.strategies.venue_agnostic_signal_observer import run_cross_asset_impulse
 
         source = inspect.getsource(run_cross_asset_impulse)
@@ -917,7 +927,7 @@ class TestGenerateSourceImpulses:
             # Create a burst of larger trades periodically
             notional_mult = 10.0 if (i % 30 < 3) else 1.0
             price = base_price + rng.gauss(0, 10)
-            size = notional_mult * abs(rng.gauss(1.0, 0.5))
+            notional_mult * abs(rng.gauss(1.0, 0.5))
             side = rng.choice(["buy", "sell"])
             trades.append(_make_tick(ts, "coinbase", "BTC/USD", price, side))
 
@@ -942,7 +952,9 @@ class TestCliParser:
     """Verify CLI parser has all required arguments."""
 
     def test_parser_has_fee_args(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import build_parser
+        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import (
+            build_parser,
+        )
         parser = build_parser()
         args = parser.parse_args(["--ticks", "data/test"])
         assert args.fee_bps == 40.0
@@ -950,20 +962,26 @@ class TestCliParser:
         assert args.quote_mismatch_buffer_bps == 5.0
 
     def test_parser_has_range_args(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import build_parser
+        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import (
+            build_parser,
+        )
         parser = build_parser()
         args = parser.parse_args(["--ticks", "data/test"])
         assert args.min_source_range_bps == 30.0
         assert args.min_target_range_bps == 30.0
 
     def test_parser_has_min_events_arg(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import build_parser
+        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import (
+            build_parser,
+        )
         parser = build_parser()
         args = parser.parse_args(["--ticks", "data/test"])
         assert args.min_events == 50
 
     def test_parser_has_baseline_window_arg(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import build_parser
+        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import (
+            build_parser,
+        )
         parser = build_parser()
         args = parser.parse_args(["--ticks", "data/test"])
         assert args.baseline_window_ms == 60000

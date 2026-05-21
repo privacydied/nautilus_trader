@@ -16,31 +16,26 @@ Public data observer only. No auth. No orders. No execution.
 from __future__ import annotations
 
 import json
-import tempfile
 import time
+from datetime import UTC
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from venue_agnostic_signal_observer.burn import (
-    burn_corpus,
-    read_burned,
-    get_burned_run_ids,
-    is_burned,
-    get_burned_signal_families,
-)
-from venue_agnostic_signal_observer.stage2_precommitment_utils import (
-    CollectionLock,
-    load_precommitment,
-    get_test_family_dimensions,
-    get_signal_family,
-    validate_markdown_json_match,
-    compute_file_sha256,
-)
-from venue_agnostic_signal_observer.stage2_fdr import run_fdr
-from venue_agnostic_signal_observer.stage2_split_corpus import build_split
+from venue_agnostic_signal_observer.burn import burn_corpus
+from venue_agnostic_signal_observer.burn import get_burned_run_ids
+from venue_agnostic_signal_observer.burn import get_burned_signal_families
+from venue_agnostic_signal_observer.burn import is_burned
+from venue_agnostic_signal_observer.burn import read_burned
 from venue_agnostic_signal_observer.run_artifacts import create_run_id
+from venue_agnostic_signal_observer.stage2_fdr import run_fdr
+from venue_agnostic_signal_observer.stage2_precommitment_utils import CollectionLock
+from venue_agnostic_signal_observer.stage2_precommitment_utils import get_signal_family
+from venue_agnostic_signal_observer.stage2_precommitment_utils import get_test_family_dimensions
+from venue_agnostic_signal_observer.stage2_precommitment_utils import load_precommitment
+from venue_agnostic_signal_observer.stage2_precommitment_utils import validate_markdown_json_match
+from venue_agnostic_signal_observer.stage2_split_corpus import build_split
 
 
 # ===========================================================================
@@ -242,7 +237,8 @@ class TestCollectionLock:
 
 class TestFdrBhBy:
     def test_bh_correct_on_known_pvalues(self):
-        """BH gives exact expected flags on known p-values.
+        """
+        BH gives exact expected flags on known p-values.
 
         Using p-values: [0.001, 0.02, 0.03, 0.5, 0.8]
         m=5, q=0.10
@@ -292,7 +288,7 @@ class TestFdrBhBy:
         assert result["accepted_bh_count"] == 2
 
         # Check individual flags
-        bh_results = {str(i): r for i, r in enumerate(result["primary_result"])}
+        {str(i): r for i, r in enumerate(result["primary_result"])}
         sorted_bh = sorted(result["primary_result"], key=lambda r: r.get("p_value", 1.0))
         assert sorted_bh[0]["rejected"] is True  # p=0.001
         assert sorted_bh[1]["rejected"] is True  # p=0.02
@@ -319,7 +315,8 @@ class TestFdrBhBy:
         assert result["rejected_by_count"] <= result["rejected_bh_count"]
 
     def test_by_exact_expected_flags(self):
-        """BY gives exact expected accept/reject flags on known p-values.
+        """
+        BY gives exact expected accept/reject flags on known p-values.
 
         Using p-values: [0.001, 0.02, 0.03, 0.5, 0.8]
         m=5, q=0.10
@@ -1187,8 +1184,10 @@ class TestReadinessCheck:
 
 class TestPrecommitmentFileConsistency:
     def test_precommitment_files_exist(self):
-        """STAGE2_PRECOMMITMENT.md, stage2_precommitment.json, and
-        STAGE2_THRESHOLDS_RATIONALE.md all exist."""
+        """
+        STAGE2_PRECOMMITMENT.md, stage2_precommitment.json, and
+        STAGE2_THRESHOLDS_RATIONALE.md all exist.
+        """
         root = Path.cwd().resolve()
         assert (root / "STAGE2_PRECOMMITMENT.md").exists()
         assert (root / "stage2_precommitment.json").exists()
@@ -1200,7 +1199,8 @@ class TestPrecommitmentFileConsistency:
         assert data.get("signal_family") == "cross_asset_beta_lag_v1"
         created = data.get("created_utc", "")
         assert created != "<ACTUAL_UTC_CREATION_TIME>"
-        assert "T" in created and created.endswith("Z")
+        assert "T" in created
+        assert created.endswith("Z")
         primary = data.get("primary_fdr", {})
         assert primary.get("method") == "benjamini_hochberg"
         assert primary.get("q") == 0.10
@@ -1278,8 +1278,8 @@ class TestWatcherCooldown:
     def test_no_capture_does_not_set_cooldown(self, tmp_path):
         """Diagnostic/no-capture polls do not set cooldown."""
         # Must run first — before any state file exists
+
         from venue_agnostic_signal_observer.stage2_gate_watcher import WatcherState
-        import os
         state_file = Path("reports", "cross_asset_beta_lag_watcher_state.json")
         if state_file.exists():
             state_file.unlink()
@@ -1289,7 +1289,6 @@ class TestWatcherCooldown:
     def test_no_previous_capture_allows_capture(self, tmp_path):
         """No last capture -> no cooldown -> capture allowed."""
         from venue_agnostic_signal_observer.stage2_gate_watcher import WatcherState
-        import os
         state_file = Path("reports", "cross_asset_beta_lag_watcher_state.json")
         if state_file.exists():
             state_file.unlink()
@@ -1299,7 +1298,6 @@ class TestWatcherCooldown:
     def test_recent_capture_triggers_cooldown(self, tmp_path):
         """Last validated FULL_ACTIVE 30 min ago -> SKIPPED_COOLDOWN."""
         from venue_agnostic_signal_observer.stage2_gate_watcher import WatcherState
-        import time
         state = WatcherState(min_gap_seconds=3600)
         state.record_capture(run_id="test_run_1", capture_dir="/tmp/test_cap_1")
         remaining = state.cooldown_remaining_seconds()
@@ -1308,11 +1306,12 @@ class TestWatcherCooldown:
 
     def test_old_capture_expires_cooldown(self, tmp_path):
         """Last validated FULL_ACTIVE 61 min ago -> cooldown expired -> capture allowed."""
+        from datetime import datetime
+
         from venue_agnostic_signal_observer.stage2_gate_watcher import WatcherState
-        from datetime import datetime, timezone
-        state = WatcherState(min_gap_seconds=3600)
+        WatcherState(min_gap_seconds=3600)
         # Manually set last capture to 61 minutes ago
-        old_ts = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        datetime.now(UTC).isoformat().replace("+00:00", "Z")
         import json
         # Directly write a state file with old timestamp
         state_dir = tmp_path / "state_test"
@@ -1321,8 +1320,8 @@ class TestWatcherCooldown:
         state_file.write_text(json.dumps({
             "last_corpus_eligible_capture_utc":
                 datetime.fromtimestamp(
-                    datetime.now(timezone.utc).timestamp() - 3660,
-                    tz=timezone.utc
+                    datetime.now(UTC).timestamp() - 3660,
+                    tz=UTC
                 ).strftime("%Y-%m-%dT%H:%M:%S.") + "000Z",
         }))
         # Load it
@@ -1339,7 +1338,6 @@ class TestWatcherCooldown:
     def test_short_gap_expires_quickly(self, tmp_path):
         """With a 1-second min gap, cooldown expires almost immediately."""
         from venue_agnostic_signal_observer.stage2_gate_watcher import WatcherState
-        import time
         state = WatcherState(min_gap_seconds=1)
         state.record_capture(run_id="test_run_3", capture_dir="/tmp/test_cap_3")
         cooldown = state.cooldown_remaining_seconds()

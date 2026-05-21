@@ -1,5 +1,6 @@
 # Copyright (C) 2026. All rights reserved.
-"""Candidate-level lock file for the discovery freeze.
+"""
+Candidate-level lock file for the discovery freeze.
 
 A ``DiscoveryCandidateLock`` freezes a specific discovered rule/cluster
 after a discovery scan surfaces it.  It pins the exact grid spec, grid
@@ -21,28 +22,25 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .capture_fingerprint import CaptureManifestRef, build_capture_manifest_ref
-from .exceptions import (
-    CandidateHashMismatchError,
-    CandidateLockValidationError,
-    CaptureFingerprintError,
-    GridCellCountMismatchError,
-    GridLockValidationError,
-)
-from .grid_lock import DiscoveryGridLock, validate_grid_lock, GRID_LOCK_TYPE
-from .search_space import (
-    COUNTED_AXIS_NAMES,
-    DiscoveryGridSpec,
-    enumerate_cost_sensitivity_cell_count,
-    enumerate_primary_cell_count,
-    grid_sha256,
-    validate_grid_spec,
-)
+from .capture_fingerprint import CaptureManifestRef
+from .capture_fingerprint import build_capture_manifest_ref
+from .exceptions import CandidateHashMismatchError
+from .exceptions import CandidateLockValidationError
+from .exceptions import GridCellCountMismatchError
+from .grid_lock import DiscoveryGridLock
+from .grid_lock import validate_grid_lock
+from .search_space import DiscoveryGridSpec
+from .search_space import enumerate_cost_sensitivity_cell_count
+from .search_space import enumerate_primary_cell_count
+from .search_space import grid_sha256
+
 
 CANDIDATE_SCHEMA_VERSION = "discovery-candidate-v1"
 CANDIDATE_LOCK_TYPE = "DISCOVERY_CANDIDATE_LOCK"
@@ -65,7 +63,8 @@ _SELECTED_CELL_KEY_SET: frozenset[str] = frozenset(_SELECTED_CELL_KEYS)
 
 @dataclass(frozen=True)
 class DiscoveryCandidateLock:
-    """Frozen lock that records a specific candidate discovery result.
+    """
+    Frozen lock that records a specific candidate discovery result.
 
     Fields
     ------
@@ -112,7 +111,8 @@ class DiscoveryCandidateLock:
 
 
 def canonical_selected_cell_json(cell: dict[str, Any]) -> str:
-    """Build canonical JSON for a single selected cell.
+    """
+    Build canonical JSON for a single selected cell.
 
     - Sorted keys.
     - Compact separators (",", ":").
@@ -135,7 +135,8 @@ def validate_selected_cells(
     cells: list[dict[str, Any]],
     grid_spec: DiscoveryGridSpec,
 ) -> None:
-    """Validate selected cells against a grid spec.
+    """
+    Validate selected cells against a grid spec.
 
     Raises
     ------
@@ -190,7 +191,8 @@ def canonicalize_selected_cells(
     cells: list[dict[str, Any]],
     grid_spec: DiscoveryGridSpec,
 ) -> list[dict[str, Any]]:
-    """Validate and canonically sort selected cells.
+    """
+    Validate and canonically sort selected cells.
 
     Sort key: canonical JSON string of each cell.
     Returns the sorted list of cell dicts (already validated).
@@ -205,7 +207,8 @@ def canonicalize_selected_cells(
 
 
 def canonical_candidate_payload(lock: DiscoveryCandidateLock) -> dict[str, Any]:
-    """Build the canonical dict for candidate hashing.
+    """
+    Build the canonical dict for candidate hashing.
 
     Accepts **only** a fully constructed ``DiscoveryCandidateLock``.
     This ensures creation and validation share one hashing code path.
@@ -242,7 +245,8 @@ def canonical_candidate_payload(lock: DiscoveryCandidateLock) -> dict[str, Any]:
 
 
 def _canonical_candidate_json(lock: DiscoveryCandidateLock) -> str:
-    """Canonical JSON for candidate hash payload.
+    """
+    Canonical JSON for candidate hash payload.
 
     - Sorted object keys.
     - Compact separators (",", ":").
@@ -276,7 +280,8 @@ def create_candidate_lock(
     discovery_capture_refs: tuple[CaptureManifestRef, ...] | list[CaptureManifestRef] | None = None,
     frozen_at_utc: str | None = None,
 ) -> DiscoveryCandidateLock:
-    """Create a candidate lock from validated inputs.
+    """
+    Create a candidate lock from validated inputs.
 
     Parameters
     ----------
@@ -346,7 +351,7 @@ def create_candidate_lock(
             capture_refs.append(ref)
 
     if frozen_at_utc is None:
-        frozen_at_utc = datetime.now(timezone.utc).isoformat()
+        frozen_at_utc = datetime.now(UTC).isoformat()
 
     # Build provisional lock with empty hash
     provisional = DiscoveryCandidateLock(
@@ -569,7 +574,8 @@ def candidate_lock_file_is_semantically_identical(
 
 
 def save_candidate_lock(lock: DiscoveryCandidateLock, path: str | Path) -> None:
-    """Write a candidate lock to a JSON file.
+    """
+    Write a candidate lock to a JSON file.
 
     Raises
     ------

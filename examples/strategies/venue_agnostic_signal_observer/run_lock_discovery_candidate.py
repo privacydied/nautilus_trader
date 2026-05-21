@@ -1,4 +1,5 @@
-"""CLI entrypoint to create a discovery candidate lock.
+"""
+CLI entrypoint to create a discovery candidate lock.
 
 Usage:
     python run_lock_discovery_candidate.py <grid_spec.json> <grid_lock.json> <selected_cells.json> <lock_output.json> [capture_manifest.json ...]
@@ -14,20 +15,22 @@ import sys
 
 from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
     create_candidate_lock,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
     load_candidate_lock,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
     save_candidate_lock,
-    canonical_candidate_payload,
-    candidate_sha256,
 )
 from examples.strategies.venue_agnostic_signal_observer.discovery.capture_fingerprint import (
     build_capture_manifest_ref,
 )
+from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import load_grid_lock
 from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import (
-    load_grid_lock,
     validate_grid_spec_against_lock,
 )
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import load_grid_spec
 from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
-    load_grid_spec,
     validate_grid_spec,
 )
 
@@ -77,7 +80,7 @@ def main() -> int:
 
     # Load selected cells JSON
     try:
-        with open(cells_path, "r") as f:
+        with open(cells_path) as f:
             cells_data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError, Exception) as exc:
         print(f"Error loading selected cells: {exc}", file=sys.stderr)

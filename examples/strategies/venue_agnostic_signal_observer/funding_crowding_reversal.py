@@ -1,4 +1,5 @@
-"""Frozen constants for Family 2 funding crowding reversal precommitment.
+"""
+Frozen constants for Family 2 funding crowding reversal precommitment.
 
 Phase 0 precommitment constants only. No evaluation, no data fetching,
 no report writing, no execution code.
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+
 
 # ---------------------------------------------------------------------------
 # FDR family
@@ -123,7 +125,8 @@ INVARIANT_FDR_METHOD: str = "FDR_METHOD = BY (Benjamini-Yekutieli)"
 def signal_return_bps_for_positive_funding(
     forward_btc_spot_return_bps: float,
 ) -> float:
-    """For positive funding extreme, signal return is negative BTC return.
+    """
+    For positive funding extreme, signal return is negative BTC return.
 
     The hypothesis: positive funding (crowded long) predicts reversal down.
     """
@@ -133,7 +136,8 @@ def signal_return_bps_for_positive_funding(
 def signal_return_bps_for_negative_funding(
     forward_btc_spot_return_bps: float,
 ) -> float:
-    """For negative funding extreme, signal return is positive BTC return.
+    """
+    For negative funding extreme, signal return is positive BTC return.
 
     The hypothesis: negative funding (crowded short) predicts reversal up.
     """
@@ -164,7 +168,8 @@ def compute_past_only_percentile_threshold(
     funding_rates_before_t: Sequence[float],
     percentile_rank: float,
 ) -> float:
-    """Compute the percentile threshold using only observations before time t.
+    """
+    Compute the percentile threshold using only observations before time t.
 
     Parameters
     ----------
@@ -201,7 +206,7 @@ def compute_past_only_percentile_threshold(
         return sorted_rates[0]
 
     rank = percentile_rank / 100.0 * (n - 1)
-    lower = int(math.floor(rank))
+    lower = math.floor(rank)
     upper = min(lower + 1, n - 1)
     frac = rank - lower
 

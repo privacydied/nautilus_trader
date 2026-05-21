@@ -18,24 +18,21 @@ Covers:
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from ..governance import (
-    EvidenceLedger,
-    LedgerIntegrityError,
-    make_grid_lock_event,
-    make_candidate_lock_event,
-    make_estimator_evidence_event,
-    make_approval_event,
-    make_revocation_event,
-    make_demotion_event,
-    make_supersession_event,
-    make_kill_switch_event,
-    replay_ledger,
-)
+from venue_agnostic_signal_observer.governance import EvidenceLedger
+from venue_agnostic_signal_observer.governance import LedgerIntegrityError
+from venue_agnostic_signal_observer.governance import make_approval_event
+from venue_agnostic_signal_observer.governance import make_candidate_lock_event
+from venue_agnostic_signal_observer.governance import make_demotion_event
+from venue_agnostic_signal_observer.governance import make_estimator_evidence_event
+from venue_agnostic_signal_observer.governance import make_grid_lock_event
+from venue_agnostic_signal_observer.governance import make_kill_switch_event
+from venue_agnostic_signal_observer.governance import make_revocation_event
+from venue_agnostic_signal_observer.governance import make_supersession_event
+from venue_agnostic_signal_observer.governance import replay_ledger
 
 
 def _fresh_ledger(tmp_path: Path) -> EvidenceLedger:
@@ -104,7 +101,7 @@ class TestLedgerAppend:
         d = json.loads(lines[0])
         d["event_type"] = "alien_event_type_xyz"
         # Recompute hash to pass integrity check
-        from ..governance.events import _event_hash
+        from venue_agnostic_signal_observer.governance.events import _event_hash
         d["event_hash"] = _event_hash(
             d["ledger_index"], d["event_type"], d["event_time_utc"],
             d.get("candidate_hash"), d.get("grid_hash"), d.get("payload", {}),

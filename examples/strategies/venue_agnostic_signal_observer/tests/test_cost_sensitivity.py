@@ -1,4 +1,5 @@
-"""Tests for cost_sensitivity module.
+"""
+Tests for cost_sensitivity module.
 
 Coverage:
 1. Finite filtering — NaN, inf, None, empty string handled
@@ -15,25 +16,19 @@ Coverage:
 from __future__ import annotations
 
 import json
-import math
 import tempfile
 from pathlib import Path
 
 import pytest
 
-from venue_agnostic_signal_observer.cost_sensitivity import (
-    COST_SENSITIVITY_READY,
-    DEFAULT_COST_LEVELS_BPS,
-    NO_EVALUATED_GROUPS,
-    NO_FINITE_GROUPS,
-    CostSensitivityRow,
-    CostSensitivitySummary,
-    _is_finite,
-    _to_float,
-    compute_cost_sensitivity,
-    load_report_groups,
-    write_cost_sensitivity_reports,
-)
+from venue_agnostic_signal_observer.cost_sensitivity import COST_SENSITIVITY_READY
+from venue_agnostic_signal_observer.cost_sensitivity import NO_EVALUATED_GROUPS
+from venue_agnostic_signal_observer.cost_sensitivity import NO_FINITE_GROUPS
+from venue_agnostic_signal_observer.cost_sensitivity import CostSensitivitySummary
+from venue_agnostic_signal_observer.cost_sensitivity import _is_finite
+from venue_agnostic_signal_observer.cost_sensitivity import _to_float
+from venue_agnostic_signal_observer.cost_sensitivity import compute_cost_sensitivity
+from venue_agnostic_signal_observer.cost_sensitivity import write_cost_sensitivity_reports
 
 
 # ---------------------------------------------------------------------------

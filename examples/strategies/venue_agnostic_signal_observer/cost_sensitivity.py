@@ -1,4 +1,5 @@
-"""Cost-sensitivity / breakeven diagnostic for derivatives spot lead-lag reports.
+"""
+Cost-sensitivity / breakeven diagnostic for derivatives spot lead-lag reports.
 
 Reads an existing evaluation report and computes breakeven cost levels for
 each evaluated group. This is a diagnostic-only tool — it cannot create
@@ -15,13 +16,17 @@ Forbidden verdicts (raise ValueError):
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import json
 import math
 import os
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
+from typing import Sequence
+
 
 SAFETY_MODE = "public_data_observer_only"
 
@@ -51,6 +56,7 @@ DEFAULT_COST_LEVELS_BPS = [50.0, 10.0, 5.0, 1.0, 0.5]
 @dataclass
 class CostSensitivityRow:
     """One evaluated group annotated with cost-sensitivity metrics."""
+
     source_venue: str
     target_venue: str
     signal_type: str
@@ -81,6 +87,7 @@ class CostSensitivityRow:
 @dataclass
 class CostSensitivitySummary:
     """Top-level summary of the cost-sensitivity diagnostic."""
+
     report_dir: str
     all_in_cost_bps: float
     fee_bps: float
@@ -166,7 +173,8 @@ def compute_cost_sensitivity(
     cost_levels_bps: Sequence[float] | None = None,
     min_events: int = 0,
 ) -> CostSensitivitySummary:
-    """Compute cost-sensitivity metrics for a list of evaluated groups.
+    """
+    Compute cost-sensitivity metrics for a list of evaluated groups.
 
     groups: list of dicts from summary.json results_by_group or summary.csv rows.
     all_in_cost_bps: total cost wall from the original report.
@@ -299,7 +307,8 @@ def compute_cost_sensitivity(
 # ---------------------------------------------------------------------------
 
 def load_report_groups(report_dir: str | Path) -> tuple[list[dict], dict]:
-    """Load evaluated groups from a derivatives spot lead-lag report directory.
+    """
+    Load evaluated groups from a derivatives spot lead-lag report directory.
 
     Returns (groups, metadata) where metadata contains cost info from summary.json.
     """
@@ -332,11 +341,9 @@ def load_report_groups(report_dir: str | Path) -> tuple[list[dict], dict]:
             # CSV rows may have string values — convert numerics
             for row in groups:
                 for key in ["valid_count", "lookback_ms", "horizon_ms"]:
-                    if key in row and row[key]:
-                        try:
+                    if row.get(key):
+                        with contextlib.suppress(ValueError, TypeError):
                             row[key] = int(row[key])
-                        except (ValueError, TypeError):
-                            pass
                 for key in ["mean_raw_bps", "mean_net_bps", "median_net_bps",
                              "win_rate", "baseline_mean_net_bps", "baseline_win_rate"]:
                     if key in row:
@@ -425,7 +432,7 @@ def write_cost_sensitivity_reports(
                          f"{margin_str} | {vc} | {wr} | {cand} |\n")
 
     lines.append("\n## Cost-Wall Analysis\n")
-    viable_at = {level: 0 for level in d["cost_levels_bps"]}
+    viable_at = dict.fromkeys(d["cost_levels_bps"], 0)
     for row in d["rows"]:
         raw = row.get("mean_raw_bps")
         if raw is None:

@@ -11,10 +11,14 @@ is not a valid pass.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 
-from .fill_model import CrossVenueFillModel, FillModelConfig, FillEvent
+from .fill_model import CrossVenueFillModel
+from .fill_model import FillEvent
+from .fill_model import FillModelConfig
 
 
 @dataclass
@@ -66,7 +70,8 @@ def run_shadow(
     grid_hash: str | None = None,
     seed: int = 42,
 ) -> ShadowResult:
-    """Run shadow simulation over a sequence of signal events.
+    """
+    Run shadow simulation over a sequence of signal events.
 
     Each event must have 'trigger_time_seconds' and 'target_mid_move_bps'.
 

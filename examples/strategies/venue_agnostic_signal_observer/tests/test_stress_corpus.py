@@ -8,15 +8,17 @@ from pathlib import Path
 
 import pytest
 
+
 PROJECT_ROOT = str(Path(__file__).resolve().parents[4])
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import build_stress_corpus
 from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (
-    build_stress_corpus,
     load_stress_corpus_manifest,
 )
 from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
+
 
 _NS = 1_000_000_000
 

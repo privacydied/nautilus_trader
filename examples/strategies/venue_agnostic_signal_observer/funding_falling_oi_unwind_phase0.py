@@ -13,18 +13,19 @@ Hard constraints:
 - Phase 0B is deterministic (no randomness).
 """
 
-import argparse
 import csv
 import hashlib
 import io
 import json
 import os
-import sys
 import urllib.error
 import urllib.request
 import zipfile
 from collections import OrderedDict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -171,7 +172,7 @@ def extract_csv_from_zip(zip_bytes):
 def parse_timestamp(ts_str):
     """Parse create_time field (UTC). Returns datetime or None."""
     try:
-        return datetime.strptime(ts_str.strip(), DT_FMT).replace(tzinfo=timezone.utc)
+        return datetime.strptime(ts_str.strip(), DT_FMT).replace(tzinfo=UTC)
     except (ValueError, AttributeError):
         return None
 
@@ -188,9 +189,9 @@ def parse_klines_timestamp(ts_int):
     """
     try:
         if ts_int > 100_000_000_000_000:  # > 1e14 → microseconds
-            return datetime.fromtimestamp(ts_int / 1_000_000, tz=timezone.utc)
+            return datetime.fromtimestamp(ts_int / 1_000_000, tz=UTC)
         else:  # milliseconds (standard)
-            return datetime.fromtimestamp(ts_int / 1_000, tz=timezone.utc)
+            return datetime.fromtimestamp(ts_int / 1_000, tz=UTC)
     except (OverflowError, ValueError, OSError):
         return None
 
@@ -410,7 +411,7 @@ def run_phase0a():
                         parsed_rows[0]["ts"].year,
                         parsed_rows[0]["ts"].month,
                         parsed_rows[0]["ts"].day,
-                        tzinfo=timezone.utc,
+                        tzinfo=UTC,
                     )
                     funding_settlements = [
                         day_start + timedelta(hours=h) for h in FUNDING_HOURS
@@ -463,7 +464,7 @@ def run_phase0a():
                                 if parsed2:
                                     day_start2 = datetime(
                                         parsed2[0]["ts"].year, parsed2[0]["ts"].month,
-                                        parsed2[0]["ts"].day, tzinfo=timezone.utc,
+                                        parsed2[0]["ts"].day, tzinfo=UTC,
                                     )
                                     fs2 = [day_start2 + timedelta(hours=h) for h in FUNDING_HOURS]
                                     for settlement_ts in fs2:
@@ -536,7 +537,7 @@ def run_phase0a():
                         return results
 
                     # Check p95 threshold
-                    p95_combined = all_offsets_combined[
+                    all_offsets_combined[
                         min(int(len(all_offsets_combined) * 0.95), len(all_offsets_combined) - 1)
                     ]
                     p95_end = all_offsets_end[
@@ -638,7 +639,7 @@ def run_phase0b():
                         calc_time_ms = int(r["calc_time"])
                         rate = float(r["last_funding_rate"])
                         ts = datetime.fromtimestamp(
-                            calc_time_ms / 1000, tz=timezone.utc
+                            calc_time_ms / 1000, tz=UTC
                         )
                         all_funding.append({"ts": ts, "funding_rate": rate})
                     except (ValueError, KeyError):
@@ -722,7 +723,8 @@ def run_phase0b():
     dates_sorted = sorted(unique_dates)
     print(f"\nLoading {len(dates_sorted)} unique daily OI files (parallel, 8 workers)...")
 
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import as_completed
 
     oi_by_date = {}
     loaded = 0
@@ -1067,7 +1069,7 @@ def build_phase0_report(phase0a_results, phase0b_results):
 
     report = OrderedDict()
     report["study_id"] = "family3_funding_falling_oi_unwind_v1"
-    report["generated_at_utc"] = datetime.now(timezone.utc).isoformat()
+    report["generated_at_utc"] = datetime.now(UTC).isoformat()
     report["git_sha"] = get_git_sha()
     report["precommitment_sha256"] = precommitment_sha
 
@@ -1197,7 +1199,7 @@ def main():
         print("\nStage A PASSED. Proceeding to Stage B requires running the evaluator.")
         print("The evaluator must read this report and proceed only if outcome == POPULATION_SUFFICIENT.")
     else:
-        print(f"\nStage A FAILED. Stopping. Do not build evaluator.")
+        print("\nStage A FAILED. Stopping. Do not build evaluator.")
         print(f"Outcome: {report['outcome']}")
 
     print("\nNo forward returns, edge stats, null tests, FDR, evaluation,")

@@ -24,17 +24,18 @@ import httpx
 
 
 def load_venue_csv(path: str) -> tuple[list[float], list[float]]:
-    """Load OHLCV CSV and return (timestamps, close_prices) sorted by timestamp.
+    """
+    Load OHLCV CSV and return (timestamps, close_prices) sorted by timestamp.
 
     Supports both csv.DictReader format (with header row) and raw comma-split
     format with at least 2 columns (timestamp, close) or 5+ columns (OHLCV).
-    
+
     Args:
         path: Filesystem path to the CSV file.
-        
+
     Returns:
         Tuple of (sorted timestamps, corresponding close prices).
-        
+
     Raises:
         ValueError: If CSV cannot be parsed or has no valid rows.
     """
@@ -88,7 +89,8 @@ def align_venues(
     target_prices: list[float],
     grid_seconds: float | None = None,
 ) -> tuple[list[float], list[float], list[float]]:
-    """Align two price series onto a common timestamp grid using forward-fill.
+    """
+    Align two price series onto a common timestamp grid using forward-fill.
 
     Uses bisect for efficient timestamp alignment without requiring pandas.
 
@@ -142,7 +144,8 @@ def download_public_klines(
     start_ts: int | None = None,
     end_ts: int | None = None,
 ) -> list[dict]:
-    """Download OHLCV klines from public exchange APIs (no auth required).
+    """
+    Download OHLCV klines from public exchange APIs (no auth required).
 
     Handles pagination and rate limiting automatically.
     Uses httpx.AsyncClient to avoid blocking the event loop if called from async context.
@@ -246,7 +249,7 @@ def _fetch_kraken(
         resp = client.get("https://api.kraken.com/0/public/OHLC", params=params)
         resp.raise_for_status()
         body = resp.json()
-        if "error" in body and body["error"]:
+        if body.get("error"):
             raise RuntimeError(f"Kraken API error: {body['error']}")
 
         ohlc_data = None
@@ -285,7 +288,8 @@ def _fetch_coinbase(
     start_ts: int | None,
     end_ts: int | None,
 ) -> list[dict]:
-    """Fetch Coinbase candles.
+    """
+    Fetch Coinbase candles.
 
     Note: Coinbase legacy exchange candles endpoint does NOT support
     start/end filters — it always returns the most recent candles
@@ -320,7 +324,8 @@ def _fetch_coinbase(
 
 
 def save_venue_csv(path: str, data: list[dict]) -> None:
-    """Write kline data to a CSV file.
+    """
+    Write kline data to a CSV file.
 
     Args:
         path: Output file path.

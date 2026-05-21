@@ -1,4 +1,5 @@
-"""CLI runner for cost-sensitivity / breakeven diagnostic.
+"""
+CLI runner for cost-sensitivity / breakeven diagnostic.
 
 Reads an existing derivatives spot lead-lag evaluation report and writes
 a cost-sensitivity analysis showing what cost level each group would need
@@ -16,17 +17,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
-from .cost_sensitivity import (
-    SAFETY_MODE,
-    compute_cost_sensitivity,
-    load_report_groups,
-    write_cost_sensitivity_reports,
-    DEFAULT_COST_LEVELS_BPS,
-)
+from .cost_sensitivity import compute_cost_sensitivity
+from .cost_sensitivity import load_report_groups
+from .cost_sensitivity import write_cost_sensitivity_reports
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -78,7 +74,7 @@ def main() -> None:
     groups, meta = load_report_groups(report_dir)
     if not groups:
         print("  No evaluated groups found. Exiting.")
-        print(f"\nVERDICT: NO_EVALUATED_GROUPS")
+        print("\nVERDICT: NO_EVALUATED_GROUPS")
         # Still write empty report
         summary = compute_cost_sensitivity(
             groups=[],
@@ -100,7 +96,7 @@ def main() -> None:
     print(f"  Cost levels: {cost_levels}")
     print(f"  Min events filter: {args.min_events}")
 
-    print(f"\n[2] Computing cost-sensitivity analysis...")
+    print("\n[2] Computing cost-sensitivity analysis...")
     summary = compute_cost_sensitivity(
         groups=groups,
         all_in_cost_bps=all_in_cost,
@@ -119,7 +115,7 @@ def main() -> None:
 
     # Show top 5 rows
     if summary.rows:
-        print(f"\n  Top 5 groups by breakeven cost (raw edge):")
+        print("\n  Top 5 groups by breakeven cost (raw edge):")
         for i, row in enumerate(summary.rows[:5], 1):
             raw = row.get("mean_raw_bps")
             be = row.get("breakeven_cost_bps")
@@ -134,7 +130,7 @@ def main() -> None:
                   f"raw={raw:.3f} net={net:.3f} breakeven={be:.3f} n={vc}")
 
     # Viability summary at each cost level
-    print(f"\n  Viability at each cost level:")
+    print("\n  Viability at each cost level:")
     for level in cost_levels:
         viable = sum(1 for r in summary.rows if r.get("mean_raw_bps") is not None and r["mean_raw_bps"] > level)
         print(f"    {level} bps: {viable} groups viable")

@@ -19,11 +19,15 @@ For S=16 blocks: C(16, 8) = 12,870 partitions.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
 from itertools import combinations
-from typing import Any, Sequence
+from typing import Any
+from typing import Sequence
 
-from .metadata import EstimatorMetadata, make_metadata
+from .metadata import EstimatorMetadata
+from .metadata import make_metadata
 
 
 ESTIMATOR_NAME = "pbo_cscv"
@@ -74,7 +78,8 @@ def _block_split_returns(
     cell_returns: list[list[float]],
     n_blocks: int,
 ) -> list[list[list[float]]]:
-    """Split each cell's return series into n_blocks equal time blocks.
+    """
+    Split each cell's return series into n_blocks equal time blocks.
 
     Returns: blocks[block_idx][cell_idx] = list of returns in that block.
     """
@@ -112,7 +117,8 @@ def compute_pbo(
     estimator_metadata: EstimatorMetadata | None = None,
     input_metadata: dict[str, Any] | None = None,
 ) -> PBOResult:
-    """Compute Probability of Backtest Overfitting for a frozen grid.
+    """
+    Compute Probability of Backtest Overfitting for a frozen grid.
 
     Parameters
     ----------
@@ -161,16 +167,15 @@ def compute_pbo(
         return _error(f"Too few observations to form {n_blocks} blocks")
 
     n_is_blocks = actual_n_blocks // 2
-    n_oos_blocks = actual_n_blocks - n_is_blocks
+    actual_n_blocks - n_is_blocks
 
     all_block_indices = list(range(actual_n_blocks))
     is_combos = list(combinations(all_block_indices, n_is_blocks))
-    n_partitions = len(is_combos)
+    len(is_combos)
 
     # In-sample performance across all partitions for each cell
     # → select the best IS cell per partition
     # → record its OOS rank
-    oos_rank_counts_below_median: list[int] = []
     best_cell_oos_ranks: list[float] = []
 
     for is_indices in is_combos:

@@ -1,4 +1,5 @@
-"""GPU-accelerated permutation null engine for venue_agnostic_signal_observer.
+"""
+GPU-accelerated permutation null engine for venue_agnostic_signal_observer.
 
 Pure functions only. No network, no capture, no live imports, no orders, no auth.
 
@@ -43,13 +44,14 @@ DEFAULT_CHUNK_SIZE: int = 512
 # ---------------------------------------------------------------------------
 
 def check_cuda_available(device: str = "cuda:0") -> tuple[bool, str]:
-    """Return (available, reason) without raising.
+    """
+    Return (available, reason) without raising.
 
     If torch is not installed, or CUDA is not available, returns False with
     a diagnostic reason string.
     """
     try:
-        import torch  # noqa: PLC0415
+        import torch
     except ImportError:
         return False, "torch_not_installed"
 
@@ -100,7 +102,8 @@ def compute_null_distribution_gpu(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     device: str = "cuda:0",
 ) -> dict[str, Any]:
-    """GPU version of compute_null_distribution.
+    """
+    GPU version of compute_null_distribution.
 
     Output schema is compatible with the CPU version in permutation_null.py.
 
@@ -140,7 +143,7 @@ def compute_null_distribution_gpu(
         null_mean_net_bps, null_win_rates, null_median_net_bps,
         percentiles, iterations, seed, shift_mode, engine, device, chunk_size
     """
-    import torch  # noqa: PLC0415
+    import torch
 
     if shift_mode != "circular_time_shift":
         raise ValueError(
@@ -155,7 +158,7 @@ def compute_null_distribution_gpu(
     # Filter zero/negative prices from target
     valid_pairs = [
         (ts, pr)
-        for ts, pr in zip(target_timestamps, target_prices)
+        for ts, pr in zip(target_timestamps, target_prices, strict=False)
         if math.isfinite(pr) and pr > 0
     ]
     if not valid_pairs:
@@ -313,7 +316,8 @@ def compute_null_distribution_multi_gpu(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     devices: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Multi-GPU wrapper around :func:`compute_null_distribution_gpu`.
+    """
+    Multi-GPU wrapper around :func:`compute_null_distribution_gpu`.
 
     Shards permutation iterations across ``devices`` and concatenates the
     per-device null distributions in device order. Each device receives a
@@ -334,10 +338,8 @@ def compute_null_distribution_multi_gpu(
     ``num_devices`` and ``devices`` fields plus a ``per_device_iterations``
     field for diagnostics.
     """
-    from .gpu_devices import (  # noqa: PLC0415
-        derive_per_device_seeds,
-        split_work_evenly,
-    )
+    from .gpu_devices import derive_per_device_seeds
+    from .gpu_devices import split_work_evenly
 
     if not devices:
         raise ValueError("multi-GPU permutation path requires at least one device")
@@ -356,7 +358,7 @@ def compute_null_distribution_multi_gpu(
     null_win_rates: list[float] = []
     per_device_iterations: list[int] = []
 
-    for dev_str, shard, dev_seed in zip(devices, shards, per_seed):
+    for dev_str, shard, dev_seed in zip(devices, shards, per_seed, strict=False):
         iters_here = len(shard)
         per_device_iterations.append(iters_here)
         if iters_here == 0:
@@ -418,7 +420,7 @@ def _percentile(sorted_values: list[float], p: float) -> float:
     if n == 1:
         return sorted_values[0]
     rank = p / 100.0 * (n - 1)
-    lower = int(math.floor(rank))
+    lower = math.floor(rank)
     upper = lower + 1
     if upper >= n:
         return sorted_values[-1]

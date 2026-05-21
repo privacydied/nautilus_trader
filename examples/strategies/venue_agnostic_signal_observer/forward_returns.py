@@ -1,18 +1,22 @@
 """Forward-return measurement for signal events."""
-from typing import List, Optional, Tuple
-from bisect import bisect_right
 import math
+from bisect import bisect_right
+from typing import List
+from typing import Tuple
 
-from .models import SignalEvent, ForwardReturnResult
-from .config import Horizon, FeeModel
+from .config import FeeModel
+from .config import Horizon
+from .models import ForwardReturnResult
+from .models import SignalEvent
 
 
 def get_entry_price(
     timestamps: List[float],
     prices: List[float],
     signal_ts: float,
-) -> Optional[Tuple[float, float]]:
-    """Find entry reference price: bar at or after signal timestamp.
+) -> Tuple[float, float] | None:
+    """
+    Find entry reference price: bar at or after signal timestamp.
 
     Prefer exact match if it exists.
     """
@@ -32,8 +36,9 @@ def find_price_at_or_after(
     timestamps: List[float],
     prices: List[float],
     target_ts: float,
-) -> Optional[Tuple[float, float]]:
-    """Find the first price bar strictly after ``target_ts``.
+) -> Tuple[float, float] | None:
+    """
+    Find the first price bar strictly after ``target_ts``.
 
     For forward return horizons we want the price *at or after* the horizon
     timestamp, but since the horizon is computed from the entry timestamp
@@ -72,8 +77,9 @@ def compute_excursions(
     entry_price: float,
     forward_ts: float,
     direction: str,
-) -> Tuple[Optional[float], Optional[float]]:
-    """Compute max favorable and adverse excursion between entry and horizon.
+) -> Tuple[float | None, float | None]:
+    """
+    Compute max favorable and adverse excursion between entry and horizon.
 
     Returns (max_favorable_bps, max_adverse_bps), direction-adjusted.
     """
@@ -113,7 +119,8 @@ def evaluate_signal(
     fee_model: FeeModel,
     quote_mismatch: bool = False,
 ) -> List[ForwardReturnResult]:
-    """Evaluate one signal across all horizons.
+    """
+    Evaluate one signal across all horizons.
 
     Returns a list of ForwardReturnResult, one per horizon.
     """

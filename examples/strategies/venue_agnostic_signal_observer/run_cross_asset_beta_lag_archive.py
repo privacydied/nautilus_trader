@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""CLI runner for cross-asset beta-lag archive v0 study.
+"""
+CLI runner for cross-asset beta-lag archive v0 study.
 
 Study: cross_asset_beta_lag_archive_v0
 
@@ -21,117 +22,92 @@ import math
 import os
 import statistics
 import sys
-import time
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Tuple
+
 
 # Ensure we can import sibling modules
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, os.path.dirname(_THIS_DIR))
 
-from .tick_models import TickForwardReturn, TradeTickLite
-
-from .binance_vision_archive import (
-    download_daily_agg_trades,
-    download_daily_klines_1m,
-    scan_archive_availability,
-    compute_common_calendar,
-    parse_agg_trade_csv,
-    parse_1m_klines_csv,
-    _iter_date_range,
-    _sha256_bytes,
-    _sha256_file,
-    compute_kline_candidate_days,  # deprecated — kept for A/B comparison
-    estimate_file_size_mb,
-    estimate_kline_file_size_mb,
-)
-from .kline_prefilter_v1 import (
-    compute_kline_candidate_days_v1,
-    compute_kline_candidate_days_deprecated,  # A/B comparison
-)
-from .binance_vision_archive import append_ticks_jsonl, tick_file_path
-from .streaming_stress_labels import (
-    generate_stress_labels_streaming,
-    check_target_coverage_from_ts_prices,
-    compute_forward_returns_from_ts_prices,
-    generate_baseline_from_ts_prices,
-)
-from .cross_asset_beta_lag_archive import (
-    ALL_SYMBOLS,
-    SOURCE_SYMBOLS,
-    TARGET_SYMBOLS,
-    CALENDAR_START,
-    CALENDAR_END,
-    MIN_CALENDAR_DAYS,
-    MIN_INDEPENDENT_WINDOWS,
-    STRESS_RULES,
-    STRESS_DEDUP_COOLDOWN_NS,
-    HORIZONS_MS,
-    STRESS_WINDOW_SECONDS,
-    DIRECTIONS,
-    FAMILY_SIZE,
-    VENUE,
-    TOTAL_COST_BPS,
-    FEE_BPS,
-    SLIPPAGE_BPS,
-    QUOTE_MISMATCH_BUFFER_BPS,
-    SEED,
-    NULL_ITERATIONS,
-    FDR_ALPHA,
-    TRAIN_FRAC,
-    MIN_EVENTS_PER_CELL,
-    MIN_EVENTS_HOLDOUT,
-    WIN_RATE_THRESHOLD,
-    WORST_DECILE_THRESHOLD,
-    BASELINE_DELTA_BPS,
-    NULL_ALPHA,
-
-    StressLabel,
-    CoverageInterval,
-    generate_stress_labels,
-    deduplicate_labels,
-    assign_independent_windows,
-    check_target_coverage,
-    compute_forward_returns_for_stress,
-    compute_cell_stats,
-    cell_group_key,
-    all_cell_keys,
-    generate_baseline_events,
-    run_null_test,
-    run_null_test_gpu,
-    NULL_METHOD_CHOICES,
-    default_null_method_for_engine,
-    validate_null_engine_method,
-    apply_by_fdr,
-    reconcile_event_vector,
-    write_report,
-    _get_git_sha,
-    _now_utc_iso,
-    _sha256_json,
-    MS_TO_NS,
-    ENTRY_DELAY_NS,
-    build_stress_day_download_plan,
-
-    # Checkpoint functions
-    CHECKPOINT_PHASES,
-    write_checkpoint,
-    write_checkpoint_manifest,
-    load_checkpoint_manifest,
-    compute_resume_phase,
-    discover_checkpoint_phases,
-    validate_checkpoint_config,
-)
-
-from .run_artifacts import (
-    create_run_id,
-    create_run_dir,
-    atomic_write_json,
-    atomic_write_jsonl,
-    atomic_write_text,
-    safe_output_dir,
-)
+from .binance_vision_archive import _iter_date_range
+from .binance_vision_archive import append_ticks_jsonl
+from .binance_vision_archive import compute_common_calendar
+from .binance_vision_archive import download_daily_agg_trades
+from .binance_vision_archive import download_daily_klines_1m
+from .binance_vision_archive import estimate_file_size_mb
+from .binance_vision_archive import parse_1m_klines_csv
+from .binance_vision_archive import parse_agg_trade_csv
+from .binance_vision_archive import scan_archive_availability
+from .binance_vision_archive import tick_file_path
+from .cross_asset_beta_lag_archive import ALL_SYMBOLS
+from .cross_asset_beta_lag_archive import BASELINE_DELTA_BPS
+from .cross_asset_beta_lag_archive import CALENDAR_END
+from .cross_asset_beta_lag_archive import CALENDAR_START
+from .cross_asset_beta_lag_archive import ENTRY_DELAY_NS
+from .cross_asset_beta_lag_archive import FAMILY_SIZE
+from .cross_asset_beta_lag_archive import FDR_ALPHA
+from .cross_asset_beta_lag_archive import FEE_BPS
+from .cross_asset_beta_lag_archive import HORIZONS_MS
+from .cross_asset_beta_lag_archive import MIN_CALENDAR_DAYS
+from .cross_asset_beta_lag_archive import MIN_EVENTS_HOLDOUT
+from .cross_asset_beta_lag_archive import MIN_EVENTS_PER_CELL
+from .cross_asset_beta_lag_archive import MIN_INDEPENDENT_WINDOWS
+from .cross_asset_beta_lag_archive import MS_TO_NS
+from .cross_asset_beta_lag_archive import NULL_ALPHA
+from .cross_asset_beta_lag_archive import NULL_ITERATIONS
+from .cross_asset_beta_lag_archive import NULL_METHOD_CHOICES
+from .cross_asset_beta_lag_archive import QUOTE_MISMATCH_BUFFER_BPS
+from .cross_asset_beta_lag_archive import SEED
+from .cross_asset_beta_lag_archive import SLIPPAGE_BPS
+from .cross_asset_beta_lag_archive import SOURCE_SYMBOLS
+from .cross_asset_beta_lag_archive import STRESS_RULES
+from .cross_asset_beta_lag_archive import TARGET_SYMBOLS
+from .cross_asset_beta_lag_archive import TOTAL_COST_BPS
+from .cross_asset_beta_lag_archive import TRAIN_FRAC
+from .cross_asset_beta_lag_archive import VENUE
+from .cross_asset_beta_lag_archive import WIN_RATE_THRESHOLD
+from .cross_asset_beta_lag_archive import WORST_DECILE_THRESHOLD
+from .cross_asset_beta_lag_archive import StressLabel
+from .cross_asset_beta_lag_archive import _get_git_sha
+from .cross_asset_beta_lag_archive import _now_utc_iso
+from .cross_asset_beta_lag_archive import _sha256_json
+from .cross_asset_beta_lag_archive import all_cell_keys
+from .cross_asset_beta_lag_archive import apply_by_fdr
+from .cross_asset_beta_lag_archive import assign_independent_windows
+from .cross_asset_beta_lag_archive import build_stress_day_download_plan
+from .cross_asset_beta_lag_archive import cell_group_key
+from .cross_asset_beta_lag_archive import compute_cell_stats
+from .cross_asset_beta_lag_archive import compute_resume_phase
+from .cross_asset_beta_lag_archive import deduplicate_labels
+from .cross_asset_beta_lag_archive import default_null_method_for_engine
+from .cross_asset_beta_lag_archive import discover_checkpoint_phases
+from .cross_asset_beta_lag_archive import generate_stress_labels
+from .cross_asset_beta_lag_archive import load_checkpoint_manifest
+from .cross_asset_beta_lag_archive import run_null_test
+from .cross_asset_beta_lag_archive import run_null_test_gpu
+from .cross_asset_beta_lag_archive import validate_checkpoint_config
+from .cross_asset_beta_lag_archive import validate_null_engine_method
+from .cross_asset_beta_lag_archive import write_checkpoint
+from .cross_asset_beta_lag_archive import write_checkpoint_manifest
+from .cross_asset_beta_lag_archive import write_report
+from .kline_prefilter_v1 import compute_kline_candidate_days_deprecated  # A/B comparison
+from .kline_prefilter_v1 import compute_kline_candidate_days_v1
+from .run_artifacts import atomic_write_json
+from .run_artifacts import atomic_write_jsonl
+from .run_artifacts import atomic_write_text
+from .run_artifacts import create_run_id
+from .streaming_stress_labels import check_target_coverage_from_ts_prices
+from .streaming_stress_labels import compute_forward_returns_from_ts_prices
+from .forward_returns_dispatcher import compute_forward_returns_single as _dispatch_forward_returns
+from .streaming_stress_labels import generate_baseline_from_ts_prices
+from .streaming_stress_labels import generate_stress_labels_streaming
+from .tick_models import TickForwardReturn
+from .tick_models import TradeTickLite
 
 
 def _load_checkpoint_payload(output_dir: Path, phase: str) -> Dict[str, Any]:
@@ -147,19 +123,20 @@ def _load_checkpoint_payload(output_dir: Path, phase: str) -> Dict[str, Any]:
 
 
 def _load_ts_prices_from_jsonl(path: Path) -> tuple:
-    """Load (timestamps, prices) arrays from a tick JSONL file.
+    """
+    Load (timestamps, prices) arrays from a tick JSONL file.
 
     Reads only ts_event and price fields, skips non-finite prices.
     Returns (numpy.ndarray[int64], numpy.ndarray[float64]).
     """
-    import json as _json  # noqa: PLC0415
-    import math as _math  # noqa: PLC0415
+    import json as _json
+    import math as _math
 
-    import numpy as np  # noqa: PLC0415
+    import numpy as np
 
     ts_list: list[int] = []
     pr_list: list[float] = []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             row = _json.loads(line)
             price = row.get("price")
@@ -202,7 +179,8 @@ def _load_parquet_ticks_to_jsonl(
     parquet_dir: Path,
     output_dir: Path,
 ) -> int:
-    """Load parquet aggTrade files for symbol+dates and write JSONL.
+    """
+    Load parquet aggTrade files for symbol+dates and write JSONL.
 
     Parquet schema: ts_event (int64, ns), price (float), size (float), is_buyer_maker (bool).
     Returns total tick count written.
@@ -210,10 +188,9 @@ def _load_parquet_ticks_to_jsonl(
     Processes one parquet file at a time, flushing JSONL immediately —
     avoids holding entire symbol's data in memory.
     """
-    import pyarrow.parquet as pq  # noqa: PLC0415
-
-    import pandas as pd  # noqa: PLC0415
-    import numpy as np  # noqa: PLC0415
+    import numpy as np
+    import pandas as pd
+    import pyarrow.parquet as pq
 
     jsonl_path = tick_file_path(output_dir, symbol)
     jsonl_path.parent.mkdir(parents=True, exist_ok=True)
@@ -267,15 +244,15 @@ def _load_parquet_ts_prices(
     dates: list[str],
     parquet_dir: Path,
 ) -> tuple:
-    """Load (timestamps, prices) arrays directly from Parquet files.
+    """
+    Load (timestamps, prices) arrays directly from Parquet files.
 
     Parquet schema: ts_event (int64, ns), price (float).
     Returns (numpy.ndarray[int64], numpy.ndarray[float64]).
     Skips non-finite prices.
     """
-    import pyarrow.parquet as pq  # noqa: PLC0415
-    import numpy as np  # noqa: PLC0415
-    import math as _math  # noqa: PLC0415
+    import numpy as np
+    import pyarrow.parquet as pq
 
     sym_lower = symbol.lower()
     ts_chunks = []
@@ -314,15 +291,17 @@ def _generate_stress_labels_from_parquet(
     threshold_bps: float,
     StressLabel,
 ) -> list:
-    """Generate stress labels by streaming Parquet files one at a time.
+    """
+    Generate stress labels by streaming Parquet files one at a time.
 
     Equivalent to generate_stress_labels_streaming but reads Parquet directly.
     Maintains a rolling deque across file boundaries.
     """
-    import pyarrow.parquet as pq  # noqa: PLC0415
-    import random  # noqa: PLC0415
-    import math  # noqa: PLC0415
-    from collections import deque  # noqa: PLC0415
+    import math
+    import random
+    from collections import deque
+
+    import pyarrow.parquet as pq
 
     SEED = 42
     STRESS_DEDUP_COOLDOWN_NS = 30_000_000_000  # 30 seconds
@@ -342,7 +321,7 @@ def _generate_stress_labels_from_parquet(
         ts_arr = table.column("ts_event").to_numpy()
         pr_arr = table.column("price").to_numpy()
 
-        for ts_ns, price in zip(ts_arr, pr_arr):
+        for ts_ns, price in zip(ts_arr, pr_arr, strict=False):
             price = float(price)
             ts_ns = int(ts_ns)
             if not math.isfinite(price):
@@ -457,6 +436,18 @@ def main() -> None:
         "--null-batch-size", type=int, default=0,
         help="GPU null batch size (0 = default). CPU path ignores this.",
     )
+    parser.add_argument(
+        "--forward-engine", choices=["cpu", "gpu"], default="cpu",
+        help="Forward-return engine: cpu (default) or gpu. GPU requires CUDA.",
+    )
+    parser.add_argument(
+        "--forward-device", default="cuda:0",
+        help="CUDA device for GPU forward returns (default: cuda:0)",
+    )
+    parser.add_argument(
+        "--forward-batch-size", type=int, default=16384,
+        help="GPU forward-return chunk size (default: 16384). CPU path ignores this.",
+    )
     args = parser.parse_args()
 
     # ── Null engine/method validation ────────────────────────────────────────
@@ -485,9 +476,25 @@ def main() -> None:
     else:
         print(f"Null engine: CPU (method={null_method})")
 
+    # Forward engine selection and validation
+    forward_engine = args.forward_engine
+    if forward_engine == "gpu":
+        from .forward_returns_gpu import check_cuda_available as _check_fwd_cuda
+        fwd_cuda_ok, fwd_cuda_reason = _check_fwd_cuda(args.forward_device)
+        if not fwd_cuda_ok:
+            parser.error(
+                f"GPU forward returns requested but unavailable: {fwd_cuda_reason}"
+            )
+        print(
+            f"Forward engine: GPU (device={args.forward_device}, "
+            f"batch_size={args.forward_batch_size})"
+        )
+    else:
+        print(f"Forward engine: CPU (default)")
+
     # Print start info
     git_sha = _get_git_sha()
-    print(f"=== Cross-Asset Beta-Lag Archive v0 ===")
+    print("=== Cross-Asset Beta-Lag Archive v0 ===")
     print(f"Git SHA: {git_sha}")
     print(f"Start: {_now_utc_iso()}")
     print(f"Precommitment: {args.precommitment}")
@@ -497,12 +504,11 @@ def main() -> None:
     print(f"Source: {SOURCE_SYMBOLS}")
     print(f"Targets: {TARGET_SYMBOLS}")
     print(f"Calendar: {CALENDAR_START} to {CALENDAR_END}")
-    print(f"========================================\n")
+    print("========================================\n")
 
     # ── Resume logic ──────────────────────────────────────────────────────────
     completed_phases: List[str] = []
-    resume_phase: Optional[str] = None
-    prefilter_data_reloaded = False
+    resume_phase: str | None = None
     run_id: str = ""
     output_dir: Path = Path(args.out)
 
@@ -606,7 +612,7 @@ def main() -> None:
         print(f"\n[Phase 4A] Downloading source klines ({len(SOURCE_SYMBOLS)} symbols)...")
         source_kline_data: Dict[str, List[Dict[str, Any]]] = {}
         kline_manifest: List[Dict[str, Any]] = []
-        
+
         for src_sym in SOURCE_SYMBOLS:
             print(f"  Downloading 1m klines for {src_sym}...")
             sym_klines: List[Dict[str, Any]] = []
@@ -634,7 +640,7 @@ def main() -> None:
         print(f"  Kline data: {kline_kb:.0f} KB")
 
         # Phase 4B: Kline prefilter (V1 — per-bar high-low range)
-        print(f"\n[Phase 4B] Computing kline stress-day prefilter (V1 — per-bar HL >= 30bps)...")
+        print("\n[Phase 4B] Computing kline stress-day prefilter (V1 — per-bar HL >= 30bps)...")
         candidate_dates_set = compute_kline_candidate_days_v1(source_kline_data)
         print(f"  Candidate stress days (V1): {len(candidate_dates_set)}")
 
@@ -662,7 +668,7 @@ def main() -> None:
         ]
 
         # Phase 4C: Build download plan
-        print(f"\n[Phase 4C] Building aggTrade download plan...")
+        print("\n[Phase 4C] Building aggTrade download plan...")
         dl_plan = build_stress_day_download_plan(
             candidate_days, ALL_SYMBOLS, SOURCE_SYMBOLS, date_list,
         )
@@ -675,7 +681,7 @@ def main() -> None:
 
         # Phase 4D: Volume gate on planned download (skip in parquet mode — no download occurs)
         if args.tick_source != "parquet":
-            print(f"\n[Phase 4D] Checking planned download volume...")
+            print("\n[Phase 4D] Checking planned download volume...")
             max_planned_mb = args.max_planned_download_gb * 1024
             if planned_mb > max_planned_mb:
                 print(f"  PREFILTERED VOLUME EXCEEDS CAP: {planned_mb:.1f} > {max_planned_mb:.0f} MB")
@@ -688,26 +694,26 @@ def main() -> None:
                 print(f"\n=== VERDICT: {verdict} ===")
                 return
         else:
-            print(f"\n[Phase 4D] Skipping volume gate (parquet source — no download)")
+            print("\n[Phase 4D] Skipping volume gate (parquet source — no download)")
 
         # Phase 4E: Download or load planned aggTrades
         parquet_dir = None
         if args.tick_source == "parquet":
-            print(f"\n[Phase 4E] Loading planned aggTrades from parquet...")
+            print("\n[Phase 4E] Loading planned aggTrades from parquet...")
             parquet_dir = Path(args.tick_source_dir)
             if not parquet_dir.exists():
                 print(f"ERROR: Parquet directory not found: {parquet_dir}")
                 _write_early_stop(output_dir, run_id, "PARQUET_DIR_NOT_FOUND", git_sha)
                 return
             # Get candidate dates for download plan
-            candidate_date_set = set(d["date"] for d in candidate_days)
+            candidate_date_set = {d["date"] for d in candidate_days}
             # Also include all calendar dates for target symbols (needed for forward returns)
             all_needed_dates = sorted(candidate_date_set)
             print(f"  Parquet dir: {parquet_dir}")
             print(f"  Candidate source dates: {len(candidate_date_set)}")
 
             # Source symbols: only candidate dates (stress label generation)
-            all_tick_counts = {sym: 0 for sym in ALL_SYMBOLS}
+            all_tick_counts = dict.fromkeys(ALL_SYMBOLS, 0)
             file_manifest = []
             total_files = 0
             failed_files = 0
@@ -736,8 +742,8 @@ def main() -> None:
                 print(f"  {tgt_sym}: {count} parquet files available ({len(date_list)} planned)")
                 total_files += count
         else:
-            print(f"\n[Phase 4E] Downloading planned aggTrades...")
-            all_tick_counts: Dict[str, int] = {sym: 0 for sym in ALL_SYMBOLS}
+            print("\n[Phase 4E] Downloading planned aggTrades...")
+            all_tick_counts: Dict[str, int] = dict.fromkeys(ALL_SYMBOLS, 0)
             file_manifest: List[Dict[str, Any]] = []
             total_files = 0
             failed_files = 0
@@ -782,7 +788,7 @@ def main() -> None:
             }
 
         # Phase 4F: Exact aggTrade stress label reconstruction
-        print(f"\n[Phase 4F] Reconstructing exact stress labels from aggTrades...")
+        print("\n[Phase 4F] Reconstructing exact stress labels from aggTrades...")
         all_labels: List[StressLabel] = []
         for src_sym in SOURCE_SYMBOLS:
             if args.tick_source == "parquet" and parquet_dir is not None:
@@ -849,7 +855,6 @@ def main() -> None:
         completed_phases.append("03_aggtrades")
 
         # Note: evaluation continues from Phase 3 below
-        phase_label = "[Phase 4G]"
     else:
         # ── Brute-force path (prefilter disabled) ─────────────────────────
         if brute_mb > 5000:
@@ -860,7 +865,7 @@ def main() -> None:
             _write_summary(output_dir, run_id, git_sha, precommitment_sha, verdict,
                            early_stop=f"archive_data_volume_too_large_{brute_mb:.0f}mb")
             print(f"\n=== VERDICT: {verdict} ===")
-            print(f"Use --prefilter-source-klines to enable kline prefilter.")
+            print("Use --prefilter-source-klines to enable kline prefilter.")
             return
 
         print(f"\n[Phase 2] Downloading all aggTrades ({len(ALL_SYMBOLS)} symbols)...")
@@ -893,7 +898,7 @@ def main() -> None:
                                       "last_ts": t[-1].ts_event if t else None}
 
         # Generate stress labels from all source ticks
-        print(f"\n[Phase 3] Generating stress labels...")
+        print("\n[Phase 3] Generating stress labels...")
         all_labels = []
         for src_sym in SOURCE_SYMBOLS:
             src_ticks = all_ticks.get(src_sym, [])
@@ -904,7 +909,6 @@ def main() -> None:
                     lookback_seconds=lookback_sec, threshold_bps=threshold)
                 all_labels.extend(labels)
 
-        phase_label = "[Phase 3]"
 
     # ── Common evaluation path (dedup, coverage, forward returns, null, FDR) ──
     if not all_labels:
@@ -923,7 +927,7 @@ def main() -> None:
 
     # Assign independent windows
     windowed = assign_independent_windows(deduped)
-    independent_window_ids = list(set(l.independent_window_id for l in windowed))
+    independent_window_ids = list({l.independent_window_id for l in windowed})
     print(f"  Independent windows: {len(independent_window_ids)}")
 
     # Checkpoint: 05_independent_windows
@@ -951,7 +955,7 @@ def main() -> None:
         return
 
     # Phase 4: Coverage check per label
-    print(f"\n[Phase 4] Checking target coverage...")
+    print("\n[Phase 4] Checking target coverage...")
     usable_labels: List[StressLabel] = []
     coverage_summary: Dict[str, Any] = {
         "per_target": {},
@@ -999,7 +1003,7 @@ def main() -> None:
             usable_labels.append(lbl)
 
     coverage_summary["usable_labels"] = len(usable_labels)
-    all_target_windows = len(set(l.independent_window_id for l in usable_labels))
+    all_target_windows = len({l.independent_window_id for l in usable_labels})
     coverage_summary["all_target_windows"] = all_target_windows
 
     print(f"  Usable labels (all targets): {len(usable_labels)}")
@@ -1026,15 +1030,14 @@ def main() -> None:
 
     # Phase 5: Compute forward returns (resume-aware)
     forward_rows: List[Dict[str, Any]] = []
-    signal_rows: List[Dict[str, Any]] = []
 
     if "07_forward_returns" in completed_phases:
-        print(f"\n[Phase 5] Loading forward returns from checkpoint...")
+        print("\n[Phase 5] Loading forward returns from checkpoint...")
         payload = _load_checkpoint_payload(output_dir, "07_forward_returns")
         forward_rows = payload.get("forward_rows", [])
         print(f"  Forward return rows (from checkpoint): {len(forward_rows)}")
     else:
-        print(f"\n[Phase 5] Computing forward returns...")
+        print("\n[Phase 5] Computing forward returns...")
 
         # Per-target loop: load one target, process all labels, discard
         for tgt_sym in TARGET_SYMBOLS:
@@ -1052,9 +1055,11 @@ def main() -> None:
             print(f"  {tgt_sym}: {len(ts_arr)} ticks for forward returns")
 
             for lbl in usable_labels:
-                frs = compute_forward_returns_from_ts_prices(
+                frs = _dispatch_forward_returns(
                     lbl, ts_arr, pr_arr, tgt_sym, HORIZONS_MS,
-                    TickForwardReturn=TickForwardReturn,
+                    engine=args.forward_engine,
+                    device=args.forward_device,
+                    batch_size=args.forward_batch_size,
                     VENUE=VENUE,
                     ENTRY_DELAY_NS=ENTRY_DELAY_NS,
                     MS_TO_NS=MS_TO_NS,
@@ -1123,12 +1128,12 @@ def main() -> None:
     # Phase 6: Cell evaluation (resume-aware)
     cell_results: Dict[str, Dict[str, Any]] = {}
     if "08_cell_results" in completed_phases:
-        print(f"\n[Phase 6] Loading cell results from checkpoint...")
+        print("\n[Phase 6] Loading cell results from checkpoint...")
         payload = _load_checkpoint_payload(output_dir, "08_cell_results")
         cell_results = payload.get("cell_results", {})
         print(f"  Cell results (from checkpoint): {len(cell_results)} cells")
     else:
-        print(f"\n[Phase 6] Cell evaluation...")
+        print("\n[Phase 6] Cell evaluation...")
 
         for gk in all_cell_keys_list:
             cell_events = [r for r in forward_rows if r["group_key"] == gk and r["valid"]]
@@ -1236,12 +1241,12 @@ def main() -> None:
     # Phase 7: Baseline (resume-aware)
     baseline_results: Dict[str, Dict[str, Any]] = {}
     if "09_baseline" in completed_phases:
-        print(f"\n[Phase 7] Loading baseline results from checkpoint...")
+        print("\n[Phase 7] Loading baseline results from checkpoint...")
         payload = _load_checkpoint_payload(output_dir, "09_baseline")
         baseline_results = payload.get("baseline_results", {})
         print(f"  Baseline results (from checkpoint): {len(baseline_results)} cells")
     else:
-        print(f"\n[Phase 7] Computing baseline...")
+        print("\n[Phase 7] Computing baseline...")
         for gk in all_cell_keys_list:
             cell = cell_results.get(gk, {})
             n = cell.get("valid_count", 0)
@@ -1311,7 +1316,7 @@ def main() -> None:
     # Phase 8: Null test (resume-aware)
     null_results: Dict[str, Dict[str, Any]] = {}
     if "10_null" in completed_phases:
-        print(f"\n[Phase 8] Loading null results from checkpoint...")
+        print("\n[Phase 8] Loading null results from checkpoint...")
         payload = _load_checkpoint_payload(output_dir, "10_null")
         null_results = payload.get("null_results", {})
         print(f"  Null results (from checkpoint): {len(null_results)} cells")
@@ -1357,12 +1362,12 @@ def main() -> None:
     # Phase 9: FDR (resume-aware)
     fdr_results: Dict[str, Dict[str, Any]] = {}
     if "11_fdr" in completed_phases:
-        print(f"\n[Phase 9] Loading FDR results from checkpoint...")
+        print("\n[Phase 9] Loading FDR results from checkpoint...")
         payload = _load_checkpoint_payload(output_dir, "11_fdr")
         fdr_results = payload.get("fdr_results", {})
         print(f"  FDR results (from checkpoint): {len(fdr_results)} cells")
     else:
-        print(f"\n[Phase 9] FDR correction...")
+        print("\n[Phase 9] FDR correction...")
         pvalues: List[Tuple[str, float]] = []
         for gk in all_cell_keys_list:
             nr = null_results.get(gk, {})
@@ -1387,12 +1392,12 @@ def main() -> None:
     # Phase 10: Holdout evaluation (resume-aware)
     holdout_results: Dict[str, Dict[str, Any]] = {}
     if "12_holdout" in completed_phases:
-        print(f"\n[Phase 10] Loading holdout results from checkpoint...")
+        print("\n[Phase 10] Loading holdout results from checkpoint...")
         payload = _load_checkpoint_payload(output_dir, "12_holdout")
         holdout_results = payload.get("holdout_results", {})
         print(f"  Holdout results (from checkpoint): {len(holdout_results)} cells")
     else:
-        print(f"\n[Phase 10] Holdout evaluation...")
+        print("\n[Phase 10] Holdout evaluation...")
         for gk in all_cell_keys_list:
             cell = cell_results.get(gk, {})
             hold_n = cell.get("holdout_count", 0)
@@ -1429,7 +1434,7 @@ def main() -> None:
         completed_phases.append("12_holdout")
 
     # Phase 11: Event vector reconciliation
-    print(f"\n[Phase 11] Event vector reconciliation...")
+    print("\n[Phase 11] Event vector reconciliation...")
     reconciled = True
     reconcilation_errors: List[str] = []
     for gk, cell in cell_results.items():
@@ -1446,9 +1451,9 @@ def main() -> None:
 
         if nets:
             computed_mean = sum(nets) / len(nets)
-            computed_median = statistics.median(nets) if len(nets) > 0 else None
+            statistics.median(nets) if len(nets) > 0 else None
             computed_wins = sum(1 for n in nets if n > 0)
-            computed_wr = computed_wins / len(nets)
+            computed_wins / len(nets)
 
             if abs(computed_mean - cell["mean_net_bps"]) > 0.01:
                 reconcilation_errors.append(f"{gk}: mean mismatch {computed_mean:.4f} vs {cell['mean_net_bps']}")
@@ -1469,7 +1474,7 @@ def main() -> None:
         return
 
     # Phase 12: Aggregate cell verdicts and family verdict
-    print(f"\n[Phase 12] Final verdict...")
+    print("\n[Phase 12] Final verdict...")
     powered_cells = 0
     underpowered_cells = 0
     gates_passed_cells = 0
@@ -1561,7 +1566,7 @@ def main() -> None:
     print(f"  Final verdict: {verdict}")
 
     # Phase 13: Write report
-    print(f"\n[Phase 13] Writing report...")
+    print("\n[Phase 13] Writing report...")
 
     # Build label data for report
     label_rows: List[Dict[str, Any]] = []
@@ -1595,11 +1600,11 @@ def main() -> None:
             "full_calendar_retained": True,
             "kline_prefilter": "source_only_non_verdict_producing",
             "exact_stress_labels_from_aggtrades": True,
-            "brute_force_mb": round(brute_mb, 1) if 'brute_mb' in dir() else 0,
-            "planned_mb": round(planned_mb, 1) if 'planned_mb' in dir() else 0,
-            "candidate_days": len(candidate_days) if 'candidate_days' in dir() else 0,
-            "exact_stress_labels": len(windowed) if 'windowed' in dir() else 0,
-            "usable_windows": all_target_windows if 'all_target_windows' in dir() else 0,
+            "brute_force_mb": round(brute_mb, 1) if "brute_mb" in dir() else 0,
+            "planned_mb": round(planned_mb, 1) if "planned_mb" in dir() else 0,
+            "candidate_days": len(candidate_days) if "candidate_days" in dir() else 0,
+            "exact_stress_labels": len(windowed) if "windowed" in dir() else 0,
+            "usable_windows": all_target_windows if "all_target_windows" in dir() else 0,
             "evaluation_reached": True,
         }
 
@@ -1800,8 +1805,8 @@ def _write_summary(
     output_dir: Path, run_id: str, git_sha: str, precommitment_sha: str,
     verdict: str,
     *,
-    early_stop: Optional[str] = None,
-    summary: Optional[Dict[str, Any]] = None,
+    early_stop: str | None = None,
+    summary: Dict[str, Any] | None = None,
 ) -> None:
     if summary is None:
         summary = {

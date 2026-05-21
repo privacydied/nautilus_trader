@@ -1,4 +1,5 @@
-"""Local-only Stress Corpus Accumulator v1 for Edge Miner.
+"""
+Local-only Stress Corpus Accumulator v1 for Edge Miner.
 
 The accumulator scans existing local public market-data captures, applies the
 existing deterministic BTC/ETH stress-label rules, merges labels into independent
@@ -11,12 +12,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import sys
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
+from typing import Iterable
+from typing import Sequence
+
 
 PROJECT_ROOT = str(Path(__file__).resolve().parents[3])
 if PROJECT_ROOT not in sys.path:
@@ -24,23 +29,48 @@ if PROJECT_ROOT not in sys.path:
 
 from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (  # noqa: E402
     DEFAULT_INPUT_DIRS,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (  # noqa: E402
     SOURCE_ASSETS,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (  # noqa: E402
     TARGET_ASSETS,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (  # noqa: E402
     _asset_from_filename,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (  # noqa: E402
     _ns_from_iso,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (  # noqa: E402
     _utc_iso_from_ns,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (  # noqa: E402
     discover_trade_files,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (  # noqa: E402
     load_ticks_by_asset,
 )
 from examples.strategies.venue_agnostic_signal_observer.stress_labels import (  # noqa: E402
     LABEL_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import (  # noqa: E402
     MOVE_30S_THRESHOLD_BPS,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import (  # noqa: E402
     MOVE_60S_THRESHOLD_BPS,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import (  # noqa: E402
     RANGE_THRESHOLD_BPS,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import (  # noqa: E402
     StressLabel,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import (  # noqa: E402
     build_stress_labels,
 )
-from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite  # noqa: E402
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
+
 
 ACCUMULATOR_VERSION = "stress_corpus_accumulator.v1"
 ACCUMULATED_CORPUS_ID = "stress_beta_lag_v1_accumulated"
@@ -378,7 +408,7 @@ def build_accumulated_stress_corpus(
         "\n".join([
             "# Edge Miner Stress Corpus Accumulator v1",
             "",
-            f"- mode: local_only",
+            "- mode: local_only",
             f"- status: {status}",
             f"- ready_for_rerun: {ready}",
             f"- corpus_id: {ACCUMULATED_CORPUS_ID}",
@@ -412,7 +442,7 @@ def build_accumulated_stress_corpus(
 def load_accumulated_corpus_manifest(path: Path, *, allow_diagnostic: bool = False) -> dict[str, Any]:
     try:
         manifest = json.loads(path.read_text())
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise ValueError(f"Invalid accumulated stress corpus manifest: {path}") from exc
     required = {
         "corpus_id",

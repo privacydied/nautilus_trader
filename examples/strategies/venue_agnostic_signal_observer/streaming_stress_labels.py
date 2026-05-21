@@ -1,4 +1,5 @@
-"""Streaming stress label generation for cross-asset beta-lag archive.
+"""
+Streaming stress label generation for cross-asset beta-lag archive.
 
 Reads JSONL tick files line-by-line to avoid loading all ticks into memory.
 """
@@ -10,7 +11,9 @@ import math
 import random
 from collections import deque
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
+from typing import Iterator
+
 
 SEED = 42
 STRESS_DEDUP_COOLDOWN_NS = 30_000_000_000  # 30 seconds
@@ -30,7 +33,7 @@ def _compute_move_bps_from_jsonl(
     """Compute rolling lookback moves by streaming a JSONL tick file."""
     window: deque[tuple[int, float]] = deque()
 
-    with open(jsonl_path, "r", encoding="utf-8") as f:
+    with open(jsonl_path, encoding="utf-8") as f:
         for line in f:
             row = json.loads(line)
             ts_ns = row["ts_event"]
@@ -115,13 +118,14 @@ def compute_forward_returns_from_ts_prices(
     SLIPPAGE_BPS,
     QUOTE_MISMATCH_BUFFER_BPS,
 ) -> list:
-    """Compute forward returns using pre-extracted (timestamps, prices) arrays.
+    """
+    Compute forward returns using pre-extracted (timestamps, prices) arrays.
 
     Identical to compute_forward_returns_for_stress but accepts parallel
     arrays instead of TradeTickLite objects. Much more memory-efficient
     for large target tick sets.
     """
-    from bisect import bisect_left  # noqa: PLC0415
+    from bisect import bisect_left
 
     _validate_monotonic_timestamps(timestamps)
 
@@ -221,15 +225,16 @@ def generate_baseline_from_ts_prices(
     HORIZONS_MS,
     baseline_requests: list[dict[str, Any]] | None = None,
 ) -> list:
-    """Generate baseline forward returns from (timestamps, prices) arrays.
+    """
+    Generate baseline forward returns from (timestamps, prices) arrays.
 
     By default, samples random timestamps/symbols from the supplied target arrays.
     For exact-cell comparability, pass ``baseline_requests`` rows containing
     ``target_symbol``, ``signal_ts`` and optional ``horizons_ms``. Returned rows
     always preserve the real target symbol and requested horizon.
     """
-    import random as _random  # noqa: PLC0415
-    from bisect import bisect_left  # noqa: PLC0415
+    import random as _random
+    from bisect import bisect_left
 
     if not target_data:
         return []
@@ -318,14 +323,15 @@ def check_target_coverage_from_ts_prices(
     max_horizon_ns: int,
     buffer_ns: int = 5_000_000_000,
 ) -> tuple:
-    """Check target coverage using (timestamps, prices) arrays.
+    """
+    Check target coverage using (timestamps, prices) arrays.
 
     Returns (all_covered, coverage_map).
     """
     horizon_end = entry_ns + max_horizon_ns + buffer_ns
     coverage = {}
 
-    for sym, (ts_arr, pr_arr) in target_data.items():
+    for sym, (ts_arr, _pr_arr) in target_data.items():
         if ts_arr.size == 0:
             coverage[sym] = {
                 "symbol": sym, "tick_count": 0,
@@ -341,7 +347,8 @@ def check_target_coverage_from_ts_prices(
         has_coverage = first_ts <= entry_ns and last_ts >= horizon_end
 
         if has_coverage:
-            from bisect import bisect_right, bisect_left  # noqa: PLC0415
+            from bisect import bisect_left
+            from bisect import bisect_right
             left = bisect_left(ts_arr, entry_ns)
             right = bisect_right(ts_arr, horizon_end)
             tick_count = right - left

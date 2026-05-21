@@ -1,4 +1,5 @@
-"""CLI --device / --devices argument tests for the three GPU runner scripts.
+"""
+CLI --device / --devices argument tests for the three GPU runner scripts.
 
 No CUDA required. Tests parse, override, validation-failure, and CPU-mode
 behaviour using only the argparse layer and gpu_devices helpers.
@@ -8,23 +9,20 @@ No auth, no orders, no network, no captures.
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.gpu_devices import (
-    parse_cuda_devices,
-    validate_cuda_devices,
-)
+from examples.strategies.venue_agnostic_signal_observer.gpu_devices import parse_cuda_devices
+from examples.strategies.venue_agnostic_signal_observer.gpu_devices import validate_cuda_devices
 from examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import (
     build_parser as build_forward_parser,
 )
-from examples.strategies.venue_agnostic_signal_observer.run_permutation_null import (
-    build_parser as build_null_parser,
-)
 from examples.strategies.venue_agnostic_signal_observer.run_lead_lag_heatmap import (
     build_parser as build_heatmap_parser,
+)
+from examples.strategies.venue_agnostic_signal_observer.run_permutation_null import (
+    build_parser as build_null_parser,
 )
 
 
@@ -104,35 +102,25 @@ class TestPermutationNullDeviceCLI:
         assert args.devices == ""
 
     def test_legacy_device_flag(self):
-        args = _parse(build_null_parser(), self._required() + ["--device", "cuda:1"])
+        args = _parse(build_null_parser(), [*self._required(), "--device", "cuda:1"])
         assert args.device == "cuda:1"
 
     def test_devices_flag_parses(self):
-        args = _parse(build_null_parser(), self._required() + ["--devices", "cuda:0,cuda:1"])
+        args = _parse(build_null_parser(), [*self._required(), "--devices", "cuda:0,cuda:1"])
         assert args.devices == "cuda:0,cuda:1"
 
     def test_devices_overrides_device(self):
-        args = _parse(build_null_parser(), self._required() + [
-            "--device", "cuda:1",
-            "--devices", "cuda:0,cuda:1",
-            "--engine", "gpu",
-        ])
+        args = _parse(build_null_parser(), [*self._required(), "--device", "cuda:1", "--devices", "cuda:0,cuda:1", "--engine", "gpu"])
         parsed = parse_cuda_devices(args.devices, fallback_device=args.device, engine="gpu")
         assert parsed == ["cuda:0", "cuda:1"]
 
     def test_single_devices_matches_device_behavior(self):
-        args = _parse(build_null_parser(), self._required() + [
-            "--devices", "cuda:0",
-            "--engine", "gpu",
-        ])
+        args = _parse(build_null_parser(), [*self._required(), "--devices", "cuda:0", "--engine", "gpu"])
         parsed = parse_cuda_devices(args.devices, fallback_device=args.device, engine="gpu")
         assert parsed == ["cuda:0"]
 
     def test_cpu_mode_devices_ignored(self):
-        args = _parse(build_null_parser(), self._required() + [
-            "--devices", "cuda:0,cuda:1",
-            "--engine", "cpu",
-        ])
+        args = _parse(build_null_parser(), [*self._required(), "--devices", "cuda:0,cuda:1", "--engine", "cpu"])
         result = parse_cuda_devices(args.devices, fallback_device=args.device, engine="cpu")
         assert result == []
 
@@ -162,35 +150,25 @@ class TestLeadLagHeatmapDeviceCLI:
         assert args.devices == ""
 
     def test_legacy_device_flag(self):
-        args = _parse(build_heatmap_parser(), self._required() + ["--device", "cuda:1"])
+        args = _parse(build_heatmap_parser(), [*self._required(), "--device", "cuda:1"])
         assert args.device == "cuda:1"
 
     def test_devices_flag_parses(self):
-        args = _parse(build_heatmap_parser(), self._required() + ["--devices", "cuda:0,cuda:1"])
+        args = _parse(build_heatmap_parser(), [*self._required(), "--devices", "cuda:0,cuda:1"])
         assert args.devices == "cuda:0,cuda:1"
 
     def test_devices_overrides_device(self):
-        args = _parse(build_heatmap_parser(), self._required() + [
-            "--device", "cuda:1",
-            "--devices", "cuda:0,cuda:1",
-            "--engine", "gpu",
-        ])
+        args = _parse(build_heatmap_parser(), [*self._required(), "--device", "cuda:1", "--devices", "cuda:0,cuda:1", "--engine", "gpu"])
         parsed = parse_cuda_devices(args.devices, fallback_device=args.device, engine="gpu")
         assert parsed == ["cuda:0", "cuda:1"]
 
     def test_single_devices_matches_device_behavior(self):
-        args = _parse(build_heatmap_parser(), self._required() + [
-            "--devices", "cuda:0",
-            "--engine", "gpu",
-        ])
+        args = _parse(build_heatmap_parser(), [*self._required(), "--devices", "cuda:0", "--engine", "gpu"])
         parsed = parse_cuda_devices(args.devices, fallback_device=args.device, engine="gpu")
         assert parsed == ["cuda:0"]
 
     def test_cpu_mode_devices_ignored(self):
-        args = _parse(build_heatmap_parser(), self._required() + [
-            "--devices", "cuda:0,cuda:1",
-            "--engine", "cpu",
-        ])
+        args = _parse(build_heatmap_parser(), [*self._required(), "--devices", "cuda:0,cuda:1", "--engine", "cpu"])
         result = parse_cuda_devices(args.devices, fallback_device=args.device, engine="cpu")
         assert result == []
 

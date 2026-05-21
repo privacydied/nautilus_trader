@@ -10,76 +10,145 @@ Uses synthetic funding series in fixtures. No network calls, no real archives.
 from __future__ import annotations
 
 import random
-import math
+
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
-    ASSETS,
-    FDR_ALPHA,
-    FDR_FAMILY_SIZE,
-    FDR_METHOD,
-    HOLD_LENGTHS,
-    SAFETY_MODE,
-    THRESHOLDS_BPS,
     ALLOWED_VERDICTS,
-    FORBIDDEN_VERDICTS,
-    CELL_LEVEL_LABELS,
-    VALID_CELL_VERDICTS,
-    PRIMARY_CAMPAIGN_COST_BPS,
-    DIAGNOSTIC_COST_BPS,
-    NULL_ALPHA,
-    NULL_ITERATIONS,
-    NULL_SEED,
-    TRAIN_FRACTION,
-    FUNDING_SANITY_BAND_BPS,
-    MIN_SETTLEMENTS_IN_WINDOW,
-    GATE_A_MIN_EVENTS,
-    GATE_B_MIN_EVENTS,
-    HOLDOUT_MIN_EVENTS,
-    PRE_NULL_MIN_EVENTS,
-    FROZEN_CELL_COUNT,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import ASSETS
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
     COST_DECOMPOSITION,
-    CellIdentifier,
-    CellRecord,
-    CampaignResult,
-    DispersionEvent,
-    FundingSeries,
-    GateAResult,
-    GateBComboResult,
-    SettlementRecord,
-    WindowResolution,
-    VERDICT_ARCHIVE_CANDIDATE,
-    VERDICT_DATA_INSUFFICIENT,
-    VERDICT_FDR_BLOCKED,
-    VERDICT_FUNDING_UNIT_AMBIGUOUS,
-    VERDICT_HOLDOUT_FAILED,
-    VERDICT_NEEDS_MORE_DATA,
-    VERDICT_NULL_REJECTED,
-    VERDICT_REJECTED,
-    VERDICT_REJECTED_COST_WALL,
-    LABEL_PASS_PRE_NULL,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    DIAGNOSTIC_COST_BPS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import FDR_ALPHA
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    FDR_FAMILY_SIZE,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import FDR_METHOD
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    FORBIDDEN_VERDICTS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    FROZEN_CELL_COUNT,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    FUNDING_SANITY_BAND_BPS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    GATE_A_MIN_EVENTS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    GATE_B_MIN_EVENTS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import HOLD_LENGTHS
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    HOLDOUT_MIN_EVENTS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
     LABEL_PASS_NULL,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    LABEL_PASS_PRE_NULL,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    MIN_SETTLEMENTS_IN_WINDOW,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    NULL_ITERATIONS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import NULL_SEED
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    PRE_NULL_MIN_EVENTS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    PRIMARY_CAMPAIGN_COST_BPS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import SAFETY_MODE
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    THRESHOLDS_BPS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    TRAIN_FRACTION,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    VERDICT_ARCHIVE_CANDIDATE,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    VERDICT_DATA_INSUFFICIENT,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    VERDICT_FDR_BLOCKED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    VERDICT_FUNDING_UNIT_AMBIGUOUS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    VERDICT_HOLDOUT_FAILED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    VERDICT_NEEDS_MORE_DATA,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    VERDICT_NULL_REJECTED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    VERDICT_REJECTED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    VERDICT_REJECTED_COST_WALL,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    CellIdentifier,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import CellRecord
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    FundingSeries,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    SettlementRecord,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    WindowResolution,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
     build_all_cell_identifiers,
-    compute_settlement_carry_bps,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
     compute_realized_carry_bps,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
+    compute_settlement_carry_bps,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import (
     validate_verdict,
 )
 from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import (
-    detect_funding_unit,
-    normalize_to_bps,
-    stage0_load_and_normalize,
-    stage1_gate_a,
-    stage2_gate_b,
-    stage3_grid_evaluation,
-    stage4_pre_null_economic_gates,
-    stage5_event_vector_shift_null,
-    stage6_fdr,
-    stage7_holdout_confirmation,
-    stage8_study_verdict,
     _benjamini_yekutieli,
-    _median,
-    _find_dispersion_events,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import (
     _compute_non_overlapping_campaigns,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import (
+    detect_funding_unit,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import (
+    normalize_to_bps,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import (
+    stage0_load_and_normalize,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import (
+    stage2_gate_b,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import (
+    stage4_pre_null_economic_gates,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import stage6_fdr
+from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import (
+    stage8_study_verdict,
 )
 
 
@@ -185,7 +254,7 @@ def _make_window(
     interval_ns: int = 8 * 3600 * 1_000_000_000,
 ) -> WindowResolution:
     """Create a WindowResolution for synthetic data."""
-    total_ns = n * interval_ns
+    n * interval_ns
     split_idx = int(n * TRAIN_FRACTION)
     timestamps = [start_ns + i * interval_ns for i in range(n)]
     return WindowResolution(
@@ -209,7 +278,8 @@ def _make_window(
 
 
 class TestNoLookahead:
-    """A constructed series where settlement t has large funding and t+1..t+N
+    """
+    A constructed series where settlement t has large funding and t+1..t+N
     are zero must yield realized_carry_bps == 0.
 
     If t leaks into the sum, this test fails.
@@ -257,14 +327,14 @@ class TestNoLookahead:
         )
 
     def test_realized_carry_excludes_entry_settlement(self):
-        """Even with non-zero entry funding, the carry for t+1..t+N
-        settlements is computed correctly — entry t is excluded."""
+        """
+        Even with non-zero entry funding, the carry for t+1..t+N
+        settlements is computed correctly — entry t is excluded.
+        """
         # Entry at t=0, where binance=20 bps, bybit=5 bps.
         # Subsequent settlements: t=1: binance=8, bybit=6; t=2: binance=10, bybit=3
         # Expected carry (short_binance): (8-6) + (10-3) = 2 + 7 = 9 bps
         # NOT including entry: (20-5) = 15 bps should NOT appear
-        f_short_0 = 20.0  # This should be excluded
-        f_long_0 = 5.0    # This should be excluded
 
         f_short_1 = 8.0   # t+1 carry
         f_long_1 = 6.0
@@ -291,14 +361,17 @@ class TestNoLookahead:
 
 
 class TestPnLSignCorrectness:
-    """With known positive funding differential, the short-higher / long-lower
+    """
+    With known positive funding differential, the short-higher / long-lower
     assignment yields positive realized_carry_bps; with the differential
     negated, the sign flips correctly — no special-casing for negative funding.
     """
 
     def test_positive_differential_yields_positive_carry(self):
-        """When binance funding > bybit funding, short binance / long bybit
-        collects positive carry (short receives, long pays)."""
+        """
+        When binance funding > bybit funding, short binance / long bybit
+        collects positive carry (short receives, long pays).
+        """
         # binance: 20 bps, bybit: 5 bps for each settlement
         f_short = 20.0  # short on binance (higher rate)
         f_long = 5.0    # long on bybit (lower rate)
@@ -307,8 +380,10 @@ class TestPnLSignCorrectness:
         assert carry > 0, f"Expected positive carry, got {carry}"
 
     def test_negated_differential_yields_negative_carry(self):
-        """When bybit funding > binance funding, short bybit / long binance
-        direction is negated, and carry flips sign with no special-casing."""
+        """
+        When bybit funding > binance funding, short bybit / long binance
+        direction is negated, and carry flips sign with no special-casing.
+        """
         # Same magnitude but reversed: bybit has 20, binance has 5
         # Direction: short_bybit
         # f_short = bybit = 20, f_long = binance = 5
@@ -319,9 +394,11 @@ class TestPnLSignCorrectness:
         assert carry == pytest.approx(15.0), f"Expected 15.0, got {carry}"
 
     def test_negative_funding_rates_handled(self):
-        """Negative funding rates are handled through signed arithmetic,
+        """
+        Negative funding rates are handled through signed arithmetic,
         no special-casing needed. When rates go negative, the sign convention
-        automatically reverses payer/receiver."""
+        automatically reverses payer/receiver.
+        """
         # Both venues have negative rates
         # Short on binance (f_short = -10), long on bybit (f_long = -5)
         # carry = -10 - (-5) = -10 + 5 = -5
@@ -356,14 +433,17 @@ class TestPnLSignCorrectness:
 
 
 class TestNonOverlappingSuppression:
-    """A dense burst of dispersion events within one hold window produces
+    """
+    A dense burst of dispersion events within one hold window produces
     exactly one campaign for that cell; the suppressed ones land in
     overlapping_events_suppressed.
     """
 
     def test_dense_burst_produces_one_campaign(self):
-        """When all settlements in a short window exceed the threshold,
-        only the first event starts a campaign; the rest are suppressed."""
+        """
+        When all settlements in a short window exceed the threshold,
+        only the first event starts a campaign; the rest are suppressed.
+        """
         n = 60
         start_ns = 1_600_000_000_000_000_000
         interval = 8 * 3600 * 1_000_000_000
@@ -405,13 +485,16 @@ class TestNonOverlappingSuppression:
 
 
 class TestEventValidity:
-    """Events whose hold runs past the window end are excluded and counted
+    """
+    Events whose hold runs past the window end are excluded and counted
     in truncated_events.
     """
 
     def test_truncated_events_excluded(self):
-        """An event near the window end whose N-settlement hold exceeds the
-        available data should be counted as truncated, not valid."""
+        """
+        An event near the window end whose N-settlement hold exceeds the
+        available data should be counted as truncated, not valid.
+        """
         n = 30
         start_ns = 1_600_000_000_000_000_000
         interval = 8 * 3600 * 1_000_000_000
@@ -421,10 +504,7 @@ class TestEventValidity:
 
         for i in range(n):
             ts = start_ns + i * interval
-            if i == 25:  # event near end
-                binance_lookup[ts] = 30.0
-                bybit_lookup[ts] = 5.0
-            elif i == 5:  # early event
+            if i == 25 or i == 5:  # event near end
                 binance_lookup[ts] = 30.0
                 bybit_lookup[ts] = 5.0
             else:
@@ -447,7 +527,7 @@ class TestEventValidity:
             window_end_ns=ts_list[-1],
         )
 
-        valid = [c for c in campaigns if c is not None]
+        [c for c in campaigns if c is not None]
         truncated = sum(1 for c in campaigns if c is None)
 
         # The event at i=25 has hold_end = 25 + 6 = 31, but len(ts_list) = 30
@@ -461,13 +541,16 @@ class TestEventValidity:
 
 
 class TestFundingUnitFailClosed:
-    """A series that cannot be classified, and a series with an out-of-band
+    """
+    A series that cannot be classified, and a series with an out-of-band
     normalized value, each produce FUNDING_UNIT_AMBIGUOUS and stop the pipeline.
     """
 
     def test_unclassifiable_series_stops_pipeline(self):
-        """Mixed-scale rates that can't be confidently classified stop
-        with FUNDING_UNIT_AMBIGUOUS."""
+        """
+        Mixed-scale rates that can't be confidently classified stop
+        with FUNDING_UNIT_AMBIGUOUS.
+        """
         # Create a series where some values look decimal and some look like percents
         raw = {}
         start = 1_600_000_000_000_000_000
@@ -494,8 +577,10 @@ class TestFundingUnitFailClosed:
             f"Unexpected early exit: {early_exit}"
 
     def test_out_of_band_normalized_value_stops_pipeline(self):
-        """A series with a normalized value outside ±300 bps per settlement
-        triggers FUNDING_UNIT_AMBIGUOUS."""
+        """
+        A series with a normalized value outside ±300 bps per settlement
+        triggers FUNDING_UNIT_AMBIGUOUS.
+        """
         # Create rates that normalize to > 300 bps (i.e., > 3%)
         # In decimal: 0.05 = 500 bps, which is > 300 bps sanity band
         raw = {}
@@ -522,7 +607,8 @@ class TestFundingUnitFailClosed:
 
 
 class TestGateBUnderpoweredVsCostWall:
-    """A synthetic set with <50 events in every combo yields
+    """
+    A synthetic set with <50 events in every combo yields
     NEEDS_MORE_DATA_OR_NO_TAIL; a set with powered combos that all have
     negative median net carry yields REJECTED_COST_WALL. The two must not
     be confused.
@@ -546,8 +632,10 @@ class TestGateBUnderpoweredVsCostWall:
             f"Expected NEEDS_MORE_DATA for underpowered, got {early_exit}"
 
     def test_powered_but_negative_carry_yields_cost_wall(self):
-        """Powered combos exist but none has positive median net carry →
-        REJECTED_COST_WALL, not NEEDS_MORE_DATA."""
+        """
+        Powered combos exist but none has positive median net carry →
+        REJECTED_COST_WALL, not NEEDS_MORE_DATA.
+        """
         # Create series with enough events but negative carry
         # bybit has higher funding than binance, so short_bybit should collect
         # But we can make it so the carry doesn't cover costs
@@ -591,7 +679,8 @@ class TestGateBUnderpoweredVsCostWall:
 
 
 class TestFDRDenominator:
-    """With only k < 24 cells null-tested, the BY family size used is still 24
+    """
+    With only k < 24 cells null-tested, the BY family size used is still 24
     (non-tested cells carry p = 1).
     """
 
@@ -637,8 +726,8 @@ class TestFDRDenominator:
 
         # The two PASS_PRE_NULL cells should have their p-values adjusted
         # The rest should have p = 1.0 (set in stage5 or carried through)
-        tested_cells = [c for c in fdr_records if c.cell_verdict in (LABEL_PASS_NULL, VERDICT_NULL_REJECTED)]
-        non_tested = [c for c in fdr_records if c.null_p_value is not None and c.null_p_value == 1.0]
+        [c for c in fdr_records if c.cell_verdict in (LABEL_PASS_NULL, VERDICT_NULL_REJECTED)]
+        [c for c in fdr_records if c.null_p_value is not None and c.null_p_value == 1.0]
 
         # Family size is always 24
         all_p = [c.null_p_value if c.null_p_value is not None else 1.0 for c in fdr_records]
@@ -651,13 +740,16 @@ class TestFDRDenominator:
 
 
 class TestNullStructure:
-    """The event-vector shift preserves the future-carry series (a checksum/
+    """
+    The event-vector shift preserves the future-carry series (a checksum/
     length invariant) and only permutes event positions.
     """
 
     def test_future_carry_series_unchanged_after_shift(self):
-        """The differential carry series must have the same elements before and
-        after an event-vector shift — only the alignment with events changes."""
+        """
+        The differential carry series must have the same elements before and
+        after an event-vector shift — only the alignment with events changes.
+        """
         n = 100
         rng = random.Random(42)
 
@@ -666,7 +758,6 @@ class TestNullStructure:
 
         # Build event positions
         event_positions = [10, 30, 50, 70]
-        event_directions = [1.0, 1.0, -1.0, 1.0]
 
         # Circular shift
         shift = 15
@@ -716,7 +807,7 @@ class TestVerdictGuard:
             "TRADE_READY",
             "ARCHIVE_CANDIDATE_FOR_EXECUTION_MODELING",
         }
-        assert FORBIDDEN_VERDICTS == expected_forbidden, \
+        assert expected_forbidden == FORBIDDEN_VERDICTS, \
             f"FORBIDDEN_VERDICTS mismatch: {FORBIDDEN_VERDICTS} vs {expected_forbidden}"
 
     def test_allowed_verdict_set_matches_spec(self):
@@ -732,7 +823,7 @@ class TestVerdictGuard:
             "HOLDOUT_FAILED_DIAGNOSTIC",
             "ARCHIVE_CANDIDATE_FOR_LONGER_OBSERVATION",
         }
-        assert ALLOWED_VERDICTS == expected_allowed, \
+        assert expected_allowed == ALLOWED_VERDICTS, \
             f"ALLOWED_VERDICTS mismatch: {ALLOWED_VERDICTS} vs {expected_allowed}"
 
 
@@ -742,7 +833,8 @@ class TestVerdictGuard:
 
 
 class TestVerdictAssemblyDeterminism:
-    """Construct cell-verdict sets that exercise each of the Stage 8 ordered
+    """
+    Construct cell-verdict sets that exercise each of the Stage 8 ordered
     rules and assert the study-level verdict matches the rule that should fire
     — including the HOLDOUT_FAILED_DIAGNOSTIC vs FDR_BLOCKED_DIAGNOSTIC
     distinction.
@@ -768,7 +860,7 @@ class TestVerdictAssemblyDeterminism:
                 worst_decile_net_carry_bps=-40.0 if v not in (VERDICT_NEEDS_MORE_DATA,) else 0.0,
                 convergence_rate=0.5,
                 cell_verdict=v,
-                fdr_survived=(v == VERDICT_ARCHIVE_CANDIDATE) or (v == VERDICT_HOLDOUT_FAILED) or (v == LABEL_PASS_NULL),
+                fdr_survived=v in (VERDICT_ARCHIVE_CANDIDATE, VERDICT_HOLDOUT_FAILED, LABEL_PASS_NULL),
             ))
         return records
 
@@ -780,8 +872,10 @@ class TestVerdictAssemblyDeterminism:
         assert result == VERDICT_ARCHIVE_CANDIDATE
 
     def test_rule5_holdout_failed_diagnostic(self):
-        """Rule 5: Some survived FDR but all such cells failed holdout →
-        HOLDOUT_FAILED_DIAGNOSTIC."""
+        """
+        Rule 5: Some survived FDR but all such cells failed holdout →
+        HOLDOUT_FAILED_DIAGNOSTIC.
+        """
         verdicts = [VERDICT_HOLDOUT_FAILED] + [VERDICT_NEEDS_MORE_DATA] * 23
         cells = self._make_cells(verdicts)
         # Mark the holdout_failed cell as FDR survivor
@@ -794,9 +888,11 @@ class TestVerdictAssemblyDeterminism:
         assert result == VERDICT_HOLDOUT_FAILED
 
     def test_rule6_fdr_blocked_diagnostic(self):
-        """Rule 6: Some reached PASS_NULL but all ended as FDR_BLOCKED →
+        """
+        Rule 6: Some reached PASS_NULL but all ended as FDR_BLOCKED →
         FDR_BLOCKED_DIAGNOSTIC. Uses reached_pass_null boolean to track
-        pipeline progress, not the final verdict label."""
+        pipeline progress, not the final verdict label.
+        """
         verdicts = [VERDICT_FDR_BLOCKED] + [VERDICT_NEEDS_MORE_DATA] * 23
         cells = self._make_cells(verdicts)
         # Mark the FDR_BLOCKED cell as having reached PASS_NULL in Stage 5
@@ -809,8 +905,10 @@ class TestVerdictAssemblyDeterminism:
         assert result == VERDICT_FDR_BLOCKED
 
     def test_rule7_null_rejected_diagnostic(self):
-        """Rule 7: Some reached PASS_PRE_NULL but all ended as NULL_REJECTED →
-        NULL_REJECTED_DIAGNOSTIC. Uses reached_pass_pre_null boolean."""
+        """
+        Rule 7: Some reached PASS_PRE_NULL but all ended as NULL_REJECTED →
+        NULL_REJECTED_DIAGNOSTIC. Uses reached_pass_pre_null boolean.
+        """
         verdicts = [VERDICT_NULL_REJECTED] + [VERDICT_NEEDS_MORE_DATA] * 23
         cells = self._make_cells(verdicts)
         # Mark the NULL_REJECTED cell as having reached PASS_PRE_NULL in Stage 4
@@ -823,11 +921,13 @@ class TestVerdictAssemblyDeterminism:
         assert result == VERDICT_NULL_REJECTED
 
     def test_mixed_holdout_failed_and_fdr_blocked_rule5_wins(self):
-        """Mixed case: cell X survived FDR but failed holdout (HOLDOUT_FAILED),
+        """
+        Mixed case: cell X survived FDR but failed holdout (HOLDOUT_FAILED),
         cell Y reached PASS_NULL but is FDR_BLOCKED. Rule 5 should fire
         (HOLDOUT_FAILED_DIAGNOSTIC), not Rule 6 (FDR_BLOCKED_DIAGNOSTIC),
         because not every PASS_NULL cell ended as FDR_BLOCKED — cell X
-        progressed further."""
+        progressed further.
+        """
         verdicts = [VERDICT_HOLDOUT_FAILED, VERDICT_FDR_BLOCKED] + [VERDICT_NEEDS_MORE_DATA] * 22
         cells = self._make_cells(verdicts)
         # Cell 0: survived FDR, failed holdout
@@ -849,8 +949,10 @@ class TestVerdictAssemblyDeterminism:
         )
 
     def test_rule6_fires_when_all_pass_null_cells_are_fdr_blocked(self):
-        """Pure FDR_BLOCKED case: all cells that reached PASS_NULL are FDR_BLOCKED,
-        no cells survived FDR. Rule 6 fires correctly."""
+        """
+        Pure FDR_BLOCKED case: all cells that reached PASS_NULL are FDR_BLOCKED,
+        no cells survived FDR. Rule 6 fires correctly.
+        """
         verdicts = [VERDICT_FDR_BLOCKED, VERDICT_FDR_BLOCKED] + [VERDICT_NEEDS_MORE_DATA] * 22
         cells = self._make_cells(verdicts)
         cells[0] = CellRecord(
@@ -867,8 +969,10 @@ class TestVerdictAssemblyDeterminism:
         assert result == VERDICT_FDR_BLOCKED
 
     def test_rule6_does_not_fire_if_pass_null_cell_progressed(self):
-        """A cell that reached PASS_NULL but then survived FDR and holdout
-        should mean Rule 4 fires (ARCHIVE_CANDIDATE), not Rule 6."""
+        """
+        A cell that reached PASS_NULL but then survived FDR and holdout
+        should mean Rule 4 fires (ARCHIVE_CANDIDATE), not Rule 6.
+        """
         verdicts = [VERDICT_ARCHIVE_CANDIDATE] + [VERDICT_NEEDS_MORE_DATA] * 23
         cells = self._make_cells(verdicts)
         cells[0] = CellRecord(
@@ -888,16 +992,20 @@ class TestVerdictAssemblyDeterminism:
         assert result == VERDICT_REJECTED
 
     def test_rule9_rejected_cost_wall(self):
-        """Rule 9: All non-underpowered cells are REJECTED_COST_WALL →
-        REJECTED_COST_WALL."""
+        """
+        Rule 9: All non-underpowered cells are REJECTED_COST_WALL →
+        REJECTED_COST_WALL.
+        """
         verdicts = [VERDICT_REJECTED_COST_WALL] * 10 + [VERDICT_NEEDS_MORE_DATA] * 14
         cells = self._make_cells(verdicts)
         result, _ = stage8_study_verdict(cells)
         assert result == VERDICT_REJECTED_COST_WALL
 
     def test_rule10_needs_more_data(self):
-        """Rule 10: All 24 cells NEEDS_MORE_DATA_OR_NO_TAIL →
-        NEEDS_MORE_DATA_OR_NO_TAIL."""
+        """
+        Rule 10: All 24 cells NEEDS_MORE_DATA_OR_NO_TAIL →
+        NEEDS_MORE_DATA_OR_NO_TAIL.
+        """
         verdicts = [VERDICT_NEEDS_MORE_DATA] * 24
         cells = self._make_cells(verdicts)
         result, _ = stage8_study_verdict(cells)
@@ -1071,8 +1179,10 @@ class TestBYFDR:
             assert p == pytest.approx(1.0, abs=0.01)
 
     def test_single_significant_survives_at_corrected_threshold(self):
-        """One very small p-value among many nulls should have a BY-adjusted
-        p-value that may or may not survive the correction."""
+        """
+        One very small p-value among many nulls should have a BY-adjusted
+        p-value that may or may not survive the correction.
+        """
         p_values = [0.001] + [1.0] * 23
         adj = _benjamini_yekutieli(p_values, alpha=0.05)
         # The small p-value should have a much larger adjusted p-value due to
@@ -1125,7 +1235,6 @@ class TestCostDecomposition:
     """The cost decomposition must sum to 50 bps."""
 
     def test_cost_decomposition_sums_to_50(self):
-        from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_carry import COST_DECOMPOSITION
         total = sum(v for _, v in COST_DECOMPOSITION)
         assert total == pytest.approx(50.0, abs=0.01)
 
@@ -1399,7 +1508,8 @@ class TestBybitFundingCSVLoader:
 
 
 class TestLoadArchiveData:
-    """Integration tests for load_archive_data.
+    """
+    Integration tests for load_archive_data.
 
     Uses tiny synthetic CSVs, no network calls.
     """
@@ -1435,7 +1545,7 @@ class TestLoadArchiveData:
 
         result = load_archive_data(binance_btc, binance_eth, bybit_btc, bybit_eth)
         assert set(result.keys()) == {"binance_BTC", "binance_ETH", "bybit_BTC", "bybit_ETH"}
-        for key, series in result.items():
+        for series in result.values():
             assert len(series) == 10
 
     def test_missing_path_raises_file_not_found(self, tmp_path):
@@ -1456,11 +1566,11 @@ class TestLoadArchiveData:
 
     def test_unit_normalization_in_stage0(self, tmp_path):
         """Decimal-format rates are normalized to bps by Stage 0."""
-        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
-            load_archive_data,
-        )
         from examples.strategies.venue_agnostic_signal_observer.funding_dispersion_stages import (
             stage0_load_and_normalize,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_funding_dispersion_carry import (
+            load_archive_data,
         )
         # Create series with enough data to pass window requirement (>200 settlements)
         base_ts = 1735689600000
@@ -1475,7 +1585,7 @@ class TestLoadArchiveData:
 
         # Decimal 0.0001 should normalize to 1.0 bps
         assert verdict is None  # no early exit
-        for key, series in normalized.items():
+        for series in normalized.values():
             assert series.unit_detected == "decimal"
             assert series.unit_normalized_to == "bps_per_settlement"
             assert series.records[0].funding_rate_bps == pytest.approx(1.0)

@@ -14,12 +14,15 @@ Invariants:
 - Single-window artifacts should be demoted or kept diagnostic-only.
 """
 
-from .aggregator import aggregate_corpus, CorpusAggregationResult, CaptureRecord
+from .aggregator import CaptureRecord
+from .aggregator import CorpusAggregationResult
+from .aggregator import aggregate_corpus
 from .ledger_emitter import emit_corpus_events
 
+
 __all__ = [
-    "aggregate_corpus",
-    "CorpusAggregationResult",
     "CaptureRecord",
+    "CorpusAggregationResult",
+    "aggregate_corpus",
     "emit_corpus_events",
 ]

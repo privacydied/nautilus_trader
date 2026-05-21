@@ -1,4 +1,5 @@
-"""File hashing, hash cache, and deterministic data_corpus_hash.
+"""
+File hashing, hash cache, and deterministic data_corpus_hash.
 
 Hash cache is keyed by (absolute path, file size bytes, mtime ns).
 Cache lives at reports/venue_agnostic_signal_observer/offline_historical_hash_cache.json.
@@ -11,11 +12,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
+from typing import Dict
+from typing import Sequence
 
 from .offline_historical_models import OfflineSourceFile
+
 
 # ---------------------------------------------------------------------------
 # Default cache path
@@ -51,7 +56,7 @@ def sha256_file(path: Path, chunk_size: int = 1 << 20) -> str:
 class HashCache:
     """Reusable per-session file hash cache backed by a JSON file on disk."""
 
-    def __init__(self, cache_path: Optional[Path] = None) -> None:
+    def __init__(self, cache_path: Path | None = None) -> None:
         self._path: Path = Path(cache_path) if cache_path else _DEFAULT_CACHE_PATH
         self._data: Dict[str, Any] = {}
         self._reused: int = 0
@@ -81,7 +86,8 @@ class HashCache:
     def get_or_compute(
         self, path: Path, force_rehash: bool = False
     ) -> tuple[str, bool]:
-        """Return (sha256_hex, was_reused).
+        """
+        Return (sha256_hex, was_reused).
 
         If ``force_rehash`` is True, always recomputes even if the cache entry
         is valid.
@@ -106,7 +112,7 @@ class HashCache:
         sha = sha256_file(path)
         self._data[key] = {
             "file_sha256": sha,
-            "computed_at_utc": datetime.now(timezone.utc).isoformat(),
+            "computed_at_utc": datetime.now(UTC).isoformat(),
             "file_size_bytes": size,
             "mtime_ns": mtime_ns,
         }
@@ -154,7 +160,8 @@ def compute_data_corpus_hash(
     source_files: Sequence[OfflineSourceFile],
     schema_version: str,
 ) -> str:
-    """Compute a deterministic SHA-256 over sorted source-file identities.
+    """
+    Compute a deterministic SHA-256 over sorted source-file identities.
 
     Any change to a source file's SHA-256, row count, timestamp unit,
     or schema version changes the corpus hash.

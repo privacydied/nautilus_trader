@@ -1,4 +1,5 @@
-"""Comprehensive tests for the tick-level lead-lag event-study framework.
+"""
+Comprehensive tests for the tick-level lead-lag event-study framework.
 
 Covers:
   1. Tick model serialization and validation
@@ -24,39 +25,35 @@ Covers:
   21. No account-PnL fields scan
 """
 
-import csv
 import json
-import os
-import re
 from pathlib import Path
 
 import pytest
 
+from examples.strategies.venue_agnostic_signal_observer.event_study import TickLeadLagConfig
+from examples.strategies.venue_agnostic_signal_observer.event_study import TickLeadLagGenerator
+from examples.strategies.venue_agnostic_signal_observer.event_study import evaluate_candidate_group
+from examples.strategies.venue_agnostic_signal_observer.event_study import evaluate_tick_signal
+from examples.strategies.venue_agnostic_signal_observer.event_study import generate_random_baseline
 from examples.strategies.venue_agnostic_signal_observer.event_study import (
-    TickLeadLagConfig,
-    TickLeadLagGenerator,
-    evaluate_candidate_group,
-    evaluate_tick_signal,
-    generate_random_baseline,
     generate_synthetic_no_edge_ticks,
+)
+from examples.strategies.venue_agnostic_signal_observer.event_study import (
     generate_synthetic_positive_lead_lag_ticks,
 )
-from examples.strategies.venue_agnostic_signal_observer.tick_models import (
-    QuoteTickLite,
-    TickForwardReturn,
-    TickSignalEvent,
-    TradeTickLite,
-)
-from examples.strategies.venue_agnostic_signal_observer.tick_store import (
-    load_quotes_jsonl,
-    load_trades_jsonl,
-    merge_and_sort_ticks,
-    reject_stale_ticks,
-    save_quotes_jsonl,
-    save_trades_jsonl,
-    sort_by_ts,
-    tick_file_discovery,
-)
+from examples.strategies.venue_agnostic_signal_observer.tick_models import QuoteTickLite
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TickForwardReturn
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TickSignalEvent
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
+from examples.strategies.venue_agnostic_signal_observer.tick_store import load_quotes_jsonl
+from examples.strategies.venue_agnostic_signal_observer.tick_store import load_trades_jsonl
+from examples.strategies.venue_agnostic_signal_observer.tick_store import merge_and_sort_ticks
+from examples.strategies.venue_agnostic_signal_observer.tick_store import reject_stale_ticks
+from examples.strategies.venue_agnostic_signal_observer.tick_store import save_quotes_jsonl
+from examples.strategies.venue_agnostic_signal_observer.tick_store import save_trades_jsonl
+from examples.strategies.venue_agnostic_signal_observer.tick_store import sort_by_ts
+from examples.strategies.venue_agnostic_signal_observer.tick_store import tick_file_discovery
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -191,7 +188,7 @@ class TestTickStore:
         path = str(tmp_path / "bad.jsonl")
         with open(path, "w") as f:
             f.write('{"ts_event": 100, "venue": "K", "symbol": "BTC/USD", "bid": 50000.0, "ask": 50005.0}\n')
-            f.write('NOT JSON\n')
+            f.write("NOT JSON\n")
             f.write('{"ts_event": 200, "venue": "K", "symbol": "BTC/USD", "bid": 50001.0, "ask": 50006.0}\n')
         loaded = load_quotes_jsonl(path)
         assert len(loaded) == 2
@@ -655,8 +652,9 @@ class TestReportOutput:
     def test_markdown_report_created(self, tmp_path: Path):
         """Run the sweep runner with synthetic data and verify report output."""
         from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import (
-            run_sweep, build_parser,
+            build_parser,
         )
+        from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import run_sweep
         # Create synthetic tick data
         source, target = generate_synthetic_positive_lead_lag_ticks(
             num_ticks=200, jump_interval=10, jump_bps=30.0,
@@ -689,7 +687,13 @@ class TestReportOutput:
         # The sweep runner only returns the summary; the main() function
         # handles file writing. Call the output writers directly:
         from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import (
-            _write_outputs, generate_markdown_report, _determine_verdict,
+            _determine_verdict,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import (
+            _write_outputs,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import (
+            generate_markdown_report,
         )
         verdict = _determine_verdict(summary, data_loaded=True)
         _write_outputs(summary, args.out, args.skip_baseline)

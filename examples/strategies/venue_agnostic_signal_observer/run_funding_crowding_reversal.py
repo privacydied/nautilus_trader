@@ -24,28 +24,22 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from .funding_crowding_data import (
-    ArchiveCache,
-    FundingRateRow,
-    SpotKlineRow,
-    compute_funding_coverage,
-    fetch_funding_range,
-    fetch_spot_klines_range,
-)
-from .funding_crowding_evaluation import (
-    FundingObservation,
-    SpotPriceSnapshot,
-    build_all_cell_identifiers,
-    estimate_coverage,
-)
-from .run_artifacts import create_run_id
+from .funding_crowding_data import ArchiveCache
+from .funding_crowding_data import FundingRateRow
+from .funding_crowding_data import SpotKlineRow
+from .funding_crowding_data import compute_funding_coverage
+from .funding_crowding_data import fetch_funding_range
+from .funding_crowding_data import fetch_spot_klines_range
+from .funding_crowding_evaluation import FundingObservation
+from .funding_crowding_evaluation import SpotPriceSnapshot
+from .funding_crowding_evaluation import estimate_coverage
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +63,8 @@ def _probe_archive_availability(
     end_year: int,
     end_month: int,
 ) -> list[dict[str, Any]]:
-    """Probe Binance Vision archive months and classify each.
+    """
+    Probe Binance Vision archive months and classify each.
 
     Returns list of dicts:
         {year, month, funding_status, spot_status}
@@ -126,7 +121,7 @@ def _fmt_ns_dt(ts_ns: int | None) -> str:
     """Format a nanosecond timestamp as a human-readable UTC datetime."""
     if ts_ns is None:
         return "N/A"
-    dt = datetime.fromtimestamp(ts_ns / 1_000_000_000, tz=timezone.utc)
+    dt = datetime.fromtimestamp(ts_ns / 1_000_000_000, tz=UTC)
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
@@ -344,14 +339,14 @@ def run_coverage(args: argparse.Namespace) -> int:
     print(f"    Failed spot months     : {len(failed_spot)}")
     print()
     print("  Funding data:")
-    print(f"    Symbol        : BTCUSDT USDⓈ-M")
+    print("    Symbol        : BTCUSDT USDⓈ-M")
     print(f"    Observations  : {coverage.total_funding_obs:,}")
     print(f"    Earliest      : {_fmt_ns_dt(coverage.earliest_funding_ns)}")
     print(f"    Latest        : {_fmt_ns_dt(coverage.latest_funding_ns)}")
     print(f"    Year-months   : {len(funding_cov.year_months_fetched)}")
     print()
     print("  Spot price data (1h):")
-    print(f"    Symbol        : BTCUSDT")
+    print("    Symbol        : BTCUSDT")
     print(f"    Observations  : {len(spot_snaps):,}")
     print(f"    Earliest      : {_fmt_ns_dt(spot_snaps[0].timestamp_ns if spot_snaps else None)}")
     print(f"    Latest        : {_fmt_ns_dt(spot_snaps[-1].timestamp_ns if spot_snaps else None)}")
@@ -363,7 +358,7 @@ def run_coverage(args: argparse.Namespace) -> int:
     print("  Funding interval metadata: AVAILABLE (funding_interval_hours column")
     print("    present in Binance Vision archive CSVs)")
     print()
-    print(f"  Coverage estimates (for reference only, NOT used for window choice):")
+    print("  Coverage estimates (for reference only, NOT used for window choice):")
     print(f"    Cells with any past-only history : {coverage.cells_with_past_only_history}/60")
     print(f"    Cells with >= 50 events          : {coverage.cells_with_ge_50_events}/60")
     print(f"    Cells with >= 100 events         : {coverage.cells_with_ge_100_events}/60")
@@ -415,12 +410,12 @@ def run_coverage(args: argparse.Namespace) -> int:
     print()
     print("  Mechanical rationale:")
     print(f"    - Earliest common available data: {_fmt_ns_dt(earliest_ns)}")
-    print(f"    - +180-day percentile warmup: 180 calendar days")
+    print("    - +180-day percentile warmup: 180 calendar days")
     print(f"    - Latest common available data: {_fmt_ns_dt(window_end_ns)}")
-    print(f"    - Window = earliest_available + 180_days through latest_common_available")
-    print(f"    - Cell counts were NOT used to choose this window.")
+    print("    - Window = earliest_available + 180_days through latest_common_available")
+    print("    - Cell counts were NOT used to choose this window.")
     print()
-    print(f"  Reference cell counts under this window:")
+    print("  Reference cell counts under this window:")
     print(f"    Cells with >= 50 events  : {coverage.cells_with_ge_50_events}/60")
     print(f"    Cells with >= 100 events : {coverage.cells_with_ge_100_events}/60")
     print()
@@ -428,7 +423,7 @@ def run_coverage(args: argparse.Namespace) -> int:
     # Write proposal JSON with all audit metadata
     proposal = {
         "status": "WINDOW_PROPOSAL_READY",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "data_source": "Binance Vision archive (data.binance.vision)",
         "symbol_funding": "BTCUSDT",
         "symbol_spot": "BTCUSDT",
@@ -504,7 +499,8 @@ def run_coverage(args: argparse.Namespace) -> int:
 
 
 def run_evaluation(args: argparse.Namespace) -> int:
-    """Execute the frozen 60-cell evaluation run.
+    """
+    Execute the frozen 60-cell evaluation run.
 
     This function is reserved for the post-approval evaluation task.
     It must not be called in this pre-run coverage task.
@@ -562,7 +558,7 @@ def main() -> int:
 
     # Default end date to current month
     if args.end_year is None or args.end_month is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if args.end_year is None:
             args.end_year = now.year
         if args.end_month is None:

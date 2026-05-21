@@ -28,9 +28,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..governance.ledger import EvidenceLedger, LedgerIntegrityError
-from ..governance.replay import replay_ledger, ReplayResult
-from .manifest import ApprovedManifest, ManifestRecord, load_manifest
+from venue_agnostic_signal_observer.governance.ledger import EvidenceLedger
+from venue_agnostic_signal_observer.governance.replay import replay_ledger
+
+from .manifest import ManifestRecord
+from .manifest import load_manifest
 
 
 @dataclass
@@ -50,7 +52,8 @@ class GateResult:
 
 
 class BotGate:
-    """Authorization gate for the trading bot.
+    """
+    Authorization gate for the trading bot.
 
     The bot says: "I am allowed to quote this exact frozen rule under
     these exact conditions, with these exact limits."
@@ -63,7 +66,8 @@ class BotGate:
         self._manifest_path = manifest_path
 
     def authorize(self, candidate_hash: str) -> GateResult:
-        """Authorize bot execution for a specific candidate.
+        """
+        Authorize bot execution for a specific candidate.
 
         Steps (all must pass for authorization):
         1. Replay ledger — fail closed on any error.

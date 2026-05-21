@@ -1,4 +1,5 @@
-"""Offline stress-corpus assembly for Edge Miner beta-lag research.
+"""
+Offline stress-corpus assembly for Edge Miner beta-lag research.
 
 The builder scans local capture files, labels source-side BTC/ETH stress windows
 with the deterministic stress-label rules, checks only timestamp/file coverage for
@@ -13,25 +14,29 @@ import hashlib
 import json
 import re
 import sys
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime, timedelta
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
+from typing import Iterable
+from typing import Sequence
+
 
 PROJECT_ROOT = str(Path(__file__).resolve().parents[3])
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from examples.strategies.venue_agnostic_signal_observer.stress_labels import (
-    LABEL_VERSION,
-    MOVE_30S_THRESHOLD_BPS,
-    MOVE_60S_THRESHOLD_BPS,
-    RANGE_THRESHOLD_BPS,
-    StressLabel,
-    build_stress_labels,
-)
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import LABEL_VERSION
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import MOVE_30S_THRESHOLD_BPS
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import MOVE_60S_THRESHOLD_BPS
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import RANGE_THRESHOLD_BPS
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import StressLabel
+from examples.strategies.venue_agnostic_signal_observer.stress_labels import build_stress_labels
 from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
 from examples.strategies.venue_agnostic_signal_observer.tick_store import load_trades_jsonl
+
 
 CORPUS_ID = "stress_beta_lag_v1"
 CORPUS_VERSION = "1.0.0"
@@ -338,7 +343,7 @@ def build_stress_corpus(
 def load_stress_corpus_manifest(path: Path) -> dict[str, Any]:
     try:
         manifest = json.loads(path.read_text())
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise ValueError(f"Invalid stress corpus manifest: {path}") from exc
     required = {
         "corpus_id",

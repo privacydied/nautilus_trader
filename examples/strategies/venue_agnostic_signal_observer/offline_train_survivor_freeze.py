@@ -1,4 +1,5 @@
-"""Phase 2B-2B1 deterministic train survivor freeze.
+"""
+Phase 2B-2B1 deterministic train survivor freeze.
 
 Consumes Phase 2B-2A train-evaluation artifacts and freezes a deterministic
 train-survivor set from the existing raw train screen only. No holdout
@@ -12,12 +13,16 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .run_artifacts import atomic_write_json, safe_output_dir
+from .run_artifacts import atomic_write_json
+from .run_artifacts import safe_output_dir
+
 
 FREEZE_SCHEMA_VERSION = "offline_train_survivor_freeze_v1"
 

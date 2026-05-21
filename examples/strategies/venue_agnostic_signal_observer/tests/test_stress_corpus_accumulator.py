@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+
 PROJECT_ROOT = str(Path(__file__).resolve().parents[4])
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -15,16 +16,19 @@ if PROJECT_ROOT not in sys.path:
 from examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture import (
     build_parser as build_capture_parser,
 )
-from examples.strategies.venue_agnostic_signal_observer.stress_corpus import (
-    TARGET_ASSETS,
-    _asset_from_filename,
-)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import TARGET_ASSETS
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus import _asset_from_filename
 from examples.strategies.venue_agnostic_signal_observer.stress_corpus_accumulator import (
     MIN_READY_USABLE_WINDOWS,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus_accumulator import (
     build_accumulated_stress_corpus,
+)
+from examples.strategies.venue_agnostic_signal_observer.stress_corpus_accumulator import (
     load_accumulated_corpus_manifest,
 )
 from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
+
 
 _NS = 1_000_000_000
 
@@ -178,7 +182,7 @@ class TestStressCorpusAccumulator:
         assert result.status == "CORPUS_READY_FOR_RERUN"
         assert result.usable_window_count == MIN_READY_USABLE_WINDOWS
         summary = _read_json(result.output_dir / "target_coverage_summary.json")
-        assert summary["coverage_by_target"] == {target: MIN_READY_USABLE_WINDOWS for target in TARGET_ASSETS}
+        assert summary["coverage_by_target"] == dict.fromkeys(TARGET_ASSETS, MIN_READY_USABLE_WINDOWS)
         manifest = load_accumulated_corpus_manifest(result.manifest_path)
         assert manifest["ready_for_rerun"] is True
 

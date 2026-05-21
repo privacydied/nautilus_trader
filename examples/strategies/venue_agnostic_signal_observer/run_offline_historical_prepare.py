@@ -1,4 +1,5 @@
-"""Phase 1 offline historical data-lane prepare runner.
+r"""
+Phase 1 offline historical data-lane prepare runner.
 
 Usage:
   uv run --no-sync python -m examples.strategies.venue_agnostic_signal_observer.run_offline_historical_prepare \\
@@ -22,35 +23,27 @@ import argparse
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
+from typing import List
 
-from .offline_corpus_hash import HashCache, compute_data_corpus_hash
-from .offline_historical_models import (
-    OFFLINE_DATA_SCHEMA_VERSION,
-    OfflineSourceFile,
-    OfflineTradeRecord,
-    OfflineBarRecord,
-)
-from .offline_historical_normalize import (
-    to_nanoseconds,
-)
-from .offline_historical_sources import (
-    assert_known_source_kind,
-    parse_binance_agg_trades,
-    parse_binance_klines,
-    parse_coinbase_candles,
-    parse_coinbase_trades,
-    parse_kraken_ohlcvt,
-    parse_kraken_trades,
-    ParseResult,
-)
-from .offline_replay_manifest import (
-    build_manifest,
-    compute_precommitment_hash,
-    write_manifest,
-)
+from .offline_corpus_hash import HashCache
+from .offline_historical_models import OfflineBarRecord
+from .offline_historical_models import OfflineSourceFile
+from .offline_historical_models import OfflineTradeRecord
+from .offline_historical_sources import ParseResult
+from .offline_historical_sources import assert_known_source_kind
+from .offline_historical_sources import parse_binance_agg_trades
+from .offline_historical_sources import parse_binance_klines
+from .offline_historical_sources import parse_coinbase_candles
+from .offline_historical_sources import parse_coinbase_trades
+from .offline_historical_sources import parse_kraken_ohlcvt
+from .offline_historical_sources import parse_kraken_trades
+from .offline_replay_manifest import build_manifest
+from .offline_replay_manifest import compute_precommitment_hash
+from .offline_replay_manifest import write_manifest
 
 
 def _get_git_sha() -> str:
@@ -67,8 +60,8 @@ def _get_git_sha() -> str:
 
 def _parse_iso(ts: str) -> int:
     """Parse an ISO-8601 UTC string to nanoseconds."""
-    from datetime import datetime, timezone
-    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    from datetime import datetime
+    dt = datetime.fromisoformat(ts)
     return int(dt.timestamp() * 1_000_000_000)
 
 
@@ -205,7 +198,7 @@ def run(args: argparse.Namespace) -> int:
     out_dir = Path(args.out)
     overwrite: bool = args.overwrite
     force_rehash: bool = args.force_rehash
-    precommitment_path: Optional[Path] = (
+    precommitment_path: Path | None = (
         Path(args.precommitment) if args.precommitment else None
     )
 
@@ -248,7 +241,7 @@ def run(args: argparse.Namespace) -> int:
         )
 
     # Precommitment
-    precommitment_hash: Optional[str] = None
+    precommitment_hash: str | None = None
     if precommitment_path is not None:
         if not precommitment_path.exists():
             print(f"ERROR: precommitment file not found: {precommitment_path}", file=sys.stderr)
@@ -256,7 +249,7 @@ def run(args: argparse.Namespace) -> int:
         precommitment_hash = compute_precommitment_hash(precommitment_path)
 
     # Build run_id
-    run_id = "offline_prepare_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    run_id = "offline_prepare_" + datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     manifest = build_manifest(
         run_id=run_id,

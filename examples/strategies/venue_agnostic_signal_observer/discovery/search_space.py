@@ -1,5 +1,6 @@
 # Copyright (C) 2026. All rights reserved.
-"""Discovery grid specification — frozen search space for Edge Miner.
+"""
+Discovery grid specification — frozen search space for Edge Miner.
 
 Defines the ``DiscoveryGridSpec`` dataclass, validation, canonical
 serialization, deterministic hashing, and cell-count enumeration.
@@ -19,14 +20,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
+from typing import ClassVar
 
 # ---------------------------------------------------------------------------
 # Exception re-exports for convenience
 # ---------------------------------------------------------------------------
 from .exceptions import GridSpecValidationError
+
 
 # ---------------------------------------------------------------------------
 # Schema constants
@@ -114,7 +118,8 @@ _HASH_EXCLUDED_FIELDS: frozenset[str] = frozenset({
 
 @dataclass(frozen=True)
 class DiscoveryGridSpec:
-    """Frozen specification of a discovery grid.
+    """
+    Frozen specification of a discovery grid.
 
     All fields are immutable.  Validation is a separate step.
     All fields have defaults so that test code can construct partial specs.
@@ -210,9 +215,7 @@ def _validate_non_empty(
                 )
 
         # positivity requirements vary by axis
-        if axis_name == "entry_delays_ms":
-            _require_non_negative(values, axis_name)
-        elif axis_name == "cost_models_centibps":
+        if axis_name == "entry_delays_ms" or axis_name == "cost_models_centibps":
             _require_non_negative(values, axis_name)
         else:
             _require_positive(values, axis_name)
@@ -403,7 +406,8 @@ def _hash_ordered_keys() -> tuple[str, ...]:
 
 
 def canonical_grid_payload(spec: DiscoveryGridSpec) -> dict[str, Any]:
-    """Return the canonical dict for the grid spec (hash payload only).
+    """
+    Return the canonical dict for the grid spec (hash payload only).
 
     Excludes ``created_at_utc``, ``notes``, git sha, lock paths, and
     runtime/generated-at timestamps.
@@ -412,7 +416,8 @@ def canonical_grid_payload(spec: DiscoveryGridSpec) -> dict[str, Any]:
 
 
 def canonical_grid_json(spec: DiscoveryGridSpec) -> str:
-    """Return the canonical JSON string for hashing.
+    """
+    Return the canonical JSON string for hashing.
 
     - Sorted object keys.
     - Compact separators (",", ":").
@@ -434,7 +439,8 @@ def grid_sha256(spec: DiscoveryGridSpec) -> str:
 
 
 def enumerate_primary_cell_count(spec: DiscoveryGridSpec) -> int:
-    """Compute the number of enumerable primary cells.
+    """
+    Compute the number of enumerable primary cells.
 
     This is the product of the lengths of all primary counted axes:
 
@@ -455,7 +461,8 @@ def enumerate_primary_cell_count(spec: DiscoveryGridSpec) -> int:
 
 
 def enumerate_cost_sensitivity_cell_count(spec: DiscoveryGridSpec) -> int:
-    """Compute the cost-sensitivity cell count.
+    """
+    Compute the cost-sensitivity cell count.
 
     Definition::
 
@@ -472,7 +479,8 @@ def enumerate_cost_sensitivity_cell_count(spec: DiscoveryGridSpec) -> int:
 
 
 def _spec_from_dict(data: dict[str, Any]) -> DiscoveryGridSpec:
-    """Build a DiscoveryGridSpec from a deserialised JSON dict.
+    """
+    Build a DiscoveryGridSpec from a deserialised JSON dict.
 
     Converts lists to tuples on read.
     """
@@ -509,7 +517,8 @@ def load_grid_spec(path: str | Path) -> DiscoveryGridSpec:
 
 
 def save_grid_spec(spec: DiscoveryGridSpec, path: str | Path) -> None:
-    """Save a grid spec as canonical JSON.
+    """
+    Save a grid spec as canonical JSON.
 
     The saved file includes all fields (including ``created_at_utc``
     and ``notes``), not just the hash payload.

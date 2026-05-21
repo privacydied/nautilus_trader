@@ -1,29 +1,26 @@
 """Tests for research_report_miner.py"""
 from __future__ import annotations
 
-import csv
 import json
-from pathlib import Path
-import pytest
 import sys
+from pathlib import Path
+
+import pytest
+
 
 # Ensure the miner is importable from the tests package.
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MINER_PATH = REPO_ROOT / "examples" / "strategies" / "research_report_miner.py"
 sys.path.insert(0, str(MINER_PATH.parent))
 
-from research_report_miner import (  # noqa: E402
-    StudyResult,
-    _infer_project,
-    _normalize_verdict,
-    _parse_val,
-    _make_result,
-    _process_json_report,
-    _process_jsonl_file,
-    mine_reports,
-    format_bps_gate_table,
-    format_rejected_md,
-)
+from research_report_miner import StudyResult  # noqa: E402
+from research_report_miner import _infer_project  # noqa: E402
+from research_report_miner import _make_result  # noqa: E402
+from research_report_miner import _normalize_verdict  # noqa: E402
+from research_report_miner import _parse_val  # noqa: E402
+from research_report_miner import format_bps_gate_table  # noqa: E402
+from research_report_miner import format_rejected_md  # noqa: E402
+from research_report_miner import mine_reports  # noqa: E402
 
 
 # -- unit helpers --
@@ -212,8 +209,7 @@ def test_full_mine_and_output(fixture_reports: Path, tmp_path: Path):
     assert len(bps) > 100
 
     # Write CSV to a temp path
-    csv_path = tmp_path / "test_table.csv"
-    lines = md.splitlines()
-    csv_rows = []
+    tmp_path / "test_table.csv"
+    md.splitlines()
     csv_lines = bps.splitlines()
     assert isinstance(csv_lines, list)

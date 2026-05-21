@@ -16,6 +16,8 @@ import pytest
 # Ensure the module is importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+import contextlib
+
 from examples.strategies.venue_agnostic_signal_observer import (
     run_stage2_gate_watcher as watcher,  # noqa: E402
 )
@@ -887,10 +889,11 @@ class TestCaptureCommandIncludesAvaxUsd:
 
     def test_default_signal_family_includes_avax(self):
         """Default signal family includes AVAX/USD in target_symbols."""
+        import inspect
+
         from examples.strategies.venue_agnostic_signal_observer import (
             stage2_gate_watcher as v1_watcher,
         )
-        import inspect
 
         source = inspect.getsource(v1_watcher._run_capture)
         assert "AVAX/USD" in source
@@ -986,17 +989,17 @@ class TestCompletedWithErrorsNotFatal:
 
     def test_run_index_accepts_completed_with_errors(self):
         """run_index.py validates completed_with_errors as a legal status."""
-        from examples.strategies.venue_agnostic_signal_observer.run_index import (
-            validate_status,
-        )
+        from examples.strategies.venue_agnostic_signal_observer.run_index import validate_status
         assert validate_status("completed_with_errors") == "completed_with_errors"
 
     def test_status_json_reflects_completed_with_errors(self, tmp_path):
         """After capture with completed_with_errors manifest, status reports COMPLETED_WITH_ERRORS."""
+        from unittest.mock import MagicMock
+        from unittest.mock import patch
+
         from examples.strategies.venue_agnostic_signal_observer import (
             stage2_gate_watcher as v1_watcher,
         )
-        from unittest.mock import patch, MagicMock
 
         saved_reports = v1_watcher._REPORTS_ROOT
         saved_data = v1_watcher._DATA_ROOT
@@ -1058,10 +1061,8 @@ class TestCompletedWithErrorsNotFatal:
                                         args.once = True
                                         args.no_capture = False
                                         args.min_gap_seconds = 3600
-                                        try:
+                                        with contextlib.suppress(SystemExit):
                                             v1_watcher._run_watcher_cycle(log, args, state)
-                                        except SystemExit:
-                                            pass
 
             assert status_path.exists()
             data = json.loads(status_path.read_text())
@@ -1078,10 +1079,11 @@ class TestLockPreventsOverlappingCapture:
     """CaptureGuard blocks a second capture while one is already in progress."""
 
     def test_capture_guard_blocks_when_flag_exists(self, tmp_path):
+        from unittest.mock import patch
+
         from examples.strategies.venue_agnostic_signal_observer import (
             stage2_gate_watcher as v1_watcher,
         )
-        from unittest.mock import patch
 
         saved_reports = v1_watcher._REPORTS_ROOT
         saved_repo = v1_watcher._REPO_ROOT
@@ -1256,8 +1258,9 @@ class TestCorpusReadinessBoundary:
 
     def test_status_json_reports_20_as_threshold(self, tmp_path):
         """Status JSON always reports 20 as minimum_ready_usable_windows."""
-        from examples.strategies.venue_agnostic_signal_observer import stage2_gate_watcher as w
         import json as _json
+
+        from examples.strategies.venue_agnostic_signal_observer import stage2_gate_watcher as w
 
         saved_reports = w._REPORTS_ROOT
         saved_data = w._DATA_ROOT
@@ -1363,7 +1366,7 @@ class TestStartupReconciliation:
 
     def test_partial_capture_dir_quarantined(self, tmp_path):
         """A dir with .partial.json but no canonical manifest is quarantined."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
         w = self._setup(tmp_path)
         try:
             cap = tmp_path / "data" / "cross_asset_beta_lag_v1_FULL_ACTIVE_partial"
@@ -1377,7 +1380,7 @@ class TestStartupReconciliation:
                 "examples.strategies.venue_agnostic_signal_observer.stage2_gate_watcher.quarantine_run"
                 if hasattr(w, "quarantine_run") else
                 "examples.strategies.venue_agnostic_signal_observer.quarantine.quarantine_run"
-            ) as mock_q:
+            ):
                 # Patch the import inside the function
                 import examples.strategies.venue_agnostic_signal_observer.quarantine as qmod
                 original = qmod.quarantine_run

@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Iterator
 
-from .events import LedgerEvent, EventType
+from .events import LedgerEvent
 
 
 class LedgerIntegrityError(Exception):

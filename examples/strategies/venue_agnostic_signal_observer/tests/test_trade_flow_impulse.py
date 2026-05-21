@@ -1,26 +1,32 @@
-"""Deterministic synthetic tests for the trade-flow impulse signal generator.
+"""
+Deterministic synthetic tests for the trade-flow impulse signal generator.
 
 No exchange APIs. No real data. No orders.  Pure fixtures.
 """
 from __future__ import annotations
 
-import statistics
 import sys
 from pathlib import Path
 
 import pytest
+
 
 # Ensure the package root is on sys.path for direct execution
 PROJECT_ROOT = str(Path(__file__).resolve().parents[3])
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
 from examples.strategies.venue_agnostic_signal_observer.trade_flow_impulse import (
     TradeFlowImpulseConfig,
+)
+from examples.strategies.venue_agnostic_signal_observer.trade_flow_impulse import (
     TradeFlowImpulseSignalGenerator,
+)
+from examples.strategies.venue_agnostic_signal_observer.trade_flow_impulse import (
     _infer_tick_rule_side,
 )
-from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
+
 
 _NS = 1  # nanosecond increment for ordering
 
@@ -270,15 +276,15 @@ class TestNoLookahead:
         )
         gen = TradeFlowImpulseSignalGenerator(cfg)
         signals = gen.generate([
-            _trade(s, 50000.0, 0.1, "buy") for s in range(0, 100)
+            _trade(s, 50000.0, 0.1, "buy") for s in range(100)
         ])
         for sig in signals:
             # Signal timestamp must be a tick timestamp that exists in the input
             sig_ts = sig.ts_event
             # The generator should not have used any tick strictly AFTER sig.ts_event
             # to decide to emit this signal
-            future_ticks = [t for t in [
-                _trade(s, 50000.0, 0.1, "buy") for s in range(0, 100)
+            [t for t in [
+                _trade(s, 50000.0, 0.1, "buy") for s in range(100)
             ] if t.ts_event > sig_ts and t.ts_event == sig_ts]
             # At minimum, the signal timestamp itself is present
             assert sig_ts >= _ts(0)

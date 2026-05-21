@@ -1,4 +1,5 @@
-"""Regression tests for bug-audit fixes in stage2 pipeline.
+"""
+Regression tests for bug-audit fixes in stage2 pipeline.
 
 Covers:
 - _ts_now_iso double-datetime race (single datetime.now call)
@@ -17,7 +18,6 @@ from __future__ import annotations
 import datetime
 import json
 import re
-from datetime import timezone
 
 
 # ---------------------------------------------------------------------------
@@ -26,7 +26,7 @@ from datetime import timezone
 
 def _ts_now_iso() -> str:
     """Replica of the fixed _ts_now_iso from stage2_gate_watcher.py."""
-    now = datetime.datetime.now(timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond:06d}"[:3] + "Z"
 
 
@@ -42,7 +42,7 @@ class TestTsNowIso:
 
     def test_millis_truncated_not_rounded(self) -> None:
         """Verify only 3 digits of microsecond (millis) are used."""
-        now = datetime.datetime(2026, 5, 16, 22, 30, 45, 123456, tzinfo=timezone.utc)
+        now = datetime.datetime(2026, 5, 16, 22, 30, 45, 123456, tzinfo=datetime.UTC)
         result = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond:06d}"[:3] + "Z"
         assert result == "2026-05-16T22:30:45.123Z"
 
@@ -134,9 +134,7 @@ class TestBhFailedConfigs:
             if "rejected_by_bh" in stripped and ("=" in stripped or "append" in stripped):
                 # Check it's in a comment
                 if "#" not in stripped:
-                    assert False, (
-                        f"Line {i}: unremediated use of 'rejected_by_bh' in code (not comment)"
-                    )
+                    raise AssertionError(f"Line {i}: unremediated use of 'rejected_by_bh' in code (not comment)")
 
     def test_bh_failed_configs_present(self) -> None:
         source = open(
@@ -196,7 +194,7 @@ class TestNoDeadSurvivorsAppend:
             stripped = line.strip()
             # ``survivors.append([])`` is the dead code pattern
             if stripped == "survivors.append([])":
-                assert False, f"Line {i}: dead survivors.append([]) still present"
+                raise AssertionError(f"Line {i}: dead survivors.append([]) still present")
 
     def test_survivors_is_empty_list_in_result(self) -> None:
         """Verify survivors is [] not [[]] in a no-survivor result."""
@@ -214,7 +212,7 @@ class TestNoDeadSurvivorsAppend:
 # ---------------------------------------------------------------------------
 
 class TestCpuDeviceString:
-    """Verify CPU engine passes empty device string, not ``\"cuda:0\"``."""
+    r"""Verify CPU engine passes empty device string, not ``\"cuda:0\"``."""
 
     def test_no_cuda_zero_on_cpu_heatmap(self) -> None:
         source = open(
@@ -222,7 +220,7 @@ class TestCpuDeviceString:
         ).read()
         lines = source.splitlines()
         for i, line in enumerate(lines, 1):
-            if 'heatmap_device' in line and 'cuda' in line.lower():
+            if "heatmap_device" in line and "cuda" in line.lower():
                 assert '"cuda:0"' not in line, (
                     f"Line {i}: heatmap_device still has 'cuda:0' for CPU path"
                 )
@@ -233,10 +231,8 @@ class TestCpuDeviceString:
         ).read()
         lines = source.splitlines()
         for i, line in enumerate(lines, 1):
-            if '--device' in line and 'cuda:0' in line:
-                assert False, (
-                    f"Line {i}: --device still passes 'cuda:0' for CPU path"
-                )
+            if "--device" in line and "cuda:0" in line:
+                raise AssertionError(f"Line {i}: --device still passes 'cuda:0' for CPU path")
 
     def test_device_empty_when_cpu(self) -> None:
         """Simulate the logic when CUDA is not available."""

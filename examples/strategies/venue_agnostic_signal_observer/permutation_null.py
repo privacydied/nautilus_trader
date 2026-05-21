@@ -1,4 +1,5 @@
-"""Permutation / null test module for venue_agnostic_signal_observer.
+"""
+Permutation / null test module for venue_agnostic_signal_observer.
 
 Pure functions only. No network, no capture, no live imports.
 
@@ -19,22 +20,15 @@ run_null_test_for_group        – high-level: run full null test for one group
 """
 from __future__ import annotations
 
-import json
 import math
 import random
 import statistics
 import uuid
-from pathlib import Path
 from typing import Any
 
-from .tick_models import TickSignalEvent, TickForwardReturn
 from .event_study import evaluate_tick_signal
-from .mcpt_export import (
-    is_mcpt_worthy_group,
-    _load_jsonl,
-    _load_summary_json,
-)
-from .artifact_metadata import build_metadata, get_metadata_field
+from .tick_models import TickSignalEvent
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -58,7 +52,8 @@ def is_null_worthy_group(
     cost_floor_bps: float = DEFAULT_COST_FLOOR_BPS,
     min_events: int = DEFAULT_MIN_EVENTS,
 ) -> tuple[bool, str]:
-    """Decide whether a group is worth null-testing.
+    """
+    Decide whether a group is worth null-testing.
 
     Returns (worthy, reason).
 
@@ -101,7 +96,8 @@ def select_null_candidate_groups(
     cost_floor_bps: float = DEFAULT_COST_FLOOR_BPS,
     min_events: int = DEFAULT_MIN_EVENTS,
 ) -> list[dict[str, Any]]:
-    """Select at most *max_groups* best candidate / near-candidate groups for null testing.
+    """
+    Select at most *max_groups* best candidate / near-candidate groups for null testing.
 
     Sort priority: candidate=True first, then mean_net_bps desc.
     Deduplicate by (signal_type, lookback_ms) — keep best horizon per variant.
@@ -156,7 +152,8 @@ def circular_time_shift(
     source_event_timestamps: list[int],
     rng: random.Random,
 ) -> list[int]:
-    """Circularly shift source event timestamps by a random offset.
+    """
+    Circularly shift source event timestamps by a random offset.
 
     Takes sorted source event timestamps, computes the series duration
     (max - min), generates a random offset in [0, duration), and adds
@@ -197,7 +194,8 @@ def block_time_shift(
     block_size: int,
     rng: random.Random,
 ) -> list[int]:
-    """Divide events into contiguous blocks and shift each block circularly.
+    """
+    Divide events into contiguous blocks and shift each block circularly.
 
     Preserves intra-block clustering structure better than a single global
     circular shift or naive independent shuffle.
@@ -258,7 +256,7 @@ def _percentile(sorted_values: list[float], p: float) -> float:
     if n == 1:
         return sorted_values[0]
     rank = p / 100.0 * (n - 1)
-    lower = int(math.floor(rank))
+    lower = math.floor(rank)
     upper = lower + 1
     if upper >= n:
         return sorted_values[-1]
@@ -281,7 +279,8 @@ def compute_null_distribution(
     shift_mode: str = "circular_time_shift",
     block_size: int = 10,
 ) -> dict[str, Any]:
-    """Build a null distribution by repeatedly shifting source timestamps.
+    """
+    Build a null distribution by repeatedly shifting source timestamps.
 
     For each iteration:
         a. Apply shift_mode to get null timestamps.
@@ -304,7 +303,7 @@ def compute_null_distribution(
     from .tick_models import TradeTickLite as _TTL
 
     target_ticks = []
-    for ts, pr in zip(target_timestamps, target_prices):
+    for ts, pr in zip(target_timestamps, target_prices, strict=False):
         target_ticks.append(
             _TTL(
                 ts_event=ts,
@@ -320,7 +319,7 @@ def compute_null_distribution(
     null_medians: list[float] = []
     null_win_rates: list[float] = []
 
-    total_cost = fee_bps + slippage_bps + (quote_mismatch_buffer_bps if quote_mismatch else 0.0)
+    fee_bps + slippage_bps + (quote_mismatch_buffer_bps if quote_mismatch else 0.0)
 
     for _iter_num in range(iterations):
         # Shift timestamps
@@ -443,7 +442,8 @@ def run_null_test_for_group(
     report_dir: str = "",
     capture_dir: str = "",
 ) -> dict[str, Any]:
-    """Run a full null/permutation test for one candidate group.
+    """
+    Run a full null/permutation test for one candidate group.
 
     Computes real statistics from the group dict, runs the null distribution,
     and evaluates survival criteria.
@@ -472,17 +472,17 @@ def run_null_test_for_group(
         real_win_rate = float("nan")
 
     # Extract group-identifying fields
-    source_venue = str(candidate_group.get("source_venue", ""))
-    target_venue = str(candidate_group.get("target_venue", ""))
-    source_symbol = str(candidate_group.get("source_symbol", ""))
-    target_symbol = str(candidate_group.get("target_symbol", ""))
-    signal_type = str(candidate_group.get("signal_type", ""))
-    lookback_ms = int(candidate_group.get("lookback_ms", 0))
-    horizon_ms = int(candidate_group.get("horizon_ms", 0))
+    str(candidate_group.get("source_venue", ""))
+    str(candidate_group.get("target_venue", ""))
+    str(candidate_group.get("source_symbol", ""))
+    str(candidate_group.get("target_symbol", ""))
+    str(candidate_group.get("signal_type", ""))
+    int(candidate_group.get("lookback_ms", 0))
+    int(candidate_group.get("horizon_ms", 0))
 
     # OI bucket from group metadata if present
     metadata = candidate_group.get("metadata") or {}
-    oi_bucket = str(metadata.get("oi_bucket", ""))
+    str(metadata.get("oi_bucket", ""))
 
     # Early exit: not enough events or non-positive mean
     if real_event_count < min_events:
@@ -537,7 +537,7 @@ def run_null_test_for_group(
     pctls = null_dist["percentiles"]
 
     valid_null_means = [x for x in null_means if math.isfinite(x)]
-    valid_null_win_rates = [x for x in null_dist["null_win_rates"] if math.isfinite(x)]
+    [x for x in null_dist["null_win_rates"] if math.isfinite(x)]
 
     # p-value = fraction of null iterations where null_mean >= real_mean
     real_mean = real_mean_net_bps
@@ -548,15 +548,14 @@ def run_null_test_for_group(
         p_value = 1.0
 
     # Percentiles
-    null_mean_p50 = pctls.get("mean_net_bps_p50", float("nan"))
+    pctls.get("mean_net_bps_p50", float("nan"))
     null_mean_p95 = pctls.get("mean_net_bps_p95", float("nan"))
-    null_mean_p99 = pctls.get("mean_net_bps_p99", float("nan"))
+    pctls.get("mean_net_bps_p99", float("nan"))
     null_wr_p50 = pctls.get("win_rate_p50", float("nan"))
 
     # Determine if real beats null
-    real_beats_null = False
     if math.isfinite(real_mean) and len(valid_null_means) > 0:
-        real_beats_null = real_mean > null_mean_p95
+        pass
 
     # Evaluate survival criteria
     # 1. real mean net bps > 0
@@ -713,7 +712,7 @@ def _null_result(
 
         # Compute p-value
         valid_null_means = [x for x in null_means if math.isfinite(x)]
-        valid_null_win_rates = [x for x in null_win_rates if math.isfinite(x)]
+        [x for x in null_win_rates if math.isfinite(x)]
 
         if math.isfinite(real_mean_net_bps) and len(valid_null_means) > 0:
             count_ge = sum(1 for nm in valid_null_means if nm >= real_mean_net_bps)

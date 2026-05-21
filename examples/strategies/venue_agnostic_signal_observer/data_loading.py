@@ -1,6 +1,7 @@
 """Data loading utilities for the signal observer."""
 import csv
-from typing import List, Tuple, Optional
+from typing import List
+from typing import Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -12,7 +13,8 @@ def load_bars_from_csv(
     timestamp_col: str = "timestamp",
     close_col: str = "close",
 ) -> Tuple[List[float], List[float]]:
-    """Load price bars from a CSV file.
+    """
+    Load price bars from a CSV file.
 
     Returns (timestamps, close_prices) as parallel lists, sorted by timestamp.
     """
@@ -33,7 +35,7 @@ def load_bars_from_csv(
                 timestamps.append(ts)
                 prices.append(price)
 
-    combined = sorted(zip(timestamps, prices))
+    combined = sorted(zip(timestamps, prices, strict=False))
     timestamps = [t for t, _ in combined]
     prices = [p for _, p in combined]
     return timestamps, prices
@@ -64,7 +66,8 @@ def generate_synthetic_lead_lag(
     jump_bps: float = 50.0,
     noise_std_bps: float = 2.0,
 ) -> Tuple[List[float], List[float], List[float]]:
-    """Generate synthetic source → target series where target follows source.
+    """
+    Generate synthetic source → target series where target follows source.
 
     The source has periodic jumps. The target follows with a *lag* and a
     configurable catch-up fraction.  If ``target_catch_up_fraction`` > 1.0
@@ -116,7 +119,8 @@ def generate_synthetic_noise(
     base_price: float = 50_000.0,
     noise_std_bps: float = 5.0,
 ) -> Tuple[List[float], List[float], List[float]]:
-    """Generate uncorrelated source and target series (no edge).
+    """
+    Generate uncorrelated source and target series (no edge).
 
     Both series are pure random walks with no relationship.
     Any signals detected by the cross-market generator should produce
@@ -131,7 +135,7 @@ def generate_synthetic_noise(
     source_prices = [base_price]
     target_prices = [base_price]
 
-    for i in range(1, num_bars):
+    for _i in range(1, num_bars):
         src_new = source_prices[-1] * (1 + random.gauss(0, noise_std_bps) / 10_000.0)
         tgt_new = target_prices[-1] * (1 + random.gauss(0, noise_std_bps) / 10_000.0)
         source_prices.append(src_new)

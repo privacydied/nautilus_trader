@@ -1,4 +1,5 @@
-"""Trade-flow impulse signal generator.
+"""
+Trade-flow impulse signal generator.
 
 **RESEARCH MEASUREMENT TOOL ONLY.**  Scans source-venue trade ticks for
 abnormal flow (count burst, notional burst, large trades, signed imbalance)
@@ -19,10 +20,11 @@ from __future__ import annotations
 import math
 import statistics
 import uuid
-from bisect import bisect_left, bisect_right
+from bisect import bisect_left
 from dataclasses import dataclass
 
-from .tick_models import TickSignalEvent, TradeTickLite
+from .tick_models import TickSignalEvent
+from .tick_models import TradeTickLite
 
 
 def _finite_positive(value: float) -> bool:
@@ -84,7 +86,8 @@ def _infer_tick_rule_side(
     ticks: list[TradeTickLite],
     idx: int,
 ) -> str:
-    """Infer aggressor side using the tick rule (Lee-Ready proxy).
+    """
+    Infer aggressor side using the tick rule (Lee-Ready proxy).
 
     If the current trade price is >= the previous trade price, classify as
     ``"buy"``; otherwise ``"sell"``.  For the very first tick, returns
@@ -106,7 +109,8 @@ def _infer_tick_rule_side(
 # -- Sliding-window flow scanner --------------------------------------------
 
 class TradeFlowImpulseSignalGenerator:
-    """Scan sorted source-venue trade ticks for trade-flow impulse signals.
+    """
+    Scan sorted source-venue trade ticks for trade-flow impulse signals.
 
     The generator walks through the trade stream once and, at every tick
     timestamp, evaluates each enabled signal type against a rolling baseline
@@ -124,7 +128,8 @@ class TradeFlowImpulseSignalGenerator:
     # -- public API --------------------------------------------------------
 
     def generate(self, trades: list[TradeTickLite]) -> list[TickSignalEvent]:
-        """Generate signals from a sorted list of source-venue trade ticks.
+        """
+        Generate signals from a sorted list of source-venue trade ticks.
 
         Parameters
         ----------
@@ -155,7 +160,8 @@ class TradeFlowImpulseSignalGenerator:
     def generate_by_type(
         self, trades: list[TradeTickLite], signal_type: str
     ) -> list[TickSignalEvent]:
-        """Generate signals for a single signal type.
+        """
+        Generate signals for a single signal type.
 
         Useful for the runner to iterate over signal types independently,
         applying per-type parameter sweeps.
@@ -233,7 +239,7 @@ class TradeFlowImpulseSignalGenerator:
                 bl_lo = bisect_left(timestamps, ts - bl_ns, 0, idx)
                 # count baseline trades per lookback-sized sub-windows
                 # Approximate: count of trades in baseline_window_ms
-                bl_count = idx - bl_lo
+                idx - bl_lo
                 # Compute rolling median count per lookback_ms-sized slice
                 # Using a simpler approach: median of per-second counts
                 if idx - bl_lo > 0:
@@ -369,7 +375,6 @@ class TradeFlowImpulseSignalGenerator:
         notionals = [_finite_notional(t.price, t.size) for t in trades]
 
         # Rolling median for multiplier check
-        from bisect import insort
         window_notionals: list[float] = []
         window_ts: list[int] = []
         bl_ns = self.config.baseline_window_ms * _MS_TO_NS
@@ -534,7 +539,8 @@ class TradeFlowImpulseSignalGenerator:
         lookback_ms: int,
         signal_type: str,
     ) -> str:
-        """Resolve signal direction from source price move over the lookback.
+        """
+        Resolve signal direction from source price move over the lookback.
 
         For count_burst and notional_burst, the signal itself has no inherent
         direction.  We label based on whether the source price moved up or
@@ -548,7 +554,7 @@ class TradeFlowImpulseSignalGenerator:
             ref_idx = idx
             while ref_idx > 0 and ts - trades[ref_idx].ts_event <= lookback_ns:
                 ref_idx -= 1
-            ref_idx = ref_idx + 1 if ref_idx + 1 <= idx else idx
+            ref_idx = min(ref_idx + 1, idx)
             ref_price = trades[ref_idx].price
             curr_price = trades[idx].price
             if curr_price >= ref_price:

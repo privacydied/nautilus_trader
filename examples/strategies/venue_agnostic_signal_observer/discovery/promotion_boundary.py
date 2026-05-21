@@ -1,4 +1,5 @@
-"""Structural choke point between discovery and validation.
+"""
+Structural choke point between discovery and validation.
 
 Discovery outputs are NOT trading candidates.
 Validators must consume DiscoveryCandidateLock via this function.
@@ -12,10 +13,8 @@ named, tested home.
 
 from __future__ import annotations
 
-from .candidate_lock import (
-    DiscoveryCandidateLock,
-    validate_candidate_lock,
-)
+from .candidate_lock import DiscoveryCandidateLock
+from .candidate_lock import validate_candidate_lock
 from .grid_lock import DiscoveryGridLock
 from .search_space import DiscoveryGridSpec
 
@@ -25,7 +24,8 @@ def require_frozen_candidate_for_validation(
     grid_lock: DiscoveryGridLock,
     candidate_lock: DiscoveryCandidateLock,
 ) -> DiscoveryCandidateLock:
-    """Validate and return a frozen candidate lock for validation use.
+    """
+    Validate and return a frozen candidate lock for validation use.
 
     This is the only entrypoint through which a validator may accept a
     discovery candidate.  Ad-hoc discovery output is rejected.

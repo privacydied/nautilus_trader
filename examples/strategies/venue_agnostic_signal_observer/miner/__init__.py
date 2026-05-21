@@ -14,18 +14,25 @@ Invariants:
 - A frozen grid must not silently re-test locked-rejected gates.
 """
 
-from .grid import FrozenGrid, GridCell, GridSpec, build_grid
-from .sweep import run_sweep, SweepResult, CellResult
-from .rejection_guard import check_rejection_guard, RejectionGuardResult
+from .grid import FrozenGrid
+from .grid import GridCell
+from .grid import GridSpec
+from .grid import build_grid
+from .rejection_guard import RejectionGuardResult
+from .rejection_guard import check_rejection_guard
+from .sweep import CellResult
+from .sweep import SweepResult
+from .sweep import run_sweep
+
 
 __all__ = [
+    "CellResult",
     "FrozenGrid",
     "GridCell",
     "GridSpec",
-    "build_grid",
-    "run_sweep",
-    "SweepResult",
-    "CellResult",
-    "check_rejection_guard",
     "RejectionGuardResult",
+    "SweepResult",
+    "build_grid",
+    "check_rejection_guard",
+    "run_sweep",
 ]

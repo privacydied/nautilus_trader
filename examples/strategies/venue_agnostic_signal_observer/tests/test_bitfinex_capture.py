@@ -1,4 +1,5 @@
-"""Tests for Bitfinex public-trade capture support.
+"""
+Tests for Bitfinex public-trade capture support.
 
 Bitfinex was added as a second-wave observer venue for cross_asset_beta_lag_v1.
 These tests cover symbol mapping, trade-payload parsing, side inference from
@@ -15,14 +16,12 @@ from pathlib import Path
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer import symbol_aliases
-from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import (
-    _CaptureStats,
-    _FEED_TASKS,
-    _map_bitfinex_symbol,
-    _write_manifest,
-    bitfinex_symbol,
-    parse_bitfinex_trade,
-)
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import _FEED_TASKS
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import _CaptureStats
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import _map_bitfinex_symbol
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import _write_manifest
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import bitfinex_symbol
+from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import parse_bitfinex_trade
 
 
 ASSETS = ["BTC", "ETH", "SOL", "LINK", "DOGE", "AVAX"]
@@ -34,7 +33,7 @@ ASSETS = ["BTC", "ETH", "SOL", "LINK", "DOGE", "AVAX"]
 
 
 @pytest.mark.parametrize(
-    "user,expected",
+    ("user", "expected"),
     [
         ("BTC/USD", "tBTCUSD"),
         ("BTC/UST", "tBTCUST"),

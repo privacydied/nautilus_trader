@@ -1,4 +1,5 @@
-"""MCPT export adapter for venue_agnostic_signal_observer.
+"""
+MCPT export adapter for venue_agnostic_signal_observer.
 
 Pure functions only. No network, no capture, no live imports.
 
@@ -18,7 +19,10 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from .artifact_metadata import build_metadata, get_metadata, get_metadata_field
+
+from .artifact_metadata import build_metadata
+from .artifact_metadata import get_metadata
+from .artifact_metadata import get_metadata_field
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +51,8 @@ def is_mcpt_worthy_group(
     cost_floor_bps: float = DEFAULT_COST_FLOOR_BPS,
     min_events: int = DEFAULT_MIN_EVENTS,
 ) -> tuple[bool, str]:
-    """Decide whether MCPT is worth running on a group.
+    """
+    Decide whether MCPT is worth running on a group.
 
     Returns (worthy, reason).
 
@@ -104,6 +109,7 @@ def is_mcpt_worthy_group(
 @dataclass(frozen=True)
 class GroupKey:
     """Unique identifier for a result group to avoid duplicate variants."""
+
     source_venue: str
     target_venue: str
     signal_type: str
@@ -118,7 +124,8 @@ def select_mcpt_candidate_groups(
     cost_floor_bps: float = DEFAULT_COST_FLOOR_BPS,
     min_events: int = DEFAULT_MIN_EVENTS,
 ) -> list[dict[str, Any]]:
-    """Select at most *max_groups* best candidate/near-candidate groups.
+    """
+    Select at most *max_groups* best candidate/near-candidate groups.
 
     Sort priority: candidate=True first, then by mean_net_bps desc,
     then by win_rate desc, then by valid_count desc.
@@ -240,7 +247,8 @@ def export_mcpt_candidate_series(
     candidate_group: dict[str, Any],
     out_dir: Path | None = None,
 ) -> Path:
-    """Export one candidate group's event return series as a CSV file.
+    """
+    Export one candidate group's event return series as a CSV file.
 
     Given the report directory (containing summary.json, signals.jsonl,
     forward_returns.jsonl) and a selected candidate group dict, writes a
@@ -251,7 +259,7 @@ def export_mcpt_candidate_series(
     report_dir = Path(report_dir)
 
     summary = _load_summary_json(report_dir / "summary.json")
-    capture_slug = _slugify(Path(summary.get("capture_dir", "unknown")).name)
+    _slugify(Path(summary.get("capture_dir", "unknown")).name)
 
     # Build group-identifying fields from the candidate dict
     src_v = candidate_group.get("source_venue", "unknown")
@@ -349,7 +357,8 @@ def export_mcpt_summary(
     skipped_reason: str | None = None,
     out_dir: Path | None = None,
 ) -> Path:
-    """Write mcpt_export_summary.json.
+    """
+    Write mcpt_export_summary.json.
 
     Records whether MCPT was skipped, why, and which groups were selected.
     """
@@ -360,14 +369,13 @@ def export_mcpt_summary(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Load source summary to propagate capture_mode and metadata
-    source_meta: dict[str, Any] = {}
     source_summary: dict[str, Any] = {}
     source_summary_path = report_dir / "summary.json"
     if source_summary_path.exists():
         try:
             with open(source_summary_path) as f:
                 source_summary = json.load(f)
-            source_meta = get_metadata(source_summary)
+            get_metadata(source_summary)
         except Exception:
             pass  # Backward compat: old summaries without metadata are fine
 

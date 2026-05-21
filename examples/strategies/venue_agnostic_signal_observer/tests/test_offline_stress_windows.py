@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import textwrap
 from dataclasses import asdict
 from pathlib import Path
 
@@ -9,34 +8,75 @@ import pytest
 
 from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import (
     compute_data_corpus_hash,
-    sha256_file,
 )
+from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import sha256_file
 from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OFFLINE_DATA_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     RESOLUTION_AGG_TRADE,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     RESOLUTION_BAR,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     WINDOW_MODE_CAUSAL,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     WINDOW_MODE_RETROSPECTIVE_DIAGNOSTIC,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OfflineBarRecord,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OfflinePreparedDataset,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OfflinePrepareManifest,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OfflineSourceFile,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OfflineTradeRecord,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     can_promote_from_window_mode,
 )
 from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
-    OFFLINE_STRESS_WINDOW_SCHEMA_VERSION,
     STATUS_DATA_CORPUS_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     STATUS_INSUFFICIENT_HISTORICAL_COVERAGE,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     STATUS_NO_STRESS_WINDOWS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     STATUS_OFFLINE_STRESS_INDEX_READY,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     STATUS_RETROSPECTIVE_DIAGNOSTIC_ONLY,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     STATUS_UNSUPPORTED_RESOLUTION_FOR_STRESS_RULE,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     StressRuleConfig,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     build_stress_window_index,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     build_stress_window_manifest_payload,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     compute_stress_rule_config_hash,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     index_prepared_manifest_reload,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     write_stress_window_outputs,
 )
 
@@ -265,7 +305,7 @@ def test_future_only_movement_does_not_create_earlier_trigger(tmp_path: Path):
 
 def test_causal_trigger_uses_only_data_at_or_before_trigger_timestamp(tmp_path: Path):
     early = [_trade(0, 100.0), _trade(300, 100.5), _trade(600, 102.0)]
-    late = early + [_trade(1200, 80.0), _trade(1500, 150.0)]
+    late = [*early, _trade(1200, 80.0), _trade(1500, 150.0)]
     early_result = build_stress_window_index(_dataset(tmp_path / "early", trades=early), [_range_rule()], selection_mode=WINDOW_MODE_CAUSAL)
     late_result = build_stress_window_index(_dataset(tmp_path / "late", trades=late), [_range_rule()], selection_mode=WINDOW_MODE_CAUSAL)
     assert early_result.windows[0].trigger_timestamp_ns == 600 * NS

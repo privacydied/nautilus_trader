@@ -24,15 +24,18 @@ import csv
 import hashlib
 import io
 import json
-import math
 import os
 import random
 import sys
 import urllib.request
 import zipfile
 from collections import OrderedDict
-from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
+
 
 # ---------------------------------------------------------------------------
 # Frozen constants (from precommitment)
@@ -129,16 +132,16 @@ def extract_csv_from_zip(zip_bytes):
 
 def parse_timestamp(ts_str):
     try:
-        return datetime.strptime(ts_str.strip(), DT_FMT).replace(tzinfo=timezone.utc)
+        return datetime.strptime(ts_str.strip(), DT_FMT).replace(tzinfo=UTC)
     except (ValueError, AttributeError):
         return None
 
 def parse_klines_timestamp(ts_int):
     try:
         if ts_int > 100_000_000_000_000:  # > 1e14 -> us
-            return datetime.fromtimestamp(ts_int / 1_000_000, tz=timezone.utc)
+            return datetime.fromtimestamp(ts_int / 1_000_000, tz=UTC)
         else:
-            return datetime.fromtimestamp(ts_int / 1_000, tz=timezone.utc)
+            return datetime.fromtimestamp(ts_int / 1_000, tz=UTC)
     except (OverflowError, ValueError, OSError):
         return None
 
@@ -172,7 +175,7 @@ def load_funding_all():
     months = list(iter_months(START_YM, END_YM))
     print(f"Loading {len(months)} monthly funding rate files...")
     all_funding = []
-    for i, ym in enumerate(months):
+    for _i, ym in enumerate(months):
         path = MONTHLY_FUNDING_PATH.format(symbol=SYMBOL, ym=ym)
         url = f"{BASE_URL}/{path}"
         cache_key = f"funding_{ym}.zip"
@@ -184,7 +187,7 @@ def load_funding_all():
                     try:
                         calc_time_ms = int(r["calc_time"])
                         rate = float(r["last_funding_rate"])
-                        ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=timezone.utc)
+                        ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=UTC)
                         all_funding.append({"ts": ts, "funding_rate": rate})
                     except (ValueError, KeyError):
                         pass
@@ -246,7 +249,7 @@ def load_spot_klines():
     months = list(iter_months(START_YM, END_YM))
     print(f"Loading {len(months)} monthly spot klines files...")
     spot_klines = []
-    for i, ym in enumerate(months):
+    for _i, ym in enumerate(months):
         path = SPOT_KLINES_PATH.format(symbol=SYMBOL, ym=ym)
         url = f"{BASE_URL}/{path}"
         cache_key = f"spot_klines_{ym}.zip"
@@ -674,7 +677,7 @@ def run_evaluation():
         "study_id": "family3_funding_falling_oi_unwind_v1",
         "precommitment_sha256": phase0_report.get("precommitment_sha256"),
         "git_sha": get_git_sha(),
-        "git_generated_at": datetime.now(timezone.utc).isoformat(),
+        "git_generated_at": datetime.now(UTC).isoformat(),
         "seed": SEED,
         "preflight_verdict": preflight.get("preflight_verdict"),
         "stage_a_outcome": phase0_report.get("outcome"),
@@ -785,7 +788,7 @@ def run_evaluation():
 
     # ---- Merge gate + null ----
     cell_verdicts = []
-    for cr, nr in zip(cell_results, null_results):
+    for cr, nr in zip(cell_results, null_results, strict=False):
         cv = dict(cr)
         cv["null_p_value"] = nr.get("p_value")
         cv["null_mean"] = nr.get("null_mean")
@@ -842,7 +845,7 @@ def run_evaluation():
               f"verdict={hr['holdout_verdict']}")
 
     # Merge holdout into cell verdicts
-    for cv, hr in zip(cell_verdicts, holdout_results):
+    for cv, hr in zip(cell_verdicts, holdout_results, strict=False):
         cv["holdout_n_train"] = hr["n_train"]
         cv["holdout_n_holdout"] = hr["n_holdout"]
         cv["holdout_mean_net_bps"] = hr["holdout_mean_net_bps"]
@@ -907,7 +910,6 @@ def _write_artifacts(output_dir, run_id, metadata, cell_verdicts,
                      null_results, p_values, fdr_rejected, holdout_results,
                      phase0_report, events, spot_klines, study_verdict):
     """Write all Stage B output artifacts."""
-
     # Summary
     summary = OrderedDict()
     summary["run_id"] = run_id
@@ -916,7 +918,7 @@ def _write_artifacts(output_dir, run_id, metadata, cell_verdicts,
     summary["cell_results"] = [dict(cv) for cv in cell_verdicts]
     with open(os.path.join(output_dir, "summary.json"), "w") as f:
         json.dump(summary, f, indent=2, default=str)
-    print(f"  Wrote summary.json")
+    print("  Wrote summary.json")
 
     # Null results
     nr_out = []
@@ -924,7 +926,7 @@ def _write_artifacts(output_dir, run_id, metadata, cell_verdicts,
         nr_out.append(dict(nr))
     with open(os.path.join(output_dir, "null_results.json"), "w") as f:
         json.dump(nr_out, f, indent=2, default=str)
-    print(f"  Wrote null_results.json")
+    print("  Wrote null_results.json")
 
     # FDR results
     fdr_out = {
@@ -936,12 +938,12 @@ def _write_artifacts(output_dir, run_id, metadata, cell_verdicts,
     }
     with open(os.path.join(output_dir, "fdr_results.json"), "w") as f:
         json.dump(fdr_out, f, indent=2, default=str)
-    print(f"  Wrote fdr_results.json")
+    print("  Wrote fdr_results.json")
 
     # Holdout results
     with open(os.path.join(output_dir, "holdout_results.json"), "w") as f:
         json.dump(holdout_results, f, indent=2, default=str)
-    print(f"  Wrote holdout_results.json")
+    print("  Wrote holdout_results.json")
 
     # Markdown report
     lines = []
@@ -979,7 +981,7 @@ def _write_artifacts(output_dir, run_id, metadata, cell_verdicts,
 
     with open(os.path.join(output_dir, "STAGE_B_REPORT.md"), "w") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"  Wrote STAGE_B_REPORT.md")
+    print("  Wrote STAGE_B_REPORT.md")
 
     # Also write to shared output dir
     shared_dir = os.path.join(OUTPUT_DIR)
@@ -999,7 +1001,7 @@ def _write_artifacts(output_dir, run_id, metadata, cell_verdicts,
     stage_b_results["study_verdict"] = study_verdict
     with open(os.path.join(OUTPUT_DIR, "stage_b_results.json"), "w") as f:
         json.dump(stage_b_results, f, indent=2, default=str)
-    print(f"  Wrote stage_b_results.json")
+    print("  Wrote stage_b_results.json")
 
 preflight = None  # module-level for _write_artifacts access
 
@@ -1015,7 +1017,7 @@ def _update_registry(cell_verdicts, run_id, metadata, study_verdict):
         return
 
     with open(REGISTRY_PATH) as f:
-        current = f.read()
+        f.read()
 
     # Build status row
     verdict_text = "REJECTED"
@@ -1110,7 +1112,7 @@ Family size: exactly 2. BY FDR across both cells.
 
 def main():
     parser = argparse.ArgumentParser(description="Stage B evaluator for Family 3 v1 falling-OI unwind")
-    args = parser.parse_args()
+    parser.parse_args()
     run_evaluation()
 
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""MCPT export CLI — decide whether MCPT is warranted and export candidate series.
+r"""
+MCPT export CLI — decide whether MCPT is warranted and export candidate series.
 
 This script loads an existing evaluation report, decides whether any group
 is MCPT-worthy, and exports candidate event return series CSVs.
@@ -23,14 +24,12 @@ import math
 import sys
 from pathlib import Path
 
-from .mcpt_export import (
-    DEFAULT_COST_FLOOR_BPS,
-    DEFAULT_MAX_GROUPS,
-    DEFAULT_MIN_EVENTS,
-    export_mcpt_candidate_series,
-    export_mcpt_summary,
-    select_mcpt_candidate_groups,
-)
+from .mcpt_export import DEFAULT_COST_FLOOR_BPS
+from .mcpt_export import DEFAULT_MAX_GROUPS
+from .mcpt_export import DEFAULT_MIN_EVENTS
+from .mcpt_export import export_mcpt_candidate_series
+from .mcpt_export import export_mcpt_summary
+from .mcpt_export import select_mcpt_candidate_groups
 
 
 def _format_optional_bps(value: object) -> str:
@@ -186,7 +185,7 @@ def main() -> None:
 
     print()
     print("=" * 60)
-    print(f"MCPT EXPORT COMPLETE")
+    print("MCPT EXPORT COMPLETE")
     print(f"  Report: {report_dir}")
     print(f"  Verdict: {verdict}")
     print(f"  Capture mode: {capture_mode or 'unspecified'}")

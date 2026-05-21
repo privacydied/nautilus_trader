@@ -1,4 +1,5 @@
-"""CLI runner for trade-flow impulse signal research.
+r"""
+CLI runner for trade-flow impulse signal research.
 
 **RESEARCH MEASUREMENT TOOL ONLY.**  This script scans trade-tick data for
 abnormal flow patterns (count burst, notional burst, large-trade outliers,
@@ -34,18 +35,21 @@ import os
 import statistics
 import sys
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 
-from .tick_models import TradeTickLite, TickSignalEvent, TickForwardReturn
-from .tick_store import load_trades_jsonl, tick_file_discovery
+from .event_study import evaluate_candidate_group
+from .event_study import evaluate_tick_signal
+from .event_study import generate_random_baseline
 from .symbol_aliases import resolve_symbol
-from .event_study import (
-    evaluate_tick_signal,
-    generate_random_baseline,
-    evaluate_candidate_group,
-)
-from .trade_flow_impulse import TradeFlowImpulseConfig, TradeFlowImpulseSignalGenerator
+from .tick_models import TickForwardReturn
+from .tick_models import TradeTickLite
+from .tick_store import load_trades_jsonl
+from .tick_store import tick_file_discovery
+from .trade_flow_impulse import TradeFlowImpulseConfig
+from .trade_flow_impulse import TradeFlowImpulseSignalGenerator
+
 
 _MS_TO_NS = 1_000_000
 
@@ -55,6 +59,7 @@ _MS_TO_NS = 1_000_000
 @dataclass
 class TradeFlowImpulseSummary:
     """Aggregate summary produced by one run of the trade-flow sweep."""
+
     total_signals: int = 0
     valid_evaluations: int = 0
     rejected_evaluations: int = 0
@@ -215,7 +220,7 @@ def load_tick_data(
 
 def _format_ts(ts_ns: int) -> str:
     import datetime
-    dt = datetime.datetime.fromtimestamp(ts_ns / 1e9, tz=datetime.timezone.utc)
+    dt = datetime.datetime.fromtimestamp(ts_ns / 1e9, tz=datetime.UTC)
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
@@ -325,7 +330,7 @@ def run_sweep(args: argparse.Namespace) -> TradeFlowImpulseSummary:
                         enable_tick_rule_side_proxy=args.enable_tick_rule_side_proxy,
                         cooldown_ms=args.cooldown_ms,
                     )
-                    generator = TradeFlowImpulseSignalGenerator(config)
+                    TradeFlowImpulseSignalGenerator(config)
 
                     for lb_ms in lookbacks_ms:
                         sub_config = TradeFlowImpulseConfig(

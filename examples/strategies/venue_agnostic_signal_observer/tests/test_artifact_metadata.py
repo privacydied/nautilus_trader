@@ -1,4 +1,5 @@
-"""Tests for artifact metadata injection and backward compatibility.
+"""
+Tests for artifact metadata injection and backward compatibility.
 
 Covers:
 1. New capture manifest includes schema/version/git/run metadata.
@@ -10,29 +11,18 @@ Covers:
 from __future__ import annotations
 
 import json
-import math
-import tempfile
-from datetime import datetime, timezone
-from pathlib import Path
-from unittest.mock import patch
+from datetime import datetime
 
-import pytest
-
-from ..artifact_metadata import (
-    CURRENT_SCHEMA_VERSION,
-    SAFETY_MODE,
-    build_metadata,
-    get_metadata,
-    get_metadata_field,
-    inject_metadata_into_manifest,
-)
-from ..mcpt_export import (
-    export_mcpt_summary,
-    is_mcpt_worthy_group,
-    select_mcpt_candidate_groups,
-)
-from ..run_derivatives_spot_lead_lag import EvalSummary, write_reports
-from ..tick_models import TickSignalEvent, TickForwardReturn
+from venue_agnostic_signal_observer.artifact_metadata import CURRENT_SCHEMA_VERSION
+from venue_agnostic_signal_observer.artifact_metadata import SAFETY_MODE
+from venue_agnostic_signal_observer.artifact_metadata import build_metadata
+from venue_agnostic_signal_observer.artifact_metadata import get_metadata
+from venue_agnostic_signal_observer.artifact_metadata import get_metadata_field
+from venue_agnostic_signal_observer.artifact_metadata import inject_metadata_into_manifest
+from venue_agnostic_signal_observer.mcpt_export import export_mcpt_summary
+from venue_agnostic_signal_observer.mcpt_export import select_mcpt_candidate_groups
+from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import EvalSummary
+from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import write_reports
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +105,7 @@ class TestBuildMetadata:
         # ISO-8601 with Z suffix
         assert ts.endswith("Z")
         # Parseable
-        parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(ts)
         assert parsed.tzinfo is not None
 
     def test_git_sha_is_string(self):
@@ -299,7 +289,8 @@ class TestWriteReportsMetadata:
 
 class TestFastDiagnosticVerdictRemap:
     def test_rejected_remapped_to_market_moderate_diagnostic(self):
-        """FAST_DIAGNOSTIC captures must never produce final REJECTED verdict.
+        """
+        FAST_DIAGNOSTIC captures must never produce final REJECTED verdict.
 
         The run_derivatives_spot_lead_lag.py evaluation logic remaps
         REJECTED -> MARKET_MODERATE_DIAGNOSTIC when capture_mode == "FAST_DIAGNOSTIC".

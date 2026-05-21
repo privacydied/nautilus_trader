@@ -1,4 +1,5 @@
-"""Tests for latency_diagnostics module.
+"""
+Tests for latency_diagnostics module.
 
 Tests:
 1. DetectsZeroOverlapStreams — no temporal overlap → overlap_seconds ≈ 0
@@ -9,18 +10,11 @@ Tests:
 """
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
-from venue_agnostic_signal_observer.latency_diagnostics import (
-    LatencyDiagnosticReport,
-    OverlapResult,
-    StreamStats,
-    compute_overlap_stats,
-    load_stream_stats,
-)
+from venue_agnostic_signal_observer.latency_diagnostics import StreamStats
+from venue_agnostic_signal_observer.latency_diagnostics import compute_overlap_stats
+from venue_agnostic_signal_observer.latency_diagnostics import load_stream_stats
 
 
 # ---------------------------------------------------------------------------

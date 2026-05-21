@@ -7,14 +7,16 @@ from pathlib import Path
 
 import pytest
 
+from venue_agnostic_signal_observer.candidate_falsification import COST_WALL_BLOCKED
+from venue_agnostic_signal_observer.candidate_falsification import FALSIFICATION_SUMMARY_READY
+from venue_agnostic_signal_observer.candidate_falsification import MISSING_REQUIRED_REPORTS
+from venue_agnostic_signal_observer.candidate_falsification import NO_EVALUATED_GROUPS
+from venue_agnostic_signal_observer.candidate_falsification import FalsificationSummary
 from venue_agnostic_signal_observer.candidate_falsification import (
-    COST_WALL_BLOCKED,
-    FALSIFICATION_SUMMARY_READY,
-    MISSING_REQUIRED_REPORTS,
-    NO_EVALUATED_GROUPS,
-    FalsificationSummary,
     compute_candidate_falsification_summary,
-    validate_verdict,
+)
+from venue_agnostic_signal_observer.candidate_falsification import validate_verdict
+from venue_agnostic_signal_observer.candidate_falsification import (
     write_candidate_falsification_reports,
 )
 

@@ -1,32 +1,28 @@
 #!/usr/bin/env python3
 """Tests for the venue-agnostic signal observer."""
 import json
-import csv
 import tempfile
-import time
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
+
+from examples.strategies.venue_agnostic_signal_observer.config import FeeModel
+from examples.strategies.venue_agnostic_signal_observer.config import Horizon
 
 # ---------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------
-from examples.strategies.venue_agnostic_signal_observer.config import (
-    ObserverConfig, FeeModel, Horizon, SignalSourceConfig, DEFAULT_HORIZONS,
-)
-from examples.strategies.venue_agnostic_signal_observer.models import (
-    SignalEvent, ForwardReturnResult, SignalEvaluationSummary,
-)
-from examples.strategies.venue_agnostic_signal_observer.signals import (
-    load_signals_from_csv, CrossMarketSignalGenerator,
-)
-from examples.strategies.venue_agnostic_signal_observer.forward_returns import (
-    evaluate_signal, compute_forward_return, get_entry_price, find_price_at_or_after,
-)
-from examples.strategies.venue_agnostic_signal_observer.data_loading import load_bars_from_csv, generate_synthetic_data
-from examples.strategies.venue_agnostic_signal_observer.observer import SignalObserver, _build_summary
+from examples.strategies.venue_agnostic_signal_observer.config import ObserverConfig
+from examples.strategies.venue_agnostic_signal_observer.config import SignalSourceConfig
+from examples.strategies.venue_agnostic_signal_observer.data_loading import generate_synthetic_data
+from examples.strategies.venue_agnostic_signal_observer.forward_returns import evaluate_signal
+from examples.strategies.venue_agnostic_signal_observer.models import ForwardReturnResult
+from examples.strategies.venue_agnostic_signal_observer.models import SignalEvent
+from examples.strategies.venue_agnostic_signal_observer.observer import SignalObserver
+from examples.strategies.venue_agnostic_signal_observer.observer import _build_summary
 from examples.strategies.venue_agnostic_signal_observer.reports import write_outputs
+from examples.strategies.venue_agnostic_signal_observer.signals import CrossMarketSignalGenerator
+from examples.strategies.venue_agnostic_signal_observer.signals import load_signals_from_csv
 
 
 # ===================================================================
@@ -354,7 +350,7 @@ class TestForwardReturns:
             target_venue="B", target_instrument="T",
             signal_type="test", direction="long", strength=1.0,
         )
-        results = evaluate_signal(sig, ts, prices, [Horizon("10s", 10.0)], FeeModel())
+        evaluate_signal(sig, ts, prices, [Horizon("10s", 10.0)], FeeModel())
         # Entry should succeed: first bar at ts=2000
         # But horizon would be at ts=2010, which exists → should be valid
         # To actually test rejection, signal after ALL data:

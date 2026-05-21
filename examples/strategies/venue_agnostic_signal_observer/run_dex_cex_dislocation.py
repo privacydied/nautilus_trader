@@ -1,4 +1,5 @@
-"""CLI runner for DEX→CEX spot dislocation research.
+r"""
+CLI runner for DEX→CEX spot dislocation research.
 
 **RESEARCH MEASUREMENT TOOL ONLY.**  No orders, no execution, no live trading.
 
@@ -21,27 +22,26 @@ Usage (synthetic/mocked data)::
 from __future__ import annotations
 
 import argparse
-import bisect
+import csv
 import json
 import math
-import sys
-import csv
 import statistics
 import time
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 from typing import Any
 
-from .dex_models import DexPoolSnapshot, DexDislocationEvent, DexCexForwardResult
-from .dex_cex_dislocation import DexCexDislocationDetector, dex_event_to_tick_signal
 from .dex_adapters import load_dex_snapshots_from_jsonl
-from .tick_models import TickForwardReturn, TradeTickLite
-from .event_study import (
-    evaluate_tick_signal,
-    generate_random_baseline as _orig_random_baseline,
-    evaluate_candidate_group,
-)
+from .dex_cex_dislocation import DexCexDislocationDetector
+from .dex_cex_dislocation import dex_event_to_tick_signal
+from .dex_models import DexCexForwardResult
+from .dex_models import DexDislocationEvent
+from .event_study import evaluate_candidate_group
+from .event_study import evaluate_tick_signal
+from .tick_models import TickForwardReturn
+from .tick_models import TradeTickLite
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +104,8 @@ def load_target_ticks(
     target_venues: list[str],
     assets: list[str],
 ) -> dict[str, list[TradeTickLite]]:
-    """Discover tick files from directories.
+    """
+    Discover tick files from directories.
 
     Tries tick_file_discovery per venue+symbol, then falls back to
     scanning for trades_*.jsonl files in the directory.
@@ -180,13 +181,12 @@ def evaluate_dex_events(
     results: list[DexCexForwardResult] = []
     stats: dict = defaultdict(int)
 
-    total_cost = fee_bps + slippage_bps + stale_data_buffer_bps + quote_mismatch_buffer_bps
+    fee_bps + slippage_bps + stale_data_buffer_bps + quote_mismatch_buffer_bps
 
     for evt in events:
         # Find matching target venue
         asset = evt.asset
         matched = False
-        best_result: DexCexForwardResult | None = None
 
         for tv_key, ticks in target_ticks.items():
             tv_venue = tv_key.split(":")[0] if ":" in tv_key else tv_key
@@ -404,7 +404,7 @@ def run_sweep(args: argparse.Namespace) -> DexCexDislocationSummary:
         gate = evaluate_candidate_group(
             forward_returns=[_r2tfr(r) for r in valid],
             baseline_forward_returns=[],
-            min_events=getattr(args, 'min_events', 50),
+            min_events=getattr(args, "min_events", 50),
         )
 
         # Extra DEX-specific gate checks
@@ -416,19 +416,19 @@ def run_sweep(args: argparse.Namespace) -> DexCexDislocationSummary:
 
             if gross_mean <= 0:
                 gate["candidate"] = False
-                gate["rejection_reasons"] = gate.get("rejection_reasons", []) + ["gross_mean_negative"]
+                gate["rejection_reasons"] = [*gate.get("rejection_reasons", []), "gross_mean_negative"]
             if net_mean <= 0:
                 gate["candidate"] = False
-                gate["rejection_reasons"] = gate.get("rejection_reasons", []) + ["net_mean_negative"]
+                gate["rejection_reasons"] = [*gate.get("rejection_reasons", []), "net_mean_negative"]
             if net_median < -5:
                 gate["candidate"] = False
-                gate["rejection_reasons"] = gate.get("rejection_reasons", []) + ["median_too_negative"]
+                gate["rejection_reasons"] = [*gate.get("rejection_reasons", []), "median_too_negative"]
             if wr < 0.5:
                 gate["candidate"] = False
-                gate["rejection_reasons"] = gate.get("rejection_reasons", []) + ["win_rate_below_50pct"]
-            if len(valid) < getattr(args, 'min_events', 50):
+                gate["rejection_reasons"] = [*gate.get("rejection_reasons", []), "win_rate_below_50pct"]
+            if len(valid) < getattr(args, "min_events", 50):
                 gate["candidate"] = False
-                gate["rejection_reasons"] = gate.get("rejection_reasons", []) + ["insufficient_events"]
+                gate["rejection_reasons"] = [*gate.get("rejection_reasons", []), "insufficient_events"]
 
         if gate.get("candidate"):
             candidate_groups.append({**stats_group, **gate})

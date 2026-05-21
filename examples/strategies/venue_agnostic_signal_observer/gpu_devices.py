@@ -1,4 +1,5 @@
-"""Shared multi-GPU device helpers for venue_agnostic_signal_observer.
+"""
+Shared multi-GPU device helpers for venue_agnostic_signal_observer.
 
 Pure utility module. No network, no file writes, no capture logic, no orders,
 no auth, no execution.
@@ -20,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 
+
 SAFETY_MODE = "public_data_observer_only"
 
 
@@ -28,7 +30,8 @@ def parse_cuda_devices(
     fallback_device: str = "cuda:0",
     engine: str = "gpu",
 ) -> list[str]:
-    """Parse a ``--devices`` CSV string into a list of CUDA device strings.
+    """
+    Parse a ``--devices`` CSV string into a list of CUDA device strings.
 
     Behaviour:
     - ``engine != "gpu"`` -> ``[]`` (CPU path keeps single-device semantics
@@ -67,7 +70,8 @@ def parse_cuda_devices(
 
 
 def validate_cuda_devices(devices: list[str]) -> tuple[bool, str]:
-    """Check that every requested CUDA device exists and is usable.
+    """
+    Check that every requested CUDA device exists and is usable.
 
     Returns ``(True, "cuda_available")`` if all devices pass, otherwise
     ``(False, reason)`` where ``reason`` names the first failing device.
@@ -79,7 +83,7 @@ def validate_cuda_devices(devices: list[str]) -> tuple[bool, str]:
     if not devices:
         return False, "no_devices_requested"
     try:
-        import torch  # noqa: PLC0415
+        import torch
     except ImportError:
         return False, "torch_not_installed"
     if not hasattr(torch, "cuda") or torch.cuda is None:
@@ -98,7 +102,8 @@ def validate_cuda_devices(devices: list[str]) -> tuple[bool, str]:
 
 
 def split_work_evenly(n_items: int, n_devices: int) -> list[range]:
-    """Split ``n_items`` of indexed work into ``n_devices`` contiguous ranges.
+    """
+    Split ``n_items`` of indexed work into ``n_devices`` contiguous ranges.
 
     Guarantees:
     - The returned ranges cover ``[0, n_items)`` exactly once, with no
@@ -128,7 +133,8 @@ def split_work_evenly(n_items: int, n_devices: int) -> list[range]:
 
 
 def derive_per_device_seeds(base_seed: int, n_devices: int) -> list[int]:
-    """Derive ``n_devices`` deterministic per-device seeds from ``base_seed``.
+    """
+    Derive ``n_devices`` deterministic per-device seeds from ``base_seed``.
 
     Uses BLAKE2b on ``(base_seed, device_index)`` so the mapping is
     reproducible across runs and machines, and any small change to
@@ -142,7 +148,7 @@ def derive_per_device_seeds(base_seed: int, n_devices: int) -> list[int]:
     seeds: list[int] = []
     for i in range(n_devices):
         h = hashlib.blake2b(
-            f"vasos:gpu:seed:{base_seed}:{i}".encode("utf-8"),
+            f"vasos:gpu:seed:{base_seed}:{i}".encode(),
             digest_size=8,
         )
         seeds.append(int.from_bytes(h.digest(), "big"))
@@ -157,7 +163,8 @@ def benchmark_metadata(
     per_device_shards: list[int] | None = None,
     batch_size: int | None = None,
 ) -> dict:
-    """Build a standard benchmark/timing metadata dict for GPU runs.
+    """
+    Build a standard benchmark/timing metadata dict for GPU runs.
 
     This is diagnostic only — it MUST NOT be consumed by verdict, candidate,
     FDR, or rejection logic. Callers should attach it as a sidecar field on

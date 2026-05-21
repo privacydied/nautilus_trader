@@ -10,11 +10,12 @@ All tests are self-contained (no HTTP dependencies) except where noted.
 import json
 import os
 import sys
-import tempfile
-from collections import OrderedDict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 
 import pytest
+
 
 # Ensure the modules are importable
 sys.path.insert(
@@ -22,25 +23,16 @@ sys.path.insert(
     os.path.join(os.path.dirname(__file__), ".."),
 )
 
-from run_funding_oi_archive_probe import (
-    FIXED_PROBE_DATES,
-    BASE_URL,
-    SYMBOL,
-    OI_PRIMARY_FIELD,
-    OI_SECONDARY_FIELD,
-    TIMESTAMP_FIELD,
-    MIN_ALIGNED_SETTLEMENT_SLOTS,
-    MIN_COVERAGE_DATE,
-    WARMUP_DAYS,
-    _monthly_zip_path,
-    _daily_zip_path,
-    probe_url,
-    extract_csv_from_zip,
-    parse_timestamp,
-    run_phase0a,
-    write_report_json,
-    write_data_availability_md,
-)
+from run_funding_oi_archive_probe import FIXED_PROBE_DATES
+from run_funding_oi_archive_probe import MIN_ALIGNED_SETTLEMENT_SLOTS
+from run_funding_oi_archive_probe import MIN_COVERAGE_DATE
+from run_funding_oi_archive_probe import OI_PRIMARY_FIELD
+from run_funding_oi_archive_probe import OI_SECONDARY_FIELD
+from run_funding_oi_archive_probe import TIMESTAMP_FIELD
+from run_funding_oi_archive_probe import _daily_zip_path
+from run_funding_oi_archive_probe import _monthly_zip_path
+from run_funding_oi_archive_probe import extract_csv_from_zip
+from run_funding_oi_archive_probe import run_phase0a
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +56,7 @@ def test_fixed_probe_dates_content():
         "2025-01-01",
         "2026-01-01",
     ]
-    assert FIXED_PROBE_DATES == expected
+    assert expected == FIXED_PROBE_DATES
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +181,6 @@ def test_schema_missing_timestamp():
     ]
     zip_bytes = _make_zip_bytes(header, rows)
     h, r = extract_csv_from_zip(zip_bytes)
-    from run_funding_oi_archive_probe import TIMESTAMP_FIELD
 
     assert TIMESTAMP_FIELD not in h
 
@@ -202,7 +193,7 @@ def test_schema_missing_timestamp():
 def test_oi_alignment_last_row_before_or_at_settlement():
     """OI_end uses the last row at or before settlement_ts, never after."""
     # Build OI rows at 0, 5, 10 minutes past each hour
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     oi_data = []
     for minute in range(0, 24 * 60, 5):
         ts = base + timedelta(minutes=minute)
@@ -227,7 +218,7 @@ def test_oi_alignment_no_future_rows():
     OI alignment must never use a row after settlement_ts.
     If all rows are after settlement_ts, OI_end is None.
     """
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     # All rows are AFTER settlement_ts
     oi_data = [{"ts": base + timedelta(hours=9), "oi": 200.0}]
     settlement_ts = base + timedelta(hours=8)
@@ -242,7 +233,7 @@ def test_oi_alignment_no_future_rows():
 
 def test_oi_start_8h_before():
     """OI_start must use the last row at or before settlement_ts - 8h."""
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     oi_data = []
     for minute in range(0, 24 * 60, 5):
         ts = base + timedelta(minutes=minute)
@@ -262,7 +253,7 @@ def test_oi_start_8h_before():
 
 def test_missing_oi_bracket_unaligned():
     """Missing either OI bracket must produce OI_UNALIGNED."""
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     oi_data = [{"ts": base + timedelta(hours=2), "oi": 150.0}]
     settlement_ts = base + timedelta(hours=8)
     s8h = settlement_ts - timedelta(hours=8)
@@ -285,7 +276,7 @@ def test_missing_oi_bracket_unaligned():
 
 def test_oi_change_pct_computation():
     """OI_change_pct = (OI_end - OI_start) / OI_start."""
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     oi_end = {"ts": base + timedelta(hours=8), "oi": 200.0}
     oi_start = {"ts": base, "oi": 100.0}
     change_pct = (oi_end["oi"] - oi_start["oi"]) / oi_start["oi"]

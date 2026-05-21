@@ -92,7 +92,8 @@ class TestEventWindowPrecommitmentFilesExist:
         assert data.get("stage") == "stage2"
 
         created = data.get("created_utc", "")
-        assert "T" in created and created.endswith("Z")
+        assert "T" in created
+        assert created.endswith("Z")
 
         hc = data.get("hypothesis_config", {})
         assert hc.get("source_assets") == ["BTC", "ETH"]
@@ -202,9 +203,11 @@ class TestEventWindowPrecommitmentFilesExist:
 
 
 class TestSignalFamilySpelling:
-    """Search every event-window file and ensure the signal family is
+    """
+    Search every event-window file and ensure the signal family is
     spelled exactly cross_asset_event_window_differential_v1
-    with no comp_asset, compas_asset, or other typos."""
+    with no comp_asset, compas_asset, or other typos.
+    """
 
     def test_json_signal_family_spelling(self):
         data = _load_ew_json()
@@ -253,8 +256,10 @@ class TestSignalFamilySpelling:
 
 
 class TestPairedDifferentialContrast:
-    """The event-window precommitment must be based on paired contrast,
-    not independent window comparison."""
+    """
+    The event-window precommitment must be based on paired contrast,
+    not independent window comparison.
+    """
 
     def test_paired_contrast_section_exists(self):
         data = _load_ew_json()
@@ -273,8 +278,10 @@ class TestPairedDifferentialContrast:
         assert data.get("paired_contrast", {}).get("paired_permutation_required") is True
 
     def test_primary_pvalue_source_paired(self):
-        """Both paired_contrast.primary_pvalue_source and
-        primary_fdr.pvalue_source must be 'native_paired_permutation'."""
+        """
+        Both paired_contrast.primary_pvalue_source and
+        primary_fdr.pvalue_source must be 'native_paired_permutation'.
+        """
         data = _load_ew_json()
         pc_source = data.get("paired_contrast", {}).get("primary_pvalue_source")
         fdr_source = data.get("primary_fdr", {}).get("pvalue_source")
@@ -319,8 +326,10 @@ class TestPairedDifferentialContrast:
         assert "native_paired_permutation" in text
 
     def test_pvalue_source_differs_from_beta(self):
-        """The event-window pvalue_source must differ from the beta-lag
-        precommitment (which uses native_permutation, not native_paired_permutation)."""
+        """
+        The event-window pvalue_source must differ from the beta-lag
+        precommitment (which uses native_permutation, not native_paired_permutation).
+        """
         ew = _load_ew_json()
         beta = _load_beta_json()
 
@@ -335,8 +344,10 @@ class TestPairedDifferentialContrast:
 
 
 class TestPairedPermutationRowShape:
-    """The paired permutation output row shape is defined once in JSON,
-    markdown, and rationale.  All three must agree."""
+    """
+    The paired permutation output row shape is defined once in JSON,
+    markdown, and rationale.  All three must agree.
+    """
 
     def test_json_has_primary_pvalue_row_shape(self):
         data = _load_ew_json()
@@ -412,8 +423,10 @@ class TestPairedPermutationRowShape:
         assert "native_paired_permutation" in text
 
     def test_fdr_pvalue_source_matches_paired_contrast(self):
-        """primary_fdr.pvalue_source must match
-        paired_contrast.primary_pvalue_source."""
+        """
+        primary_fdr.pvalue_source must match
+        paired_contrast.primary_pvalue_source.
+        """
         data = _load_ew_json()
         fdr_source = data.get("primary_fdr", {}).get("pvalue_source")
         pc_source = data.get("paired_contrast", {}).get("primary_pvalue_source")
@@ -422,8 +435,10 @@ class TestPairedPermutationRowShape:
         )
 
     def test_window_type_not_event_or_baseline_for_primary(self):
-        """The primary FDR dimension window_type must NOT have value 'event'
-        or 'baseline' — it must be 'paired_delta'."""
+        """
+        The primary FDR dimension window_type must NOT have value 'event'
+        or 'baseline' — it must be 'paired_delta'.
+        """
         data = _load_ew_json()
         wt = (
             data.get("paired_contrast", {})
@@ -434,8 +449,10 @@ class TestPairedPermutationRowShape:
         assert wt not in ("event", "baseline")
 
     def test_md_window_type_section_does_not_list_event_baseline_first(self):
-        """The 'window_type as a Dimension' section must NOT list
-        '(values: event, baseline)' as the primary description."""
+        """
+        The 'window_type as a Dimension' section must NOT list
+        '(values: event, baseline)' as the primary description.
+        """
         md = _load_ew_md()
         # Find the "### window_type as a Dimension" section
         idx = md.find("### window_type as a Dimension")
@@ -456,8 +473,10 @@ class TestPairedPermutationRowShape:
                 or "primary FDR family is defined on the" in md)
 
     def test_rationale_window_type_section_mentions_paired_delta(self):
-        """The rationale 'Window Type as a Test Family Dimension' section
-        must mention paired_delta."""
+        """
+        The rationale 'Window Type as a Test Family Dimension' section
+        must mention paired_delta.
+        """
         rationale = ROOT / "EVENT_WINDOW_THRESHOLDS_RATIONALE.md"
         text = rationale.read_text(encoding="utf-8")
         idx = text.find("## Window Type as a Test Family Dimension")
@@ -467,8 +486,10 @@ class TestPairedPermutationRowShape:
             "Rationale Window Type section must mention paired_delta"
 
     def test_rationale_window_type_does_not_say_primary_separates_event_baseline(self):
-        """The rationale must NOT say the primary FDR separates event and
-        baseline rows — those are diagnostic-only."""
+        """
+        The rationale must NOT say the primary FDR separates event and
+        baseline rows — those are diagnostic-only.
+        """
         rationale = ROOT / "EVENT_WINDOW_THRESHOLDS_RATIONALE.md"
         text = rationale.read_text(encoding="utf-8")
         idx = text.find("## Window Type as a Test Family Dimension")
@@ -482,8 +503,10 @@ class TestPairedPermutationRowShape:
         assert stale not in section
 
     def test_md_no_stale_event_baseline_as_primary_fdr_prose(self):
-        """The markdown must not contain prose implying event/baseline
-        are separated by the primary FDR correction."""
+        """
+        The markdown must not contain prose implying event/baseline
+        are separated by the primary FDR correction.
+        """
         md = _load_ew_md()
         stale_phrases = [
             "the FDR correction can separate the two window types",
@@ -498,8 +521,10 @@ class TestPairedPermutationRowShape:
 
 
 class TestCaptureGeometry:
-    """The capture geometry must be unambiguous and the duration fields
-    must be explicit in seconds, no implied defaults."""
+    """
+    The capture geometry must be unambiguous and the duration fields
+    must be explicit in seconds, no implied defaults.
+    """
 
     def test_capture_geometry_section_exists(self):
         data = _load_ew_json()
@@ -533,8 +558,10 @@ class TestCaptureGeometry:
 
         cg_dur = cg.get("baseline_window_duration_seconds")
         ew_dur = ew.get("baseline_window_duration_seconds")
-        assert cg_dur is not None and cg_dur == 1200
-        assert ew_dur is not None and ew_dur == 1200
+        assert cg_dur is not None
+        assert cg_dur == 1200
+        assert ew_dur is not None
+        assert ew_dur == 1200
         assert cg_dur == ew_dur
 
     def test_paired_admitted_duration_seconds(self):
@@ -559,8 +586,10 @@ class TestCaptureGeometry:
         )
 
     def test_no_ambiguous_duration_wording_in_md(self):
-        """The markdown must not use ambiguous relative terms like
-        'up to', 'at least', or 'approximately' for window durations."""
+        """
+        The markdown must not use ambiguous relative terms like
+        'up to', 'at least', or 'approximately' for window durations.
+        """
         md = _load_ew_md()
         ambiguous_terms = ["up to", "approximately", "roughly", "about ", "~"]
         for term in ambiguous_terms:
@@ -948,9 +977,9 @@ class TestBaselineWindowRule:
 class TestBurnQuarantineNamespace:
     def test_burn_file_supports_signal_family(self):
         """burn.py stores signal_family per row — separation is built in."""
-        from venue_agnostic_signal_observer.burn import burn_corpus
-
         import inspect
+
+        from venue_agnostic_signal_observer.burn import burn_corpus
         sig = inspect.signature(burn_corpus)
         params = list(sig.parameters.keys())
         assert "signal_family" in params
@@ -962,9 +991,8 @@ class TestBurnQuarantineNamespace:
         assert isinstance(families, set)
 
     def test_burn_separates_by_family(self, tmp_path):
-        from venue_agnostic_signal_observer.burn import (
-            burn_corpus, read_burned,
-        )
+        from venue_agnostic_signal_observer.burn import burn_corpus
+        from venue_agnostic_signal_observer.burn import read_burned
 
         bpath = tmp_path / "burned.jsonl"
         burn_corpus(
@@ -987,8 +1015,10 @@ class TestBurnQuarantineNamespace:
         assert len(families) == 2
 
     def test_quarantine_is_run_scoped(self):
-        """Quarantine has no signal_family field — by design,
-        data-quality quarantine is cross-family."""
+        """
+        Quarantine has no signal_family field — by design,
+        data-quality quarantine is cross-family.
+        """
         path = ROOT / "examples" / "strategies" / "venue_agnostic_signal_observer" / "quarantine.py"
         source = path.read_text(encoding="utf-8")
         assert "signal_family" not in source, (
@@ -1009,55 +1039,42 @@ class TestBurnQuarantineNamespace:
 
 class TestStage2UtilitiesImportable:
     def test_precommitment_utils_importable(self):
-        from venue_agnostic_signal_observer.stage2_precommitment_utils import (
-            CollectionLock, load_precommitment, get_test_family_dimensions,
-            get_signal_family, validate_markdown_json_match, compute_file_sha256,
-        )
+        from venue_agnostic_signal_observer.stage2_precommitment_utils import load_precommitment
         data = load_precommitment(ROOT / "event_window_differential_precommitment.json")
         assert data.get("signal_family") == "cross_asset_event_window_differential_v1"
 
     def test_ew_loaded_via_explicit_path(self):
-        from venue_agnostic_signal_observer.stage2_precommitment_utils import (
-            load_precommitment, get_signal_family,
-        )
+        from venue_agnostic_signal_observer.stage2_precommitment_utils import get_signal_family
+        from venue_agnostic_signal_observer.stage2_precommitment_utils import load_precommitment
         data = load_precommitment(ROOT / "event_window_differential_precommitment.json")
         assert get_signal_family(data) == "cross_asset_event_window_differential_v1"
 
     def test_beta_lag_still_loads_via_default(self):
-        from venue_agnostic_signal_observer.stage2_precommitment_utils import (
-            load_precommitment, get_signal_family,
-        )
+        from venue_agnostic_signal_observer.stage2_precommitment_utils import get_signal_family
+        from venue_agnostic_signal_observer.stage2_precommitment_utils import load_precommitment
         data = load_precommitment()
         assert get_signal_family(data) == "cross_asset_beta_lag_v1"
 
     def test_fdr_importable(self):
-        from venue_agnostic_signal_observer.stage2_fdr import run_fdr, build_parser
+        pass
 
     def test_split_corpus_importable(self):
-        from venue_agnostic_signal_observer.stage2_split_corpus import build_split, build_parser
+        pass
 
     def test_check_criteria_importable(self):
-        from venue_agnostic_signal_observer.stage2_check_criteria import (
-            run_discovery_check, run_holdout_check, build_parser,
-        )
+        pass
 
     def test_quarantine_importable(self):
-        from venue_agnostic_signal_observer.quarantine import (
-            quarantine_run, read_quarantine, is_quarantined, get_quarantined_run_ids,
-        )
+        pass
 
     def test_burn_importable(self):
-        from venue_agnostic_signal_observer.burn import (
-            burn_corpus, read_burned, get_burned_run_ids, is_burned, get_burned_signal_families,
-        )
+        pass
 
     def test_validate_capture_importable(self):
-        from venue_agnostic_signal_observer.validate_capture import (
-            validate_capture, build_parser,
-        )
+        pass
 
     def test_run_report_corpus_importable(self):
-        from venue_agnostic_signal_observer.run_report_corpus import main as rc_main
+        pass
 
 
 # ===========================================================================

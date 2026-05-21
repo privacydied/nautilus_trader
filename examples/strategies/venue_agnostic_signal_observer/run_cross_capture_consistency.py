@@ -1,4 +1,5 @@
-"""CLI runner for cross-capture consistency diagnostics.
+"""
+CLI runner for cross-capture consistency diagnostics.
 
 Reads multiple existing derivatives spot lead-lag report directories and writes
 JSON/CSV/Markdown aggregation by exact group config. Diagnostic-only: no live
@@ -11,14 +12,19 @@ import argparse
 import sys
 from pathlib import Path
 
+
 try:
     from venue_agnostic_signal_observer.cross_capture_consistency import (
         compute_cross_capture_consistency,
+    )
+    from venue_agnostic_signal_observer.cross_capture_consistency import (
         write_cross_capture_consistency_reports,
     )
 except ModuleNotFoundError:  # Support `python -m examples.strategies...` from repo root.
     from examples.strategies.venue_agnostic_signal_observer.cross_capture_consistency import (
         compute_cross_capture_consistency,
+    )
+    from examples.strategies.venue_agnostic_signal_observer.cross_capture_consistency import (
         write_cross_capture_consistency_reports,
     )
 

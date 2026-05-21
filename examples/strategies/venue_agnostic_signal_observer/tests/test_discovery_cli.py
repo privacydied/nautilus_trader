@@ -1,5 +1,6 @@
 # Copyright (C) 2026. All rights reserved.
-"""CLI tests for discovery freeze entrypoints.
+"""
+CLI tests for discovery freeze entrypoints.
 
 Tests test cases 95-102 from the discovery freeze specification.
 """
@@ -12,26 +13,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pytest
+from venue_agnostic_signal_observer.discovery.candidate_lock import load_candidate_lock
+from venue_agnostic_signal_observer.discovery.grid_lock import GRID_LOCK_TYPE
+from venue_agnostic_signal_observer.discovery.grid_lock import create_grid_lock
+from venue_agnostic_signal_observer.discovery.grid_lock import load_grid_lock
+from venue_agnostic_signal_observer.discovery.search_space import DiscoveryGridSpec
 
-from ..discovery.grid_lock import (
-    DiscoveryGridLock,
-    create_grid_lock,
-    load_grid_lock,
-    GRID_LOCK_TYPE,
-)
-from ..discovery.candidate_lock import (
-    DiscoveryCandidateLock,
-    load_candidate_lock,
-)
-from ..discovery.search_space import (
-    DiscoveryGridSpec,
-    grid_sha256,
-    enumerate_primary_cell_count,
-    enumerate_cost_sensitivity_cell_count,
-    load_grid_spec,
-)
-from ..discovery.exceptions import GridSpecValidationError
 
 # ── Paths ──────────────────────────────────────────────────────────────
 
@@ -97,7 +84,7 @@ DISCOVERY_MODULE = "examples.strategies.venue_agnostic_signal_observer.discovery
 def run_cli(module_suffix: str, args: list[str]) -> subprocess.CompletedProcess:
     """Run a CLI module using -m invocation (needed for relative imports)."""
     return subprocess.run(
-        [sys.executable, "-m", f"{DISCOVERY_MODULE}.{module_suffix}"] + args,
+        [sys.executable, "-m", f"{DISCOVERY_MODULE}.{module_suffix}", *args],
         capture_output=True,
         text=True,
         timeout=30,
@@ -174,7 +161,7 @@ class TestCliGridLock:
         try:
             # Create initial lock
             spec = _golden_spec()
-            lock = create_grid_lock(spec)
+            create_grid_lock(spec)
             lock_data = {
                 "lock_type": GRID_LOCK_TYPE,
                 "grid_id": spec.grid_id,

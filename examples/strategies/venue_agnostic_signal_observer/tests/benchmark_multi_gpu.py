@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Multi-GPU benchmark for forward-returns, permutation-null, and lead-lag heatmap.
+"""
+Multi-GPU benchmark for forward-returns, permutation-null, and lead-lag heatmap.
 
 Non-gating diagnostic tool. Results MUST NOT be used to tune strategy parameters,
 thresholds, candidate gates, FDR rules, or verdict taxonomy.
@@ -23,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import random
 import sys
 import time
@@ -114,11 +114,13 @@ def _run_cpu(fn, *args, **kwargs):
 
 def _benchmark_forward_returns(devices_list: list[str]) -> list[dict]:
     """Benchmark forward-returns across CPU / single-GPU / dual-GPU."""
+    from examples.strategies.venue_agnostic_signal_observer.event_study import evaluate_tick_signal
     from examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu import (
         batch_evaluate_signals_gpu,
+    )
+    from examples.strategies.venue_agnostic_signal_observer.forward_returns_gpu import (
         batch_evaluate_signals_multi_gpu,
     )
-    from examples.strategies.venue_agnostic_signal_observer.event_study import evaluate_tick_signal
 
     WORKLOADS = [
         ("small", 50, 500),
@@ -159,13 +161,11 @@ def _benchmark_forward_returns(devices_list: list[str]) -> list[dict]:
                     batch_evaluate_signals_gpu(sigs, ticks, horizons_ms=HORIZONS,
                                               fee_bps=40.0, slippage_bps=5.0, device=devs_l[0])
                     gpu_s = time.perf_counter() - t0
-                    sg_s = gpu_s
                 else:
                     t0 = time.perf_counter()
                     batch_evaluate_signals_multi_gpu(sigs, ticks, horizons_ms=HORIZONS,
                                                     fee_bps=40.0, slippage_bps=5.0, devices=devs_l)
                     gpu_s = time.perf_counter() - t0
-                    sg_s = None  # filled below from single-GPU row
 
                 speedup_cpu = round(cpu_s / gpu_s, 2) if gpu_s > 0 else None
                 results.append({**row_base, "engine": "gpu", "devices": devs_l,
@@ -178,7 +178,7 @@ def _benchmark_forward_returns(devices_list: list[str]) -> list[dict]:
                                 "error": str(exc)})
 
     # Back-fill speedup_vs_single_gpu for multi-GPU rows
-    for i, r in enumerate(results):
+    for _i, r in enumerate(results):
         if r["num_devices"] > 1 and r.get("elapsed_seconds"):
             sg = next((x for x in results
                        if x["module"] == r["module"] and x["workload"] == r["workload"]
@@ -191,9 +191,13 @@ def _benchmark_forward_returns(devices_list: list[str]) -> list[dict]:
 
 def _benchmark_permutation_null(devices_list: list[str]) -> list[dict]:
     """Benchmark permutation-null across CPU / single-GPU / dual-GPU."""
-    from examples.strategies.venue_agnostic_signal_observer.permutation_null import compute_null_distribution
+    from examples.strategies.venue_agnostic_signal_observer.permutation_null import (
+        compute_null_distribution,
+    )
     from examples.strategies.venue_agnostic_signal_observer.permutation_null_gpu import (
         compute_null_distribution_gpu,
+    )
+    from examples.strategies.venue_agnostic_signal_observer.permutation_null_gpu import (
         compute_null_distribution_multi_gpu,
     )
 
@@ -261,7 +265,7 @@ def _benchmark_permutation_null(devices_list: list[str]) -> list[dict]:
                                 "speedup_vs_cpu": None, "speedup_vs_single_gpu": None,
                                 "error": str(exc)})
 
-    for i, r in enumerate(results):
+    for _i, r in enumerate(results):
         if r["num_devices"] > 1 and r.get("elapsed_seconds"):
             sg = next((x for x in results
                        if x["module"] == r["module"] and x["workload"] == r["workload"]
@@ -332,7 +336,7 @@ def _benchmark_heatmap(devices_list: list[str]) -> list[dict]:
                                 "speedup_vs_cpu": None, "speedup_vs_single_gpu": None,
                                 "error": str(exc)})
 
-    for i, r in enumerate(results):
+    for _i, r in enumerate(results):
         if r["num_devices"] > 1 and r.get("elapsed_seconds"):
             sg = next((x for x in results
                        if x["module"] == r["module"] and x["workload"] == r["workload"]
@@ -419,7 +423,7 @@ def main() -> None:
 
     if raw:
         from examples.strategies.venue_agnostic_signal_observer.gpu_devices import (
-            parse_cuda_devices, validate_cuda_devices,
+            validate_cuda_devices,
         )
         # Build groups: single-device groups from each unique device, plus the full group if multi.
         all_devs_raw = [d.strip() for d in raw.split(",") if d.strip()]

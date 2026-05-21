@@ -155,7 +155,8 @@ VALID_CELL_VERDICTS: frozenset[str] = ALLOWED_VERDICTS | CELL_LEVEL_LABELS
 
 
 def validate_verdict(verdict: str, allow_intermediate: bool = False) -> None:
-    """Raise ValueError if a forbidden or unsupported verdict appears.
+    """
+    Raise ValueError if a forbidden or unsupported verdict appears.
 
     When allow_intermediate=True, cell-level intermediate labels
     (PASS_PRE_NULL, PASS_NULL) are also accepted.
@@ -410,7 +411,8 @@ def compute_settlement_carry_bps(
     f_short_bps: float,
     f_long_bps: float,
 ) -> float:
-    """Compute per-settlement carry in bps per the frozen algebra (Section 4.4).
+    """
+    Compute per-settlement carry in bps per the frozen algebra (Section 4.4).
 
     settlement_carry_bps(s) = f_short(s) - f_long(s)
 
@@ -427,7 +429,8 @@ def compute_realized_carry_bps(
     long_venue_rates: dict[int, float],
     settlement_indices: range,
 ) -> float:
-    """Sum settlement_carry_bps over the hold window t+1..t+N.
+    """
+    Sum settlement_carry_bps over the hold window t+1..t+N.
 
     Implements the frozen algebra exactly:
         realized_carry_bps = sum(f_short(s) - f_long(s) for s in t+1..t+N)

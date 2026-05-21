@@ -7,14 +7,10 @@ evidence ledger. Current candidate state is still derived by Phase 2 replay.
 
 from __future__ import annotations
 
-from typing import Any
+from venue_agnostic_signal_observer.governance.events import LedgerEvent
+from venue_agnostic_signal_observer.governance.events import make_demotion_event
+from venue_agnostic_signal_observer.governance.events import make_estimator_evidence_event
 
-from ..governance.events import (
-    make_estimator_evidence_event,
-    make_demotion_event,
-    make_revocation_event,
-    LedgerEvent,
-)
 from .aggregator import CorpusAggregationResult
 
 
@@ -22,7 +18,8 @@ def emit_corpus_events(
     result: CorpusAggregationResult,
     ledger_index_start: int,
 ) -> list[LedgerEvent]:
-    """Produce ledger events for a corpus aggregation result.
+    """
+    Produce ledger events for a corpus aggregation result.
 
     Returns a list of events to be appended to the Phase 2 evidence ledger.
     The caller is responsible for appending them via EvidenceLedger.append().

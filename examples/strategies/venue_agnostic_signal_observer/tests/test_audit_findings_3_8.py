@@ -11,13 +11,15 @@ import pytest
 
 
 def _tick_forward_return_cls():
-    from ..tick_models import TickForwardReturn
+    from venue_agnostic_signal_observer.tick_models import TickForwardReturn
 
     return TickForwardReturn
 
 
 def test_baseline_preserves_real_target_symbol_and_requested_exact_cell_horizon():
-    from ..streaming_stress_labels import generate_baseline_from_ts_prices
+    from venue_agnostic_signal_observer.streaming_stress_labels import (
+        generate_baseline_from_ts_prices,
+    )
 
     results = generate_baseline_from_ts_prices(
         {
@@ -47,7 +49,9 @@ def test_baseline_preserves_real_target_symbol_and_requested_exact_cell_horizon(
 
 
 def test_baseline_rejects_unsorted_timestamps():
-    from ..streaming_stress_labels import generate_baseline_from_ts_prices
+    from venue_agnostic_signal_observer.streaming_stress_labels import (
+        generate_baseline_from_ts_prices,
+    )
 
     with pytest.raises(ValueError, match="sorted"):
         generate_baseline_from_ts_prices(
@@ -67,7 +71,9 @@ def test_baseline_rejects_unsorted_timestamps():
 
 
 def test_forward_return_helper_rejects_unsorted_timestamps():
-    from ..streaming_stress_labels import compute_forward_returns_from_ts_prices
+    from venue_agnostic_signal_observer.streaming_stress_labels import (
+        compute_forward_returns_from_ts_prices,
+    )
 
     stress_label = SimpleNamespace(label_id="sl", stress_end_ns=1_000, direction="bullish")
 
@@ -89,7 +95,7 @@ def test_forward_return_helper_rejects_unsorted_timestamps():
 
 
 def test_signal_event_from_dict_requires_valid_direction():
-    from ..models import SignalEvent
+    from venue_agnostic_signal_observer.models import SignalEvent
 
     base = {
         "signal_id": "s",
@@ -111,7 +117,7 @@ def test_signal_event_from_dict_requires_valid_direction():
 
 
 def test_tick_signal_event_from_dict_rejects_invalid_direction():
-    from ..tick_models import TickSignalEvent
+    from venue_agnostic_signal_observer.tick_models import TickSignalEvent
 
     base = {
         "signal_id": "s",
@@ -144,7 +150,10 @@ def _zip_csv(content: str) -> bytes:
 
 
 def test_archive_parse_status_distinguishes_missing_parse_and_schema_errors():
-    from ..binance_vision_archive import ArchiveFileStatus, parse_agg_trade_csv_with_status
+    from venue_agnostic_signal_observer.binance_vision_archive import ArchiveFileStatus
+    from venue_agnostic_signal_observer.binance_vision_archive import (
+        parse_agg_trade_csv_with_status,
+    )
 
     missing = parse_agg_trade_csv_with_status(None, "BTCUSDT")
     assert missing.status is ArchiveFileStatus.MISSING_FILE

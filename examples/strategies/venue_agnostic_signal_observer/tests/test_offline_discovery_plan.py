@@ -1,42 +1,81 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, replace
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import compute_data_corpus_hash
+from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import (
+    compute_data_corpus_hash,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    DISCOVERY_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    STATUS_INPUT_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    STATUS_NO_PROMOTABLE_WINDOWS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    STATUS_NO_SUPPORTED_HYPOTHESIS_FAMILIES,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    STATUS_OFFLINE_DISCOVERY_PLAN_READY,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    STATUS_UNUSABLE_STRESS_INDEX,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    STATUS_WINDOW_INDEX_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    build_offline_discovery_plan,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    build_offline_discovery_plan_manifest_payload,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    compute_discovery_config_hash,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    load_discovery_config,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+    write_offline_discovery_plan_outputs,
+)
 from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OFFLINE_DATA_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     RESOLUTION_BAR,
-    RESOLUTION_TRADE,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     WINDOW_MODE_CAUSAL,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     WINDOW_MODE_RETROSPECTIVE_DIAGNOSTIC,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OfflinePrepareManifest,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OfflineSourceFile,
 )
 from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     OFFLINE_STRESS_WINDOW_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     STATUS_OFFLINE_STRESS_INDEX_READY,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     STATUS_RETROSPECTIVE_DIAGNOSTIC_ONLY,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     OfflineStressWindow,
 )
-from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
-    DISCOVERY_SCHEMA_VERSION,
-    STATUS_INPUT_HASH_MISMATCH,
-    STATUS_INVALID_DISCOVERY_CONFIG,
-    STATUS_NO_PROMOTABLE_WINDOWS,
-    STATUS_NO_SUPPORTED_HYPOTHESIS_FAMILIES,
-    STATUS_OFFLINE_DISCOVERY_PLAN_READY,
-    STATUS_UNUSABLE_STRESS_INDEX,
-    STATUS_WINDOW_INDEX_HASH_MISMATCH,
-    build_offline_discovery_plan,
-    build_offline_discovery_plan_manifest_payload,
-    compute_discovery_config_hash,
-    load_discovery_config,
-    write_offline_discovery_plan_outputs,
-)
+
 
 NS = 1_000_000_000
 
@@ -168,7 +207,9 @@ def _stress_manifest(
     stress_rule_config_hash: str = "stress_rule_hash",
 ) -> dict:
     payload = _stress_payload(windows)
-    from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import compute_window_index_hash
+    from examples.strategies.venue_agnostic_signal_observer.offline_discovery_plan import (
+        compute_window_index_hash,
+    )
 
     return {
         "run_id": "stress_run",

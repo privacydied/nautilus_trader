@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import pytest
 
-from ..discovery.search_space import (
-    DiscoveryGridSpec,
-    canonical_grid_json,
+from venue_agnostic_signal_observer.discovery.exceptions import GridSpecValidationError
+from venue_agnostic_signal_observer.discovery.search_space import GRID_SCHEMA_VERSION
+from venue_agnostic_signal_observer.discovery.search_space import DiscoveryGridSpec
+from venue_agnostic_signal_observer.discovery.search_space import canonical_grid_json
+from venue_agnostic_signal_observer.discovery.search_space import (
     enumerate_cost_sensitivity_cell_count,
-    enumerate_primary_cell_count,
-    grid_sha256,
-    validate_grid_spec,
-    GRID_SCHEMA_VERSION,
 )
-from ..discovery.exceptions import GridSpecValidationError
+from venue_agnostic_signal_observer.discovery.search_space import enumerate_primary_cell_count
+from venue_agnostic_signal_observer.discovery.search_space import grid_sha256
+from venue_agnostic_signal_observer.discovery.search_space import validate_grid_spec
+
 
 # ===================================================================
 # Golden hash constant — DO NOT CHANGE
@@ -54,29 +55,29 @@ GOLDEN_CANONICAL_JSON = (
 def golden_spec():
     """Canonical golden example grid spec."""
     return DiscoveryGridSpec(
-        grid_id='edge_miner_cross_asset_beta_lag_v1',
+        grid_id="edge_miner_cross_asset_beta_lag_v1",
         schema_version=GRID_SCHEMA_VERSION,
-        signal_family='cross_asset_beta_lag',
-        source_venues=('binance_perp',),
-        source_symbols=('BTC/USDT', 'ETH/USDT'),
-        target_venues=('kraken', 'coinbase'),
-        target_symbols=('SOL/USD', 'DOGE/USD', 'LINK/USD', 'AVAX/USD'),
-        feature_types=('price_impulse', 'signed_imbalance', 'notional_burst', 'large_trade'),
+        signal_family="cross_asset_beta_lag",
+        source_venues=("binance_perp",),
+        source_symbols=("BTC/USDT", "ETH/USDT"),
+        target_venues=("kraken", "coinbase"),
+        target_symbols=("SOL/USD", "DOGE/USD", "LINK/USD", "AVAX/USD"),
+        feature_types=("price_impulse", "signed_imbalance", "notional_burst", "large_trade"),
         lookbacks_ms=(1000, 5000, 10000, 30000, 60000),
         thresholds_centibps=(1000, 2000, 3000, 5000),
         horizons_ms=(10000, 30000, 60000, 180000, 300000),
         entry_delays_ms=(0, 5000, 15000),
         cooldown_ms=60000,
-        regime_filters=('market_active', 'market_stress', 'btc_1m_vol_p95'),
+        regime_filters=("market_active", "market_stress", "btc_1m_vol_p95"),
         cost_models_centibps=(1000, 2500, 5000),
         min_events=30,
-        clustering_keys=('feature_types', 'lookbacks_ms', 'horizons_ms', 'target_symbols'),
+        clustering_keys=("feature_types", "lookbacks_ms", "horizons_ms", "target_symbols"),
         fdr_family_dimensions=(
-            'source_symbols', 'target_symbols', 'feature_types', 'lookbacks_ms',
-            'thresholds_centibps', 'horizons_ms', 'entry_delays_ms', 'regime_filters',
+            "source_symbols", "target_symbols", "feature_types", "lookbacks_ms",
+            "thresholds_centibps", "horizons_ms", "entry_delays_ms", "regime_filters",
         ),
-        created_at_utc='2026-05-17T00:00:00Z',
-        notes='Golden example grid for deterministic freeze tests.',
+        created_at_utc="2026-05-17T00:00:00Z",
+        notes="Golden example grid for deterministic freeze tests.",
     )
 
 
@@ -84,26 +85,26 @@ def golden_spec():
 def base_valid_spec():
     """Minimal valid grid spec for mutation-based tests."""
     return DiscoveryGridSpec(
-        grid_id='test_grid',
+        grid_id="test_grid",
         schema_version=GRID_SCHEMA_VERSION,
-        signal_family='test_family',
-        source_venues=('venue_a',),
-        source_symbols=('SYM1/USD',),
-        target_venues=('venue_b',),
-        target_symbols=('SYM2/USD',),
-        feature_types=('ma_cross',),
+        signal_family="test_family",
+        source_venues=("venue_a",),
+        source_symbols=("SYM1/USD",),
+        target_venues=("venue_b",),
+        target_symbols=("SYM2/USD",),
+        feature_types=("ma_cross",),
         lookbacks_ms=(1000,),
         thresholds_centibps=(100,),
         horizons_ms=(5000,),
         entry_delays_ms=(0,),
         cooldown_ms=1000,
-        regime_filters=('all',),
+        regime_filters=("all",),
         cost_models_centibps=(500,),
         min_events=1,
-        clustering_keys=('feature_types',),
-        fdr_family_dimensions=('source_symbols', 'feature_types'),
-        created_at_utc='',
-        notes='',
+        clustering_keys=("feature_types",),
+        fdr_family_dimensions=("source_symbols", "feature_types"),
+        created_at_utc="",
+        notes="",
     )
 
 
@@ -155,13 +156,13 @@ class TestGridHashing:
         hash1 = grid_sha256(golden_spec)
         modified = DiscoveryGridSpec(
             **{**{k: getattr(golden_spec, k) for k in
-                  ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                   'source_symbols', 'target_venues', 'target_symbols',
-                   'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-                   'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-                   'cost_models_centibps', 'min_events', 'clustering_keys',
-                   'fdr_family_dimensions', 'created_at_utc', 'notes']},
-               'feature_types': ('price_impulse', 'signed_imbalance', 'notional_burst', 'custom_signal'),
+                  ["grid_id", "schema_version", "signal_family", "source_venues",
+                   "source_symbols", "target_venues", "target_symbols",
+                   "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+                   "entry_delays_ms", "cooldown_ms", "regime_filters",
+                   "cost_models_centibps", "min_events", "clustering_keys",
+                   "fdr_family_dimensions", "created_at_utc", "notes"]},
+               "feature_types": ("price_impulse", "signed_imbalance", "notional_burst", "custom_signal"),
             }
         )
         hash2 = grid_sha256(modified)
@@ -172,13 +173,13 @@ class TestGridHashing:
         hash1 = grid_sha256(golden_spec)
         modified = DiscoveryGridSpec(
             **{**{k: getattr(golden_spec, k) for k in
-                  ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                   'source_symbols', 'target_venues', 'target_symbols',
-                   'feature_types', 'thresholds_centibps', 'horizons_ms',
-                   'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-                   'cost_models_centibps', 'min_events', 'clustering_keys',
-                   'fdr_family_dimensions', 'created_at_utc', 'notes']},
-               'lookbacks_ms': (1000, 5000, 10000, 30000, 120000),
+                  ["grid_id", "schema_version", "signal_family", "source_venues",
+                   "source_symbols", "target_venues", "target_symbols",
+                   "feature_types", "thresholds_centibps", "horizons_ms",
+                   "entry_delays_ms", "cooldown_ms", "regime_filters",
+                   "cost_models_centibps", "min_events", "clustering_keys",
+                   "fdr_family_dimensions", "created_at_utc", "notes"]},
+               "lookbacks_ms": (1000, 5000, 10000, 30000, 120000),
             }
         )
         hash2 = grid_sha256(modified)
@@ -189,13 +190,13 @@ class TestGridHashing:
         hash1 = grid_sha256(golden_spec)
         modified = DiscoveryGridSpec(
             **{**{k: getattr(golden_spec, k) for k in
-                  ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                   'source_symbols', 'target_venues', 'target_symbols',
-                   'feature_types', 'lookbacks_ms', 'thresholds_centibps',
-                   'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-                   'cost_models_centibps', 'min_events', 'clustering_keys',
-                   'fdr_family_dimensions', 'created_at_utc', 'notes']},
-               'horizons_ms': (10000, 30000, 60000, 180000, 600000),
+                  ["grid_id", "schema_version", "signal_family", "source_venues",
+                   "source_symbols", "target_venues", "target_symbols",
+                   "feature_types", "lookbacks_ms", "thresholds_centibps",
+                   "entry_delays_ms", "cooldown_ms", "regime_filters",
+                   "cost_models_centibps", "min_events", "clustering_keys",
+                   "fdr_family_dimensions", "created_at_utc", "notes"]},
+               "horizons_ms": (10000, 30000, 60000, 180000, 600000),
             }
         )
         hash2 = grid_sha256(modified)
@@ -206,13 +207,13 @@ class TestGridHashing:
         hash1 = grid_sha256(golden_spec)
         modified = DiscoveryGridSpec(
             **{**{k: getattr(golden_spec, k) for k in
-                  ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                   'source_symbols', 'target_venues', 'target_symbols',
-                   'feature_types', 'lookbacks_ms', 'horizons_ms',
-                   'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-                   'cost_models_centibps', 'min_events', 'clustering_keys',
-                   'fdr_family_dimensions', 'created_at_utc', 'notes']},
-               'thresholds_centibps': (1000, 2000, 3000, 7500),
+                  ["grid_id", "schema_version", "signal_family", "source_venues",
+                   "source_symbols", "target_venues", "target_symbols",
+                   "feature_types", "lookbacks_ms", "horizons_ms",
+                   "entry_delays_ms", "cooldown_ms", "regime_filters",
+                   "cost_models_centibps", "min_events", "clustering_keys",
+                   "fdr_family_dimensions", "created_at_utc", "notes"]},
+               "thresholds_centibps": (1000, 2000, 3000, 7500),
             }
         )
         hash2 = grid_sha256(modified)
@@ -223,13 +224,13 @@ class TestGridHashing:
         hash1 = grid_sha256(golden_spec)
         modified = DiscoveryGridSpec(
             **{**{k: getattr(golden_spec, k) for k in
-                  ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                   'source_symbols', 'target_venues', 'target_symbols',
-                   'feature_types', 'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-                   'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-                   'min_events', 'clustering_keys',
-                   'fdr_family_dimensions', 'created_at_utc', 'notes']},
-               'cost_models_centibps': (1000, 2500, 5000, 10000),
+                  ["grid_id", "schema_version", "signal_family", "source_venues",
+                   "source_symbols", "target_venues", "target_symbols",
+                   "feature_types", "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+                   "entry_delays_ms", "cooldown_ms", "regime_filters",
+                   "min_events", "clustering_keys",
+                   "fdr_family_dimensions", "created_at_utc", "notes"]},
+               "cost_models_centibps": (1000, 2500, 5000, 10000),
             }
         )
         hash2 = grid_sha256(modified)
@@ -240,13 +241,13 @@ class TestGridHashing:
         hash1 = grid_sha256(golden_spec)
         modified = DiscoveryGridSpec(
             **{**{k: getattr(golden_spec, k) for k in
-                  ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                   'source_symbols', 'target_venues', 'target_symbols',
-                   'feature_types', 'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-                   'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-                   'cost_models_centibps', 'min_events', 'clustering_keys',
-                   'fdr_family_dimensions', 'notes']},
-               'created_at_utc': '2099-01-01T00:00:00Z',
+                  ["grid_id", "schema_version", "signal_family", "source_venues",
+                   "source_symbols", "target_venues", "target_symbols",
+                   "feature_types", "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+                   "entry_delays_ms", "cooldown_ms", "regime_filters",
+                   "cost_models_centibps", "min_events", "clustering_keys",
+                   "fdr_family_dimensions", "notes"]},
+               "created_at_utc": "2099-01-01T00:00:00Z",
             }
         )
         hash2 = grid_sha256(modified)
@@ -257,13 +258,13 @@ class TestGridHashing:
         hash1 = grid_sha256(golden_spec)
         modified = DiscoveryGridSpec(
             **{**{k: getattr(golden_spec, k) for k in
-                  ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                   'source_symbols', 'target_venues', 'target_symbols',
-                   'feature_types', 'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-                   'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-                   'cost_models_centibps', 'min_events', 'clustering_keys',
-                   'fdr_family_dimensions', 'created_at_utc']},
-               'notes': 'Completely different notes that should not affect the hash.',
+                  ["grid_id", "schema_version", "signal_family", "source_venues",
+                   "source_symbols", "target_venues", "target_symbols",
+                   "feature_types", "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+                   "entry_delays_ms", "cooldown_ms", "regime_filters",
+                   "cost_models_centibps", "min_events", "clustering_keys",
+                   "fdr_family_dimensions", "created_at_utc"]},
+               "notes": "Completely different notes that should not affect the hash.",
             }
         )
         hash2 = grid_sha256(modified)
@@ -274,26 +275,26 @@ class TestGridHashing:
         hash_golden = grid_sha256(golden_spec)
         # Different signal_family and different axis lengths
         different = DiscoveryGridSpec(
-            grid_id='other_grid_v2',
+            grid_id="other_grid_v2",
             schema_version=GRID_SCHEMA_VERSION,
-            signal_family='momentum_mean_reversion',
-            source_venues=('venue_a', 'venue_b'),
-            source_symbols=('BTC/USDT',),
-            target_venues=('venue_c',),
-            target_symbols=('SOL/USD', 'DOGE/USD'),
-            feature_types=('rsi_divergence',),
+            signal_family="momentum_mean_reversion",
+            source_venues=("venue_a", "venue_b"),
+            source_symbols=("BTC/USDT",),
+            target_venues=("venue_c",),
+            target_symbols=("SOL/USD", "DOGE/USD"),
+            feature_types=("rsi_divergence",),
             lookbacks_ms=(5000, 10000),
             thresholds_centibps=(500,),
             horizons_ms=(30000,),
             entry_delays_ms=(0, 1000),
             cooldown_ms=30000,
-            regime_filters=('all',),
+            regime_filters=("all",),
             cost_models_centibps=(1000,),
             min_events=10,
-            clustering_keys=('feature_types', 'horizons_ms'),
-            fdr_family_dimensions=('source_symbols', 'target_symbols', 'feature_types'),
-            created_at_utc='',
-            notes='',
+            clustering_keys=("feature_types", "horizons_ms"),
+            fdr_family_dimensions=("source_symbols", "target_symbols", "feature_types"),
+            created_at_utc="",
+            notes="",
         )
         hash_diff = grid_sha256(different)
         assert hash_golden != hash_diff
@@ -302,17 +303,17 @@ class TestGridHashing:
     def test_golden_grid_hash(self, golden_spec):
         actual_hash = grid_sha256(golden_spec)
         assert actual_hash == GOLDEN_HASH, (
-            f'Golden grid hash changed! Expected {GOLDEN_HASH}, got {actual_hash}. '
-            'Do NOT change the constant -- fix the implementation or update the golden spec.'
+            f"Golden grid hash changed! Expected {GOLDEN_HASH}, got {actual_hash}. "
+            "Do NOT change the constant -- fix the implementation or update the golden spec."
         )
 
     # --- 12. Canonical JSON matches the exact expected string ---
     def test_canonical_json_matches_expected_string(self, golden_spec):
         actual_json = canonical_grid_json(golden_spec)
         assert actual_json == GOLDEN_CANONICAL_JSON, (
-            f'Canonical JSON mismatch.\n'
-            f'Expected:\n  {GOLDEN_CANONICAL_JSON}\n'
-            f'Got:\n  {actual_json}'
+            f"Canonical JSON mismatch.\n"
+            f"Expected:\n  {GOLDEN_CANONICAL_JSON}\n"
+            f"Got:\n  {actual_json}"
         )
 
 
@@ -328,13 +329,13 @@ class TestGridValidation:
     @staticmethod
     def _mutate(spec: DiscoveryGridSpec, **overrides) -> DiscoveryGridSpec:
         fields = [
-            'grid_id', 'schema_version', 'signal_family',
-            'source_venues', 'source_symbols', 'target_venues', 'target_symbols',
-            'feature_types', 'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-            'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-            'cost_models_centibps', 'min_events',
-            'clustering_keys', 'fdr_family_dimensions',
-            'created_at_utc', 'notes',
+            "grid_id", "schema_version", "signal_family",
+            "source_venues", "source_symbols", "target_venues", "target_symbols",
+            "feature_types", "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+            "entry_delays_ms", "cooldown_ms", "regime_filters",
+            "cost_models_centibps", "min_events",
+            "clustering_keys", "fdr_family_dimensions",
+            "created_at_utc", "notes",
         ]
         d = {k: getattr(spec, k) for k in fields}
         d.update(overrides)
@@ -343,129 +344,129 @@ class TestGridValidation:
     # --- 13. Empty source_venues rejected ---
     def test_empty_source_venues_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, source_venues=())
-        with pytest.raises(GridSpecValidationError, match='source_venues must be non-empty'):
+        with pytest.raises(GridSpecValidationError, match="source_venues must be non-empty"):
             validate_grid_spec(bad)
 
     # --- 14. Empty source_symbols rejected ---
     def test_empty_source_symbols_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, source_symbols=())
-        with pytest.raises(GridSpecValidationError, match='source_symbols must be non-empty'):
+        with pytest.raises(GridSpecValidationError, match="source_symbols must be non-empty"):
             validate_grid_spec(bad)
 
     # --- 15. Empty target_venues rejected ---
     def test_empty_target_venues_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, target_venues=())
-        with pytest.raises(GridSpecValidationError, match='target_venues must be non-empty'):
+        with pytest.raises(GridSpecValidationError, match="target_venues must be non-empty"):
             validate_grid_spec(bad)
 
     # --- 16. Empty target_symbols rejected ---
     def test_empty_target_symbols_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, target_symbols=())
-        with pytest.raises(GridSpecValidationError, match='target_symbols must be non-empty'):
+        with pytest.raises(GridSpecValidationError, match="target_symbols must be non-empty"):
             validate_grid_spec(bad)
 
     # --- 17. Empty feature_types rejected ---
     def test_empty_feature_types_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, feature_types=())
-        with pytest.raises(GridSpecValidationError, match='feature_types must be non-empty'):
+        with pytest.raises(GridSpecValidationError, match="feature_types must be non-empty"):
             validate_grid_spec(bad)
 
     # --- 18. Negative lookback rejected ---
     def test_negative_lookback_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, lookbacks_ms=(-100, 1000))
-        with pytest.raises(GridSpecValidationError, match=r'lookbacks_ms\[0\]: must be positive'):
+        with pytest.raises(GridSpecValidationError, match=r"lookbacks_ms\[0\]: must be positive"):
             validate_grid_spec(bad)
 
     # --- 19. Zero horizon rejected ---
     def test_zero_horizon_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, horizons_ms=(0, 5000))
-        with pytest.raises(GridSpecValidationError, match=r'horizons_ms\[0\]: must be positive'):
+        with pytest.raises(GridSpecValidationError, match=r"horizons_ms\[0\]: must be positive"):
             validate_grid_spec(bad)
 
     # --- 20. Negative entry delay rejected ---
     def test_negative_entry_delay_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, entry_delays_ms=(-1,))
-        with pytest.raises(GridSpecValidationError, match=r'entry_delays_ms\[0\]: must be non-negative'):
+        with pytest.raises(GridSpecValidationError, match=r"entry_delays_ms\[0\]: must be non-negative"):
             validate_grid_spec(bad)
 
     # --- 21. Zero cooldown rejected ---
     def test_zero_cooldown_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, cooldown_ms=0)
-        with pytest.raises(GridSpecValidationError, match='cooldown_ms: must be positive'):
+        with pytest.raises(GridSpecValidationError, match="cooldown_ms: must be positive"):
             validate_grid_spec(bad)
 
     # --- 22. Empty thresholds_centibps rejected ---
     def test_empty_thresholds_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, thresholds_centibps=())
-        with pytest.raises(GridSpecValidationError, match='thresholds_centibps must be non-empty'):
+        with pytest.raises(GridSpecValidationError, match="thresholds_centibps must be non-empty"):
             validate_grid_spec(bad)
 
     # --- 23. Negative threshold rejected ---
     def test_negative_threshold_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, thresholds_centibps=(-500,))
-        with pytest.raises(GridSpecValidationError, match=r'thresholds_centibps\[0\]: must be positive'):
+        with pytest.raises(GridSpecValidationError, match=r"thresholds_centibps\[0\]: must be positive"):
             validate_grid_spec(bad)
 
     # --- 24. Negative cost model rejected ---
     def test_negative_cost_model_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, cost_models_centibps=(-100,))
-        with pytest.raises(GridSpecValidationError, match=r'cost_models_centibps\[0\]: must be non-negative'):
+        with pytest.raises(GridSpecValidationError, match=r"cost_models_centibps\[0\]: must be non-negative"):
             validate_grid_spec(bad)
 
     # --- 25. Zero min_events rejected ---
     def test_zero_min_events_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, min_events=0)
-        with pytest.raises(GridSpecValidationError, match='min_events: must be positive'):
+        with pytest.raises(GridSpecValidationError, match="min_events: must be positive"):
             validate_grid_spec(bad)
 
     # --- 26. Invalid clustering key rejected ---
     def test_invalid_clustering_key_rejected(self, base_valid_spec):
-        bad = self._mutate(base_valid_spec, clustering_keys=('not_a_real_axis',))
-        with pytest.raises(GridSpecValidationError, match='is not a valid grid axis name'):
+        bad = self._mutate(base_valid_spec, clustering_keys=("not_a_real_axis",))
+        with pytest.raises(GridSpecValidationError, match="is not a valid grid axis name"):
             validate_grid_spec(bad)
 
     # --- 27. Invalid FDR family dimension rejected ---
     def test_invalid_fdr_family_dimension_rejected(self, base_valid_spec):
-        bad = self._mutate(base_valid_spec, fdr_family_dimensions=('cost_models_centibps',))
-        with pytest.raises(GridSpecValidationError, match='is not a valid primary counted axis name'):
+        bad = self._mutate(base_valid_spec, fdr_family_dimensions=("cost_models_centibps",))
+        with pytest.raises(GridSpecValidationError, match="is not a valid primary counted axis name"):
             validate_grid_spec(bad)
 
     # --- 28. schema_version mismatch rejected ---
     def test_schema_version_mismatch_rejected(self, base_valid_spec):
-        bad = self._mutate(base_valid_spec, schema_version='discovery-grid-v0')
-        with pytest.raises(GridSpecValidationError, match='schema_version must be'):
+        bad = self._mutate(base_valid_spec, schema_version="discovery-grid-v0")
+        with pytest.raises(GridSpecValidationError, match="schema_version must be"):
             validate_grid_spec(bad)
 
     # --- 29. Bool numeric axis element rejected ---
-    @pytest.mark.parametrize('axis', [
-        'lookbacks_ms',
-        'thresholds_centibps',
-        'horizons_ms',
-        'entry_delays_ms',
-        'cost_models_centibps',
+    @pytest.mark.parametrize("axis", [
+        "lookbacks_ms",
+        "thresholds_centibps",
+        "horizons_ms",
+        "entry_delays_ms",
+        "cost_models_centibps",
     ])
     def test_bool_in_numeric_axis_rejected(self, base_valid_spec, axis):
         original = getattr(base_valid_spec, axis)
-        bad = self._mutate(base_valid_spec, **{axis: (True,) + original[1:]})
-        with pytest.raises(GridSpecValidationError, match='bool is not a valid int value'):
+        bad = self._mutate(base_valid_spec, **{axis: (True, *original[1:])})
+        with pytest.raises(GridSpecValidationError, match="bool is not a valid int value"):
             validate_grid_spec(bad)
 
     # --- 30. Whitespace-only string axis element rejected ---
     def test_whitespace_string_axis_element_rejected(self, base_valid_spec):
-        bad = self._mutate(base_valid_spec, source_venues=('  ',))
-        with pytest.raises(GridSpecValidationError, match='whitespace-only'):
+        bad = self._mutate(base_valid_spec, source_venues=("  ",))
+        with pytest.raises(GridSpecValidationError, match="whitespace-only"):
             validate_grid_spec(bad)
 
     # --- 31. Duplicate string axis element rejected ---
     def test_duplicate_string_axis_rejected(self, base_valid_spec):
-        bad = self._mutate(base_valid_spec, target_symbols=('SYM2/USD', 'SYM2/USD'))
-        with pytest.raises(GridSpecValidationError, match='duplicate value'):
+        bad = self._mutate(base_valid_spec, target_symbols=("SYM2/USD", "SYM2/USD"))
+        with pytest.raises(GridSpecValidationError, match="duplicate value"):
             validate_grid_spec(bad)
 
     # --- 32. Duplicate int axis element rejected ---
     def test_duplicate_int_axis_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, lookbacks_ms=(1000, 1000))
-        with pytest.raises(GridSpecValidationError, match='duplicate value'):
+        with pytest.raises(GridSpecValidationError, match="duplicate value"):
             validate_grid_spec(bad)
 
     # --- 33. fdr_family_dimensions as strict subset of counted axes is accepted ---
@@ -475,13 +476,13 @@ class TestGridValidation:
     # Edge case: empty fdr_family_dimensions rejected
     def test_empty_fdr_family_dimensions_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, fdr_family_dimensions=())
-        with pytest.raises(GridSpecValidationError, match='fdr_family_dimensions must be non-empty'):
+        with pytest.raises(GridSpecValidationError, match="fdr_family_dimensions must be non-empty"):
             validate_grid_spec(bad)
 
     # Edge case: empty clustering_keys rejected
     def test_empty_clustering_keys_rejected(self, base_valid_spec):
         bad = self._mutate(base_valid_spec, clustering_keys=())
-        with pytest.raises(GridSpecValidationError, match='clustering_keys must be non-empty'):
+        with pytest.raises(GridSpecValidationError, match="clustering_keys must be non-empty"):
             validate_grid_spec(bad)
 
     # Edge case: valid golden spec passes validation
@@ -517,13 +518,13 @@ class TestCellCount:
         # Add one more feature type
         modified = DiscoveryGridSpec(
             **{k: getattr(golden_spec, k) for k in
-               ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                'source_symbols', 'target_venues', 'target_symbols',
-                'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-                'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-                'cost_models_centibps', 'min_events', 'clustering_keys',
-                'fdr_family_dimensions', 'created_at_utc', 'notes']},
-            feature_types=('price_impulse', 'signed_imbalance', 'notional_burst', 'large_trade', 'extra'),
+               ["grid_id", "schema_version", "signal_family", "source_venues",
+                "source_symbols", "target_venues", "target_symbols",
+                "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+                "entry_delays_ms", "cooldown_ms", "regime_filters",
+                "cost_models_centibps", "min_events", "clustering_keys",
+                "fdr_family_dimensions", "created_at_utc", "notes"]},
+            feature_types=("price_impulse", "signed_imbalance", "notional_burst", "large_trade", "extra"),
         )
         new_count = enumerate_primary_cell_count(modified)
         assert new_count != base_count
@@ -535,12 +536,12 @@ class TestCellCount:
         base_count = enumerate_primary_cell_count(golden_spec)
         modified = DiscoveryGridSpec(
             **{k: getattr(golden_spec, k) for k in
-               ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                'source_symbols', 'target_venues', 'target_symbols',
-                'feature_types', 'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-                'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-                'min_events', 'clustering_keys',
-                'fdr_family_dimensions', 'created_at_utc', 'notes']},
+               ["grid_id", "schema_version", "signal_family", "source_venues",
+                "source_symbols", "target_venues", "target_symbols",
+                "feature_types", "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+                "entry_delays_ms", "cooldown_ms", "regime_filters",
+                "min_events", "clustering_keys",
+                "fdr_family_dimensions", "created_at_utc", "notes"]},
             cost_models_centibps=(1000, 2500, 5000, 10000),
         )
         new_count = enumerate_primary_cell_count(modified)
@@ -551,12 +552,12 @@ class TestCellCount:
         base_count = enumerate_primary_cell_count(golden_spec)
         modified = DiscoveryGridSpec(
             **{k: getattr(golden_spec, k) for k in
-               ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                'source_symbols', 'target_venues', 'target_symbols',
-                'feature_types', 'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-                'entry_delays_ms', 'regime_filters',
-                'cost_models_centibps', 'clustering_keys',
-                'fdr_family_dimensions', 'created_at_utc', 'notes']},
+               ["grid_id", "schema_version", "signal_family", "source_venues",
+                "source_symbols", "target_venues", "target_symbols",
+                "feature_types", "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+                "entry_delays_ms", "regime_filters",
+                "cost_models_centibps", "clustering_keys",
+                "fdr_family_dimensions", "created_at_utc", "notes"]},
             cooldown_ms=99999,
             min_events=99,
         )
@@ -568,12 +569,12 @@ class TestCellCount:
         base_count = enumerate_cost_sensitivity_cell_count(golden_spec)
         modified = DiscoveryGridSpec(
             **{k: getattr(golden_spec, k) for k in
-               ['grid_id', 'schema_version', 'signal_family', 'source_venues',
-                'source_symbols', 'target_venues', 'target_symbols',
-                'feature_types', 'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-                'entry_delays_ms', 'cooldown_ms', 'regime_filters',
-                'min_events', 'clustering_keys',
-                'fdr_family_dimensions', 'created_at_utc', 'notes']},
+               ["grid_id", "schema_version", "signal_family", "source_venues",
+                "source_symbols", "target_venues", "target_symbols",
+                "feature_types", "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+                "entry_delays_ms", "cooldown_ms", "regime_filters",
+                "min_events", "clustering_keys",
+                "fdr_family_dimensions", "created_at_utc", "notes"]},
             cost_models_centibps=(1000, 2500, 5000, 10000),
         )
         new_count = enumerate_cost_sensitivity_cell_count(modified)

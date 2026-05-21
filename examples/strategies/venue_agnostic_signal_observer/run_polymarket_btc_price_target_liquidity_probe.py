@@ -1,4 +1,5 @@
-"""CLI runner for the Polymarket BTC Price Target liquidity probe.
+r"""
+CLI runner for the Polymarket BTC Price Target liquidity probe.
 
 Observer-only. No orders. No wallet. No auth.
 
@@ -17,52 +18,85 @@ import json
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 
 import httpx
 
 from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
-    CAPTURE_UNUSABLE_V,
     FAMILY_BTC_PRICE_TARGET,
-    FAMILY_BTC_UPDOWN,
-    NEEDS_MORE_DATA_V,
-    STRIKE_EXTRACTED,
-    BOOK_TWO_SIDED,
-    AdapterInspectionResult,
-    BtcProxyTick,
-    LiquiditySample,
-    MarketMetadata,
-    OrderbookSnapshot,
-    compute_distance_bps,
-    compute_liquidity_verdict,
-    compute_tte_seconds,
-    classify_distance_bucket,
-    classify_tte_bucket,
-    discover_btc_price_target_markets,
-    empty_snapshot,
-    extract_strike,
-    inspect_nautilus_polymarket_adapter,
-    is_convex_danger_zone,
-    parse_orderbook_snapshot,
-    parse_tokens_from_market,
-    poll_btc_binance_proxy,
-    poll_clob_book,
-    write_adapter_inspection_json,
-    write_liquidity_grid_csv,
-    write_markets_json,
-    write_report_md,
-    write_samples_jsonl,
-    write_summary_json,
-    GREEN_DIAG,
-    YELLOW_DIAG,
-    RED_DIAG,
-    NEEDS_MORE_DATA_V,
-    CAPTURE_UNUSABLE_V,
-    FORBIDDEN_VERDICTS,
-    _get_git_sha,
-    _is_dirty,
 )
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    FAMILY_BTC_UPDOWN,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    STRIKE_EXTRACTED,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    AdapterInspectionResult,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    BtcProxyTick,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    LiquiditySample,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    MarketMetadata,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    OrderbookSnapshot,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    classify_distance_bucket,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    classify_tte_bucket,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    compute_distance_bps,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    compute_liquidity_verdict,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    compute_tte_seconds,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    discover_btc_price_target_markets,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    inspect_nautilus_polymarket_adapter,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    is_convex_danger_zone,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    poll_btc_binance_proxy,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    poll_clob_book,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    write_adapter_inspection_json,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    write_liquidity_grid_csv,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    write_markets_json,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    write_report_md,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    write_samples_jsonl,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    write_summary_json,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +236,6 @@ async def _run_capture(
     samples: list[LiquiditySample] = []
     start_time = time.time()
     end_time = start_time + duration_seconds
-    consecutive_errors = 0
 
     # Filter to BTC_PRICE_TARGET with strike extracted
     target_markets = [
@@ -328,7 +361,7 @@ async def _main() -> int:
     # --- Market discovery ---
     run_id = (
         f"polymarket_btc_price_target_liquidity_probe_v0_"
-        f"{datetime.now(tz=timezone.utc).strftime('%Y%m%dT%H%M%S')}_"
+        f"{datetime.now(tz=UTC).strftime('%Y%m%dT%H%M%S')}_"
         f"{uuid.uuid4().hex[:8]}"
     )
     out_dir = Path(args.out) / run_id

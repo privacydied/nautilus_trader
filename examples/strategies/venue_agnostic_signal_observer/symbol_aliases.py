@@ -1,4 +1,5 @@
-"""Explicit symbol-alias mapping for cross-venue signal research.
+"""
+Explicit symbol-alias mapping for cross-venue signal research.
 
 This module provides a single source of truth for mapping venue-specific
 symbol strings into a canonical (asset, quote) tuple.  It does not infer
@@ -8,6 +9,7 @@ mappings silently — unknown symbols raise ``ValueError``.
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 
 # ---------------------------------------------------------------------------
 # Canonical asset / quote pair
@@ -47,10 +49,7 @@ _ALIAS_REGISTRY: dict[str, CanonicalSymbol] = {
     "xbt/usd": CanonicalSymbol("BTC", "USD"),
     "xbtzusd": CanonicalSymbol("BTC", "USD"),
     "xxbtzusd": CanonicalSymbol("BTC", "USD"),
-    "btc/usd": CanonicalSymbol("BTC", "USD"),
-    "eth/usd": CanonicalSymbol("ETH", "USD"),
     "xethzusd": CanonicalSymbol("ETH", "USD"),
-    "sol/usd": CanonicalSymbol("SOL", "USD"),
     "solusd": CanonicalSymbol("SOL", "USD"),
 
     # Binance (spot and perp -- perp uses USDT quote, not USD)
@@ -61,11 +60,7 @@ _ALIAS_REGISTRY: dict[str, CanonicalSymbol] = {
     "solusdt": CanonicalSymbol("SOL", "USDT"),
     "sol/usdt": CanonicalSymbol("SOL", "USDT"),
     "btcusd": CanonicalSymbol("BTC", "USD"),
-    "btc/usd": CanonicalSymbol("BTC", "USD"),
     "ethusd": CanonicalSymbol("ETH", "USD"),
-    "eth/usd": CanonicalSymbol("ETH", "USD"),
-    "solusd": CanonicalSymbol("SOL", "USD"),
-    "sol/usd": CanonicalSymbol("SOL", "USD"),
 
     # Binance altcoins (USDT quote)
     "linkusdt": CanonicalSymbol("LINK", "USDT"),
@@ -86,13 +81,8 @@ _ALIAS_REGISTRY: dict[str, CanonicalSymbol] = {
     "adausd": CanonicalSymbol("ADA", "USD"),
     "doge/usd": CanonicalSymbol("DOGE", "USD"),
     "dogeusd": CanonicalSymbol("DOGE", "USD"),
-
-    # Bitfinex (UST = USDt on Bitfinex; LINK/DOGE/AVAX use colon form)
-    "btcusd": CanonicalSymbol("BTC", "USD"),
     "btcust": CanonicalSymbol("BTC", "UST"),
-    "ethusd": CanonicalSymbol("ETH", "USD"),
     "ethust": CanonicalSymbol("ETH", "UST"),
-    "solusd": CanonicalSymbol("SOL", "USD"),
     "solust": CanonicalSymbol("SOL", "UST"),
     "link:usd": CanonicalSymbol("LINK", "USD"),
     "link:ust": CanonicalSymbol("LINK", "UST"),
@@ -115,29 +105,21 @@ _ALIAS_REGISTRY: dict[str, CanonicalSymbol] = {
     "btc-usdc": CanonicalSymbol("BTC", "USDC"),
     "eth-usdc": CanonicalSymbol("ETH", "USDC"),
     "sol-usdc": CanonicalSymbol("SOL", "USDC"),
-
-    # Bybit (concatenated form, spot)
-    "linkusdt": CanonicalSymbol("LINK", "USDT"),
-    "dogeusdt": CanonicalSymbol("DOGE", "USDT"),
-    "avaxusdt": CanonicalSymbol("AVAX", "USDT"),
     "btcusdc": CanonicalSymbol("BTC", "USDC"),
     "ethusdc": CanonicalSymbol("ETH", "USDC"),
     "solusdc": CanonicalSymbol("SOL", "USDC"),
 
     # Coinbase altcoins
     "link-usd": CanonicalSymbol("LINK", "USD"),
-    "link/usd": CanonicalSymbol("LINK", "USD"),
     "avax-usd": CanonicalSymbol("AVAX", "USD"),
-    "avax/usd": CanonicalSymbol("AVAX", "USD"),
     "ada-usd": CanonicalSymbol("ADA", "USD"),
-    "ada/usd": CanonicalSymbol("ADA", "USD"),
     "doge-usd": CanonicalSymbol("DOGE", "USD"),
-    "doge/usd": CanonicalSymbol("DOGE", "USD"),
 }
 
 
 def resolve_symbol(raw_symbol: str) -> CanonicalSymbol:
-    """Map a raw venue symbol string to a canonical (asset, quote) pair.
+    """
+    Map a raw venue symbol string to a canonical (asset, quote) pair.
 
     Args:
         raw_symbol: symbol as returned by the venue, e.g. "XBT/USD", "BTC-USD"

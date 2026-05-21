@@ -1,4 +1,5 @@
-"""Cross-capture consistency aggregation for derivatives spot lead-lag reports.
+"""
+Cross-capture consistency aggregation for derivatives spot lead-lag reports.
 
 Reads multiple existing evaluated report directories and aggregates exact
 configuration groups across captures. This is diagnostic-only public-data
@@ -12,10 +13,15 @@ import csv
 import json
 import math
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
-from statistics import mean, median
-from typing import Any, Iterable, Sequence
+from statistics import mean
+from statistics import median
+from typing import Any
+from typing import Iterable
+from typing import Sequence
+
 
 SAFETY_MODE = "public_data_observer_only"
 
@@ -189,7 +195,8 @@ def _load_groups_from_csv(csv_path: Path) -> list[dict[str, Any]]:
 
 
 def load_report(report_dir: str | Path) -> tuple[list[dict[str, Any]], dict[str, Any]] | None:
-    """Load evaluated groups and metadata from one report directory.
+    """
+    Load evaluated groups and metadata from one report directory.
 
     Preferred schema is summary.json with results_by_group. summary.csv is a
     fallback for older reports.

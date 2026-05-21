@@ -7,42 +7,41 @@ Identifies root cause of 66 -> 26 holdout collapse.
 Does NOT compute returns, edge stats, nulls, FDR, or update registry.
 """
 
-import csv
-import hashlib
 import io
 import json
 import math
 import os
 import sys
-import urllib.request
 import zipfile
 from collections import OrderedDict
-from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
+
 
 # Ensure the module is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-from funding_falling_oi_unwind_phase0 import (
-    BASE_URL, SYMBOL,
-    WARMUP_DAYS, MIN_CELL_EVENTS, MIN_HOLDOUT_EVENTS,
-    FUNDING_HOURS,
-    OI_PRIMARY_FIELD, TIMESTAMP_FIELD,
-    MONTHLY_FUNDING_PATH_TEMPLATE,
-    DAILY_OI_PATH_TEMPLATE,
-    SPOT_KLINES_MONTHLY_PATH,
-    START_YM, END_YM,
-    CACHE_DIR,
-    YMD, YM, DT_FMT,
-    _monthly_funding_path,
-    _daily_oi_path,
-    _spot_klines_path,
-    download_zip_cached,
-    extract_csv_from_zip,
-    parse_timestamp,
-    parse_klines_timestamp,
-    iter_months,
-    sha256_of_bytes,
-)
+from funding_falling_oi_unwind_phase0 import BASE_URL
+from funding_falling_oi_unwind_phase0 import CACHE_DIR
+from funding_falling_oi_unwind_phase0 import DAILY_OI_PATH_TEMPLATE
+from funding_falling_oi_unwind_phase0 import END_YM
+from funding_falling_oi_unwind_phase0 import FUNDING_HOURS
+from funding_falling_oi_unwind_phase0 import MONTHLY_FUNDING_PATH_TEMPLATE
+from funding_falling_oi_unwind_phase0 import OI_PRIMARY_FIELD
+from funding_falling_oi_unwind_phase0 import START_YM
+from funding_falling_oi_unwind_phase0 import SYMBOL
+from funding_falling_oi_unwind_phase0 import TIMESTAMP_FIELD
+from funding_falling_oi_unwind_phase0 import WARMUP_DAYS
+from funding_falling_oi_unwind_phase0 import YMD
+from funding_falling_oi_unwind_phase0 import _spot_klines_path
+from funding_falling_oi_unwind_phase0 import download_zip_cached
+from funding_falling_oi_unwind_phase0 import extract_csv_from_zip
+from funding_falling_oi_unwind_phase0 import iter_months
+from funding_falling_oi_unwind_phase0 import parse_klines_timestamp
+from funding_falling_oi_unwind_phase0 import parse_timestamp
+
 
 OUTPUT_DIR = "reports/funding_falling_oi_unwind_v1"
 
@@ -64,7 +63,7 @@ def load_funding_all():
                     try:
                         calc_time_ms = int(r["calc_time"])
                         rate = float(r["last_funding_rate"])
-                        ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=timezone.utc)
+                        ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=UTC)
                         all_funding.append({"ts": ts, "funding_rate": rate})
                     except (ValueError, KeyError):
                         pass
@@ -440,7 +439,7 @@ def main():
         settlement_ts = ev["ts"]
         bucket = "holdout" if settlement_ts > split_ts else "train"
 
-        for horizon_h in [24, 48]:
+        for _horizon_h in [24, 48]:
             avail_24, diag_24 = diagnostic_spot_availability(
                 settlement_ts, spot_klines, 24, spot_zip_meta
             )
@@ -512,7 +511,7 @@ def main():
                 if bucket == "holdout":
                     holdout_fail_48h += 1
 
-    print(f"\n=== Aggregate Results ===")
+    print("\n=== Aggregate Results ===")
     print(f"  Total falling OI events: {len(falling_oi_sorted)}")
     print(f"  Train: {len(train_events)}, Holdout: {len(holdout_events)}")
     print(f"  Total fail 24h: {total_fail_24h}")
@@ -548,15 +547,15 @@ def main():
     print(f"  Fail 24h only: {fail_24h_only}")
     print(f"  Fail 48h only: {fail_48h_only}")
 
-    print(f"\n  Failures by day_of_month:")
+    print("\n  Failures by day_of_month:")
     for dom in sorted(fail_by_dom.keys()):
         print(f"    Day {dom}: {fail_by_dom[dom]} failures")
 
-    print(f"\n  Failures by settlement_month:")
+    print("\n  Failures by settlement_month:")
     for m in sorted(fail_by_month.keys()):
         print(f"    {m}: {fail_by_month[m]} failures")
 
-    print(f"\n  Failures by days_until_month_end bucket:")
+    print("\n  Failures by days_until_month_end bucket:")
     for b in sorted(fail_by_days_until_month_end.keys()):
         print(f"    {b}: {fail_by_days_until_month_end[b]} failures")
 
@@ -566,7 +565,7 @@ def main():
     print(f"  Fail where next month ZIP exists but not loaded: {fail_next_month_exists_not_loaded}")
 
     # ---- Diagnostic checks on the spot loader ----
-    print(f"\n--- Spot Loader Diagnostics ---")
+    print("\n--- Spot Loader Diagnostics ---")
     print(f"  Spot last timestamp: {spot_klines[-1]['ts'].isoformat() if spot_klines else 'NONE'}")
     print(f"  Spot first timestamp: {spot_klines[0]['ts'].isoformat() if spot_klines else 'NONE'}")
 
@@ -576,7 +575,7 @@ def main():
     print(f"  Last event: {last_event_ts.isoformat()}, +48h: {last_event_48h.isoformat()}")
     if spot_klines:
         if spot_klines[-1]["ts"] >= last_event_48h:
-            print(f"  Spot covers last event + 48h: YES")
+            print("  Spot covers last event + 48h: YES")
         else:
             print(f"  Spot covers last event + 48h: NO (last spot: {spot_klines[-1]['ts'].isoformat()})")
 
@@ -586,7 +585,7 @@ def main():
     print(f"  Events where 48h target beyond last spot row: {near_end_count}")
 
     # ---- Determine failure distribution ----
-    print(f"\n--- Failure Distribution Analysis ---")
+    print("\n--- Failure Distribution Analysis ---")
     if spot_klines:
         last_spot = spot_klines[-1]["ts"]
         early_event_count = 0
@@ -605,7 +604,7 @@ def main():
         print(f"  After split and near/at archive tail (late): {late_event_count}")
 
     # ---- Interpret ---
-    print(f"\n--- Interpretation ---")
+    print("\n--- Interpretation ---")
 
     # Check if 24h and 48h failure sets are identical
     # Examine unique failure patterns by event
@@ -652,7 +651,7 @@ def main():
     audit_json_path = os.path.join(OUTPUT_DIR, "spot_availability_audit.json")
 
     audit_report = OrderedDict()
-    audit_report["diagnostic_run_ts"] = datetime.now(timezone.utc).isoformat()
+    audit_report["diagnostic_run_ts"] = datetime.now(UTC).isoformat()
     audit_report["total_events"] = len(falling_oi_sorted)
     audit_report["train_count"] = len(train_events)
     audit_report["holdout_count"] = len(holdout_events)
@@ -668,8 +667,8 @@ def main():
     audit_report["fail_24h_only"] = fail_24h_only
     audit_report["fail_48h_only"] = fail_48h_only
     audit_report["fail_by_day_of_month"] = {str(k): v for k, v in sorted(fail_by_dom.items())}
-    audit_report["fail_by_settlement_month"] = {k: v for k, v in sorted(fail_by_month.items())}
-    audit_report["fail_by_days_until_month_end"] = {k: v for k, v in sorted(fail_by_days_until_month_end.items())}
+    audit_report["fail_by_settlement_month"] = dict(sorted(fail_by_month.items()))
+    audit_report["fail_by_days_until_month_end"] = dict(sorted(fail_by_days_until_month_end.items()))
     audit_report["fail_crosses_month_boundary"] = fail_crosses_month
     audit_report["fail_not_cross_month_boundary"] = fail_not_cross_month
     audit_report["spot_last_ts"] = spot_klines[-1]["ts"].isoformat() if spot_klines else None

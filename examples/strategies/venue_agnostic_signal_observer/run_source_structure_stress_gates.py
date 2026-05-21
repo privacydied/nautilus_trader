@@ -1,4 +1,5 @@
-"""CLI runner for source-structure stress gates (Phase 0).
+"""
+CLI runner for source-structure stress gates (Phase 0).
 
 Source-only: Hawkes self-exciting volatility labels + permutation entropy
 measurements on BTC/ETH tick streams.
@@ -15,22 +16,36 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
-from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
 from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
-    ALLOWED_VERDICTS,
-    FORBIDDEN_VERDICTS,
     SourceStructureStressConfig,
-    build_source_return_buckets,
-    build_volatility_events,
-    compute_hawkes_intensity,
-    compute_permutation_entropy_points,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
     build_hawkes_stress_labels,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    build_source_return_buckets,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    build_volatility_events,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    compute_hawkes_intensity,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    compute_permutation_entropy_points,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
     merge_hawkes_stress_windows,
-    write_source_structure_stress_artifacts,
+)
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
     validate_verdict,
 )
+from examples.strategies.venue_agnostic_signal_observer.source_structure_stress_gates import (
+    write_source_structure_stress_artifacts,
+)
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
+
 
 # Forbidden source symbol patterns — target assets must not be passed
 _TARGET_SYMBOLS = frozenset({"SOLUSDT", "LINKUSDT", "DOGEUSDT", "AVAXUSDT", "solusdt", "linkusdt", "dogeusdt", "avaxusdt"})
@@ -40,7 +55,7 @@ _SOURCE_SYMBOLS = frozenset({"BTCUSDT", "ETHUSDT", "btcusdt", "ethusdt"})
 def _load_ticks_from_jsonl(path: Path) -> list[TradeTickLite]:
     """Load trade ticks from a JSONL file."""
     ticks = []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             d = json.loads(line)
             ticks.append(TradeTickLite.from_dict(d))
@@ -176,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Source-structure stress gates v0")
+    print("Source-structure stress gates v0")
     print(f"  Config hash: {config.config_hash()}")
     print(f"  Source symbols: {symbols}")
     print(f"  Files: {[str(p) for p in args.source_files]}")
@@ -250,9 +265,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # Write artifacts
     if args.summary_only:
-        print(f"\n  --summary-only mode: writing summary only")
-        from dataclasses import asdict
-        from examples.strategies.venue_agnostic_signal_observer.artifact_metadata import build_metadata
+        print("\n  --summary-only mode: writing summary only")
+        from examples.strategies.venue_agnostic_signal_observer.artifact_metadata import (
+            build_metadata,
+        )
 
         ent_norms = [e.normalized_entropy for e in computed_ent]
         summary = {
@@ -289,12 +305,12 @@ def main(argv: list[str] | None = None) -> int:
             entropy_verdict=entropy_verdict,
             run_args=args,
         )
-        print(f"\n  Artifacts written:")
+        print("\n  Artifacts written:")
         for key, path in result.items():
             if isinstance(path, str):
                 print(f"    {key}: {path}")
         summary_data = result.get("summary", {})
-        print(f"\n  Verdicts:")
+        print("\n  Verdicts:")
         print(f"    Hawkes: {summary_data.get('hawkes_verdict')}")
         print(f"    Entropy: {summary_data.get('entropy_verdict')}")
 

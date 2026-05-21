@@ -1,17 +1,23 @@
-"""Unit tests for capture runner WebSocket URL construction and diagnostics.
+"""
+Unit tests for capture runner WebSocket URL construction and diagnostics.
 
 Verifies:
 - Binance perp aggTrade combined stream URL uses /market routed path.
 - Kraken WebSocket URL uses v2 endpoint.
 - StreamStats diagnostics field works correctly.
 """
-import pytest
 
 from examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture import (
     BINANCE_PERP_WS_BASE,
+)
+from examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture import (
     KRAKEN_WS_URL,
-    build_binance_perp_ws_url,
+)
+from examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture import (
     StreamStats,
+)
+from examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture import (
+    build_binance_perp_ws_url,
 )
 
 

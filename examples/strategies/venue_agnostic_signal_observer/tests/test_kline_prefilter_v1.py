@@ -1,4 +1,5 @@
-"""Tests for kline_prefilter_v1 — per-bar high-low candidate day filter.
+"""
+Tests for kline_prefilter_v1 — per-bar high-low candidate day filter.
 
 Covers:
   1. Superset proof: synthetic 1m bars containing a 30s/30bps tick event.
@@ -9,16 +10,17 @@ Covers:
 
 from __future__ import annotations
 
-import math
-from typing import Any, Dict, List
+from typing import Any
+from typing import Dict
+from typing import List
 
 import pytest
 
-from ..kline_prefilter_v1 import (
-    compute_kline_candidate_days_v1,
+from venue_agnostic_signal_observer.kline_prefilter_v1 import HL_THRESHOLD_BPS
+from venue_agnostic_signal_observer.kline_prefilter_v1 import (
     compute_kline_candidate_days_deprecated,
-    HL_THRESHOLD_BPS,
 )
+from venue_agnostic_signal_observer.kline_prefilter_v1 import compute_kline_candidate_days_v1
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +58,8 @@ def _bps(open_p: float, other_p: float) -> float:
 # ---------------------------------------------------------------------------
 
 class TestSupersetProof:
-    """A 30bps move inside a 1m bar, combined with typical noise in the
+    """
+    A 30bps move inside a 1m bar, combined with typical noise in the
     remaining 30s, MUST produce a bar with HL >= 75bps.
 
     The containing bar's high-low range is always >= any sub-interval move
@@ -71,8 +74,10 @@ class TestSupersetProof:
     # non-impulse half of the minute contributes ~45+ bps of additional range.
 
     def test_30bps_move_at_bar_open(self):
-        """Event starts at bar open: 30bps up within the first 30s,
-        plus ~50bps of noise in the remaining 30s → total HL ~80bps."""
+        """
+        Event starts at bar open: 30bps up within the first 30s,
+        plus ~50bps of noise in the remaining 30s → total HL ~80bps.
+        """
         base = 42000.0
         # 30bps impulse up, then noise adds another ~50bps to the low side
         # Total HL: (high - low) / open = (base*1.008 - base*0.995) / base ≈ 80bps
@@ -269,7 +274,8 @@ class TestDeterminism:
 # ---------------------------------------------------------------------------
 
 class TestEmpiricalSanity:
-    """Run the v1 filter and the deprecated filter on real cached BTC 1m klines
+    """
+    Run the v1 filter and the deprecated filter on real cached BTC 1m klines
     from the parquet conversion. This prints candidate-day counts for comparison.
     Does NOT assert a specific count — it's an observability test.
     """
@@ -283,12 +289,11 @@ class TestEmpiricalSanity:
     )
     def test_real_btc_klines_candidate_count(self, capsys):
         """Load real BTC 1m klines from cached zips, run both filters, print counts."""
+        import csv
         import pathlib
         import zipfile
-        import csv
-        from datetime import datetime, timezone
 
-        from ..binance_vision_archive import _ts_to_ns
+        from venue_agnostic_signal_observer.binance_vision_archive import _ts_to_ns
 
         cache_dir = pathlib.Path(
             "/mnt/nasirjones/py/nautilus_trader/data/binance_vision/"

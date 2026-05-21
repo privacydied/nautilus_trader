@@ -1,4 +1,5 @@
-"""Phase 2B-2C1: Train-vs-holdout survival comparison.
+"""
+Phase 2B-2C1: Train-vs-holdout survival comparison.
 
 Consumes train evaluation, train survivor freeze, and holdout evaluation
 artifacts. Compares frozen train survivor metrics against holdout evaluation
@@ -14,12 +15,16 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .run_artifacts import atomic_write_json, safe_output_dir
+from .run_artifacts import atomic_write_json
+from .run_artifacts import safe_output_dir
+
 
 COMPARISON_SCHEMA_VERSION = "offline_train_holdout_comparison_v1"
 
@@ -479,7 +484,8 @@ def build_offline_train_holdout_comparison_report(
     holdout_evaluation_payload: dict[str, Any],
     comparison_config: OfflineTrainHoldoutComparisonConfig | None = None,
 ) -> OfflineTrainHoldoutComparisonReport:
-    """Build the train-vs-holdout comparison report.
+    """
+    Build the train-vs-holdout comparison report.
 
     All identity checks must pass before producing a comparison-ready report.
     """

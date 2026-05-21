@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Venue-agnostic signal observer — CLI entry point.
+"""
+Venue-agnostic signal observer — CLI entry point.
 
 Usage (synthetic smoke test):
     python run_signal_observer.py --synthetic --out reports/signal_observer
@@ -12,15 +13,18 @@ import math
 import sys
 from pathlib import Path
 
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from examples.strategies.venue_agnostic_signal_observer.config import ObserverConfig, FeeModel, Horizon, SignalSourceConfig
-from examples.strategies.venue_agnostic_signal_observer.signals import load_signals_from_csv, CrossMarketSignalGenerator
-from examples.strategies.venue_agnostic_signal_observer.data_loading import load_bars_from_csv, generate_synthetic_data
-from examples.strategies.venue_agnostic_signal_observer.observer import SignalObserver, _build_summary
+from examples.strategies.venue_agnostic_signal_observer.config import FeeModel
+from examples.strategies.venue_agnostic_signal_observer.config import ObserverConfig
+from examples.strategies.venue_agnostic_signal_observer.config import SignalSourceConfig
+from examples.strategies.venue_agnostic_signal_observer.data_loading import generate_synthetic_data
+from examples.strategies.venue_agnostic_signal_observer.observer import SignalObserver
 from examples.strategies.venue_agnostic_signal_observer.reports import write_outputs
+from examples.strategies.venue_agnostic_signal_observer.signals import CrossMarketSignalGenerator
 
 
 def main():
@@ -86,7 +90,7 @@ def main():
     # Print summary
     net_values = [r.net_return_bps for r in results if r.net_return_bps is not None and math.isfinite(r.net_return_bps)]
     mean_net = sum(net_values) / len(net_values) if net_values else 0
-    print(f"\nObserver Summary:")
+    print("\nObserver Summary:")
     print(f"  Signals: {summary.total_signals}")
     print(f"  Valid evaluations: {summary.valid_evaluations}")
     print(f"  Rejected evaluations: {summary.rejected_evaluations}")

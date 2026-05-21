@@ -1,4 +1,5 @@
-"""Tests for Phase 2B-2C2 offline FDR correction.
+"""
+Tests for Phase 2B-2C2 offline FDR correction.
 
 Uses synthetic JSON fixtures only. No source market data loading.
 No null distribution generation, no MCPT, no cost sensitivity,
@@ -10,51 +11,88 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import shutil
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     EXCL_COMPARISON_FAILED,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     EXCL_FAMILY4_CONDITIONING,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     EXCL_FAMILY_NOT_ELIGIBLE,
-    EXCL_INVALID_PVALUE,
-    EXCL_DUPLICATE_PVALUE,
-    EXCL_UNKNOWN_PVALUE_CELL,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     EXCL_MISSING_PVALUE,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     EXCL_NOT_EDGE_FAMILY,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     FDR_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     PVALUE_INPUT_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     STATUS_COMPARISON_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     STATUS_FDR_INPUT_PVALUES_MISSING,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     STATUS_INPUT_HASH_MISMATCH,
-    STATUS_INVALID_FDR_CONFIG,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     STATUS_INVALID_PVALUE_INPUT,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     STATUS_NO_FDR_ELIGIBLE_CELLS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     STATUS_OFFLINE_FDR_CORRECTION_READY,
-    STATUS_UNUSABLE_FDR_INPUT,
-    OfflineFdrCellResult,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     OfflineFdrConfig,
-    OfflineFdrCorrectionReport,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     OfflineFdrPValue,
-    _bh_correction,
-    _by_correction,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import _bh_correction
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     _build_cell_exclusion_reasons,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import _by_correction
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     _canonical_json,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     _is_conditioning_family,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     _is_edge_family,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     _is_family_eligible,
-    _sha256_json,
-    apply_fdr_correction,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     build_offline_fdr_correction_report,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     build_offline_fdr_manifest_payload,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     compute_fdr_config_hash,
-    compute_fdr_hash,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     compute_pvalue_input_hash,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     parse_pvalue_input,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_fdr_correction import (
     write_offline_fdr_correction_outputs,
 )
 
@@ -190,7 +228,7 @@ def _pvalue_entry(cell_id: str, p_value: float, **kw: str) -> dict:
         "cell_id": cell_id,
         "p_value": p_value,
         "test_name": kw.get("test_name", "placeholder_external_test"),
-        "evidence_hash": kw.get("evidence_hash", None),
+        "evidence_hash": kw.get("evidence_hash"),
         "metadata": {},
     }
 
@@ -442,9 +480,11 @@ class TestMissingPValue:
     """Test 10: Missing p-value for eligible cell."""
 
     def test_missing_pvalue_recorded(self) -> None:
-        """P-value for eligible cell is missing. Only supply p-values for
+        """
+        P-value for eligible cell is missing. Only supply p-values for
         known comparison cells. This test verifies the missing_pvalue
-        exclusion for the eligible cell."""
+        exclusion for the eligible cell.
+        """
         cells = [
             _comparison_cell("cell_a", comparison_passed=True),
             _comparison_cell("cell_b", comparison_passed=True),
@@ -980,9 +1020,7 @@ class TestOutputDirectory:
         (run_dir / "existing.txt").write_text("existing")
 
         # Attempting to write should fail because directory is non-empty
-        from examples.strategies.venue_agnostic_signal_observer.run_artifacts import (
-            safe_output_dir,
-        )
+        from examples.strategies.venue_agnostic_signal_observer.run_artifacts import safe_output_dir
         with pytest.raises(FileExistsError):
             safe_output_dir(run_dir)
 
@@ -1075,9 +1113,8 @@ class TestSafety:
 
         found: set[str] = set()
         for node in ast.walk(tree):
-            if isinstance(node, ast.Name):
-                if node.id in forbidden_imports:
-                    found.add(node.id)
+            if isinstance(node, ast.Name) and node.id in forbidden_imports:
+                found.add(node.id)
             if isinstance(node, ast.Attribute):
                 # Check for attribute access like obj.cost_sensitivity
                 if node.attr in forbidden_imports:
@@ -1109,12 +1146,10 @@ class TestSafety:
 
         found: set[str] = set()
         for node in ast.walk(tree):
-            if isinstance(node, ast.Name):
-                if node.id in forbidden_imports:
-                    found.add(node.id)
-            if isinstance(node, ast.Attribute):
-                if node.attr in forbidden_imports:
-                    found.add(node.attr)
+            if isinstance(node, ast.Name) and node.id in forbidden_imports:
+                found.add(node.id)
+            if isinstance(node, ast.Attribute) and node.attr in forbidden_imports:
+                found.add(node.attr)
 
         assert not found, (
             f"Forbidden identifiers found in FDR runner: {sorted(found)}"

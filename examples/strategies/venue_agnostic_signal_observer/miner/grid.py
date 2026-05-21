@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 
 
@@ -35,6 +37,7 @@ class GridCell:
 @dataclass
 class GridSpec:
     """Specification for a frozen discovery grid."""
+
     name: str
     version: str
     cells: list[GridCell]
@@ -55,6 +58,7 @@ class GridSpec:
 @dataclass
 class FrozenGrid:
     """An immutable, hash-identified grid ready for sweeping."""
+
     spec: GridSpec
     grid_hash: str
 

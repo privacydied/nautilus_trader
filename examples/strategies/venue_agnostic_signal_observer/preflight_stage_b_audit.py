@@ -14,40 +14,38 @@ Hard constraints:
 - No registry update.
 """
 
-import hashlib
 import io
 import json
-import math
 import os
 import sys
-import urllib.request
 import zipfile
 from collections import OrderedDict
-from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
+
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-from funding_falling_oi_unwind_phase0 import (
-    BASE_URL, SYMBOL,
-    WARMUP_DAYS, MIN_CELL_EVENTS, MIN_HOLDOUT_EVENTS,
-    FUNDING_HOURS,
-    OI_PRIMARY_FIELD, TIMESTAMP_FIELD,
-    MONTHLY_FUNDING_PATH_TEMPLATE,
-    DAILY_OI_PATH_TEMPLATE,
-    SPOT_KLINES_MONTHLY_PATH,
-    START_YM, END_YM,
-    CACHE_DIR,
-    YMD, YM, DT_FMT,
-    _monthly_funding_path,
-    _daily_oi_path,
-    _spot_klines_path,
-    download_zip_cached,
-    extract_csv_from_zip,
-    parse_timestamp,
-    parse_klines_timestamp,
-    iter_months,
-    sha256_of_bytes,
-)
+from funding_falling_oi_unwind_phase0 import BASE_URL
+from funding_falling_oi_unwind_phase0 import DAILY_OI_PATH_TEMPLATE
+from funding_falling_oi_unwind_phase0 import END_YM
+from funding_falling_oi_unwind_phase0 import FUNDING_HOURS
+from funding_falling_oi_unwind_phase0 import MONTHLY_FUNDING_PATH_TEMPLATE
+from funding_falling_oi_unwind_phase0 import OI_PRIMARY_FIELD
+from funding_falling_oi_unwind_phase0 import START_YM
+from funding_falling_oi_unwind_phase0 import SYMBOL
+from funding_falling_oi_unwind_phase0 import TIMESTAMP_FIELD
+from funding_falling_oi_unwind_phase0 import WARMUP_DAYS
+from funding_falling_oi_unwind_phase0 import YMD
+from funding_falling_oi_unwind_phase0 import _spot_klines_path
+from funding_falling_oi_unwind_phase0 import download_zip_cached
+from funding_falling_oi_unwind_phase0 import extract_csv_from_zip
+from funding_falling_oi_unwind_phase0 import iter_months
+from funding_falling_oi_unwind_phase0 import parse_klines_timestamp
+from funding_falling_oi_unwind_phase0 import parse_timestamp
+
 
 OUTPUT_DIR = "reports/funding_falling_oi_unwind_v1"
 
@@ -74,7 +72,7 @@ def load_funding_with_raw():
                         calc_time_raw = r["calc_time"]
                         calc_time_ms = int(calc_time_raw)
                         rate = float(r["last_funding_rate"])
-                        ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=timezone.utc)
+                        ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=UTC)
                         all_funding.append({
                             "ts": ts,
                             "funding_rate": rate,
@@ -94,12 +92,12 @@ def load_funding_with_raw():
         raw_samples["latest"] = all_funding[-1]
 
     # Find samples around 2024-12 and 2025-01
-    boundary_ts = datetime(2024, 12, 15, tzinfo=timezone.utc)
+    boundary_ts = datetime(2024, 12, 15, tzinfo=UTC)
     for ev in all_funding:
         if ev["ts"] >= boundary_ts:
             if raw_samples["around_2024_12"] is None:
                 raw_samples["around_2024_12"] = ev
-            if ev["ts"] >= datetime(2025, 1, 1, tzinfo=timezone.utc):
+            if ev["ts"] >= datetime(2025, 1, 1, tzinfo=UTC):
                 if raw_samples["around_2025_01"] is None:
                     raw_samples["around_2025_01"] = ev
 
@@ -147,10 +145,10 @@ def load_oi_with_raw(oi_dates):
 
     # Collect raw samples at different eras
     for era_ts in [
-        datetime(2021, 6, 1, 8, 0, 0, tzinfo=timezone.utc),
-        datetime(2023, 6, 1, 8, 0, 0, tzinfo=timezone.utc),
-        datetime(2024, 6, 1, 8, 0, 0, tzinfo=timezone.utc),
-        datetime(2025, 6, 1, 8, 0, 0, tzinfo=timezone.utc),
+        datetime(2021, 6, 1, 8, 0, 0, tzinfo=UTC),
+        datetime(2023, 6, 1, 8, 0, 0, tzinfo=UTC),
+        datetime(2024, 6, 1, 8, 0, 0, tzinfo=UTC),
+        datetime(2025, 6, 1, 8, 0, 0, tzinfo=UTC),
     ]:
         for row in oi_rows:
             if abs((row["ts"] - era_ts).total_seconds()) < 3600:
@@ -206,7 +204,7 @@ def main():
     print()
 
     audit = OrderedDict()
-    audit["audit_ts"] = datetime.now(timezone.utc).isoformat()
+    audit["audit_ts"] = datetime.now(UTC).isoformat()
     audit["study_id"] = "family3_funding_falling_oi_unwind_v1"
 
     # ==================================================================
@@ -446,7 +444,7 @@ def main():
         ]
 
     # Check no 2025+ rows dropped
-    post_2024_rows = [fr for fr in all_funding if fr["ts"] >= datetime(2025, 1, 1, tzinfo=timezone.utc)]
+    post_2024_rows = [fr for fr in all_funding if fr["ts"] >= datetime(2025, 1, 1, tzinfo=UTC)]
     funding_audit["post_2024_rows"] = len(post_2024_rows)
     funding_audit["funding_unit_verdict"] = (
         "FUNDING_TIMESTAMP_MS_CONFIRMED" if funding_audit["rows_ms_only"]
@@ -513,7 +511,7 @@ def main():
         oi_audit["alignment_verdict"] = "OI_ALIGNMENT_SUSPECTED_SPURIOUS"
 
     # Check no timestamp unit issues - parse_timestamp uses string format, no epoch conversion
-    parse_failures = sum(1 for row in all_oi if not row.get("oi"))
+    sum(1 for row in all_oi if not row.get("oi"))
     oi_audit["parse_failures"] = 0  # parse_timestamp returns None on failure, rows filtered
 
     audit["oi_parser_audit"] = oi_audit
@@ -586,7 +584,7 @@ def _write_md_report(audit, horizon_records, falling_oi_sorted, split_ts):
     lines.append(f"- Boundary events (24h should pass, 48h should fail): {h.get('boundary_events_count')}")
     lines.append("")
     lines.append(f"**Conclusion:** {audit.get('horizon_verdict')}")
-    if h.get('boundary_events_count', 0) == 0:
+    if h.get("boundary_events_count", 0) == 0:
         lines.append("")
         lines.append("The last spot timestamp covers all 48h targets. No event lies near")
         lines.append("the archive boundary where the two horizons would diverge. Identical")

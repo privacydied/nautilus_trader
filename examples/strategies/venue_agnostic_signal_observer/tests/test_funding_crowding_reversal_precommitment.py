@@ -1,4 +1,5 @@
-"""Focused tests for Family 2 funding crowding reversal Phase 0 precommitment.
+"""
+Focused tests for Family 2 funding crowding reversal Phase 0 precommitment.
 
 These tests protect precommitment invariants. They do not fetch data,
 evaluate returns, or run empirical evaluation.
@@ -30,29 +31,68 @@ from pathlib import Path
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
-    BTC_PRIMARY_FDR_FAMILY_SIZE,
     ALL_THRESHOLDS,
-    HORIZONS,
-    DIRECTIONS,
-    PERCENTILE_LOOKBACK_CALENDAR_DAYS,
-    TOTAL_COST_BPS,
-    MIN_VALID_EVENTS_FOR_CANDIDATE,
-    MIN_WIN_RATE,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
     BASELINE_BEAT_BPS,
-    signal_return_bps_for_positive_funding,
-    signal_return_bps_for_negative_funding,
-    compute_past_only_percentile_threshold,
-    INVARIANT_BTC_FAMILY_SIZE,
-    INVARIANT_PAST_ONLY_PERCENTILE,
-    INVARIANT_FUNDING_INTERVAL_METADATA,
-    INVARIANT_EVENT_DEDUP,
-    INVARIANT_CLUSTERING_UNADJUSTED,
-    INVARIANT_DIRECTION_MATCHED_BASELINE,
-    INVARIANT_TIMESTAMP_SHUFFLE_NULL_ONLY,
-    INVARIANT_FDR_METHOD,
-    DIRECTION_POSITIVE_FUNDING,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    BTC_PRIMARY_FDR_FAMILY_SIZE,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
     DIRECTION_NEGATIVE_FUNDING,
 )
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    DIRECTION_POSITIVE_FUNDING,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import DIRECTIONS
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import HORIZONS
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    INVARIANT_BTC_FAMILY_SIZE,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    INVARIANT_CLUSTERING_UNADJUSTED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    INVARIANT_DIRECTION_MATCHED_BASELINE,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    INVARIANT_EVENT_DEDUP,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    INVARIANT_FDR_METHOD,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    INVARIANT_FUNDING_INTERVAL_METADATA,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    INVARIANT_PAST_ONLY_PERCENTILE,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    INVARIANT_TIMESTAMP_SHUFFLE_NULL_ONLY,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    MIN_VALID_EVENTS_FOR_CANDIDATE,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    MIN_WIN_RATE,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    PERCENTILE_LOOKBACK_CALENDAR_DAYS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    TOTAL_COST_BPS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    compute_past_only_percentile_threshold,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    signal_return_bps_for_negative_funding,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    signal_return_bps_for_positive_funding,
+)
+
 
 PRECOMMITMENT_PATH = (
     Path(__file__).resolve().parents[1]
@@ -180,7 +220,8 @@ class TestTimestampShuffleNullMandatory:
     def test_document_says_null_mandatory(self) -> None:
         text = _precommitment_text()
         # The null is mandatory - check for several possible phrasings
-        assert "mandatory" in text and "null" in text.lower()
+        assert "mandatory" in text
+        assert "null" in text.lower()
 
     def test_timestamp_null_blocker_exists(self) -> None:
         text = _precommitment_text()
@@ -358,7 +399,8 @@ class TestPercentileWarmup:
         assert "warmup tax" in text
 
     def test_past_only_not_circular(self) -> None:
-        """Test that past-only invariant is well-formed.
+        """
+        Test that past-only invariant is well-formed.
 
         This test uses a synthetic series to verify the function
         behaviorally. It does NOT use the document wording check.
@@ -375,7 +417,6 @@ class TestPercentileWarmup:
         )
 
         # Append future observations (more extreme)
-        future_rates = [0.02, 0.03, 0.04, 0.05]
 
         # Recompute using only past data (same as before)
         threshold_after_future = compute_past_only_percentile_threshold(
@@ -488,6 +529,7 @@ class TestForbiddenTermsSafety:
     def test_no_forbidden_terms_in_constants(self) -> None:
         """Check the constants module for forbidden terms."""
         import inspect
+
         from examples.strategies.venue_agnostic_signal_observer import (
             funding_crowding_reversal as fcr_mod,
         )
@@ -503,7 +545,8 @@ class TestForbiddenTermsSafety:
                     )
 
     def test_no_forbidden_terms_in_document(self) -> None:
-        """Check the precommitment document for forbidden terms.
+        """
+        Check the precommitment document for forbidden terms.
 
         Some terms like TRADE_READY appear in the verdict taxonomy as
         explicitly forbidden verdicts. That is acceptable because the
@@ -596,9 +639,7 @@ class TestStructuralInvariants:
         assert "chronological" in text or "chronological train/holdout" in text
 
     def test_constants_module_exists(self) -> None:
-        from examples.strategies.venue_agnostic_signal_observer import (
-            funding_crowding_reversal,
-        )
+        from examples.strategies.venue_agnostic_signal_observer import funding_crowding_reversal
         assert funding_crowding_reversal.__doc__ is not None
 
     def test_direction_constant_values(self) -> None:
@@ -736,7 +777,8 @@ class TestKeyDecisionStatements:
 
 
 class TestPastOnlyPercentileInvariant:
-    """Test 16 (from section 18): Behavioral past-only percentiles.
+    """
+    Test 16 (from section 18): Behavioral past-only percentiles.
 
     This test builds a synthetic funding series, computes the percentile
     threshold at event time t, appends future observations, and verifies
@@ -768,7 +810,7 @@ class TestPastOnlyPercentileInvariant:
         future_rates: list[float] = [
             0.01 * rng.gauss(0, 1) for _ in range(50)
         ]
-        all_rates = past_rates + future_rates
+        past_rates + future_rates
 
         # Compute again using ONLY past data (same as before)
         threshold_after_future = compute_past_only_percentile_threshold(

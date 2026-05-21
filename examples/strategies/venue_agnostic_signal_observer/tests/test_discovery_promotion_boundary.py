@@ -1,39 +1,37 @@
-"""Tests for the promotion boundary choke point.
+"""
+Tests for the promotion boundary choke point.
 
 Covers tests 120-124 from the discovery freeze specification.
 """
 
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
-    DiscoveryGridSpec,
-    GRID_SCHEMA_VERSION,
-)
-from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import (
-    create_grid_lock,
-    DiscoveryGridLock,
-    GRID_LOCK_TYPE,
+from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
+    DiscoveryCandidateLock,
 )
 from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
     create_candidate_lock,
-    validate_candidate_lock,
-    DiscoveryCandidateLock,
-    CANDIDATE_LOCK_TYPE,
-)
-from examples.strategies.venue_agnostic_signal_observer.discovery.promotion_boundary import (
-    require_frozen_candidate_for_validation,
 )
 from examples.strategies.venue_agnostic_signal_observer.discovery.capture_fingerprint import (
     build_capture_manifest_ref,
 )
 from examples.strategies.venue_agnostic_signal_observer.discovery.exceptions import (
-    DiscoveryFreezeError,
     CandidateLockValidationError,
-    GridLockValidationError,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.exceptions import (
+    DiscoveryFreezeError,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import create_grid_lock
+from examples.strategies.venue_agnostic_signal_observer.discovery.promotion_boundary import (
+    require_frozen_candidate_for_validation,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
+    GRID_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
+    DiscoveryGridSpec,
 )
 
 
@@ -44,30 +42,30 @@ from examples.strategies.venue_agnostic_signal_observer.discovery.exceptions imp
 @pytest.fixture
 def golden_spec():
     return DiscoveryGridSpec(
-        grid_id='edge_miner_cross_asset_beta_lag_v1',
+        grid_id="edge_miner_cross_asset_beta_lag_v1",
         schema_version=GRID_SCHEMA_VERSION,
-        signal_family='cross_asset_beta_lag',
-        source_venues=('binance_perp',),
-        source_symbols=('BTC/USDT', 'ETH/USDT'),
-        target_venues=('kraken', 'coinbase'),
-        target_symbols=('SOL/USD', 'DOGE/USD', 'LINK/USD', 'AVAX/USD'),
-        feature_types=('price_impulse', 'signed_imbalance', 'notional_burst', 'large_trade'),
+        signal_family="cross_asset_beta_lag",
+        source_venues=("binance_perp",),
+        source_symbols=("BTC/USDT", "ETH/USDT"),
+        target_venues=("kraken", "coinbase"),
+        target_symbols=("SOL/USD", "DOGE/USD", "LINK/USD", "AVAX/USD"),
+        feature_types=("price_impulse", "signed_imbalance", "notional_burst", "large_trade"),
         lookbacks_ms=(1000, 5000, 10000, 30000, 60000),
         thresholds_centibps=(1000, 2000, 3000, 5000),
         horizons_ms=(10000, 30000, 60000, 180000, 300000),
         entry_delays_ms=(0, 5000, 15000),
         cooldown_ms=60000,
-        regime_filters=('market_active', 'market_stress', 'btc_1m_vol_p95'),
+        regime_filters=("market_active", "market_stress", "btc_1m_vol_p95"),
         cost_models_centibps=(1000, 2500, 5000),
         min_events=30,
-        clustering_keys=('feature_types', 'lookbacks_ms', 'horizons_ms', 'target_symbols'),
+        clustering_keys=("feature_types", "lookbacks_ms", "horizons_ms", "target_symbols"),
         fdr_family_dimensions=(
-            'source_symbols', 'target_symbols', 'feature_types',
-            'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-            'entry_delays_ms', 'regime_filters',
+            "source_symbols", "target_symbols", "feature_types",
+            "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+            "entry_delays_ms", "regime_filters",
         ),
-        created_at_utc='2026-05-17T00:00:00Z',
-        notes='Golden example grid for deterministic freeze tests.',
+        created_at_utc="2026-05-17T00:00:00Z",
+        notes="Golden example grid for deterministic freeze tests.",
     )
 
 
@@ -151,26 +149,26 @@ class TestPromotionBoundary:
 
         # Create a DIFFERENT grid and lock
         other_spec = DiscoveryGridSpec(
-            grid_id='different_grid',
+            grid_id="different_grid",
             schema_version=GRID_SCHEMA_VERSION,
-            signal_family='different_family',
-            source_venues=('binance_perp',),
-            source_symbols=('BTC/USDT',),
-            target_venues=('kraken',),
-            target_symbols=('SOL/USD',),
-            feature_types=('price_impulse',),
+            signal_family="different_family",
+            source_venues=("binance_perp",),
+            source_symbols=("BTC/USDT",),
+            target_venues=("kraken",),
+            target_symbols=("SOL/USD",),
+            feature_types=("price_impulse",),
             lookbacks_ms=(1000,),
             thresholds_centibps=(1000,),
             horizons_ms=(10000,),
             entry_delays_ms=(0,),
             cooldown_ms=5000,
-            regime_filters=('market_active',),
+            regime_filters=("market_active",),
             cost_models_centibps=(1000,),
             min_events=10,
-            clustering_keys=('feature_types',),
-            fdr_family_dimensions=('feature_types',),
-            created_at_utc='',
-            notes='',
+            clustering_keys=("feature_types",),
+            fdr_family_dimensions=("feature_types",),
+            created_at_utc="",
+            notes="",
         )
         other_lock = create_grid_lock(other_spec)
 
@@ -255,7 +253,7 @@ class TestPromotionBoundary:
         ret = sig.return_annotation
 
         # All annotations should resolve to the expected names
-        grid_spec_str = getattr(p_grid_spec, '__name__', str(p_grid_spec)).replace(
+        grid_spec_str = getattr(p_grid_spec, "__name__", str(p_grid_spec)).replace(
             "<class '", ""
         ).replace("'>", "").split(".")[-1] if not isinstance(p_grid_spec, str) else p_grid_spec
         assert "DiscoveryGridSpec" in str(grid_spec_str), (

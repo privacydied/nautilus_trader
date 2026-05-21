@@ -1,4 +1,5 @@
-"""Phase 2B-2A fixed-window train-only forward-return evaluation scaffold.
+"""
+Phase 2B-2A fixed-window train-only forward-return evaluation scaffold.
 
 Consumes frozen Phase 1/2A/2B-1 inputs and evaluates only train-window plan
 cells. No holdout evaluation, no survivor freeze, no FDR, no null tests, no
@@ -11,26 +12,23 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from statistics import median
-from typing import Any, Optional
+from typing import Any
 
 from .family1_tick_basis import compute_family1_tick_signal
-from .offline_discovery_plan import (
-    CostConfig,
-    DISCOVERY_SCHEMA_VERSION,
-    OfflineDiscoveryPlan,
-    OfflineDiscoveryPlanCell,
-    compute_window_index_hash,
-)
-from .offline_historical_models import (
-    OFFLINE_DATA_SCHEMA_VERSION,
-    RESOLUTION_AGG_TRADE,
-    RESOLUTION_BAR,
-    RESOLUTION_TRADE,
-)
+from .offline_discovery_plan import CostConfig
+from .offline_discovery_plan import OfflineDiscoveryPlan
+from .offline_discovery_plan import OfflineDiscoveryPlanCell
+from .offline_discovery_plan import compute_window_index_hash
+from .offline_historical_models import RESOLUTION_AGG_TRADE
+from .offline_historical_models import RESOLUTION_BAR
+from .offline_historical_models import RESOLUTION_TRADE
+
 
 EVALUATION_SCHEMA_VERSION = "offline_train_evaluation_v1"
 
@@ -61,15 +59,15 @@ class OfflineTrainEvaluationCellResult:
     valid_event_count: int
     lookback_ms: int
     horizon_ms: int
-    signal_variant: Optional[str]
+    signal_variant: str | None
     required_resolution: str
     latency_gate_required: bool
-    raw_mean_bps: Optional[float]
-    raw_median_bps: Optional[float]
-    net_mean_bps: Optional[float]
-    net_median_bps: Optional[float]
-    win_rate: Optional[float]
-    worst_net_bps: Optional[float]
+    raw_mean_bps: float | None
+    raw_median_bps: float | None
+    net_mean_bps: float | None
+    net_median_bps: float | None
+    win_rate: float | None
+    worst_net_bps: float | None
     fee_bps: float
     slippage_bps: float
     quote_mismatch_buffer_bps: float
@@ -115,7 +113,7 @@ def _sha256_json(obj: Any) -> str:
 
 
 def _now_utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _get_git_sha() -> str:
@@ -137,7 +135,7 @@ def _report_empty(
     plan_hash: str,
     metadata: dict[str, Any],
 ) -> OfflineTrainEvaluationReport:
-    run_id = f"offline_train_evaluation_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    run_id = f"offline_train_evaluation_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
     generated_at_utc = _now_utc_iso()
     git_sha = _get_git_sha()
     report = OfflineTrainEvaluationReport(
@@ -178,7 +176,7 @@ def _load_price_series(source_config_path: Path) -> dict[tuple[str, str], list[_
     return series
 
 
-def _find_price_at_or_after(points: list[_PricePoint], timestamp_ns: int) -> Optional[float]:
+def _find_price_at_or_after(points: list[_PricePoint], timestamp_ns: int) -> float | None:
     for point in points:
         if point.timestamp_ns >= timestamp_ns:
             return point.price
@@ -193,7 +191,7 @@ def _cost_total_bps(cost_config: CostConfig) -> float:
     return float(cost_config.fees_bps + cost_config.slippage_bps + cost_config.quote_mismatch_bps)
 
 
-def _returns_summary(raw_returns_bps: list[float], net_returns_bps: list[float]) -> dict[str, Optional[float]]:
+def _returns_summary(raw_returns_bps: list[float], net_returns_bps: list[float]) -> dict[str, float | None]:
     if not raw_returns_bps or not net_returns_bps:
         return {
             "raw_mean_bps": None,
@@ -619,7 +617,7 @@ def build_offline_train_evaluation_report(
         survivor_freeze_status="NOT_RUN_PHASE_2B2A",
         evaluation_hash="",
         metadata=metadata,
-        run_id=f"offline_train_evaluation_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
+        run_id=f"offline_train_evaluation_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}",
         generated_at_utc=_now_utc_iso(),
         git_sha=_get_git_sha(),
         data_corpus_hash=data_corpus_hash,

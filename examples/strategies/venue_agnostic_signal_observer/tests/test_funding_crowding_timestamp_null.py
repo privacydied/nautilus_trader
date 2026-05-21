@@ -1,4 +1,5 @@
-"""Focused tests for funding_crowding_timestamp_null module.
+"""
+Focused tests for funding_crowding_timestamp_null module.
 
 This module tests the TIMESTAMP_SHUFFLE_NULL_ONLY invariant implementation.
 All tests use synthetic data only. No network, no data files, no market
@@ -41,25 +42,45 @@ import random
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
-    DEFAULT_ITERATIONS,
-    DEFAULT_SEED,
-    MINIMUM_ITERATIONS,
-    ACTUAL_MEAN_TOLERANCE,
-    ALPHA,
-    STATUS_TIMESTAMP_SHUFFLE_NULL_READY,
-    STATUS_TIMESTAMP_SHUFFLE_NULL_SURVIVED,
-    STATUS_TIMESTAMP_SHUFFLE_NULL_REJECTED_DIAGNOSTIC,
-    STATUS_TIMESTAMP_SHUFFLE_NULL_UNDERPOWERED,
-    STATUS_TIMESTAMP_SHUFFLE_NULL_INVALID_INPUT,
-    NEAR_EXHAUSTIVE_ELIGIBLE_CALENDAR_DIAGNOSTIC,
     ACTUAL_MEAN_NET_BPS_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
+    DEFAULT_ITERATIONS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
+    DEFAULT_SEED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
+    NEAR_EXHAUSTIVE_ELIGIBLE_CALENDAR_DIAGNOSTIC,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
+    STATUS_TIMESTAMP_SHUFFLE_NULL_INVALID_INPUT,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
+    STATUS_TIMESTAMP_SHUFFLE_NULL_REJECTED_DIAGNOSTIC,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
+    STATUS_TIMESTAMP_SHUFFLE_NULL_SURVIVED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
+    STATUS_TIMESTAMP_SHUFFLE_NULL_UNDERPOWERED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
     TimestampShuffleNullInput,
-    TimestampShuffleNullResult,
-    run_timestamp_shuffle_null,
-    _validate_input,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
     _percentile_from_sorted,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
     _safe_ratio,
 )
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
+    _validate_input,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_timestamp_null import (
+    run_timestamp_shuffle_null,
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -76,7 +97,8 @@ def _make_synthetic_input(
     positive_mean: bool = True,
     add_direction_skew: bool = True,
 ) -> tuple[TimestampShuffleNullInput, list[float]]:
-    """Build a synthetic input for testing.
+    """
+    Build a synthetic input for testing.
 
     Creates eligible timestamps with signed net returns drawn from a
     normal distribution. If positive_mean is True, actual event returns
@@ -151,7 +173,8 @@ class TestSamplesFromEligibleCalendar:
                 assert ts in eligible_set, "Sampled timestamp not in eligible set"
 
     def test_not_just_actual_event_timestamps(self):
-        """Null samples must include timestamps that are NOT in actual_event_set.
+        """
+        Null samples must include timestamps that are NOT in actual_event_set.
         This proves the null uses the full eligible calendar, not just the
         actual-event subset.
         """
@@ -234,7 +257,8 @@ class TestNoSignFlip:
     """Test 3: The null never flips signs of returns."""
 
     def test_null_means_match_input_sign_convention(self):
-        """Null mean values should have the same sign convention as input returns.
+        """
+        Null mean values should have the same sign convention as input returns.
         We verify this by creating a dataset where all returns are positive,
         and ensuring all null means are positive.
         """
@@ -340,7 +364,8 @@ class TestDeterminism:
         assert result1.null_mean_distribution == result2.null_mean_distribution
 
     def test_different_seed_different_distribution(self):
-        """Different seeds should produce different null distributions on
+        """
+        Different seeds should produce different null distributions on
         a non-degenerate dataset with sufficient iterations.
         """
         # Use enough iterations to make distribution differences detectable
@@ -395,7 +420,8 @@ class TestSeedAffectsNullDistribution:
     """Test 6: Different seed changes distribution (expanded)."""
 
     def test_seed_affects_p_value(self):
-        """Two seeds should produce detectably different p-values on
+        """
+        Two seeds should produce detectably different p-values on
         a dataset where actual events are not truly extreme.
         """
         input_data, _ = _make_synthetic_input(
@@ -1025,7 +1051,7 @@ class TestEligibleToEventRatio:
         for eligible_count, event_count, expected_ratio in test_cases:
             eligible_ts = tuple(range(eligible_count))
             actual_ts = eligible_ts[:event_count]
-            returns = {ts: 1.0 for ts in eligible_ts}
+            returns = dict.fromkeys(eligible_ts, 1.0)
             actual_mean = 1.0
             input_data = TimestampShuffleNullInput(
                 cell_id=f"ratio_{eligible_count}_{event_count}",
@@ -1078,7 +1104,7 @@ class TestNearExhaustiveCalendarDiagnostic:
         """When ratio == 1.0, NEAR_EXHAUSTIVE diagnostic should appear."""
         eligible_ts = tuple(range(50))
         actual_ts = eligible_ts  # All eligible timestamps are actual events
-        returns = {ts: 1.0 for ts in eligible_ts}
+        returns = dict.fromkeys(eligible_ts, 1.0)
         actual_mean = 1.0
         input_data = TimestampShuffleNullInput(
             cell_id="ratio_1",
@@ -1127,7 +1153,8 @@ class TestNearExhaustiveCalendarDiagnostic:
 
 
 class TestExistingPrecommitmentTests:
-    """Test 25: Existing precommitment tests pass. This is verified by
+    """
+    Test 25: Existing precommitment tests pass. This is verified by
     running the test suite separately, but we can at least check the
     module import doesn't break anything.
     """
@@ -1141,16 +1168,14 @@ class TestExistingPrecommitmentTests:
         assert funding_crowding_timestamp_null.__doc__ is not None
 
     def test_new_module_not_in_forbidden_terms_list(self):
-        """The new module name should not appear in the Phase 0
+        """
+        The new module name should not appear in the Phase 0
         forbidden-terms safety scan.
         """
         import inspect
 
         from examples.strategies.venue_agnostic_signal_observer import (
             funding_crowding_timestamp_null as null_mod,
-        )
-        from examples.strategies.venue_agnostic_signal_observer.tests import (
-            test_funding_crowding_reversal_precommitment as precommit_tests,
         )
 
         source = inspect.getsource(null_mod)
@@ -1223,7 +1248,7 @@ class TestStructural:
         assert result.status == STATUS_TIMESTAMP_SHUFFLE_NULL_INVALID_INPUT
 
     def test_iterations_too_few(self):
-        """iterations below minimum should be invalid."""
+        """Iterations below minimum should be invalid."""
         eligible_ts = (100, 200, 300, 400, 500)
         actual_ts = (100,)
         returns = {100: 1.0, 200: 2.0, 300: 3.0, 400: 4.0, 500: 5.0}

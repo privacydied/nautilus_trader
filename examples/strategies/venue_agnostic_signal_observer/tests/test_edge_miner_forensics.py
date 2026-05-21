@@ -6,12 +6,15 @@ import json
 import sys
 from pathlib import Path
 
+
 PROJECT_ROOT = str(Path(__file__).resolve().parents[4])
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from examples.strategies.venue_agnostic_signal_observer.edge_miner_forensics import (
     FIELD_UNAVAILABLE,
+)
+from examples.strategies.venue_agnostic_signal_observer.edge_miner_forensics import (
     build_failure_forensics,
 )
 

@@ -1,4 +1,5 @@
-"""Tests for forward_returns_gpu module.
+"""
+Tests for forward_returns_gpu module.
 
 Coverage:
 1.  CPUEquivalent          -- GPU results match CPU results on tiny synthetic path
@@ -27,19 +28,15 @@ from unittest import mock
 
 import pytest
 
-from venue_agnostic_signal_observer.forward_returns_gpu import (
-    SAFETY_MODE,
-    _MODULE_METADATA,
-    batch_evaluate_signals_gpu,
-    check_cuda_available,
-    gpu_unavailable_diagnostic,
-)
 from venue_agnostic_signal_observer.event_study import evaluate_tick_signal
+from venue_agnostic_signal_observer.forward_returns_gpu import _MODULE_METADATA
+from venue_agnostic_signal_observer.forward_returns_gpu import SAFETY_MODE
+from venue_agnostic_signal_observer.forward_returns_gpu import batch_evaluate_signals_gpu
+from venue_agnostic_signal_observer.forward_returns_gpu import check_cuda_available
+from venue_agnostic_signal_observer.forward_returns_gpu import gpu_unavailable_diagnostic
 from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import build_parser
-from venue_agnostic_signal_observer.tick_models import (
-    TickSignalEvent,
-    TradeTickLite,
-)
+from venue_agnostic_signal_observer.tick_models import TickSignalEvent
+from venue_agnostic_signal_observer.tick_models import TradeTickLite
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +136,7 @@ class TestCPUEquivalent:
 
         assert len(cpu_frs) == len(gpu_frs) == len(signals) * len(horizons_ms)
 
-        for cpu_r, gpu_r in zip(cpu_frs, gpu_frs):
+        for cpu_r, gpu_r in zip(cpu_frs, gpu_frs, strict=False):
             assert cpu_r.valid == gpu_r.valid, (
                 f"valid mismatch: cpu={cpu_r.valid} gpu={gpu_r.valid} "
                 f"sig={cpu_r.signal_id} h={cpu_r.horizon_ms}"
@@ -205,7 +202,8 @@ class TestShortDirection:
             fee_bps=0.0, slippage_bps=0.0,
             chunk_size=32, device="cuda:0",
         )
-        assert frs[0].valid and frs[1].valid
+        assert frs[0].valid
+        assert frs[1].valid
         # Long + short dir_adj should cancel
         total = frs[0].direction_adjusted_return_bps + frs[1].direction_adjusted_return_bps
         assert abs(total) < 1e-6, f"long+short dir_adj should sum to zero, got {total}"
@@ -256,7 +254,8 @@ class TestQuoteMismatchCost:
             quote_mismatch=True, quote_mismatch_buffer_bps=qm_buf,
             chunk_size=32, device="cuda:0",
         )
-        assert frs_no_qm[0].valid and frs_qm[0].valid
+        assert frs_no_qm[0].valid
+        assert frs_qm[0].valid
         diff = frs_no_qm[0].net_return_bps - frs_qm[0].net_return_bps
         assert math.isclose(diff, qm_buf, rel_tol=1e-5), (
             f"QM buffer should reduce net by {qm_buf} bps, got diff={diff}"
@@ -331,7 +330,7 @@ class TestNaNPriceReject:
         _skip_no_gpu()
         # Mix valid and NaN prices; NaN ones should be filtered from target
         valid_prices = [100.0, 100.5, 101.0, 101.5, 102.0]
-        nan_prices = [float("nan")] * 5
+        [float("nan")] * 5
         # Interleave: tick even idx = valid, odd = nan
         # But since NaN is filtered, there will still be valid target ticks
         ticks = _make_ticks(valid_prices)
@@ -386,7 +385,7 @@ class TestChunkSizeInvariance:
         )
 
         assert len(frs_small) == len(frs_large)
-        for s, l in zip(frs_small, frs_large):
+        for s, l in zip(frs_small, frs_large, strict=False):
             assert s.valid == l.valid, f"valid mismatch h={s.horizon_ms}"
             if s.valid:
                 assert math.isclose(s.net_return_bps, l.net_return_bps, rel_tol=1e-9)
@@ -427,7 +426,7 @@ class TestUnsortedTargetHandled:
             horizons_ms=horizons_ms, fee_bps=3.0, slippage_bps=1.0,
             chunk_size=32, device="cuda:0",
         )
-        for c, g in zip(cpu_frs, gpu_frs):
+        for c, g in zip(cpu_frs, gpu_frs, strict=False):
             assert c.valid == g.valid
             if c.valid:
                 assert math.isclose(c.net_return_bps, g.net_return_bps, rel_tol=1e-5)
@@ -449,6 +448,7 @@ class TestGPUUnavailableDiagnostic:
     def test_torch_missing_returns_false(self):
         with mock.patch.dict(sys.modules, {"torch": None}):
             import importlib
+
             import venue_agnostic_signal_observer.forward_returns_gpu as _gpu
             importlib.reload(_gpu)
             ok, reason = _gpu.check_cuda_available("cuda:0")
@@ -460,6 +460,7 @@ class TestGPUUnavailableDiagnostic:
         fake_torch.cuda.is_available.return_value = False
         with mock.patch.dict(sys.modules, {"torch": fake_torch}):
             import importlib
+
             import venue_agnostic_signal_observer.forward_returns_gpu as _gpu
             importlib.reload(_gpu)
             ok, reason = _gpu.check_cuda_available("cuda:0")
@@ -496,7 +497,7 @@ class TestRunnerArgParsing:
         args = parser.parse_args([
             "--capture-dir", "/tmp/cap",
             "--report-dir", "/tmp/rep",
-        ] if "--report-dir" in [a.option_strings[0] if hasattr(a, 'option_strings') else "" for a in parser._actions] else [
+        ] if "--report-dir" in [a.option_strings[0] if hasattr(a, "option_strings") else "" for a in parser._actions] else [
             "--capture-dir", "/tmp/cap",
         ])
         # Just check defaults exist
@@ -577,6 +578,7 @@ class TestSafetyModeMetadata:
         )
         # The result is a TickForwardReturn — no extra GPU fields polluting the schema
         from dataclasses import fields
+
         from venue_agnostic_signal_observer.tick_models import TickForwardReturn
         field_names = {f.name for f in fields(TickForwardReturn)}
         result_dict = frs[0].to_dict()

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Corpus aggregation CLI — aggregate evaluation reports across multiple captures.
+"""
+Corpus aggregation CLI — aggregate evaluation reports across multiple captures.
 
 Reads summary.json from each report directory, groups results by configuration
 key (source_venue, target_venue, signal_type, lookback_ms, horizon_ms), and
@@ -20,13 +21,15 @@ import argparse
 import json
 import math
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from glob import glob
 from pathlib import Path
 from typing import Any
 
-from .artifact_metadata import build_metadata, check_schema_version, get_metadata_field
-from .quarantine import get_quarantined_run_ids, read_quarantine
+from .artifact_metadata import build_metadata
+from .artifact_metadata import check_schema_version
+from .artifact_metadata import get_metadata_field
+from .quarantine import get_quarantined_run_ids
 
 
 def _sanitize_for_json(obj: Any) -> Any:
@@ -50,7 +53,8 @@ def _sanitize_for_json(obj: Any) -> Any:
 
 
 def corpus_config_key(group: dict[str, Any]) -> tuple:
-    """Return a unique configuration key for a result group.
+    """
+    Return a unique configuration key for a result group.
 
     The key is (source_venue, target_venue, signal_type, lookback_ms, horizon_ms).
     Groups sharing the same key represent the same signal-target configuration
@@ -131,7 +135,8 @@ class CorpusAggregation:
 
 
 def aggregate_corpus(report_dirs: list[Path]) -> list[CorpusAggregation]:
-    """Load each report, group results by config key, and compute aggregates.
+    """
+    Load each report, group results by config key, and compute aggregates.
 
     Groups are sorted primarily by num_captures (descending), then by
     avg_mean_net_bps (descending). This enforces the HARD RULE that
@@ -243,7 +248,7 @@ def aggregate_corpus(report_dirs: list[Path]) -> list[CorpusAggregation]:
 
     # HARD RULE: Sort by num_captures desc, then avg_mean_net_bps desc
     aggregations.sort(
-        key=lambda a: (-a.num_captures, -a.avg_mean_net_bps if math.isfinite(a.avg_mean_net_bps) else float('inf'))
+        key=lambda a: (-a.num_captures, -a.avg_mean_net_bps if math.isfinite(a.avg_mean_net_bps) else float("inf"))
     )
 
     return aggregations
@@ -392,7 +397,8 @@ def discover_report_dirs(
     reports_root: Path,
     glob_pattern: str,
 ) -> list[Path]:
-    """Discover report directories via glob, sorted deterministically.
+    """
+    Discover report directories via glob, sorted deterministically.
 
     Sorting priority (higher wins):
     1. ``run_id`` from ``_metadata`` in summary.json (if available)
@@ -447,7 +453,8 @@ def filter_report_dir(
     include_quarantined: bool = False,
     allow_missing_git_sha: bool = False,
 ) -> tuple[bool, str | None]:
-    """Check a report directory for quality before inclusion.
+    """
+    Check a report directory for quality before inclusion.
 
     Skip conditions (checked in order):
 
@@ -542,9 +549,8 @@ def filter_report_dir(
         if not failed_streams:
             # Also check inside overlap_info or _metadata
             failed_streams = overlap_info.get("failed_streams", [])
-        if failed_streams:
-            if stream_strictness == "strict":
-                return False, f"failed_streams_{'_'.join(str(s) for s in failed_streams)}"
+        if failed_streams and stream_strictness == "strict":
+            return False, f"failed_streams_{'_'.join(str(s) for s in failed_streams)}"
             # lenient: warn but accept
 
     # 8. Quarantined run_id

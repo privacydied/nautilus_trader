@@ -1,4 +1,5 @@
-"""Focused tests for the Polymarket BTC Price Target liquidity probe.
+"""
+Focused tests for the Polymarket BTC Price Target liquidity probe.
 
 Tests cover:
 - Adapter inspection / safety
@@ -16,70 +17,198 @@ Tests cover:
 
 from __future__ import annotations
 
-import json
-import math
-import time
+from datetime import UTC
 
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    ALLOWED_VERDICTS,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    AMBIGUOUS_STRIKE,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    BOOK_CROSSED,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    BOOK_EMPTY,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    BOOK_ONE_SIDED_ASK,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    BOOK_ONE_SIDED_BID,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    # Orderbook
+    BOOK_TWO_SIDED,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    CAPTURE_UNUSABLE_V,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    DATA_PATH_MIXED,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    DATA_PATH_NAUTILUS,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    DATA_PATH_PUBLIC_REST,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    DIST_ABOVE_25_100,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    DIST_ABOVE_100_500,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    DIST_BELOW_25_100,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    DIST_BELOW_100_500,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    DIST_DEEP_ABOVE,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    # Distance
+    DIST_DEEP_BELOW,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    DIST_NEAR_25,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    DIST_UNKNOWN,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    FAMILY_BTC_OTHER,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
     # Market-family classification
     FAMILY_BTC_PRICE_TARGET,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
     FAMILY_BTC_UPDOWN,
-    FAMILY_BTC_OTHER,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
     FAMILY_NON_BTC,
-    classify_btc_market_family,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    FORBIDDEN_VERDICTS,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    # Verdicts
+    GREEN_DIAG,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    NEEDS_MORE_DATA_V,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    NO_STRIKE_FOUND,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    RED_DIAG,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
     # Strike extraction
     STRIKE_EXTRACTED,
-    NO_STRIKE_FOUND,
-    AMBIGUOUS_STRIKE,
-    UNSUPPORTED_MARKET_TEXT,
-    extract_strike,
-    # Token parsing
-    parse_tokens_from_market,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    TTE_0_30S,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    TTE_1M_2M,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    TTE_2M_5M,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    TTE_5M_15M,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    TTE_30S_1M,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    TTE_EXPIRED,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
     # TTE
-    TTE_GT_15M, TTE_5M_15M, TTE_2M_5M, TTE_1M_2M,
-    TTE_30S_1M, TTE_0_30S, TTE_EXPIRED, TTE_UNKNOWN,
-    compute_tte_seconds,
-    classify_tte_bucket,
-    # Distance
-    DIST_DEEP_BELOW, DIST_BELOW_100_500, DIST_BELOW_25_100,
-    DIST_NEAR_25,
-    DIST_ABOVE_25_100, DIST_ABOVE_100_500, DIST_DEEP_ABOVE,
-    DIST_UNKNOWN,
-    compute_distance_bps,
-    classify_distance_bucket,
-    is_convex_danger_zone,
-    # Orderbook
-    BOOK_TWO_SIDED, BOOK_ONE_SIDED_BID, BOOK_ONE_SIDED_ASK,
-    BOOK_EMPTY, BOOK_CROSSED,
-    parse_orderbook_snapshot,
-    empty_snapshot,
-    # Verdicts
-    GREEN_DIAG, YELLOW_DIAG, RED_DIAG,
-    NEEDS_MORE_DATA_V, CAPTURE_UNUSABLE_V,
-    FORBIDDEN_VERDICTS, ALLOWED_VERDICTS,
-    compute_liquidity_verdict,
-    compute_v1_recommendation,
-    V1_JUSTIFIED, V1_HUMAN_REVIEW,
-    V1_BLOCKED_LIQUIDITY, V1_BLOCKED_DATA,
-    # Models
-    LiquiditySample,
-    OrderbookSnapshot,
-    MarketMetadata,
+    TTE_GT_15M,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    TTE_UNKNOWN,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    V1_BLOCKED_DATA,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    V1_BLOCKED_LIQUIDITY,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    V1_HUMAN_REVIEW,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    V1_JUSTIFIED,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    YELLOW_DIAG,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
     AdapterInspectionResult,
-    # Adapter inspection
-    inspect_nautilus_polymarket_adapter,
-    DATA_PATH_NAUTILUS,
-    DATA_PATH_MIXED,
-    DATA_PATH_PUBLIC_REST,
-    # BTC proxy
-    poll_btc_binance_proxy,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
     BtcProxyTick,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    _parse_levels,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    _primary_subset,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
     # Misc
     _safe_float,
-    _parse_levels,
-    _primary_subset,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    classify_btc_market_family,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    classify_distance_bucket,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    classify_tte_bucket,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    compute_distance_bps,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    compute_liquidity_verdict,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    compute_tte_seconds,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    compute_v1_recommendation,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    empty_snapshot,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    extract_strike,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    # Adapter inspection
+    inspect_nautilus_polymarket_adapter,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    is_convex_danger_zone,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    parse_orderbook_snapshot,
+)
+from examples.strategies.venue_agnostic_signal_observer.polymarket_btc_price_target_liquidity_probe import (
+    # Token parsing
+    parse_tokens_from_market,
 )
 
 
@@ -109,8 +238,9 @@ class TestAdapterInspection:
 
     def test_probe_source_no_execution_imports(self) -> None:
         """Probe source must not import execution/auth paths."""
-        import inspect as _inspect
         import ast
+        import inspect as _inspect
+
         from examples.strategies.venue_agnostic_signal_observer import (
             polymarket_btc_price_target_liquidity_probe as probe_mod,
         )
@@ -291,7 +421,8 @@ class TestStrikeExtraction:
         assert "multiple" in reason.lower()
 
     def test_non_btc_unsupported(self) -> None:
-        """Non-BTC text => returns STRIKE_EXTRACTED for the dollar amount.
+        """
+        Non-BTC text => returns STRIKE_EXTRACTED for the dollar amount.
         The extract_strike function is a pure string parser that extracts
         numerical values. BTC-context filtering is handled by the
         market-family classifier, not the strike extraction function.
@@ -394,8 +525,9 @@ class TestTTEBuckets:
     def test_tte_seconds_computation(self) -> None:
         """compute_tte_seconds returns float for valid ISO date."""
         # Use a future date far enough away
-        from datetime import datetime, timezone, timedelta
-        future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        from datetime import datetime
+        from datetime import timedelta
+        future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
         tte = compute_tte_seconds(future)
         assert tte is not None
         assert tte > 3000  # close to 3600
@@ -501,7 +633,7 @@ class TestOrderbookParser:
     """Orderbook parsing with corrected top-of-book semantics."""
 
     def test_best_bid_is_max_bid(self) -> None:
-        """best bid = max bid price."""
+        """Best bid = max bid price."""
         raw = {
             "bids": [["0.5", "100"], ["0.55", "200"]],
             "asks": [["0.6", "150"]],
@@ -512,7 +644,7 @@ class TestOrderbookParser:
         assert snap.best_bid_size == pytest.approx(200)
 
     def test_best_ask_is_min_ask(self) -> None:
-        """best ask = min ask price."""
+        """Best ask = min ask price."""
         raw = {
             "bids": [["0.5", "100"]],
             "asks": [["0.7", "50"], ["0.65", "80"]],
@@ -652,17 +784,23 @@ class TestCliSmoke:
 
     def test_runner_imports(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.run_polymarket_btc_price_target_liquidity_probe import (
-            main, _parse_args,
+            _parse_args,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_polymarket_btc_price_target_liquidity_probe import (
+            main,
         )
         assert callable(main)
         assert callable(_parse_args)
 
     def test_argparse_defaults(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.run_polymarket_btc_price_target_liquidity_probe import (
-            _parse_args,
             DEFAULT_DURATION_SECONDS,
-            DEFAULT_POLL_INTERVAL,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_polymarket_btc_price_target_liquidity_probe import (
             DEFAULT_MAX_MARKETS,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_polymarket_btc_price_target_liquidity_probe import (
+            DEFAULT_POLL_INTERVAL,
         )
         assert DEFAULT_DURATION_SECONDS == 1800
         assert DEFAULT_POLL_INTERVAL == 5

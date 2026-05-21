@@ -6,35 +6,31 @@ Tests verify evaluation gates, null test, FDR, holdout, and safety constraints.
 import json
 import os
 import sys
-import tempfile
 
 import pytest
 
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from run_funding_oi_evaluation import (
-    PRECOMMITMENT_SHA256,
-    PRECOMMITMENT_GIT_SHA,
-    SEED,
-    HORIZONS,
-    FUNDING_DIRECTIONS,
-    OI_REGIMES,
-    PRIMARY_COST_BPS,
-    DIAGNOSTIC_COST_BPS,
-    MIN_EVENTS,
-    HOLDOUT_MIN_EVENTS,
-    N_SHUFFLES,
-    FDR_ALPHA,
-    NULL_ALPHA,
-    evaluate_cell,
-    benjamini_yekutieli,
-)
+from run_funding_oi_evaluation import DIAGNOSTIC_COST_BPS
+from run_funding_oi_evaluation import FDR_ALPHA
+from run_funding_oi_evaluation import FUNDING_DIRECTIONS
+from run_funding_oi_evaluation import HOLDOUT_MIN_EVENTS
+from run_funding_oi_evaluation import HORIZONS
+from run_funding_oi_evaluation import MIN_EVENTS
+from run_funding_oi_evaluation import N_SHUFFLES
+from run_funding_oi_evaluation import NULL_ALPHA
+from run_funding_oi_evaluation import PRECOMMITMENT_SHA256
+from run_funding_oi_evaluation import PRIMARY_COST_BPS
+from run_funding_oi_evaluation import SEED
+from run_funding_oi_evaluation import benjamini_yekutieli
+from run_funding_oi_evaluation import evaluate_cell
 
 
 def test_precommitment_sha_matches():
     """Precommitment SHA-256 must match the frozen value."""
     expected = "5f911c3f910f60abd3572474a0581c70042ef998150da0bbd5f0a0f688ae4673"
-    assert PRECOMMITMENT_SHA256 == expected
+    assert expected == PRECOMMITMENT_SHA256
 
 
 def test_seed_fixed():
@@ -45,8 +41,8 @@ def test_seed_fixed():
 def test_primary_cells_exactly_6():
     """2 directions × 1 OI regime × 3 horizons = 6 primary cells."""
     count = 0
-    for d in FUNDING_DIRECTIONS:
-        for h in HORIZONS:
+    for _d in FUNDING_DIRECTIONS:
+        for _h in HORIZONS:
             count += 1
     assert count == 6
 
@@ -113,14 +109,14 @@ def test_by_fdr_empty():
 def test_underpowered_cell_verdict():
     """Cell with < 50 events must be NEEDS_MORE_DATA."""
     events = []
-    for i in range(30):
+    for _i in range(30):
         events.append({
             "is_positive": True,
             "is_negative": False,
             "oi_regime": "rising_oi",
-            f"fwd_available_8h": True,
-            f"net_return_8h": 0.0,
-            f"diagnostic_return_8h": 0.0,
+            "fwd_available_8h": True,
+            "net_return_8h": 0.0,
+            "diagnostic_return_8h": 0.0,
         })
     result = evaluate_cell(events, "positive", "rising_oi", 8, PRIMARY_COST_BPS)
     assert result["verdict"] == "NEEDS_MORE_DATA"

@@ -7,12 +7,14 @@ Structured output is required for Phase 2 evidence ledger compatibility.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 from typing import Any
 
-from .metadata import EstimatorMetadata, make_metadata
-from .dsr import DSRResult, DiagnosticStatus as DSRStatus
 from .cpcv import CPCVResult
+from .dsr import DiagnosticStatus as DSRStatus
+from .dsr import DSRResult
+from .metadata import EstimatorMetadata
+from .metadata import make_metadata
 from .pbo import PBOResult
 
 
@@ -136,7 +138,8 @@ def run_validator(
     parent_grid_hash: str | None = None,
     input_dataset_hash: str | None = None,
 ) -> ValidatorSummary:
-    """Combine estimator outputs into a structured Validator summary.
+    """
+    Combine estimator outputs into a structured Validator summary.
 
     The final_diagnostic_status is never TRADE_READY. A DIAGNOSTIC_PASS
     indicates the candidate may proceed to Phase 2 governance review.
@@ -158,7 +161,7 @@ def run_validator(
     versions: dict[str, str] = {}
     config_hashes: dict[str, str] = {}
 
-    for name, result in [
+    for _name, result in [
         ("dsr", dsr_result),
         ("cpcv", cpcv_result),
         ("pbo", pbo_result),

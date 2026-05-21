@@ -1,4 +1,5 @@
-"""Tests for permutation_null_gpu module.
+"""
+Tests for permutation_null_gpu module.
 
 Determinism tests:
 1. SameSeedSameChunkSize -- identical null distributions
@@ -15,7 +16,6 @@ Safety tests:
 """
 from __future__ import annotations
 
-import importlib
 import inspect
 import math
 import sys
@@ -23,13 +23,11 @@ from unittest import mock
 
 import pytest
 
-from venue_agnostic_signal_observer.permutation_null_gpu import (
-    SAFETY_MODE,
-    check_cuda_available,
-    compute_null_distribution_gpu,
-    gpu_unavailable_diagnostic,
-)
 from venue_agnostic_signal_observer.permutation_null import compute_null_distribution
+from venue_agnostic_signal_observer.permutation_null_gpu import SAFETY_MODE
+from venue_agnostic_signal_observer.permutation_null_gpu import check_cuda_available
+from venue_agnostic_signal_observer.permutation_null_gpu import compute_null_distribution_gpu
+from venue_agnostic_signal_observer.permutation_null_gpu import gpu_unavailable_diagnostic
 
 
 # ---------------------------------------------------------------------------
@@ -57,18 +55,18 @@ class TestSameSeedSameChunkSize:
     def test_same_results(self):
         """Same seed + same chunk_size → identical null distribution."""
         src_ts, tgt_ts, tgt_pr = _synthetic_data()
-        kwargs = dict(
-            source_event_timestamps=src_ts,
-            target_timestamps=tgt_ts,
-            target_prices=tgt_pr,
-            direction="long",
-            horizons_ms=[500],
-            fee_bps=5.0,
-            slippage_bps=2.0,
-            iterations=50,
-            seed=42,
-            chunk_size=16,
-        )
+        kwargs = {
+            "source_event_timestamps": src_ts,
+            "target_timestamps": tgt_ts,
+            "target_prices": tgt_pr,
+            "direction": "long",
+            "horizons_ms": [500],
+            "fee_bps": 5.0,
+            "slippage_bps": 2.0,
+            "iterations": 50,
+            "seed": 42,
+            "chunk_size": 16,
+        }
 
         if not _is_cuda_available():
             pytest.skip("CUDA unavailable")
@@ -79,7 +77,7 @@ class TestSameSeedSameChunkSize:
         means1 = result1["null_mean_net_bps"]
         means2 = result2["null_mean_net_bps"]
         assert len(means1) == len(means2)
-        for a, b in zip(means1, means2):
+        for a, b in zip(means1, means2, strict=False):
             if math.isnan(a) and math.isnan(b):
                 continue
             assert math.isclose(a, b, rel_tol=1e-9), f"Mismatch: {a} vs {b}"
@@ -91,7 +89,8 @@ class TestSameSeedSameChunkSize:
 
 class TestSameSeedDifferentChunkSize:
     def test_identical_null_universe(self):
-        """Same seed + different chunk_size → byte-identical per-iteration results.
+        """
+        Same seed + different chunk_size → byte-identical per-iteration results.
 
         Offsets are precomputed from a single CPU generator seeded once, so
         --batch-size is a pure speed knob and does not change the null universe.
@@ -100,17 +99,17 @@ class TestSameSeedDifferentChunkSize:
             pytest.skip("CUDA unavailable")
 
         src_ts, tgt_ts, tgt_pr = _synthetic_data()
-        base_kwargs = dict(
-            source_event_timestamps=src_ts,
-            target_timestamps=tgt_ts,
-            target_prices=tgt_pr,
-            direction="long",
-            horizons_ms=[500],
-            fee_bps=5.0,
-            slippage_bps=2.0,
-            iterations=256,
-            seed=77,
-        )
+        base_kwargs = {
+            "source_event_timestamps": src_ts,
+            "target_timestamps": tgt_ts,
+            "target_prices": tgt_pr,
+            "direction": "long",
+            "horizons_ms": [500],
+            "fee_bps": 5.0,
+            "slippage_bps": 2.0,
+            "iterations": 256,
+            "seed": 77,
+        }
 
         r16 = compute_null_distribution_gpu(**base_kwargs, chunk_size=16)
         r64 = compute_null_distribution_gpu(**base_kwargs, chunk_size=64)
@@ -124,7 +123,7 @@ class TestSameSeedDifferentChunkSize:
         assert len(means64) == 256
         assert len(means256) == 256
 
-        for i, (a, b, c) in enumerate(zip(means16, means64, means256)):
+        for i, (a, b, c) in enumerate(zip(means16, means64, means256, strict=False)):
             both_nan = all(math.isnan(x) for x in (a, b, c))
             if both_nan:
                 continue
@@ -147,17 +146,17 @@ class TestDifferentSeedDifferentDistribution:
             pytest.skip("CUDA unavailable")
 
         src_ts, tgt_ts, tgt_pr = _synthetic_data(n_events=30, n_ticks=60)
-        base_kwargs = dict(
-            source_event_timestamps=src_ts,
-            target_timestamps=tgt_ts,
-            target_prices=tgt_pr,
-            direction="long",
-            horizons_ms=[500],
-            fee_bps=5.0,
-            slippage_bps=2.0,
-            iterations=100,
-            chunk_size=32,
-        )
+        base_kwargs = {
+            "source_event_timestamps": src_ts,
+            "target_timestamps": tgt_ts,
+            "target_prices": tgt_pr,
+            "direction": "long",
+            "horizons_ms": [500],
+            "fee_bps": 5.0,
+            "slippage_bps": 2.0,
+            "iterations": 100,
+            "chunk_size": 32,
+        }
 
         r_s1 = compute_null_distribution_gpu(**base_kwargs, seed=1)
         r_s2 = compute_null_distribution_gpu(**base_kwargs, seed=99999)
@@ -170,7 +169,7 @@ class TestDifferentSeedDifferentDistribution:
 
         # At least some values should differ
         n_same = sum(
-            1 for a, b in zip(means1, means2) if math.isclose(a, b, rel_tol=1e-9)
+            1 for a, b in zip(means1, means2, strict=False) if math.isclose(a, b, rel_tol=1e-9)
         )
         assert n_same < len(means1), "Different seeds should produce different distributions"
 
@@ -181,7 +180,8 @@ class TestDifferentSeedDifferentDistribution:
 
 class TestGPUMatchesCPU:
     def test_gpu_matches_cpu_within_tolerance(self):
-        """GPU output matches CPU output within tolerance on a tiny synthetic case.
+        """
+        GPU output matches CPU output within tolerance on a tiny synthetic case.
 
         The CPU uses random.Random which generates floating-point offsets;
         the GPU uses torch integer randint. The shift logic is the same
@@ -192,17 +192,17 @@ class TestGPUMatchesCPU:
             pytest.skip("CUDA unavailable")
 
         src_ts, tgt_ts, tgt_pr = _synthetic_data(n_events=25, n_ticks=50)
-        common_kwargs = dict(
-            source_event_timestamps=src_ts,
-            target_timestamps=tgt_ts,
-            target_prices=tgt_pr,
-            direction="long",
-            horizons_ms=[500],
-            fee_bps=5.0,
-            slippage_bps=2.0,
-            iterations=200,
-            seed=42,
-        )
+        common_kwargs = {
+            "source_event_timestamps": src_ts,
+            "target_timestamps": tgt_ts,
+            "target_prices": tgt_pr,
+            "direction": "long",
+            "horizons_ms": [500],
+            "fee_bps": 5.0,
+            "slippage_bps": 2.0,
+            "iterations": 200,
+            "seed": 42,
+        }
 
         cpu_r = compute_null_distribution(**common_kwargs)
         gpu_r = compute_null_distribution_gpu(**common_kwargs, chunk_size=64)
@@ -233,6 +233,7 @@ class TestGPUUnavailableDoesNotCrash:
         with mock.patch.dict(sys.modules, {"torch": None}):
             # Reimport to pick up the patched sys.modules
             import importlib as _il
+
             import venue_agnostic_signal_observer.permutation_null_gpu as _gpu_mod
             _il.reload(_gpu_mod)
             ok, reason = _gpu_mod.check_cuda_available("cuda:0")
@@ -295,7 +296,7 @@ class TestNoOrderImports:
         ]
         for fragment in forbidden_fragments:
             assert fragment not in source, (
-                f"Found forbidden import pattern in permutation_null_gpu.py"
+                "Found forbidden import pattern in permutation_null_gpu.py"
             )
 
 

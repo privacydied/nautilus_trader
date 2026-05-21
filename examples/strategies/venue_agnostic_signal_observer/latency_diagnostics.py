@@ -1,4 +1,5 @@
-"""Latency diagnostics for cross-venue tick streams.
+"""
+Latency diagnostics for cross-venue tick streams.
 
 Pure functions module. No network, no live imports.
 
@@ -20,12 +21,14 @@ from __future__ import annotations
 import json
 import math
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 from typing import Any
 
-from .tick_store import load_trades_jsonl
 from .artifact_metadata import build_metadata
+from .tick_store import load_trades_jsonl
+
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -106,7 +109,8 @@ _MIN_BUCKETS_FOR_CORRELATION = 20
 
 
 def load_stream_stats(capture_dir: Path) -> dict[str, StreamStats]:
-    """Load all trades JSONL files and compute per-(venue, symbol) statistics.
+    """
+    Load all trades JSONL files and compute per-(venue, symbol) statistics.
 
     Returns a dict keyed by ``"venue__symbol"`` strings.
     """
@@ -184,7 +188,7 @@ def _percentile(sorted_values: list[float], p: float) -> float:
     if n == 1:
         return sorted_values[0]
     rank = p / 100.0 * (n - 1)
-    lower = int(math.floor(rank))
+    lower = math.floor(rank)
     upper = lower + 1
     if upper >= n:
         return sorted_values[-1]
@@ -204,7 +208,7 @@ def _pearson_r(xs: list[float], ys: list[float]) -> float:
         return float("nan")
     mean_x = sum(xs) / n
     mean_y = sum(ys) / n
-    cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(xs, ys))
+    cov = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(xs, ys, strict=False))
     var_x = sum((xi - mean_x) ** 2 for xi in xs)
     var_y = sum((yi - mean_y) ** 2 for yi in ys)
     denom = math.sqrt(var_x * var_y)
@@ -220,7 +224,8 @@ def compute_cross_correlation(
     prices_b: list[float],
     bucket_ms: int,
 ) -> float | None:
-    """Align two price series into time buckets and compute cross-correlation.
+    """
+    Align two price series into time buckets and compute cross-correlation.
 
     Buckets both series at ``bucket_ms`` resolution, then computes Pearson
     correlation at lags from -5 to +5 buckets. Returns the lag **in seconds**
@@ -260,7 +265,7 @@ def compute_cross_correlation(
     def _bucket_series(ts: list[int], prices: list[float]) -> dict[int, float]:
         """Create bucket index -> last-seen-price mapping."""
         buckets: dict[int, float] = {}
-        for t, p in zip(ts, prices):
+        for t, p in zip(ts, prices, strict=False):
             if t < start_ns or t > end_ns:
                 continue
             idx = (t - start_ns) // bucket_ns
@@ -297,7 +302,7 @@ def compute_cross_correlation(
     # Find contiguous range where both are non-None
     start_idx = None
     end_idx = None
-    for i, (a, b) in enumerate(zip(series_a_maybe, series_b_maybe)):
+    for i, (a, b) in enumerate(zip(series_a_maybe, series_b_maybe, strict=False)):
         if a is not None and b is not None:
             if start_idx is None:
                 start_idx = i
@@ -394,8 +399,6 @@ def compute_overlap_stats(
     else:
         sub_second_confidence = "low"
 
-    key_a = f"{stats_a.venue}__{stats_a.symbol}"
-    key_b = f"{stats_b.venue}__{stats_b.symbol}"
 
     return OverlapResult(
         venue_a=stats_a.venue,
@@ -688,7 +691,8 @@ def write_latency_diagnostics(
     capture_dir: Path,
     out_dir: Path,
 ) -> Path:
-    """Run latency diagnostics and write JSON + markdown report.
+    """
+    Run latency diagnostics and write JSON + markdown report.
 
     Parameters
     ----------

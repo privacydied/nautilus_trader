@@ -1,4 +1,5 @@
-"""Phase 2B-2C2: Shared edge FDR over comparison survivors.
+"""
+Phase 2B-2C2: Shared edge FDR over comparison survivors.
 
 Consumes the Phase 2B-2C1 train-holdout comparison artifact and applies a
 deterministic false-discovery-rate correction across eligible edge-family
@@ -17,14 +18,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import subprocess
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .run_artifacts import atomic_write_json, safe_output_dir
+from .run_artifacts import atomic_write_json
+from .run_artifacts import safe_output_dir
+
 
 FDR_SCHEMA_VERSION = "offline_fdr_correction_v1"
 PVALUE_INPUT_SCHEMA_VERSION = "offline_fdr_pvalues_v1"
@@ -81,7 +85,8 @@ _ALLOWED_CONFIG_KEYS = frozenset({
 
 @dataclass(frozen=True)
 class OfflineFdrConfig:
-    """Strict FDR config with defaults.
+    """
+    Strict FDR config with defaults.
 
     Default method is BY (Benjamini-Yekutieli) because tests/cells are likely
     correlated.
@@ -129,7 +134,8 @@ class OfflineFdrPValue:
 
 
 def parse_pvalue_input(raw: dict[str, Any]) -> dict[str, OfflineFdrPValue]:
-    """Parse and validate a p-value input dict.
+    """
+    Parse and validate a p-value input dict.
 
     Returns a dict mapping cell_id -> OfflineFdrPValue.
 
@@ -336,27 +342,18 @@ def _parse_config(raw: dict[str, Any] | None) -> OfflineFdrConfig:
 
 def _is_edge_family(family_id: str) -> bool:
     """Check if family_id starts with a known edge-family prefix."""
-    for prefix in _EDGE_FAMILY_PREFIXES:
-        if family_id.startswith(prefix):
-            return True
-    return False
+    return any(family_id.startswith(prefix) for prefix in _EDGE_FAMILY_PREFIXES)
 
 
 def _is_conditioning_family(family_id: str) -> bool:
     """Check if family_id indicates a conditioning or Family 4 cell."""
     lower = family_id.lower()
-    for indicator in _CONDITIONING_INDICATORS:
-        if indicator in lower:
-            return True
-    return False
+    return any(indicator in lower for indicator in _CONDITIONING_INDICATORS)
 
 
 def _is_family_eligible(family_id: str, eligible_families: tuple[str, ...]) -> bool:
     """Check if family_id matches any eligible family prefix."""
-    for eligible in eligible_families:
-        if family_id.startswith(eligible):
-            return True
-    return False
+    return any(family_id.startswith(eligible) for eligible in eligible_families)
 
 
 # --- BH and BY correction ---
@@ -374,7 +371,8 @@ def _bh_correction(
     pvalues: list[tuple[str, float]],
     alpha: float,
 ) -> dict[str, dict[str, Any]]:
-    """Apply Benjamini-Hochberg correction.
+    """
+    Apply Benjamini-Hochberg correction.
 
     Returns dict cell_id -> {rank, p_value, q_value, threshold, fdr_passed}.
     """
@@ -438,7 +436,8 @@ def _by_correction(
     pvalues: list[tuple[str, float]],
     alpha: float,
 ) -> dict[str, dict[str, Any]]:
-    """Apply Benjamini-Yekutieli correction.
+    """
+    Apply Benjamini-Yekutieli correction.
 
     More conservative than BH when tests are correlated.
     """
@@ -499,7 +498,8 @@ def apply_fdr_correction(
     method: str,
     alpha: float,
 ) -> dict[str, dict[str, Any]]:
-    """Apply FDR correction using specified method.
+    """
+    Apply FDR correction using specified method.
 
     Returns dict cell_id -> {rank, p_value, q_value, threshold, fdr_passed}.
     """
@@ -518,7 +518,8 @@ def _check_lineage_hashes(
     manifest: dict[str, Any],
     comparison_json: dict[str, Any],
 ) -> str | None:
-    """Verify lineage hashes between manifest and comparison JSON.
+    """
+    Verify lineage hashes between manifest and comparison JSON.
 
     Returns None on success, or a status string on failure.
     """
@@ -567,7 +568,8 @@ def _build_cell_exclusion_reasons(
     cell: dict[str, Any],
     config: OfflineFdrConfig,
 ) -> list[str]:
-    """Determine exclusion reasons for a comparison cell.
+    """
+    Determine exclusion reasons for a comparison cell.
 
     Returns empty list if the cell is eligible for FDR.
     """
@@ -605,7 +607,8 @@ def build_offline_fdr_correction_report(
     pvalue_input: dict[str, OfflineFdrPValue] | None = None,
     comparison_manifest_path: str = "",
 ) -> OfflineFdrCorrectionReport:
-    """Build the FDR correction report.
+    """
+    Build the FDR correction report.
 
     Consumes the Phase 2B-2C1 comparison artifact and applies deterministic
     FDR correction across eligible edge-family comparison survivors.
@@ -718,14 +721,13 @@ def build_offline_fdr_correction_report(
         )
 
     # ---- Build cell results with exclusions ----
-    cell_results: list[OfflineFdrCellResult] = []
     exclusion_reasons_by_cell: dict[str, list[str]] = {}
     eligible_cell_ids: list[str] = []
 
     for cell in comparison_cells:
         cell_id = str(cell.get("cell_id", ""))
-        family_id = str(cell.get("family_id", ""))
-        comparison_passed = bool(cell.get("comparison_passed", False))
+        str(cell.get("family_id", ""))
+        bool(cell.get("comparison_passed", False))
 
         # Determine exclusion reasons
         reasons = _build_cell_exclusion_reasons(cell, config)

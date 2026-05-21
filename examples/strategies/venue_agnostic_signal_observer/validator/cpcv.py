@@ -14,19 +14,20 @@ statistical semantics and test clarity.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
 from itertools import combinations
-from typing import Any, Sequence
+from typing import Any
+from typing import Sequence
 
-from .embargo import (
-    TimeInterval,
-    TimestampedObservation,
-    purge_train_obs,
-    embargo_train_obs,
-    compute_embargo_seconds,
-)
-from .metadata import EstimatorMetadata, make_metadata
+from .embargo import TimeInterval
+from .embargo import TimestampedObservation
+from .embargo import compute_embargo_seconds
+from .embargo import embargo_train_obs
+from .embargo import purge_train_obs
+from .metadata import EstimatorMetadata
+from .metadata import make_metadata
 
 
 ESTIMATOR_NAME = "cpcv"
@@ -136,7 +137,8 @@ def compute_cpcv(
     estimator_metadata: EstimatorMetadata | None = None,
     input_metadata: dict[str, Any] | None = None,
 ) -> CPCVResult:
-    """Compute CPCV for a candidate return series.
+    """
+    Compute CPCV for a candidate return series.
 
     Parameters
     ----------

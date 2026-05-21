@@ -1,4 +1,5 @@
-"""DEX data adapters for public REST APIs.
+"""
+DEX data adapters for public REST APIs.
 
 Sources:
 - DEX Screener (api.dexscreener.com) — pair/profile data, no API key
@@ -17,6 +18,7 @@ import httpx
 
 from .dex_models import DexPoolSnapshot
 
+
 _TIMEOUT = 15  # seconds
 _RATE_LIMIT_DELAY = 1.0  # seconds between calls to avoid 429s
 
@@ -29,7 +31,8 @@ DEXSCREENER_BASE = "https://api.dexscreener.com/latest"
 
 
 def parse_dexscreener_pair(raw_pair: dict, ts_recv_ns: int) -> DexPoolSnapshot | None:
-    """Parse one pair object from DEX Screener /latest/dex/pairs/{chain}/{address}.
+    """
+    Parse one pair object from DEX Screener /latest/dex/pairs/{chain}/{address}.
 
     Returns None if the payload cannot be parsed into a valid snapshot.
     """
@@ -104,7 +107,7 @@ def parse_dexscreener_pair(raw_pair: dict, ts_recv_ns: int) -> DexPoolSnapshot |
             raw=raw_pair,
         )
     except Exception as exc:
-        warnings.warn(f"DEX Screener pair parse failed: {exc}")
+        warnings.warn(f"DEX Screener pair parse failed: {exc}", stacklevel=2)
         return None
 
 
@@ -113,7 +116,8 @@ def fetch_dexscreener_pair(
     pair_address: str,
     client: httpx.Client | None = None,
 ) -> tuple[DexPoolSnapshot | None, str | None]:
-    """Fetch a single pair from DEX Screener public API.
+    """
+    Fetch a single pair from DEX Screener public API.
 
     Returns (snapshot, error_string).  snapshot is None on failure.
     """
@@ -180,7 +184,8 @@ def search_dexscreener_by_symbols(
     symbols: list[str],
     client: httpx.Client | None = None,
 ) -> tuple[list[DexPoolSnapshot], list[str]]:
-    """Search for pairs matching asset symbols on DEX Screener.
+    """
+    Search for pairs matching asset symbols on DEX Screener.
 
     Uses /latest/dex/search endpoint with multiple queries.
     Each query is the asset symbol (e.g. 'sol', 'link').
@@ -232,7 +237,8 @@ def fetch_geckoterminal_pool_ohlcv(
     limit: int = 60,
     client: httpx.Client | None = None,
 ) -> tuple[list[dict], str | None]:
-    """Fetch OHLCV for a GeckoTerminal pool.
+    """
+    Fetch OHLCV for a GeckoTerminal pool.
 
     Timeframe: minute, hour, day.
     Returns list of OHLCV dicts with keys: timestamp, open, high, low, close, volume.

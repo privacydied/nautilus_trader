@@ -1,5 +1,6 @@
 # Copyright (C) 2026. All rights reserved.
-"""CLI entrypoint to create a discovery candidate lock.
+r"""
+CLI entrypoint to create a discovery candidate lock.
 
 Usage
 -----
@@ -19,15 +20,13 @@ import json
 import sys
 from pathlib import Path
 
-from .candidate_lock import (
-    CANDIDATE_SCHEMA_VERSION,
-    create_candidate_lock,
-    load_candidate_lock,
-    save_candidate_lock,
-    candidate_lock_file_is_semantically_identical,
-)
-from .grid_lock import DiscoveryGridLock, load_grid_lock, validate_grid_lock
-from .search_space import load_grid_spec, validate_grid_spec
+from .candidate_lock import candidate_lock_file_is_semantically_identical
+from .candidate_lock import create_candidate_lock
+from .candidate_lock import save_candidate_lock
+from .grid_lock import DiscoveryGridLock
+from .grid_lock import validate_grid_lock
+from .search_space import load_grid_spec
+from .search_space import validate_grid_spec
 
 
 def main() -> int:

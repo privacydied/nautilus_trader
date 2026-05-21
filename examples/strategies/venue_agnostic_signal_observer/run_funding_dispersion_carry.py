@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 Cross-exchange funding dispersion carry — CLI entry point.
 
 RESEARCH MEASUREMENT TOOL ONLY. No orders, no execution, no private keys.
@@ -36,32 +36,31 @@ Public data observer only. No auth. No orders. No execution.
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import math
 import sys
-from datetime import UTC, datetime
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any
 
-from .funding_dispersion_carry import (
-    ASSETS,
-    FROZEN_CELL_COUNT,
-    HOLD_LENGTHS,
-    NULL_ITERATIONS,
-    NULL_SEED,
-    PRIMARY_CAMPAIGN_COST_BPS,
-    SAFETY_MODE,
-    STUDY_ID,
-    THRESHOLDS_BPS,
-    VENUES,
-    ALLOWED_VERDICTS,
-    FORBIDDEN_VERDICTS,
-    RunMetadata,
-    validate_verdict,
-)
-from .funding_dispersion_stages import run_pipeline, stage0_load_and_normalize
-from .run_artifacts import create_run_id, create_run_dir, atomic_write_json
+from .funding_dispersion_carry import ALLOWED_VERDICTS
+from .funding_dispersion_carry import ASSETS
+from .funding_dispersion_carry import FORBIDDEN_VERDICTS
+from .funding_dispersion_carry import FROZEN_CELL_COUNT
+from .funding_dispersion_carry import HOLD_LENGTHS
+from .funding_dispersion_carry import NULL_ITERATIONS
+from .funding_dispersion_carry import NULL_SEED
+from .funding_dispersion_carry import PRIMARY_CAMPAIGN_COST_BPS
+from .funding_dispersion_carry import SAFETY_MODE
+from .funding_dispersion_carry import STUDY_ID
+from .funding_dispersion_carry import THRESHOLDS_BPS
+from .funding_dispersion_carry import VENUES
+from .funding_dispersion_carry import validate_verdict
+from .funding_dispersion_stages import run_pipeline
+from .run_artifacts import atomic_write_json
+from .run_artifacts import create_run_dir
+from .run_artifacts import create_run_id
+
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +128,8 @@ BYBIT_COLUMNS = frozenset({"symbol", "fundingRate", "fundingRateTimestamp"})
 
 
 def _read_binance_funding_csv(path: str) -> list[tuple[int, float]]:
-    """Parse a Binance Vision funding-rate CSV.
+    """
+    Parse a Binance Vision funding-rate CSV.
 
     Expected columns: calc_time (ms epoch), funding_interval_hours, last_funding_rate.
 
@@ -194,7 +194,8 @@ def _read_binance_funding_csv(path: str) -> list[tuple[int, float]]:
 
 
 def _read_bybit_funding_csv(path: str) -> list[tuple[int, float]]:
-    """Parse a Bybit funding-rate archive CSV.
+    """
+    Parse a Bybit funding-rate archive CSV.
 
     Expected columns: symbol, fundingRate, fundingRateTimestamp.
     Timestamp is milliseconds since epoch. Rate is a decimal fraction string.
@@ -265,7 +266,8 @@ def load_archive_data(
     bybit_btc_path: str | None,
     bybit_eth_path: str | None,
 ) -> dict[str, list[tuple[int, float]]]:
-    """Load funding-rate archives and return per-series (timestamp_ns, rate) data.
+    """
+    Load funding-rate archives and return per-series (timestamp_ns, rate) data.
 
     Reads Binance Vision CSV files and Bybit funding archive CSV files.
     Each file's rates are returned in their original unit — Stage 0 will
@@ -340,10 +342,10 @@ def run_coverage(args: argparse.Namespace) -> int:
     print(f"  Primary cost:       {PRIMARY_CAMPAIGN_COST_BPS} bps")
     print(f"  Diagnostic cost:    {PRIMARY_CAMPAIGN_COST_BPS if False else 6.0} bps (6 bps diagnostic tier)")
     print(f"  Null iterations:    {NULL_ITERATIONS} (seed {NULL_SEED})")
-    print(f"  FDR method:         BY (Benjamini-Yekutieli)")
-    print(f"  FDR alpha:          0.05")
+    print("  FDR method:         BY (Benjamini-Yekutieli)")
+    print("  FDR alpha:          0.05")
     print(f"  FDR family size:    {FROZEN_CELL_COUNT} (frozen)")
-    print(f"  Train/holdout:      70/30 chronological split")
+    print("  Train/holdout:      70/30 chronological split")
     print()
     print("SAFETY")
     print(f"  SAFETY_MODE:        {SAFETY_MODE}")

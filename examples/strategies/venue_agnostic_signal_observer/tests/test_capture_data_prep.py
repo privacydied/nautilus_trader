@@ -1,4 +1,5 @@
-"""Tests for capture JSONL to CSV converter.
+"""
+Tests for capture JSONL to CSV converter.
 
 Tiny synthetic JSONL fixtures only. No network calls. No private keys.
 Tests that the converter produces parser-compatible CSV output.
@@ -7,22 +8,18 @@ Tests that the converter produces parser-compatible CSV output.
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from scripts.prep_capture_data import (
-    CONVERTER_VERSION,
-    convert_capture,
-    _to_venue,
-    _to_source_kind,
-    _resolve_symbol,
-    _write_binance_csv,
-    _write_kraken_csv,
-    _write_coinbase_csv,
-)
+from scripts.prep_capture_data import CONVERTER_VERSION
+from scripts.prep_capture_data import _resolve_symbol
+from scripts.prep_capture_data import _to_source_kind
+from scripts.prep_capture_data import _to_venue
+from scripts.prep_capture_data import _write_binance_csv
+from scripts.prep_capture_data import _write_coinbase_csv
+from scripts.prep_capture_data import _write_kraken_csv
+from scripts.prep_capture_data import convert_capture
 
 
 # =====================================================================
@@ -52,8 +49,7 @@ def _make_row(
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
     with open(path, "w") as f:
-        for row in rows:
-            f.write(json.dumps(row) + "\n")
+        f.writelines(json.dumps(row) + "\n" for row in rows)
 
 
 def _make_capture_dir(
@@ -139,7 +135,7 @@ class TestBinanceConverter:
         assert transact_time == "1779029669408"  # ns // 1_000_000 = ms
 
     def test_binance_is_buyer_maker(self, tmp_path: Path) -> None:
-        """sell -> is_buyer_maker=true, buy -> false."""
+        """Sell -> is_buyer_maker=true, buy -> false."""
         rows = [
             _make_row(trade_id="1", side="sell"),
             _make_row(trade_id="2", side="buy"),
@@ -387,7 +383,6 @@ class TestFullPipelineSmoke:
                     pytest.fail(f"Network import found: {node.module}")
 
     def test_no_private_key_or_auth_imports(self) -> None:
-        import ast
 
         script_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "scripts" / "prep_capture_data.py"
         text = script_path.read_text()
@@ -418,7 +413,7 @@ class TestFullPipelineSmoke:
         # Compare output CSVs
         csv_a = list(out_a.glob("*.csv"))
         csv_b = list(out_b.glob("*.csv"))
-        for csv_a_file, csv_b_file in zip(sorted(csv_a), sorted(csv_b)):
+        for csv_a_file, csv_b_file in zip(sorted(csv_a), sorted(csv_b), strict=False):
             assert csv_a_file.read_bytes() == csv_b_file.read_bytes()
 
 
@@ -426,8 +421,10 @@ class TestPhase1Smoke:
     """Smoke test: converted CSV loads with nonzero rows in Phase 1 parser."""
 
     def test_binance_csv_parsed_by_phase1(self, tmp_path: Path) -> None:
-        """Verify that a converted binance CSV is parsed with nonzero rows
-        by the existing Phase 1 binance_um_agg_trades parser."""
+        """
+        Verify that a converted binance CSV is parsed with nonzero rows
+        by the existing Phase 1 binance_um_agg_trades parser.
+        """
         from examples.strategies.venue_agnostic_signal_observer.offline_historical_sources import (
             parse_binance_agg_trades,
         )

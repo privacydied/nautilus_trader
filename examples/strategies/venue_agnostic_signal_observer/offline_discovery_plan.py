@@ -1,4 +1,5 @@
-"""Phase 2B-1 fixed-window offline discovery scaffold.
+"""
+Phase 2B-1 fixed-window offline discovery scaffold.
 
 Consumes a frozen Phase 1 prepare manifest plus a frozen Phase 2A stress-window
 index and produces a deterministic discovery-plan scaffold only. No forward
@@ -12,27 +13,24 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any
+from typing import Sequence
 
-from .offline_historical_models import (
-    ALLOWED_FAMILY2_SIGNAL_VARIANTS,
-    OFFLINE_DATA_SCHEMA_VERSION,
-    REJECTED_FAMILY2_SOFT_VALUES,
-    RESOLUTION_BAR,
-    VALID_RESOLUTIONS,
-    validate_family2_signal_variants,
-)
-from .offline_stress_windows import (
-    OFFLINE_STRESS_WINDOW_SCHEMA_VERSION,
-    STATUS_DATA_CORPUS_HASH_MISMATCH,
-    STATUS_OFFLINE_STRESS_INDEX_READY,
-    STATUS_RETROSPECTIVE_DIAGNOSTIC_ONLY,
-    STATUS_STRESS_INDEX_UNUSABLE,
-    OfflineStressWindow,
-)
+from .offline_historical_models import RESOLUTION_BAR
+from .offline_historical_models import VALID_RESOLUTIONS
+from .offline_historical_models import validate_family2_signal_variants
+from .offline_stress_windows import OFFLINE_STRESS_WINDOW_SCHEMA_VERSION
+from .offline_stress_windows import STATUS_DATA_CORPUS_HASH_MISMATCH
+from .offline_stress_windows import STATUS_OFFLINE_STRESS_INDEX_READY
+from .offline_stress_windows import STATUS_RETROSPECTIVE_DIAGNOSTIC_ONLY
+from .offline_stress_windows import STATUS_STRESS_INDEX_UNUSABLE
+from .offline_stress_windows import OfflineStressWindow
+
 
 DISCOVERY_SCHEMA_VERSION = "offline_discovery_plan_v1"
 
@@ -149,7 +147,7 @@ class OfflineDiscoveryPlanCell:
     source_symbols: tuple[str, ...]
     target_venues: tuple[str, ...]
     target_symbols: tuple[str, ...]
-    signal_variant: Optional[str]
+    signal_variant: str | None
     lookback_ms: int
     horizon_ms: int
     required_resolution: str
@@ -177,15 +175,15 @@ class OfflineDiscoveryPlan:
     plan_hash: str
     data_corpus_hash: str
     window_index_hash: str
-    split_timestamp_boundary_ns: Optional[int]
+    split_timestamp_boundary_ns: int | None
     train_survivor_cell_ids: list[str]
     holdout_evaluation_cell_ids: list[str]
     survivor_freeze_status: str
     run_id: str
     generated_at_utc: str
     git_sha: str
-    stress_rule_config_hash: Optional[str]
-    precommitment_hash: Optional[str]
+    stress_rule_config_hash: str | None
+    precommitment_hash: str | None
 
 
 def _canonical_json(obj: Any) -> str:
@@ -197,7 +195,7 @@ def _sha256_json(obj: Any) -> str:
 
 
 def _now_utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _get_git_sha() -> str:
@@ -407,7 +405,8 @@ def compute_discovery_config_hash(config: OfflineDiscoveryConfig) -> str:
 
 
 def compute_window_index_hash(stress_windows_payload: dict[str, Any]) -> str:
-    """Return the window_index_hash from the payload, or compute from windows.
+    """
+    Return the window_index_hash from the payload, or compute from windows.
 
     If the payload includes a window_index_hash field (from post-patch stress
     window output), use it directly. Otherwise compute deterministically from
@@ -441,7 +440,7 @@ def _plan_cell_to_payload(cell: OfflineDiscoveryPlanCell) -> dict[str, Any]:
 def _split_windows(
     windows: Sequence[OfflineStressWindow],
     train_fraction: float,
-) -> tuple[list[OfflineStressWindow], list[OfflineStressWindow], Optional[int]]:
+) -> tuple[list[OfflineStressWindow], list[OfflineStressWindow], int | None]:
     promotable = sorted(
         [window for window in windows if window.promotion_allowed],
         key=lambda item: (item.trigger_timestamp_ns, item.window_id),
@@ -509,7 +508,7 @@ def _make_cell(
     source_symbols: Sequence[str],
     target_venues: Sequence[str],
     target_symbols: Sequence[str],
-    signal_variant: Optional[str],
+    signal_variant: str | None,
     lookback_ms: int,
     horizon_ms: int,
     required_resolution: str,
@@ -576,9 +575,9 @@ def build_offline_discovery_plan(
 ) -> OfflineDiscoveryPlan:
     generated_at_utc = _now_utc_iso()
     git_sha = _get_git_sha()
-    run_id = f"offline_discovery_plan_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    run_id = f"offline_discovery_plan_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}"
 
-    def empty_plan(status: str, *, family_summary: Optional[dict[str, Any]] = None) -> OfflineDiscoveryPlan:
+    def empty_plan(status: str, *, family_summary: dict[str, Any] | None = None) -> OfflineDiscoveryPlan:
         plan_hash = _sha256_json(
             {
                 "schema_version": DISCOVERY_SCHEMA_VERSION,
@@ -824,11 +823,7 @@ def build_offline_discovery_plan(
         "family_4_cell_count": len([cell for cell in plan_cells if cell.family_id == "family_4_stablecoin_quote_regime_conditioning"]),
     }
 
-    if not promotable_edge_cells:
-        status = STATUS_NO_PROMOTABLE_WINDOWS
-    elif len(train_window_ids) < discovery_config.train_holdout.min_train_windows:
-        status = STATUS_NO_PROMOTABLE_WINDOWS
-    elif len(holdout_window_ids) < discovery_config.train_holdout.min_holdout_windows:
+    if not promotable_edge_cells or len(train_window_ids) < discovery_config.train_holdout.min_train_windows or len(holdout_window_ids) < discovery_config.train_holdout.min_holdout_windows:
         status = STATUS_NO_PROMOTABLE_WINDOWS
     else:
         status = STATUS_OFFLINE_DISCOVERY_PLAN_READY

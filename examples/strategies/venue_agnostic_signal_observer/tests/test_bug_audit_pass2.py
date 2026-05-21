@@ -7,7 +7,7 @@ import pytest
 
 
 def _signal():
-    from ..models import SignalEvent
+    from venue_agnostic_signal_observer.models import SignalEvent
 
     return SignalEvent(
         signal_id="s",
@@ -23,8 +23,9 @@ def _signal():
 
 
 def test_forward_returns_reject_zero_entry_price():
-    from ..config import FeeModel, Horizon
-    from ..forward_returns import evaluate_signal
+    from venue_agnostic_signal_observer.config import FeeModel
+    from venue_agnostic_signal_observer.config import Horizon
+    from venue_agnostic_signal_observer.forward_returns import evaluate_signal
 
     results = evaluate_signal(_signal(), [0.0, 10.0], [0.0, 100.0], [Horizon("10s", 10.0)], FeeModel())
 
@@ -34,8 +35,9 @@ def test_forward_returns_reject_zero_entry_price():
 
 
 def test_forward_returns_reject_non_finite_prices():
-    from ..config import FeeModel, Horizon
-    from ..forward_returns import evaluate_signal
+    from venue_agnostic_signal_observer.config import FeeModel
+    from venue_agnostic_signal_observer.config import Horizon
+    from venue_agnostic_signal_observer.forward_returns import evaluate_signal
 
     results = evaluate_signal(_signal(), [0.0, 10.0], [100.0, float("nan")], [Horizon("10s", 10.0)], FeeModel())
 
@@ -45,9 +47,11 @@ def test_forward_returns_reject_non_finite_prices():
 
 
 def test_observer_summary_filters_nan_and_interpolates_percentiles():
-    from ..config import FeeModel, Horizon, ObserverConfig
-    from ..models import ForwardReturnResult
-    from ..observer import _build_summary
+    from venue_agnostic_signal_observer.config import FeeModel
+    from venue_agnostic_signal_observer.config import Horizon
+    from venue_agnostic_signal_observer.config import ObserverConfig
+    from venue_agnostic_signal_observer.models import ForwardReturnResult
+    from venue_agnostic_signal_observer.observer import _build_summary
 
     cfg = ObserverConfig(horizons=[Horizon("h", 1.0)], fee_model=FeeModel())
     sig = _signal()
@@ -79,7 +83,7 @@ def test_observer_summary_filters_nan_and_interpolates_percentiles():
 
 
 def test_load_signals_handles_bad_strength_and_empty_metadata_column(tmp_path):
-    from ..signals import load_signals_from_csv
+    from venue_agnostic_signal_observer.signals import load_signals_from_csv
 
     path = tmp_path / "signals.csv"
     path.write_text(
@@ -96,7 +100,7 @@ def test_load_signals_handles_bad_strength_and_empty_metadata_column(tmp_path):
 
 
 def test_align_venues_does_not_backfill_before_first_data():
-    from ..data_adapters import align_venues
+    from venue_agnostic_signal_observer.data_adapters import align_venues
 
     ts, src, tgt = align_venues([10.0], [100.0], [0.0, 10.0], [50.0, 55.0])
 
@@ -107,7 +111,7 @@ def test_align_venues_does_not_backfill_before_first_data():
 
 
 def test_stream_health_zero_min_does_not_use_falsy_check():
-    from ..cross_asset_impulse import StreamHealth
+    from venue_agnostic_signal_observer.cross_asset_impulse import StreamHealth
 
     health = StreamHealth("V", "S", price_min=0.0, price_max=100.0)
 
@@ -117,7 +121,8 @@ def test_stream_health_zero_min_does_not_use_falsy_check():
 
 
 def test_cross_asset_verdict_handles_none_gate_mean():
-    from ..cross_asset_impulse import PairResult, _determine_verdict
+    from venue_agnostic_signal_observer.cross_asset_impulse import PairResult
+    from venue_agnostic_signal_observer.cross_asset_impulse import _determine_verdict
 
     pair = PairResult(
         pair_key="A:BTC->B:ETH",
@@ -152,7 +157,8 @@ def test_cross_asset_verdict_handles_none_gate_mean():
 
 
 def test_cross_asset_report_formats_none_values(tmp_path):
-    from ..cross_asset_impulse import CrossAssetVerdict, generate_markdown_report
+    from venue_agnostic_signal_observer.cross_asset_impulse import CrossAssetVerdict
+    from venue_agnostic_signal_observer.cross_asset_impulse import generate_markdown_report
 
     v = CrossAssetVerdict(
         verdict="NEEDS_MORE_DATA",
@@ -186,7 +192,7 @@ def test_cross_asset_report_formats_none_values(tmp_path):
 
 
 def test_data_fetcher_empty_csv_has_header(tmp_path):
-    from ..data_fetcher import write_ohlc_csv
+    from venue_agnostic_signal_observer.data_fetcher import write_ohlc_csv
 
     path = tmp_path / "empty.csv"
     write_ohlc_csv([], str(path))
@@ -196,7 +202,8 @@ def test_data_fetcher_empty_csv_has_header(tmp_path):
 
 
 def test_run_derivatives_spot_report_top_groups_filters_non_finite_group_means(tmp_path):
-    from ..run_derivatives_spot_lead_lag import EvalSummary, _write_md
+    from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import EvalSummary
+    from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import _write_md
 
     summary = EvalSummary(
         capture_dir="capture",
@@ -219,7 +226,7 @@ def test_run_derivatives_spot_report_top_groups_filters_non_finite_group_means(t
 
 
 def test_run_mcpt_export_skip_reason_ignores_nan_group_means(tmp_path, capsys):
-    from ..run_mcpt_export import main
+    from venue_agnostic_signal_observer.run_mcpt_export import main
 
     report_dir = tmp_path / "report"
     report_dir.mkdir()

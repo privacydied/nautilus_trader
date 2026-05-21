@@ -1,4 +1,5 @@
-"""Diagnostic-only candidate falsification summary.
+"""
+Diagnostic-only candidate falsification summary.
 
 Combines existing optional report artifacts into one survival/failure matrix.
 This module is read-only public-data research infrastructure: it does not run
@@ -12,9 +13,11 @@ import csv
 import json
 import math
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
+
 
 SAFETY_MODE = "public_data_observer_only"
 
@@ -481,7 +484,8 @@ def _normalize_to_evaluated_keys(
     rows: dict[GroupKey, dict[str, Any]],
     evaluated: dict[GroupKey, dict[str, Any]],
 ) -> dict[GroupKey, dict[str, Any]]:
-    """Map blank-capture-mode diagnostics onto a unique evaluated key.
+    """
+    Map blank-capture-mode diagnostics onto a unique evaluated key.
 
     This preserves the capture_mode key when the diagnostic explicitly provides
     one, while letting older derived reports merge with their source evaluated

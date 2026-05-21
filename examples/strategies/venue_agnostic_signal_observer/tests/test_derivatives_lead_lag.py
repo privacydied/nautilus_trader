@@ -1,4 +1,5 @@
-"""Tests for the derivatives lead-lag observer.
+"""
+Tests for the derivatives lead-lag observer.
 
 Observer-only — no orders, no keys, no live trading.
 """
@@ -9,22 +10,27 @@ import sys
 import time
 from pathlib import Path
 
-import pytest
 
 # Ensure imports work when run from repo root
 REPO = Path(__file__).resolve().parents[4]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from examples.strategies.venue_agnostic_signal_observer.derivatives_models import (
-    DerivativeTradeTick,
-    DerivativeImpulseEvent,
-    OpenInterestSnapshot,
-    FundingSnapshot,
-)
 from examples.strategies.venue_agnostic_signal_observer.derivatives_lead_lag import (
     DerivativesImpulseGenerator,
+)
+from examples.strategies.venue_agnostic_signal_observer.derivatives_lead_lag import (
     impulse_to_tick_signal,
+)
+from examples.strategies.venue_agnostic_signal_observer.derivatives_models import (
+    DerivativeImpulseEvent,
+)
+from examples.strategies.venue_agnostic_signal_observer.derivatives_models import (
+    DerivativeTradeTick,
+)
+from examples.strategies.venue_agnostic_signal_observer.derivatives_models import FundingSnapshot
+from examples.strategies.venue_agnostic_signal_observer.derivatives_models import (
+    OpenInterestSnapshot,
 )
 
 
@@ -194,11 +200,15 @@ class TestNoLookahead:
 # -- CLI / runner fixture test --
 
 class TestConservativeVerdict:
-    """When sample count is too low the verdict should be NEEDS_MORE_DATA.
+    """
+    When sample count is too low the verdict should be NEEDS_MORE_DATA.
     This is verified via the runner's decision logic directly.
     """
+
     def test_needs_more_data_on_no_events(self, tmp_path: Path):
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import DerivativesLeadLagSummary
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            DerivativesLeadLagSummary,
+        )
         summary = DerivativesLeadLagSummary()
         summary.total_signals = 0
         summary.valid_evaluations = 0
@@ -215,7 +225,9 @@ class TestConservativeVerdict:
         assert verdict == "NEEDS_MORE_DATA"
 
     def test_rejected_on_events_but_no_candidate(self, tmp_path: Path):
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import DerivativesLeadLagSummary
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+            DerivativesLeadLagSummary,
+        )
         summary = DerivativesLeadLagSummary()
         summary.total_signals = 10
         summary.valid_evaluations = 30
@@ -257,7 +269,9 @@ class TestMalformedDataTolerance:
 # -- Net bps calculation --
 
 def test_net_bps_calculation():
-    from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import DerivativesLeadLagSummary
+    from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        DerivativesLeadLagSummary,
+    )
     """Verify that the summary total_cost is consistent with fee params."""
     s = DerivativesLeadLagSummary(
         fee_bps=12.0, slippage_bps=2.0,
@@ -271,6 +285,7 @@ def test_net_bps_calculation():
 
 class TestNoForbiddenImports:
     """Ensure the derivatives modules contain no order/key trading code."""
+
     FILES_TO_SCAN = [
         "derivatives_models.py",
         "derivatives_lead_lag.py",
@@ -296,7 +311,7 @@ class TestNoForbiddenImports:
 
     def test_no_forbidden_code(self):
         violations = self._scan()
-        assert not violations, f"Found forbidden terms:\\n" + "\\n".join(violations)
+        assert not violations, "Found forbidden terms:\\n" + "\\n".join(violations)
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +370,7 @@ class TestInstrumentTypeMetadata:
         from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             VALID_INSTRUMENT_TYPES,
         )
-        assert VALID_INSTRUMENT_TYPES == {"spot", "perp", "futures", "unknown"}
+        assert {"spot", "perp", "futures", "unknown"} == VALID_INSTRUMENT_TYPES
 
 
 # ---------------------------------------------------------------------------
@@ -366,9 +381,10 @@ class TestSpotSpotGuard:
     """A spot->spot run must not claim to reject the derivatives-lead-lag thesis."""
 
     def test_spot_spot_verdict_is_pair_specific(self, tmp_path: Path):
-        import json
         from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             _write_outputs,
         )
 
@@ -406,8 +422,11 @@ class TestSpotSpotGuard:
 
     def test_spot_spot_json_includes_instrument_types(self, tmp_path: Path):
         import json
+
         from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             _write_outputs,
         )
 
@@ -436,11 +455,14 @@ class TestSpotSpotGuard:
         assert data["summary"]["target_instrument_type"] == "spot"
 
     def test_perp_source_verdict_allows_derivatives_rejection(self, tmp_path: Path):
-        """A run with perp source should be allowed to reject without the
-        'NOT a rejection of the derivatives thesis' disclaimer."""
-        import json
+        """
+        A run with perp source should be allowed to reject without the
+        'NOT a rejection of the derivatives thesis' disclaimer.
+        """
         from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             _write_outputs,
         )
 
@@ -493,8 +515,11 @@ class TestBackwardCompatibility:
 
     def test_json_output_omits_nothing_for_defaults(self, tmp_path: Path):
         import json
+
         from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             _write_outputs,
         )
         summary = DerivativesLeadLagSummary(
@@ -529,8 +554,10 @@ def _ts_fix(seconds: int) -> int:
     return seconds * _NS_FIX
 
 
-def _perp_trade(ts_s: int, price: float, size: float, side: str = "buy") -> "DerivativeTradeTick":
-    from examples.strategies.venue_agnostic_signal_observer.derivatives_models import DerivativeTradeTick
+def _perp_trade(ts_s: int, price: float, size: float, side: str = "buy") -> DerivativeTradeTick:
+    from examples.strategies.venue_agnostic_signal_observer.derivatives_models import (
+        DerivativeTradeTick,
+    )
     return DerivativeTradeTick(
         ts_event=_ts_fix(ts_s), venue="BINANCE", symbol="BTCUSDT-PERP",
         price=price, size=size, side=side,
@@ -551,12 +578,17 @@ class TestSyntheticPerpToSpot:
     """Synthetic perp->spot test to verify machinery labels the run correctly."""
 
     def test_perp_source_labels_run_as_derivatives_source(self, tmp_path: Path):
-        """Generate synthetic perp-side impulse leading spot move.
+        """
+        Generate synthetic perp-side impulse leading spot move.
         Verify the run can be labelled as a derivatives-source test.
-        Does NOT imply profitability."""
+        Does NOT imply profitability.
+        """
         import json
+
         from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
             _write_outputs,
         )
 

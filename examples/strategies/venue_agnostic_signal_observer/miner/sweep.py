@@ -15,11 +15,16 @@ The Miner:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, UTC
-from typing import Any, Callable, Sequence
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
+from datetime import UTC
+from datetime import datetime
+from typing import Any
+from typing import Callable
 
-from .grid import FrozenGrid, GridCell
+from .grid import FrozenGrid
+from .grid import GridCell
 from .rejection_guard import check_rejection_guard
 
 
@@ -79,7 +84,8 @@ def run_sweep(
     input_metadata: dict[str, Any] | None = None,
     additional_locked_refs: list[str] | None = None,
 ) -> SweepResult:
-    """Run a vectorized sweep over all active cells in a frozen grid.
+    """
+    Run a vectorized sweep over all active cells in a frozen grid.
 
     Parameters
     ----------

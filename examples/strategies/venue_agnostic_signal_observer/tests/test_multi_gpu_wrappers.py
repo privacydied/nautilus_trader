@@ -1,4 +1,5 @@
-"""Tests for the opt-in multi-GPU wrappers across the three GPU modules.
+"""
+Tests for the opt-in multi-GPU wrappers across the three GPU modules.
 
 These tests do NOT require real CUDA. The single-device kernel each wrapper
 delegates to is monkeypatched with a fake that returns deterministic
@@ -12,14 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer import (
-    forward_returns_gpu,
-    permutation_null_gpu,
-)
-from examples.strategies.venue_agnostic_signal_observer.tick_models import (
-    TickSignalEvent,
-    TradeTickLite,
-)
+from examples.strategies.venue_agnostic_signal_observer import forward_returns_gpu
+from examples.strategies.venue_agnostic_signal_observer import permutation_null_gpu
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TickSignalEvent
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
 
 
 def _mk_signal(i: int) -> TickSignalEvent:

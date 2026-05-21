@@ -27,17 +27,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .stage2_precommitment_utils import (
-    CollectionLock,
-    compute_file_sha256,
-    load_precommitment,
-    get_signal_family,
-    _get_git_sha,
-)
-from .run_artifacts import atomic_write_json
-from .run_index import read_run_index, get_latest_status
-from .quarantine import get_quarantined_run_ids
 from .burn import get_burned_run_ids
+from .quarantine import get_quarantined_run_ids
+from .run_artifacts import atomic_write_json
+from .run_index import get_latest_status
+from .run_index import read_run_index
+from .stage2_precommitment_utils import CollectionLock
+from .stage2_precommitment_utils import _get_git_sha
+from .stage2_precommitment_utils import compute_file_sha256
+from .stage2_precommitment_utils import get_signal_family
+from .stage2_precommitment_utils import load_precommitment
 
 
 def _ts_now_iso() -> str:
@@ -70,7 +69,8 @@ def _find_capture_start(
     report_entry: dict[str, Any],
     row_data: dict[str, Any],
 ) -> str | None:
-    """Extract capture_start_utc from various report/metadata structures.
+    """
+    Extract capture_start_utc from various report/metadata structures.
 
     Checks (in order):
     1. Direct key on report_entry
@@ -121,7 +121,8 @@ def _validate_and_collect_captures(
     quarantined_run_ids: set[str],
     burned_run_ids: set[str],
 ) -> list[dict[str, Any]]:
-    """Collect validated FULL_ACTIVE captures with timestamps.
+    """
+    Collect validated FULL_ACTIVE captures with timestamps.
 
     Returns list of dicts with keys: run_id, capture_start_utc, run_dir, metadata.
     """
@@ -231,7 +232,8 @@ def build_split(
     burn_path: str | None = None,
     precommit_path: str | None = None,
 ) -> dict[str, Any]:
-    """Build the Stage 2 discovery/test split.
+    """
+    Build the Stage 2 discovery/test split.
 
     Returns a split manifest dict with keys:
         split_created_at

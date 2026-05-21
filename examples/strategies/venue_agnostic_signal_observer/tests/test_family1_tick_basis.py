@@ -1,4 +1,5 @@
-"""Focused tests for the Family 1 tick-basis signal generator.
+"""
+Focused tests for the Family 1 tick-basis signal generator.
 
 Covers hand-computed basis, sign convention, lookback sensitivity,
 missing-data exclusions, minimum-lookback floor, 300s horizon, and
@@ -11,11 +12,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from venue_agnostic_signal_observer.family1_tick_basis import (
-    _basis_bps,
-    _first_at_or_after,
-    compute_family1_tick_signal,
-)
+from venue_agnostic_signal_observer.family1_tick_basis import _basis_bps
+from venue_agnostic_signal_observer.family1_tick_basis import _first_at_or_after
+from venue_agnostic_signal_observer.family1_tick_basis import compute_family1_tick_signal
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +24,8 @@ from venue_agnostic_signal_observer.family1_tick_basis import (
 
 @dataclass
 class _P:
-    """Minimal price point matching the duck-typed contract used by the helper.
+    """
+    Minimal price point matching the duck-typed contract used by the helper.
 
     Must have ``.timestamp_ns`` (int) and ``.price`` (float).
     """
@@ -97,8 +97,10 @@ def test_hand_computed_basis_change() -> None:
 
 
 def test_sign_convention_positive_basis_change_is_short() -> None:
-    """Positive basis_change (USDT more expensive) → short → negative return
-    when target goes up."""
+    """
+    Positive basis_change (USDT more expensive) → short → negative return
+    when target goes up.
+    """
     # USDT goes from 100005 to 100020 (became more expensive)
     src_a = [_P(timestamp_ns=_T0_NS, price=100_000.0),
              _P(timestamp_ns=_T1_NS, price=100_000.0)]
@@ -116,8 +118,10 @@ def test_sign_convention_positive_basis_change_is_short() -> None:
 
 
 def test_sign_convention_negative_basis_change_is_long() -> None:
-    """Negative basis_change (USDT became cheaper) → long → positive return
-    when target goes up."""
+    """
+    Negative basis_change (USDT became cheaper) → long → positive return
+    when target goes up.
+    """
     # USDT goes from 100020 to 100005 (became cheaper)
     src_a = [_P(timestamp_ns=_T0_NS, price=100_000.0),
              _P(timestamp_ns=_T1_NS, price=100_000.0)]
@@ -141,8 +145,10 @@ def test_sign_convention_negative_basis_change_is_long() -> None:
 
 
 def test_different_lookbacks_differ_in_direction() -> None:
-    """30s, 60s, 120s lookbacks produce different signal directions on a
-    controlled fixture where src_b oscillates."""
+    """
+    30s, 60s, 120s lookbacks produce different signal directions on a
+    controlled fixture where src_b oscillates.
+    """
     # src_a (USD) flat at 100000
     # src_b (USDT) oscillates — up then down
     src_a = [
@@ -194,8 +200,10 @@ def test_different_lookbacks_differ_in_direction() -> None:
 
 
 def test_lookback_flips_direction_when_sign_changes() -> None:
-    """When different lookback windows produce opposite basis-change signs,
-    the direction and raw_bps must flip accordingly."""
+    """
+    When different lookback windows produce opposite basis-change signs,
+    the direction and raw_bps must flip accordingly.
+    """
     # src_a flat, src_b oscillates around trigger so short lookback sees
     # a decrease while longer lookback sees an increase.
     src_a = [
@@ -242,7 +250,8 @@ def test_lookback_flips_direction_when_sign_changes() -> None:
 
 
 def test_not_bit_identical_across_lookbacks() -> None:
-    """Regression test: the old evaluator produced bit-identical metrics for
+    """
+    Regression test: the old evaluator produced bit-identical metrics for
     30s/60s/120s lookback × 60s horizon because it ignored cell.lookback_ms.
     The new evaluator MUST use lookback. We verify this by constructing a
     fixture where two lookbacks see **opposite** basis-change signs, which
@@ -284,7 +293,9 @@ def test_not_bit_identical_across_lookbacks() -> None:
         src_a, src_b, target, ["w1"], windows, 120_000, 60_000, 0.0,
     )
 
-    assert v30 == 1 and v60 == 1 and v120 == 1
+    assert v30 == 1
+    assert v60 == 1
+    assert v120 == 1
 
     # 60s lookback flips to long (+5.0) while 30s and 120s are short (-5.0)
     # The old evaluator would have direction = +1 (inst basis=1.0 at trigger > 0)
@@ -301,8 +312,10 @@ def test_not_bit_identical_across_lookbacks() -> None:
 
 
 def test_instantaneous_basis_not_used() -> None:
-    """If instantaneous basis is unchanged but basis change over lookback
-    differs, the signal MUST follow the lookback-change formula."""
+    """
+    If instantaneous basis is unchanged but basis change over lookback
+    differs, the signal MUST follow the lookback-change formula.
+    """
     # Instantaneous basis at trigger = same at t0 and t0+30s
     # But the lookback window captures divergence
     # At t=0: both at 100000, basis=0
@@ -357,8 +370,10 @@ def test_instantaneous_basis_not_used() -> None:
 
 
 def test_missing_lookback_start_exclusion() -> None:
-    """When the lookback start timestamp has no price observation in one
-    source, the event is excluded with an explicit reason."""
+    """
+    When the lookback start timestamp has no price observation in one
+    source, the event is excluded with an explicit reason.
+    """
     # src_a has data only before t0 (the lookback start). Since t0 < the
     # first point in src_a, _first_at_or_after(src_a, t0) returns None.
     # Source A has a point before t0, not at or after t0
@@ -428,8 +443,10 @@ def test_missing_forward_return_exclusion() -> None:
 
 
 def test_usd_usdt_symbols_distinct() -> None:
-    """The helper does not merge or alias symbols. It accepts two separate
-    price lists for the two legs and keeps them separate."""
+    """
+    The helper does not merge or alias symbols. It accepts two separate
+    price lists for the two legs and keeps them separate.
+    """
     # Both at same price but different series — should process without error
     src_a = [_P(timestamp_ns=_T0_NS, price=100_000.0),
              _P(timestamp_ns=_T1_NS, price=100_000.0)]
@@ -452,10 +469,12 @@ def test_usd_usdt_symbols_distinct() -> None:
 
 
 def test_train_and_holdout_share_helper() -> None:
-    """Verify that both offline_train_evaluation and offline_holdout_evaluation
-    import and call the same compute_family1_tick_signal function."""
-    import venue_agnostic_signal_observer.offline_train_evaluation as te
+    """
+    Verify that both offline_train_evaluation and offline_holdout_evaluation
+    import and call the same compute_family1_tick_signal function.
+    """
     import venue_agnostic_signal_observer.offline_holdout_evaluation as he
+    import venue_agnostic_signal_observer.offline_train_evaluation as te
 
     # The import is the canonical identity check — both modules import
     # compute_family1_tick_signal from family1_tick_basis.
@@ -485,7 +504,8 @@ def test_train_and_holdout_share_helper() -> None:
 
 
 def test_forward_return_uses_existing_semantics() -> None:
-    """The helper uses _first_at_or_after for forward returns, which is the
+    """
+    The helper uses _first_at_or_after for forward returns, which is the
     same search-first-tick semantics used by the existing offline evaluators.
 
     This is verified structurally: the helper does NOT import or call
@@ -494,8 +514,9 @@ def test_forward_return_uses_existing_semantics() -> None:
     the offline evaluation pipeline handles result schema wrapping.
     """
     # The module should not have copula or reimplement forward-return search
-    from venue_agnostic_signal_observer import family1_tick_basis as ftb
     import inspect
+
+    from venue_agnostic_signal_observer import family1_tick_basis as ftb
     src = inspect.getsource(ftb)
     # Should not import evaluate_tick_signal or batch_evaluate_signals_gpu
     # (the offline pipeline uses _first_at_or_after which is the same
@@ -513,8 +534,10 @@ def test_forward_return_uses_existing_semantics() -> None:
 
 
 def test_event_vectors_exported() -> None:
-    """The compute_family1_tick_signal returns per-event raw and net return
-    vectors that can be fed back as event_raw_bps / event_net_bps."""
+    """
+    The compute_family1_tick_signal returns per-event raw and net return
+    vectors that can be fed back as event_raw_bps / event_net_bps.
+    """
     src_a = [_P(timestamp_ns=_T0_NS, price=100_000.0),
              _P(timestamp_ns=_T1_NS, price=100_000.0)]
     src_b = [_P(timestamp_ns=_T0_NS, price=100_010.0),
@@ -539,7 +562,8 @@ def test_event_vectors_exported() -> None:
 
 
 def test_sub_30s_lookback_excluded_through_config_reject() -> None:
-    """Sub-30s lookbacks are excluded by the evaluator before calling the
+    """
+    Sub-30s lookbacks are excluded by the evaluator before calling the
     helper. This test verifies the evaluator-side rejection logic would fire
     by checking the helper behavior is governed by the precommitment.
 
@@ -550,8 +574,9 @@ def test_sub_30s_lookback_excluded_through_config_reject() -> None:
     # The actual gate is in _evaluate_family1 which rejects lookback < 30000.
     # We verify the precommitment constant and that the evaluators have the gate.
     import inspect
-    import venue_agnostic_signal_observer.offline_train_evaluation as te
+
     import venue_agnostic_signal_observer.offline_holdout_evaluation as he
+    import venue_agnostic_signal_observer.offline_train_evaluation as te
 
     te_src = inspect.getsource(te._evaluate_family1)
     he_src = inspect.getsource(he._evaluate_family1)
@@ -567,8 +592,10 @@ def test_sub_30s_lookback_excluded_through_config_reject() -> None:
 
 
 def test_300s_horizon_path() -> None:
-    """The 300_000 ms horizon path produces correct forward returns when
-    target data covers that range."""
+    """
+    The 300_000 ms horizon path produces correct forward returns when
+    target data covers that range.
+    """
     src_a = [_P(timestamp_ns=_T0_NS, price=100_000.0),
              _P(timestamp_ns=_T1_NS, price=100_000.0)]
     src_b = [_P(timestamp_ns=_T0_NS, price=100_010.0),
@@ -592,8 +619,10 @@ def test_300s_horizon_path() -> None:
 
 
 def test_no_forbidden_imports() -> None:
-    """The family1_tick_basis module must not import any execution, order,
-    private-key, trading-adapter, or live-trading code."""
+    """
+    The family1_tick_basis module must not import any execution, order,
+    private-key, trading-adapter, or live-trading code.
+    """
     import os
     src_path = os.path.join(
         os.path.dirname(__file__),

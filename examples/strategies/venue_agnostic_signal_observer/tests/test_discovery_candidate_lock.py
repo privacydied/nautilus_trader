@@ -1,52 +1,69 @@
-"""Tests for capture fingerprint and candidate lock.
+"""
+Tests for capture fingerprint and candidate lock.
 
 Covers tests 54-94 from the discovery freeze specification.
 """
 
 import json
-import os
-import tempfile
-from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
-    DiscoveryGridSpec,
-    GRID_SCHEMA_VERSION,
-    grid_sha256,
-    enumerate_primary_cell_count,
-    enumerate_cost_sensitivity_cell_count,
+from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
+    DiscoveryCandidateLock,
 )
-from examples.strategies.venue_agnostic_signal_observer.discovery.capture_fingerprint import (
-    sha256_file,
-    build_capture_manifest_ref,
-    CaptureManifestRef,
+from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
+    candidate_sha256,
 )
-from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import (
-    create_grid_lock,
-    DiscoveryGridLock,
-    GRID_LOCK_TYPE,
+from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
+    canonicalize_selected_cells,
 )
 from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
     create_candidate_lock,
-    validate_candidate_lock,
-    DiscoveryCandidateLock,
-    CANDIDATE_LOCK_TYPE,
-    canonical_selected_cell_json,
-    canonicalize_selected_cells,
-    validate_selected_cells,
-    canonical_candidate_payload,
-    candidate_sha256,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
     load_candidate_lock,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
     save_candidate_lock,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
+    validate_candidate_lock,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.candidate_lock import (
+    validate_selected_cells,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.capture_fingerprint import (
+    build_capture_manifest_ref,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.capture_fingerprint import (
+    sha256_file,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.exceptions import (
+    CandidateHashMismatchError,
 )
 from examples.strategies.venue_agnostic_signal_observer.discovery.exceptions import (
     CandidateLockValidationError,
-    CandidateHashMismatchError,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.exceptions import (
     CaptureFingerprintError,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.exceptions import (
     GridCellCountMismatchError,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.exceptions import (
     GridHashMismatchError,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.exceptions import (
     GridLockValidationError,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import GRID_LOCK_TYPE
+from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import DiscoveryGridLock
+from examples.strategies.venue_agnostic_signal_observer.discovery.grid_lock import create_grid_lock
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
+    GRID_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.search_space import (
+    DiscoveryGridSpec,
 )
 
 
@@ -57,30 +74,30 @@ from examples.strategies.venue_agnostic_signal_observer.discovery.exceptions imp
 @pytest.fixture
 def golden_spec():
     return DiscoveryGridSpec(
-        grid_id='edge_miner_cross_asset_beta_lag_v1',
+        grid_id="edge_miner_cross_asset_beta_lag_v1",
         schema_version=GRID_SCHEMA_VERSION,
-        signal_family='cross_asset_beta_lag',
-        source_venues=('binance_perp',),
-        source_symbols=('BTC/USDT', 'ETH/USDT'),
-        target_venues=('kraken', 'coinbase'),
-        target_symbols=('SOL/USD', 'DOGE/USD', 'LINK/USD', 'AVAX/USD'),
-        feature_types=('price_impulse', 'signed_imbalance', 'notional_burst', 'large_trade'),
+        signal_family="cross_asset_beta_lag",
+        source_venues=("binance_perp",),
+        source_symbols=("BTC/USDT", "ETH/USDT"),
+        target_venues=("kraken", "coinbase"),
+        target_symbols=("SOL/USD", "DOGE/USD", "LINK/USD", "AVAX/USD"),
+        feature_types=("price_impulse", "signed_imbalance", "notional_burst", "large_trade"),
         lookbacks_ms=(1000, 5000, 10000, 30000, 60000),
         thresholds_centibps=(1000, 2000, 3000, 5000),
         horizons_ms=(10000, 30000, 60000, 180000, 300000),
         entry_delays_ms=(0, 5000, 15000),
         cooldown_ms=60000,
-        regime_filters=('market_active', 'market_stress', 'btc_1m_vol_p95'),
+        regime_filters=("market_active", "market_stress", "btc_1m_vol_p95"),
         cost_models_centibps=(1000, 2500, 5000),
         min_events=30,
-        clustering_keys=('feature_types', 'lookbacks_ms', 'horizons_ms', 'target_symbols'),
+        clustering_keys=("feature_types", "lookbacks_ms", "horizons_ms", "target_symbols"),
         fdr_family_dimensions=(
-            'source_symbols', 'target_symbols', 'feature_types',
-            'lookbacks_ms', 'thresholds_centibps', 'horizons_ms',
-            'entry_delays_ms', 'regime_filters',
+            "source_symbols", "target_symbols", "feature_types",
+            "lookbacks_ms", "thresholds_centibps", "horizons_ms",
+            "entry_delays_ms", "regime_filters",
         ),
-        created_at_utc='2026-05-17T00:00:00Z',
-        notes='Golden example grid for deterministic freeze tests.',
+        created_at_utc="2026-05-17T00:00:00Z",
+        notes="Golden example grid for deterministic freeze tests.",
     )
 
 
@@ -413,26 +430,26 @@ class TestCandidateLock:
         """Candidate hash changes when parent_grid_hash changes."""
         ref = build_capture_manifest_ref(temp_manifest)
         different_spec = DiscoveryGridSpec(
-            grid_id='different_grid',
+            grid_id="different_grid",
             schema_version=GRID_SCHEMA_VERSION,
-            signal_family='different_family',
-            source_venues=('binance_perp',),
-            source_symbols=('BTC/USDT',),
-            target_venues=('kraken',),
-            target_symbols=('SOL/USD',),
-            feature_types=('price_impulse',),
+            signal_family="different_family",
+            source_venues=("binance_perp",),
+            source_symbols=("BTC/USDT",),
+            target_venues=("kraken",),
+            target_symbols=("SOL/USD",),
+            feature_types=("price_impulse",),
             lookbacks_ms=(1000,),
             thresholds_centibps=(1000,),
             horizons_ms=(10000,),
             entry_delays_ms=(0,),
             cooldown_ms=5000,
-            regime_filters=('market_active',),
+            regime_filters=("market_active",),
             cost_models_centibps=(1000,),
             min_events=10,
-            clustering_keys=('feature_types',),
-            fdr_family_dimensions=('feature_types',),
-            created_at_utc='',
-            notes='',
+            clustering_keys=("feature_types",),
+            fdr_family_dimensions=("feature_types",),
+            created_at_utc="",
+            notes="",
         )
         different_lock = create_grid_lock(different_spec)
         lock_a = create_candidate_lock(
@@ -774,7 +791,7 @@ class TestCandidateLock:
     def test_90_rejects_primary_count_mismatch_vs_lock(self, golden_spec, golden_lock, temp_manifest, valid_cell):
         """Candidate lock rejects parent_grid_primary_cell_count mismatch vs grid lock."""
         ref = build_capture_manifest_ref(temp_manifest)
-        bad_lock_obj = DiscoveryGridLock(
+        DiscoveryGridLock(
             lock_type=GRID_LOCK_TYPE,
             grid_id=golden_lock.grid_id,
             grid_hash=golden_lock.grid_hash,
@@ -893,7 +910,7 @@ class TestCandidateLock:
             schema_version=golden_spec.schema_version,
             signal_family=golden_spec.signal_family,
             source_venues=golden_spec.source_venues,
-            source_symbols=('BTC/USDT',),  # Fewer symbols -> different count
+            source_symbols=("BTC/USDT",),  # Fewer symbols -> different count
             target_venues=golden_spec.target_venues,
             target_symbols=golden_spec.target_symbols,
             feature_types=golden_spec.feature_types,
@@ -927,26 +944,26 @@ class TestCandidateLock:
         )
         # Validating with wrong spec should fail
         wrong_spec = DiscoveryGridSpec(
-            grid_id='wrong',
+            grid_id="wrong",
             schema_version=GRID_SCHEMA_VERSION,
-            signal_family='wrong',
-            source_venues=('binance_perp',),
-            source_symbols=('BTC/USDT',),
-            target_venues=('kraken',),
-            target_symbols=('SOL/USD',),
-            feature_types=('price_impulse',),
+            signal_family="wrong",
+            source_venues=("binance_perp",),
+            source_symbols=("BTC/USDT",),
+            target_venues=("kraken",),
+            target_symbols=("SOL/USD",),
+            feature_types=("price_impulse",),
             lookbacks_ms=(1000,),
             thresholds_centibps=(1000,),
             horizons_ms=(10000,),
             entry_delays_ms=(0,),
             cooldown_ms=5000,
-            regime_filters=('market_active',),
+            regime_filters=("market_active",),
             cost_models_centibps=(1000,),
             min_events=10,
-            clustering_keys=('feature_types',),
-            fdr_family_dimensions=('feature_types',),
-            created_at_utc='',
-            notes='',
+            clustering_keys=("feature_types",),
+            fdr_family_dimensions=("feature_types",),
+            created_at_utc="",
+            notes="",
         )
         with pytest.raises((CandidateLockValidationError, GridLockValidationError, GridHashMismatchError)):
             validate_candidate_lock(wrong_spec, golden_lock, lock)

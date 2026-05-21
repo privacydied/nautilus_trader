@@ -15,13 +15,17 @@ Invariants:
   these exact conditions, with these exact limits."
 """
 
-from .manifest import ApprovedManifest, ManifestRecord, load_manifest
-from .gate import BotGate, GateResult
+from .gate import BotGate
+from .gate import GateResult
+from .manifest import ApprovedManifest
+from .manifest import ManifestRecord
+from .manifest import load_manifest
+
 
 __all__ = [
     "ApprovedManifest",
-    "ManifestRecord",
-    "load_manifest",
     "BotGate",
     "GateResult",
+    "ManifestRecord",
+    "load_manifest",
 ]

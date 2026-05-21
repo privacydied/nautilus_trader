@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Derivatives-source -> spot-target lead-lag evaluation runner.
+"""
+Derivatives-source -> spot-target lead-lag evaluation runner.
 
 Reads captured trade-tick JSONL from run_derivatives_spot_capture.py, clips
 to true overlap windows, generates trade-flow impulse signals on the source
@@ -11,29 +12,36 @@ Public-data observer only. No auth, no orders, no private keys, no execution.
 from __future__ import annotations
 
 import argparse
-import itertools
-import math
 import csv
+import itertools
 import json
+import math
 import statistics
 import time
-import uuid
 from bisect import bisect_left
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 
-from .tick_models import TradeTickLite, TickSignalEvent, TickForwardReturn
-from .tick_store import load_trades_jsonl
-from .symbol_aliases import resolve_symbol, quote_mismatch as sym_quote_mismatch
-from .trade_flow_impulse import TradeFlowImpulseConfig, TradeFlowImpulseSignalGenerator
-from .event_study import evaluate_tick_signal, generate_random_baseline, evaluate_candidate_group
-from .forward_returns_gpu import (
-    check_cuda_available as _frgpu_check_cuda,
-    batch_evaluate_signals_gpu as _frgpu_batch,
-    batch_evaluate_signals_multi_gpu as _frgpu_multi,
-)
 from .artifact_metadata import build_metadata
+from .event_study import evaluate_candidate_group
+from .event_study import evaluate_tick_signal
+from .event_study import generate_random_baseline
+from .forward_returns_gpu import batch_evaluate_signals_gpu as _frgpu_batch
+from .forward_returns_gpu import batch_evaluate_signals_multi_gpu as _frgpu_multi
+from .forward_returns_gpu import check_cuda_available as _frgpu_check_cuda
+from .symbol_aliases import quote_mismatch as sym_quote_mismatch
+from .symbol_aliases import resolve_symbol
+from .tick_models import TickForwardReturn
+from .tick_models import TickSignalEvent
+from .tick_models import TradeTickLite
+from .tick_store import load_trades_jsonl
+from .trade_flow_impulse import TradeFlowImpulseConfig
+from .trade_flow_impulse import TradeFlowImpulseSignalGenerator
+
 
 _MS_TO_NS = 1_000_000
 
@@ -51,7 +59,8 @@ def _split_strings(s: str) -> list[str]:
 
 
 def _parse_and_validate_devices(devices_str: str, engine: str) -> list[str]:
-    """Parse comma-separated CUDA devices. Fail fast if GPU unavailable.
+    """
+    Parse comma-separated CUDA devices. Fail fast if GPU unavailable.
 
     Returns list of validated device strings. Empty list for CPU engine.
     Duplicate detection, availability check, fast exit on failure.
@@ -359,7 +368,7 @@ class EvalSummary:
 # ---------------------------------------------------------------------------
 
 def _ts_ns(ts_ns: int) -> str:
-    dt = datetime.fromtimestamp(ts_ns / 1e9, tz=timezone.utc)
+    dt = datetime.fromtimestamp(ts_ns / 1e9, tz=UTC)
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
@@ -423,6 +432,7 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
         from .trade_flow_impulse_gpu import generate_signals_gpu as _gpu_signal_check
         if callable(_gpu_signal_check):
             import sys as _sys
+
             from .trade_flow_impulse_gpu import check_cuda_available as _sig_check
             for _d in _split_strings(signal_device):
                 _sig_ok, _sig_reason = _sig_check(_d)
@@ -568,7 +578,7 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
 
                 max_horizon_ns = max(horizons_ms) * _MS_TO_NS
                 if overlap.duration_s < max_horizon_ns / 1e9:
-                    print(f"    [OVERLAP] too short for horizons. NEEDS_MORE_DATA")
+                    print("    [OVERLAP] too short for horizons. NEEDS_MORE_DATA")
                     ALL_REJECTIONS.append({
                         "pair": pair_label, "reason": "overlap_too_short",
                         "overlap_s": overlap.duration_s,
@@ -577,7 +587,7 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
                     continue
 
                 if len(src_clipped) < 200 or len(tgt_clipped) < 200:
-                    print(f"    [OVERLAP] too few ticks. NEEDS_MORE_DATA")
+                    print("    [OVERLAP] too few ticks. NEEDS_MORE_DATA")
                     ALL_REJECTIONS.append({
                         "pair": pair_label, "reason": "insufficient_ticks_in_overlap",
                         "verdict": "NEEDS_MORE_DATA",
@@ -612,7 +622,9 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
 
                         if signal_engine == "gpu" and sig_type == "signed_imbalance":
                             # GPU signal generation (signed_imbalance only — confirmed vectorized)
-                            from .trade_flow_impulse_gpu import signed_imbalance_gpu as _gpu_signal_fn
+                            from .trade_flow_impulse_gpu import (
+                                signed_imbalance_gpu as _gpu_signal_fn,
+                            )
                             events = _gpu_signal_fn(
                                 src_clipped, cfg,
                                 device=_pair_device if len(devices) > 1 else signal_device,
@@ -847,9 +859,7 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
     else:
         if ALL_REJECTIONS:
             # All pairs had overlap/volatility issues
-            if any(r.get("reason") == "quiet_capture" for r in ALL_REJECTIONS):
-                summary.verdict = "NEEDS_MORE_DATA"
-            elif any(r.get("reason") in ("no_overlap", "overlap_too_short") for r in ALL_REJECTIONS):
+            if any(r.get("reason") == "quiet_capture" for r in ALL_REJECTIONS) or any(r.get("reason") in ("no_overlap", "overlap_too_short") for r in ALL_REJECTIONS):
                 summary.verdict = "NEEDS_MORE_DATA"
             else:
                 summary.verdict = "NEEDS_MORE_DATA"
@@ -937,13 +947,11 @@ def write_reports(
 
     # signals.jsonl
     with open(out / "signals.jsonl", "w") as f:
-        for sig in signals:
-            f.write(json.dumps(asdict(sig), default=str) + "\n")
+        f.writelines(json.dumps(asdict(sig), default=str) + "\n" for sig in signals)
 
     # forward_returns.jsonl
     with open(out / "forward_returns.jsonl", "w") as f:
-        for fr in fwd:
-            f.write(json.dumps(asdict(fr), default=str) + "\n")
+        f.writelines(json.dumps(asdict(fr), default=str) + "\n" for fr in fwd)
 
     # rejections.json
     with open(out / "rejections.json", "w") as f:
@@ -980,7 +988,7 @@ def _write_md(summary: EvalSummary, out: Path) -> None:
         "",
         "## Capture Context",
         "",
-        f"- Capture method: combined async single-event-loop runner",
+        "- Capture method: combined async single-event-loop runner",
         f"- Capture mode: {summary.capture_mode or 'unspecified'}",
         f"- All-in cost: {summary.all_in_cost_bps} bps ({summary.fee_bps} fee + {summary.slippage_bps} slippage + {summary.quote_mismatch_buffer_bps} quote mismatch)",
         "",

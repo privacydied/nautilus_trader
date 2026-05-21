@@ -1,4 +1,5 @@
-"""Tests for the DEX-CEX spot dislocation observer.
+"""
+Tests for the DEX-CEX spot dislocation observer.
 
 Observer-only - no orders, no keys, no live trading.
 """
@@ -9,6 +10,7 @@ import time
 from pathlib import Path
 
 import pytest
+
 
 _NS = 1_000_000_000  # 1 second in ns
 
@@ -36,7 +38,7 @@ def _make_snap(
     base: str = "SOL",
     quote: str = "USDC",
     addr: str = "pool-1",
-) -> "DexPoolSnapshot":
+) -> DexPoolSnapshot:
     from examples.strategies.venue_agnostic_signal_observer.dex_models import DexPoolSnapshot
     return DexPoolSnapshot(
         source="dexscreener",
@@ -143,7 +145,9 @@ class TestDexScreenerPayloadParsing:
             "pairCreatedAt": 1700000000,
         }
         ts_recv = _ts(1700000010)
-        from examples.strategies.venue_agnostic_signal_observer.dex_adapters import parse_dexscreener_pair
+        from examples.strategies.venue_agnostic_signal_observer.dex_adapters import (
+            parse_dexscreener_pair,
+        )
         snap = parse_dexscreener_pair(raw, ts_recv)
         assert snap is not None
         assert snap.chain == "solana"
@@ -167,7 +171,9 @@ class TestDexScreenerPayloadParsing:
             "volume": {"m5": 50000},
             "info": {"liquidity": {"usd": 1_000_000}, "priceChange": {}},
         }
-        from examples.strategies.venue_agnostic_signal_observer.dex_adapters import parse_dexscreener_pair
+        from examples.strategies.venue_agnostic_signal_observer.dex_adapters import (
+            parse_dexscreener_pair,
+        )
         snap = parse_dexscreener_pair(raw, _ts(100))
         assert snap is not None  # price can be None in model, parser doesn't require it
         assert snap.price_usd is None
@@ -181,7 +187,9 @@ class TestDexScreenerPayloadParsing:
             "quoteToken": {"symbol": "USDC"},
             "info": {},
         }
-        from examples.strategies.venue_agnostic_signal_observer.dex_adapters import parse_dexscreener_pair
+        from examples.strategies.venue_agnostic_signal_observer.dex_adapters import (
+            parse_dexscreener_pair,
+        )
         snap = parse_dexscreener_pair(raw, _ts(100))
         # Empty base (falsy dict) triggers the guard: empty baseToken means no valid pair
         assert snap is None
@@ -193,7 +201,9 @@ class TestDexScreenerPayloadParsing:
 
 class TestDexCexDislocationDetector:
     def test_price_shock_fires_on_large_move(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector(
             price_shock_threshold_bps=50.0,
             cooldown_ns=0,
@@ -208,7 +218,9 @@ class TestDexCexDislocationDetector:
         assert price_events[0].direction == "long"
 
     def test_price_shock_direction_short(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector(
             price_shock_threshold_bps=50.0,
             cooldown_ns=0,
@@ -223,7 +235,9 @@ class TestDexCexDislocationDetector:
         assert price_events[0].direction == "short"
 
     def test_no_price_shock_below_threshold(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector(
             price_shock_threshold_bps=1000.0,  # 10%
             cooldown_ns=0,
@@ -237,7 +251,9 @@ class TestDexCexDislocationDetector:
         assert len(price_events) == 0
 
     def test_volume_burst_fires_on_spike(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector(
             volume_burst_multiplier=2.0,
             cooldown_ns=0,
@@ -256,7 +272,9 @@ class TestDexCexDislocationDetector:
 
     def test_volume_burst_requires_direction(self):
         """Volume burst must NOT guess direction when imbalance is unknown."""
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector(
             volume_burst_multiplier=2.0,
             cooldown_ns=0,
@@ -273,7 +291,9 @@ class TestDexCexDislocationDetector:
         assert len(vol_events) == 0, "Should reject when direction cannot be inferred"
 
     def test_liquidity_shock_fires(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector(
             liquidity_shock_threshold_bps=200.0,
             cooldown_ns=0,
@@ -287,7 +307,9 @@ class TestDexCexDislocationDetector:
         assert len(liq_events) >= 1
 
     def test_liquidity_shock_unknown_direction_when_no_price(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector(
             liquidity_shock_threshold_bps=200.0,
             cooldown_ns=0,
@@ -301,7 +323,9 @@ class TestDexCexDislocationDetector:
         assert len(events) == 0
 
     def test_low_liquidity_filtered_out(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector(
             min_liquidity_usd=1_000_000,
             cooldown_ns=0,
@@ -314,7 +338,9 @@ class TestDexCexDislocationDetector:
         assert len(events) == 0
 
     def test_missing_price_rejected(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector(
             min_liquidity_usd=0,
             min_volume_1h_usd=0,
@@ -329,7 +355,9 @@ class TestDexCexDislocationDetector:
         assert any("price_usd" in w for w in warnings)
 
     def test_missing_liquidity_rejected(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector(
             min_liquidity_usd=0,
             min_volume_1h_usd=0,
@@ -344,7 +372,9 @@ class TestDexCexDislocationDetector:
         assert any("liquidity_usd" in w for w in warnings)
 
     def test_empty_input_returns_no_events(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import DexCexDislocationDetector
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            DexCexDislocationDetector,
+        )
         detector = DexCexDislocationDetector()
         events, warnings = detector.scan([])
         assert events == []
@@ -357,7 +387,9 @@ class TestDexCexDislocationDetector:
 
 class TestForwardReturnNetBps:
     def test_net_bps_subtracts_costs(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_models import DexCexForwardResult
+        from examples.strategies.venue_agnostic_signal_observer.dex_models import (
+            DexCexForwardResult,
+        )
         r = DexCexForwardResult(
             event_id="e1", asset="SOL", source_chain="solana", source_dex="raydium",
             target_venue="KRAKEN", target_symbol="SOL/USD", horizon_ms=60000,
@@ -379,12 +411,14 @@ class TestForwardReturnNetBps:
 
 class TestNoLookahead:
     def test_target_entry_price_at_or_after_event(self):
-        """Simulate that the event_study.evaluate_tick_signal only finds
-        target prices at or after the signal ts_event."""
-        from examples.strategies.venue_agnostic_signal_observer.tick_models import (
-            TickSignalEvent, TradeTickLite,
+        """
+        Simulate that the event_study.evaluate_tick_signal only finds
+        target prices at or after the signal ts_event.
+        """
+        from examples.strategies.venue_agnostic_signal_observer.event_study import (
+            evaluate_tick_signal,
         )
-        from examples.strategies.venue_agnostic_signal_observer.event_study import evaluate_tick_signal
+        from examples.strategies.venue_agnostic_signal_observer.tick_models import TickSignalEvent
 
         # Signal at t=100ns
         signal = TickSignalEvent(
@@ -427,8 +461,12 @@ class TestNoLookahead:
 
     def test_unknown_direction_rejected(self):
         """Events with unknown direction should not produce forward results."""
-        from examples.strategies.venue_agnostic_signal_observer.dex_models import DexDislocationEvent
-        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import dex_event_to_tick_signal
+        from examples.strategies.venue_agnostic_signal_observer.dex_cex_dislocation import (
+            dex_event_to_tick_signal,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.dex_models import (
+            DexDislocationEvent,
+        )
 
         evt = DexDislocationEvent(
             event_id="test-1",
@@ -457,6 +495,8 @@ class TestOutputFilesWritten:
     def test_all_files_created(self, tmp_path: Path):
         from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
             DexCexDislocationSummary,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
             _write_outputs,
         )
 
@@ -490,9 +530,15 @@ class TestOutputFilesWritten:
 class TestCandidateGate:
     def test_gate_rejects_low_sample_count(self):
         """Candidate gate should fire when events are below min_events."""
-        from examples.strategies.venue_agnostic_signal_observer.event_study import evaluate_candidate_group
-        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import _r2tfr
-        from examples.strategies.venue_agnostic_signal_observer.dex_models import DexCexForwardResult
+        from examples.strategies.venue_agnostic_signal_observer.dex_models import (
+            DexCexForwardResult,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.event_study import (
+            evaluate_candidate_group,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
+            _r2tfr,
+        )
 
         # Only 10 valid events - below threshold
         results = []
@@ -522,7 +568,9 @@ class TestCandidateGate:
 
     def test_gate_rejects_positive_gross_negative_net(self):
         """Gross positive but net negative should not be candidate."""
-        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import DexCexForwardResult
+        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
+            DexCexForwardResult,
+        )
 
         # Build results with positive gross but negative net
         results = []
@@ -541,7 +589,7 @@ class TestCandidateGate:
             ))
 
         # Compute stats
-        from statistics import mean, median
+        from statistics import mean
         gross_vals = [r.gross_bps for r in results if r.gross_bps is not None]
         net_vals = [r.net_bps for r in results if r.net_bps is not None]
 
@@ -567,13 +615,17 @@ class TestMalformedPayload:
             '{"source": "dexscreener", "chain": "solana"}\n'
             '{"ts_event": null, "ts_recv": null}\n'
         )
-        from examples.strategies.venue_agnostic_signal_observer.dex_adapters import load_dex_snapshots_from_jsonl
+        from examples.strategies.venue_agnostic_signal_observer.dex_adapters import (
+            load_dex_snapshots_from_jsonl,
+        )
         snaps = load_dex_snapshots_from_jsonl(str(p))
         # At least the valid-ish lines should be parsed
         assert isinstance(snaps, list)
 
     def test_missing_file_returns_empty(self):
-        from examples.strategies.venue_agnostic_signal_observer.dex_adapters import load_dex_snapshots_from_jsonl
+        from examples.strategies.venue_agnostic_signal_observer.dex_adapters import (
+            load_dex_snapshots_from_jsonl,
+        )
         snaps = load_dex_snapshots_from_jsonl("/nonexistent/path.jsonl")
         assert snaps == []
 
@@ -586,6 +638,8 @@ class TestReportGuardrails:
     def test_report_contains_observer_warning(self, tmp_path: Path):
         from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
             DexCexDislocationSummary,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
             _write_outputs,
         )
 
@@ -618,6 +672,8 @@ class TestReportGuardrails:
         """The report must never output PROFITABLE, TRADE_NOW, or ACCEPTED_FOR_TRADING."""
         from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
             DexCexDislocationSummary,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
             _write_outputs,
         )
 

@@ -1,4 +1,5 @@
-"""CLI runner for lead/lag heatmap diagnostics.
+"""
+CLI runner for lead/lag heatmap diagnostics.
 
 Reads existing capture data only. No network, no orders, no live trading.
 Diagnostic only: does not create candidates or alter evaluator verdicts.
@@ -8,13 +9,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .lead_lag_heatmap_gpu import (
-    compute_lead_lag_heatmap,
-    write_heatmap_reports,
-    check_cuda_available,
-)
-from .gpu_devices import parse_cuda_devices, validate_cuda_devices
-from .run_derivatives_spot_lead_lag import load_capture_data, _split_strings
+from .gpu_devices import parse_cuda_devices
+from .gpu_devices import validate_cuda_devices
+from .lead_lag_heatmap_gpu import check_cuda_available
+from .lead_lag_heatmap_gpu import compute_lead_lag_heatmap
+from .lead_lag_heatmap_gpu import write_heatmap_reports
+from .run_derivatives_spot_lead_lag import _split_strings
+from .run_derivatives_spot_lead_lag import load_capture_data
 
 
 def build_parser() -> argparse.ArgumentParser:

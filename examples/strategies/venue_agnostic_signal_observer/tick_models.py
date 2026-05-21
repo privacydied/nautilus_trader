@@ -1,4 +1,5 @@
-"""High-resolution tick-level data models for the signal observer event-study framework.
+"""
+High-resolution tick-level data models for the signal observer event-study framework.
 
 This module provides lightweight, serializable dataclasses for capturing tick-level
 price, signal, and forward-return measurements at nanosecond precision. These models
@@ -13,7 +14,8 @@ sub-millisecond precision during event-study alignment.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
+from dataclasses import dataclass
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +25,8 @@ from dataclasses import asdict, dataclass
 
 @dataclass
 class TradeTickLite:
-    """A minimal representation of a single trade tick.
+    """
+    A minimal representation of a single trade tick.
 
     Designed for high-resolution signal measurement only.  No order or execution
     semantics are attached.
@@ -48,7 +51,8 @@ class TradeTickLite:
 
     @classmethod
     def from_dict(cls, d: dict) -> TradeTickLite:
-        """Construct a ``TradeTickLite`` from a plain dict.
+        """
+        Construct a ``TradeTickLite`` from a plain dict.
 
         *ts_event* is explicitly cast to ``int`` to guard against deserialised
         floats from JSON.
@@ -72,7 +76,8 @@ class TradeTickLite:
 
 @dataclass
 class QuoteTickLite:
-    """A minimal representation of a single quote tick.
+    """
+    A minimal representation of a single quote tick.
 
     Provides computed *mid* price and spread-in-bps via properties.
     """
@@ -111,7 +116,8 @@ class QuoteTickLite:
 
     @classmethod
     def from_dict(cls, d: dict) -> QuoteTickLite:
-        """Construct a ``QuoteTickLite`` from a plain dict.
+        """
+        Construct a ``QuoteTickLite`` from a plain dict.
 
         Raises ``ValueError`` if ``ask`` is not strictly greater than ``bid``
         or if ``bid`` is not strictly positive.
@@ -141,7 +147,8 @@ class QuoteTickLite:
 
 @dataclass
 class TickSignalEvent:
-    """A detected cross-venue / cross-symbol tick-level signal.
+    """
+    A detected cross-venue / cross-symbol tick-level signal.
 
     Records the context of the signal (source, target, asset) along with the
     measured price movement and metadata. Used purely for measurement — this
@@ -206,7 +213,8 @@ class TickSignalEvent:
 
 @dataclass
 class TickForwardReturn:
-    """Measured forward return for a tick signal over a specified horizon.
+    """
+    Measured forward return for a tick signal over a specified horizon.
 
     Captures the raw and cost-adjusted return (in basis points) from the
     signal timestamp through ``horizon_ms``.  When ``valid`` is ``False`` the

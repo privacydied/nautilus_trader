@@ -1,4 +1,5 @@
-"""CLI runner for Phase 2B-2C2 offline FDR correction.
+"""
+CLI runner for Phase 2B-2C2 offline FDR correction.
 
 Consumes Phase 2B-2C1 train-holdout comparison artifact and applies
 deterministic FDR correction across eligible edge-family comparison survivors.
@@ -11,16 +12,12 @@ import json
 import sys
 from pathlib import Path
 
-from .offline_fdr_correction import (
-    FDR_SCHEMA_VERSION,
-    OfflineFdrConfig,
-    build_offline_fdr_correction_report,
-    compute_fdr_config_hash,
-    parse_pvalue_input,
-    write_offline_fdr_correction_outputs,
-    _parse_config,
-    _validate_config_keys,
-)
+from .offline_fdr_correction import OfflineFdrConfig
+from .offline_fdr_correction import _parse_config
+from .offline_fdr_correction import _validate_config_keys
+from .offline_fdr_correction import build_offline_fdr_correction_report
+from .offline_fdr_correction import parse_pvalue_input
+from .offline_fdr_correction import write_offline_fdr_correction_outputs
 
 
 def run(args: argparse.Namespace) -> int:

@@ -1,12 +1,17 @@
 """Data models for the signal observer."""
-from dataclasses import dataclass, field, asdict
-from typing import Optional, Dict, Any, List
 import json
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
+from typing import Any
+from typing import Dict
+from typing import List
 
 
 @dataclass
 class SignalEvent:
     """A timestamped signal event."""
+
     signal_id: str
     timestamp: float           # unix epoch seconds
     source_venue: str
@@ -16,8 +21,8 @@ class SignalEvent:
     signal_type: str           # "cross_market_move", "manual_csv", etc.
     direction: str             # "long" or "short"
     strength: float            # magnitude in bps or arbitrary scale
-    metadata: Optional[Dict[str, Any]] = None
-    reason: Optional[str] = None
+    metadata: Dict[str, Any] | None = None
+    reason: str | None = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -51,6 +56,7 @@ class SignalEvent:
 @dataclass
 class ForwardReturnResult:
     """Forward return for one signal + one horizon."""
+
     signal_id: str
     signal_timestamp: float
     source_venue: str
@@ -61,18 +67,18 @@ class ForwardReturnResult:
     direction: str
     strength: float
     horizon: str
-    entry_reference_price: Optional[float] = None
-    forward_price: Optional[float] = None
-    raw_return_bps: Optional[float] = None
-    direction_adjusted_return_bps: Optional[float] = None
-    fee_bps: Optional[float] = None
-    slippage_bps: Optional[float] = None
-    quote_mismatch_buffer_bps: Optional[float] = None
-    net_return_bps: Optional[float] = None
-    max_favorable_excursion_bps: Optional[float] = None
-    max_adverse_excursion_bps: Optional[float] = None
+    entry_reference_price: float | None = None
+    forward_price: float | None = None
+    raw_return_bps: float | None = None
+    direction_adjusted_return_bps: float | None = None
+    fee_bps: float | None = None
+    slippage_bps: float | None = None
+    quote_mismatch_buffer_bps: float | None = None
+    net_return_bps: float | None = None
+    max_favorable_excursion_bps: float | None = None
+    max_adverse_excursion_bps: float | None = None
     valid: bool = True
-    rejection_reason: Optional[str] = None
+    rejection_reason: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -84,36 +90,39 @@ class ForwardReturnResult:
 @dataclass
 class HorizonSummary:
     """Aggregated stats for a single horizon."""
+
     horizon: str
     event_count: int = 0
     valid_count: int = 0
     rejected_count: int = 0
-    mean_raw_return_bps: Optional[float] = None
-    median_raw_return_bps: Optional[float] = None
-    mean_net_return_bps: Optional[float] = None
-    median_net_return_bps: Optional[float] = None
-    win_rate_after_fees: Optional[float] = None
-    p25: Optional[float] = None
-    p50: Optional[float] = None
-    p75: Optional[float] = None
-    p90: Optional[float] = None
-    best_return: Optional[float] = None
-    worst_return: Optional[float] = None
+    mean_raw_return_bps: float | None = None
+    median_raw_return_bps: float | None = None
+    mean_net_return_bps: float | None = None
+    median_net_return_bps: float | None = None
+    win_rate_after_fees: float | None = None
+    p25: float | None = None
+    p50: float | None = None
+    p75: float | None = None
+    p90: float | None = None
+    best_return: float | None = None
+    worst_return: float | None = None
 
 
 @dataclass
 class SignalTypeSummary:
     """Aggregated stats for a signal type."""
+
     signal_type: str
     event_count: int = 0
     valid_count: int = 0
-    mean_net_return_bps: Optional[float] = None
-    win_rate_after_fees: Optional[float] = None
+    mean_net_return_bps: float | None = None
+    win_rate_after_fees: float | None = None
 
 
 @dataclass
 class SignalEvaluationSummary:
     """Overall summary of an observer run."""
+
     run_start: float = 0.0
     run_end: float = 0.0
     source_venues: List[str] = field(default_factory=list)
@@ -129,8 +138,8 @@ class SignalEvaluationSummary:
     results_by_horizon: List[dict] = field(default_factory=list)
     results_by_signal_type: List[dict] = field(default_factory=list)
     results_by_venue_pair: List[dict] = field(default_factory=list)
-    best_signal_group: Optional[str] = None
-    worst_signal_group: Optional[str] = None
+    best_signal_group: str | None = None
+    worst_signal_group: str | None = None
     final_recommendation: str = ""
 
     def to_dict(self) -> dict:

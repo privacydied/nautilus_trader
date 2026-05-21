@@ -7,7 +7,6 @@ Data modules are imported but never exercised over real data.
 
 from __future__ import annotations
 
-import json
 import math
 import random
 import tempfile
@@ -16,54 +15,97 @@ from unittest.mock import patch
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
-    PRIMARY_COST_BPS,
-    OPTIMISTIC_COST_BPS,
-    BASELINE_BEAT_BPS,
-    MIN_VALID_EVENTS_FOR_CANDIDATE,
-    MIN_VALID_EVENTS_FOR_DIAGNOSTIC,
-    MIN_WIN_RATE,
-    DIRECTION_POSITIVE_FUNDING,
-    DIRECTION_NEGATIVE_FUNDING,
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_data import ArchiveCache
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_data import FundingRateRow
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_data import (
+    compute_content_hash,
 )
-
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_data import (
+    parse_funding_rate_csv,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_data import (
+    parse_spot_kline_csv,
+)
 from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     VERDICT_CANDIDATE,
-    VERDICT_REJECTED,
-    VERDICT_NEEDS_MORE_DATA,
-    VERDICT_UNDERPOWERED_HOLDOUT,
-    VERDICT_NULL_REJECTED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     VERDICT_FDR_BLOCKED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     VERDICT_FDR_NOT_IMPLEMENTED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    VERDICT_NEEDS_MORE_DATA,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     VERDICT_NO_NULL_WORTHY,
-    FundingObservation,
-    SpotPriceSnapshot,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    VERDICT_NULL_REJECTED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    VERDICT_REJECTED,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    VERDICT_UNDERPOWERED_HOLDOUT,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     CellIdentifier,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     CellResult,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     EvaluationRunConfig,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    FundingObservation,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    SpotPriceSnapshot,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     build_all_cell_identifiers,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     build_eligible_timestamps,
-    select_events,
-    compute_forward_return_bps,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     compute_events_for_cell,
-    compute_baseline,
-    evaluate_gates,
-    split_events_chronological,
-    run_null_for_cell,
-    run_fdr_on_cells,
-    evaluate_all_cells,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
     estimate_coverage,
 )
-
-from examples.strategies.venue_agnostic_signal_observer.funding_crowding_data import (
-    FundingRateRow,
-    SpotKlineRow,
-    ArchiveCache,
-    compute_content_hash,
-    compute_file_hash,
-    parse_funding_rate_csv,
-    parse_spot_kline_csv,
-    extract_csv_from_zip,
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    evaluate_all_cells,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    evaluate_gates,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    run_fdr_on_cells,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    run_null_for_cell,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    select_events,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+    split_events_chronological,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    DIRECTION_NEGATIVE_FUNDING,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    DIRECTION_POSITIVE_FUNDING,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    OPTIMISTIC_COST_BPS,
+)
+from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
+    PRIMARY_COST_BPS,
 )
 
 
@@ -128,13 +170,13 @@ def _make_spot_prices(
 
 
 def _make_config(**kwargs) -> EvaluationRunConfig:
-    defaults = dict(
-        data_window_start_ns=1_600_000_000_000_000_000,
-        data_window_end_ns=1_600_000_000_000_000_000 + 5000 * 8 * 3600 * 1_000_000_000,
-        seed=42,
-        cost_bps=PRIMARY_COST_BPS,
-        optimistic_cost_bps=OPTIMISTIC_COST_BPS,
-    )
+    defaults = {
+        "data_window_start_ns": 1_600_000_000_000_000_000,
+        "data_window_end_ns": 1_600_000_000_000_000_000 + 5000 * 8 * 3600 * 1_000_000_000,
+        "seed": 42,
+        "cost_bps": PRIMARY_COST_BPS,
+        "optimistic_cost_bps": OPTIMISTIC_COST_BPS,
+    }
     defaults.update(kwargs)
     return EvaluationRunConfig(**defaults)
 
@@ -194,8 +236,8 @@ class TestPercentileInvariant:
             rates_before, percentile_rank=5.0
         )
         # Add future data (should not affect threshold at t)
-        rates_with_future = rates_before + [0.01, 0.02, 0.05]
-        threshold_after = compute_past_only_percentile_threshold(
+        rates_with_future = [*rates_before, 0.01, 0.02, 0.05]
+        compute_past_only_percentile_threshold(
             rates_with_future, percentile_rank=5.0
         )
         # The threshold depends on which rates are passed; the function
@@ -217,7 +259,7 @@ class TestEventDeDup:
     def test_one_event_per_timestamp(self) -> None:
         """Each funding timestamp produces at most one event per cell."""
         funding = _make_funding_obs(count=100, volatility=0.01)
-        spot = _make_spot_prices(count=1000)
+        _make_spot_prices(count=1000)
         # All funding rows have large positive rates -> all are positive events
         # for abs_funding_ge_5bp / positive direction
         threshold_def = {"label": "abs_funding_ge_5bp", "min_abs_rate": 0.0005}
@@ -311,8 +353,10 @@ class TestPrimaryCostGate:
 
 class TestCostTierSeparation:
     def test_passes_6bps_fails_50bps_not_promoted(self) -> None:
-        """A cell with weak edge that passes 6 bps but fails 50 bps
-        must not be promoted."""
+        """
+        A cell with weak edge that passes 6 bps but fails 50 bps
+        must not be promoted.
+        """
         # Build a cell result with mean just under 50 bps but above 6 bps
         # Under 50 bps gate: mean_net_bps <= 0 at 50 bps cost
         # Actually, passing/failing cost depends on what gate we apply.
@@ -438,9 +482,11 @@ class Test50To99Events:
 
 class Test100PlusEvents:
     def test_strong_edge_100_events_reaches_gates(self) -> None:
-        """Cell with >= 100 and strong edge passes pre-null gates.
+        """
+        Cell with >= 100 and strong edge passes pre-null gates.
         Without events provided, may land on UNDERPOWERED_HOLDOUT
-        due to empty event list for split."""
+        due to empty event list for split.
+        """
         result = CellResult(
             cell_id="BTC/abs_funding_ge_5bp/h24/positive_funding_extreme",
             threshold_label="abs_funding_ge_5bp",
@@ -476,9 +522,7 @@ class Test100PlusEvents:
 class TestChronologicalSplit:
     def test_train_all_before_holdout(self) -> None:
         """Train events all occur before holdout events."""
-        from .test_funding_crowding_timestamp_null import _make_synthetic_input as _null_input
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
-            split_events_chronological,
             CellEvent,
         )
 
@@ -507,7 +551,6 @@ class TestTrainPrecedesHoldout:
     def test_all_train_before_all_holdout(self) -> None:
         """Covers requirement 14, re-verifying the split contract."""
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
-            split_events_chronological,
             CellEvent,
         )
         events = [
@@ -535,8 +578,12 @@ class TestHoldoutSignFlip:
         """Train positive, holdout negative -> not a candidate."""
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
             CellEvent,
-            evaluate_gates,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
             CellResult,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            evaluate_gates,
         )
 
         # Build events where train is positive and holdout is negative
@@ -608,12 +655,12 @@ class TestCallsExistingNullModule:
             )
 
             try:
-                results = evaluate_all_cells(funding, spot, config)
+                evaluate_all_cells(funding, spot, config)
             except Exception:
                 # May raise due to spot price lookups, that's fine
                 pass
 
-            assert mock_null.called or True  # at least verify import path works
+            assert True  # at least verify import path works
             # Check that the module can be imported
             from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
                 run_timestamp_shuffle_null as rtsn,
@@ -629,11 +676,7 @@ class TestCallsExistingNullModule:
 class TestCallsExistingFDRModule:
     def test_fdr_module_importable(self) -> None:
         """The BY FDR module is importable."""
-        from examples.strategies.venue_agnostic_signal_observer.validator.fdr import (
-            compute_fdr,
-            FDRResult,
-            FDRRow,
-        )
+        from examples.strategies.venue_agnostic_signal_observer.validator.fdr import compute_fdr
         assert compute_fdr is not None
 
     def test_fdr_unavailable_produces_diagnostic(self) -> None:
@@ -749,6 +792,7 @@ class TestNoForbiddenVerdicts:
     def test_module_has_no_forbidden_exports(self) -> None:
         """Check that the evaluation module doesn't export forbidden strings."""
         import inspect
+
         from examples.strategies.venue_agnostic_signal_observer import (
             funding_crowding_evaluation as mod,
         )
@@ -764,11 +808,17 @@ class TestNoForbiddenVerdicts:
 
 class TestArtifactWrite:
     def test_artifact_write_all_files(self) -> None:
-        """Writing synthetic artifacts produces summary.json, events.jsonl,
-        forward_returns.jsonl, report.md."""
+        """
+        Writing synthetic artifacts produces summary.json, events.jsonl,
+        forward_returns.jsonl, report.md.
+        """
         from examples.strategies.venue_agnostic_signal_observer.run_artifacts import (
             atomic_write_json,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_artifacts import (
             atomic_write_jsonl,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.run_artifacts import (
             atomic_write_text,
         )
 
@@ -930,10 +980,10 @@ class TestNoForbiddenImports:
         import inspect
 
         from examples.strategies.venue_agnostic_signal_observer import (
-            funding_crowding_evaluation as eval_mod,
+            funding_crowding_data as data_mod,
         )
         from examples.strategies.venue_agnostic_signal_observer import (
-            funding_crowding_data as data_mod,
+            funding_crowding_evaluation as eval_mod,
         )
 
         for mod in [eval_mod, data_mod]:
@@ -988,7 +1038,9 @@ class TestDataModule:
 
     def test_funding_to_observations(self) -> None:
         """Verify conversion from data model to evaluation model."""
-        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_data import parse_funding_rate_csv
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_data import (
+            parse_funding_rate_csv,
+        )
         csv_text = "calc_time,funding_interval_hours,last_funding_rate\n1600000000000,8,0.00010000\n"
         rows = parse_funding_rate_csv(csv_text)
         obs = [
@@ -1011,9 +1063,7 @@ class TestDataModule:
 
 class TestExistingTests:
     def test_precommitment_module_importable(self) -> None:
-        from examples.strategies.venue_agnostic_signal_observer import (
-            funding_crowding_reversal,
-        )
+        from examples.strategies.venue_agnostic_signal_observer import funding_crowding_reversal
         assert funding_crowding_reversal.PRIMARY_COST_BPS == 50.0
 
     def test_timestamp_null_module_importable(self) -> None:
@@ -1034,6 +1084,7 @@ class TestArchiveProbeAudit:
     def test_no_hardcoded_2025_05(self) -> None:
         """Fetch range is not hardcoded to 2025-05 anywhere."""
         import inspect
+
         from examples.strategies.venue_agnostic_signal_observer import (
             run_funding_crowding_reversal as mod,
         )
@@ -1072,16 +1123,16 @@ class TestArchiveProbeAudit:
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_data import (
             SPOT_KLINES_1H_URL_TEMPLATE,
         )
-        assert 'spot/monthly/klines' in SPOT_KLINES_1H_URL_TEMPLATE
-        assert '{symbol}' in SPOT_KLINES_1H_URL_TEMPLATE
+        assert "spot/monthly/klines" in SPOT_KLINES_1H_URL_TEMPLATE
+        assert "{symbol}" in SPOT_KLINES_1H_URL_TEMPLATE
 
     def test_funding_source_is_futures_um_funding_rate(self) -> None:
         """Funding source path must be futures USDⓈ-M monthly fundingRate."""
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_data import (
             FUNDING_ARCHIVE_URL_TEMPLATE,
         )
-        assert 'futures/um/monthly/fundingRate' in FUNDING_ARCHIVE_URL_TEMPLATE
-        assert 'fundingRate' in FUNDING_ARCHIVE_URL_TEMPLATE
+        assert "futures/um/monthly/fundingRate" in FUNDING_ARCHIVE_URL_TEMPLATE
+        assert "fundingRate" in FUNDING_ARCHIVE_URL_TEMPLATE
 
     def test_window_mechanical_rationale(self) -> None:
         """Window proposal must include mechanical rationale statement."""
@@ -1097,6 +1148,7 @@ class TestArchiveProbeAudit:
     def test_coverage_mode_does_not_run_evaluation(self) -> None:
         """Coverage mode must not execute the real evaluation."""
         import inspect
+
         from examples.strategies.venue_agnostic_signal_observer import (
             run_funding_crowding_reversal as mod,
         )
@@ -1109,6 +1161,7 @@ class TestArchiveProbeAudit:
     def test_run_mode_blocked(self) -> None:
         """--mode run must return error and not execute."""
         import inspect
+
         from examples.strategies.venue_agnostic_signal_observer import (
             run_funding_crowding_reversal as mod,
         )
@@ -1128,7 +1181,7 @@ class TestEventsPreservation:
     def test_to_dict_includes_events(self) -> None:
         """CellResult.to_dict() must include the events field."""
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
-            CellResult, CellEvent,
+            CellResult,
         )
         cr = CellResult(
             cell_id="BTC/abs_funding_ge_5bp/h24/positive_funding_extreme",
@@ -1143,7 +1196,10 @@ class TestEventsPreservation:
     def test_reconstruction_preserves_events(self) -> None:
         """Reconstructing CellResult(**result.to_dict()) preserves event count."""
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
-            CellResult, CellEvent,
+            CellEvent,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellResult,
         )
         events = (
             CellEvent(event_timestamp_ns=1, forward_spot_return_bps=100.0, funding_rate=0.001, net_return_bps=50.0),
@@ -1166,7 +1222,13 @@ class TestEventsPreservation:
     def test_gate_reconstruction_preserves_events(self) -> None:
         """Gate-pipeline reconstruction via **result.to_dict() must preserve events."""
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
-            CellResult, CellEvent, VERDICT_NEEDS_MORE_DATA,
+            VERDICT_NEEDS_MORE_DATA,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellEvent,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellResult,
         )
         events = (
             CellEvent(event_timestamp_ns=1, forward_spot_return_bps=100.0, funding_rate=0.001, net_return_bps=50.0),
@@ -1186,8 +1248,16 @@ class TestEventsPreservation:
     def test_run_null_receives_nonempty_returns(self) -> None:
         """run_null_for_cell must receive non-empty signed_returns when events exist."""
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
-            CellResult, CellEvent, EvaluationRunConfig, VERDICT_CANDIDATE,
             MIN_VALID_EVENTS_FOR_CANDIDATE,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            VERDICT_CANDIDATE,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellEvent,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellResult,
         )
         count = MIN_VALID_EVENTS_FOR_CANDIDATE + 1
         events = tuple(
@@ -1224,15 +1294,29 @@ class TestEventsPreservation:
 
     def test_valid_cell_not_wrongly_no_null_worthy(self) -> None:
         """Cells with valid events must not be mapped to NO_NULL_WORTHY for the wrong reason."""
+        import bisect
+
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
-            CellResult, CellEvent, EvaluationRunConfig, VERDICT_CANDIDATE,
-            VERDICT_NO_NULL_WORTHY, VERDICT_NULL_REJECTED, run_null_for_cell,
-            compute_forward_return_bps, net_signal_return_bps, MIN_VALID_EVENTS_FOR_CANDIDATE,
+            VERDICT_CANDIDATE,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            VERDICT_NO_NULL_WORTHY,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellEvent,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            CellResult,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            EvaluationRunConfig,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            net_signal_return_bps,
         )
         from examples.strategies.venue_agnostic_signal_observer.funding_crowding_reversal import (
             DIRECTION_POSITIVE_FUNDING,
         )
-        import bisect
         # Build a rising price series so forward returns are positive
         count = 120
         eligible_multiple = 10
@@ -1246,10 +1330,12 @@ class TestEventsPreservation:
             spot_times.append(i * 1800_000_000_000)
             spot_prices_list.append(current_price)
             current_price += price_increment
-        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import SpotPriceSnapshot
+        from examples.strategies.venue_agnostic_signal_observer.funding_crowding_evaluation import (
+            SpotPriceSnapshot,
+        )
         spot_snaps = [
             SpotPriceSnapshot(timestamp_ns=t, price=p)
-            for t, p in zip(spot_times, spot_prices_list)
+            for t, p in zip(spot_times, spot_prices_list, strict=False)
         ]
         spot_t_arr = [p.timestamp_ns for p in spot_snaps]
         spot_p_arr = [p.price for p in spot_snaps]
@@ -1278,7 +1364,7 @@ class TestEventsPreservation:
         event_ts_list = list(eligible_ts[:count])
         events_list: list[CellEvent] = []
         for ets in event_ts_list:
-            net_bps = signed_returns.get(ets, None)
+            net_bps = signed_returns.get(ets)
             if net_bps is not None:
                 events_list.append(CellEvent(
                     event_timestamp_ns=ets,

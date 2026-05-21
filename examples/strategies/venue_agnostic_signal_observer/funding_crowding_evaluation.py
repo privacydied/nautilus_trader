@@ -17,40 +17,32 @@ import bisect
 import math
 import random
 import statistics
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from collections.abc import Mapping
+from collections.abc import Sequence
+from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 
-from .funding_crowding_reversal import (
-    ABSOLUTE_THRESHOLDS,
-    ALL_THRESHOLDS,
-    BASELINE_BEAT_BPS,
-    BTC_PRIMARY_FDR_FAMILY_SIZE,
-    DIRECTIONS,
-    DIRECTION_NEGATIVE_FUNDING,
-    DIRECTION_POSITIVE_FUNDING,
-    HORIZONS,
-    MIN_VALID_EVENTS_FOR_CANDIDATE,
-    MIN_VALID_EVENTS_FOR_DIAGNOSTIC,
-    MIN_WIN_RATE,
-    PERCENTILE_LOOKBACK_CALENDAR_DAYS,
-    PERCENTILE_THRESHOLDS,
-    PRIMARY_COST_BPS,
-    PRIMARY_HORIZON,
-    TRAIN_FRACTION,
-    signal_return_bps_for_negative_funding,
-    signal_return_bps_for_positive_funding,
-    compute_past_only_percentile_threshold,
-    net_signal_return_bps,
-)
+from .funding_crowding_reversal import ALL_THRESHOLDS
+from .funding_crowding_reversal import BASELINE_BEAT_BPS
+from .funding_crowding_reversal import DIRECTION_NEGATIVE_FUNDING
+from .funding_crowding_reversal import DIRECTION_POSITIVE_FUNDING
+from .funding_crowding_reversal import DIRECTIONS
+from .funding_crowding_reversal import HORIZONS
+from .funding_crowding_reversal import MIN_VALID_EVENTS_FOR_CANDIDATE
+from .funding_crowding_reversal import MIN_VALID_EVENTS_FOR_DIAGNOSTIC
+from .funding_crowding_reversal import MIN_WIN_RATE
+from .funding_crowding_reversal import PERCENTILE_LOOKBACK_CALENDAR_DAYS
+from .funding_crowding_reversal import PRIMARY_COST_BPS
+from .funding_crowding_reversal import TRAIN_FRACTION
+from .funding_crowding_reversal import compute_past_only_percentile_threshold
+from .funding_crowding_reversal import net_signal_return_bps
+from .funding_crowding_reversal import signal_return_bps_for_negative_funding
+from .funding_crowding_reversal import signal_return_bps_for_positive_funding
+from .funding_crowding_timestamp_null import STATUS_TIMESTAMP_SHUFFLE_NULL_INVALID_INPUT
+from .funding_crowding_timestamp_null import TimestampShuffleNullInput
+from .funding_crowding_timestamp_null import run_timestamp_shuffle_null
 
-from .funding_crowding_timestamp_null import (
-    TimestampShuffleNullInput,
-    TimestampShuffleNullResult,
-    run_timestamp_shuffle_null,
-    STATUS_TIMESTAMP_SHUFFLE_NULL_INVALID_INPUT,
-)
 
 # ---------------------------------------------------------------------------
 # Verdict constants (matching precommitment taxonomy)
@@ -116,7 +108,8 @@ class CellIdentifier:
 
 @dataclass(frozen=True)
 class CellResult:
-    """Complete evaluation result for one frozen cell.
+    """
+    Complete evaluation result for one frozen cell.
 
     All fields are populated at each stage of the gate pipeline.
     Fields that have not been computed yet may be None.
@@ -216,7 +209,8 @@ class EvaluationRunConfig:
 
 
 def build_all_cell_identifiers() -> list[CellIdentifier]:
-    """Return exactly 60 BTC primary cell identifiers.
+    """
+    Return exactly 60 BTC primary cell identifiers.
 
     Matches: 6 thresholds × 5 horizons × 2 directions = 60.
     """
@@ -245,7 +239,8 @@ def build_eligible_timestamps(
     threshold_def: dict[str, object],
     funding_rows_by_ts: Mapping[int, FundingObservation] | None = None,
 ) -> tuple[int, ...]:
-    """Build the chronologically sorted eligible calendar for a threshold.
+    """
+    Build the chronologically sorted eligible calendar for a threshold.
 
     For absolute thresholds: all funding observations are eligible
     (assuming they have sufficient forward-return data, which the
@@ -265,7 +260,7 @@ def build_eligible_timestamps(
         return tuple(eligible)
 
     # Percentile thresholds: need 180 days of history before each timestamp
-    percentile_rank = threshold_def["percentile_rank"]  # type: ignore[typeddict-item]
+    threshold_def["percentile_rank"]  # type: ignore[typeddict-item]
     lookback_ns = PERCENTILE_LOOKBACK_CALENDAR_DAYS * 86_400 * 1_000_000_000
 
     sorted_rows = sorted(funding_rows, key=lambda r: r.timestamp_ns)
@@ -303,7 +298,8 @@ def select_events(
     eligible_timestamps: tuple[int, ...],
     funding_by_ts: Mapping[int, FundingObservation],
 ) -> tuple[int, ...]:
-    """Select event timestamps for one cell.
+    """
+    Select event timestamps for one cell.
 
     Events are eligible timestamps whose funding rate passes the
     threshold, assigned to the requested direction.
@@ -379,9 +375,7 @@ def select_events(
             continue
         if abs(row.funding_rate) < min_abs_rate:
             continue
-        if direction == DIRECTION_POSITIVE_FUNDING and row.funding_rate > 0:
-            abs_events.append(row.timestamp_ns)
-        elif direction == DIRECTION_NEGATIVE_FUNDING and row.funding_rate < 0:
+        if (direction == DIRECTION_POSITIVE_FUNDING and row.funding_rate > 0) or (direction == DIRECTION_NEGATIVE_FUNDING and row.funding_rate < 0):
             abs_events.append(row.timestamp_ns)
 
     return tuple(abs_events)
@@ -397,7 +391,8 @@ def compute_forward_return_bps(
     spot_prices: Sequence[SpotPriceSnapshot],
     horizon_seconds: int,
 ) -> float | None:
-    """Compute forward BTC spot return in bps from event time to horizon.
+    """
+    Compute forward BTC spot return in bps from event time to horizon.
 
     Uses the spot price at event time (latest price <= event time) and
     the spot price at event time + horizon (latest price <= that point).
@@ -438,7 +433,8 @@ def compute_events_for_cell(
     funding_by_ts: Mapping[int, FundingObservation],
     config: EvaluationRunConfig,
 ) -> CellResult:
-    """Compute all events and metrics for one cell.
+    """
+    Compute all events and metrics for one cell.
 
     This is the core per-cell evaluation function.
     """
@@ -584,7 +580,8 @@ def compute_baseline(
     eligible_ts: tuple[int, ...],
     funding_by_ts: Mapping[int, FundingObservation],
 ) -> float | None:
-    """Compute direction-matched unconditional baseline.
+    """
+    Compute direction-matched unconditional baseline.
 
     Samples *event_count* random timestamps from the eligible calendar,
     computes the same-direction forward return for each, and returns
@@ -631,7 +628,8 @@ def split_events_chronological(
     events: Sequence[CellEvent],
     train_fraction: float = TRAIN_FRACTION,
 ) -> tuple[Sequence[CellEvent], Sequence[CellEvent]]:
-    """Split events chronologically into train and holdout.
+    """
+    Split events chronologically into train and holdout.
 
     First train_fraction of events (by timestamp) go to train,
     remainder to holdout. Events must be sorted chronologically.
@@ -650,7 +648,8 @@ def evaluate_gates(
     result: CellResult,
     config: EvaluationRunConfig,
 ) -> CellResult:
-    """Apply all acceptance gates and update result with verdict.
+    """
+    Apply all acceptance gates and update result with verdict.
 
     Returns updated CellResult with verdict populated.
     """
@@ -775,7 +774,8 @@ def run_null_for_cell(
     signed_returns_by_ts: Mapping[int, float],
     config: EvaluationRunConfig,
 ) -> CellResult:
-    """Run the timestamp-shuffle null for a cell.
+    """
+    Run the timestamp-shuffle null for a cell.
 
     Returns updated result with null fields populated.
     """
@@ -842,13 +842,15 @@ def run_fdr_on_cells(
     fdr_alpha: float = 0.05,
     fdr_method: str = "BY",
 ) -> list[CellResult]:
-    """Run BY FDR across all cells that survived null.
+    """
+    Run BY FDR across all cells that survived null.
 
     Returns updated results with FDR fields populated.
     """
     # Try to import the existing FDR module
     try:
-        from .validator.fdr import compute_fdr, make_metadata
+        from .validator.fdr import compute_fdr
+        from .validator.fdr import make_metadata
         FDR_AVAILABLE = True
     except ImportError:
         FDR_AVAILABLE = False
@@ -925,7 +927,8 @@ def evaluate_all_cells(
     spot_prices: Sequence[SpotPriceSnapshot],
     config: EvaluationRunConfig,
 ) -> list[CellResult]:
-    """Run the full evaluation pipeline for all 60 BTC primary cells.
+    """
+    Run the full evaluation pipeline for all 60 BTC primary cells.
 
     This function should only be called in the post-approval real run,
     not in this pre-run coverage task.
@@ -1055,7 +1058,8 @@ def estimate_coverage(
     spot_prices: Sequence[SpotPriceSnapshot],
     content_hashes: dict[str, str] | None = None,
 ) -> CoverageEstimate:
-    """Estimate data coverage without running full evaluation.
+    """
+    Estimate data coverage without running full evaluation.
 
     Computes approximate per-cell event counts using a simplified
     method to estimate how many cells would have sufficient data.

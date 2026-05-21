@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Research report miner.
+"""
+Research report miner.
 
 Walks the repo's reports/ directory, reads JSON/JSONL/CSV/MD files, and
 produces a unified bps-gated research-status table.
@@ -12,10 +13,11 @@ import argparse
 import csv
 import json
 import re
-import statistics
-import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
+
 
 # ---------------------------------------------------------------------------
 # Output schema
@@ -208,7 +210,7 @@ def _record_from_dict(
     r.random_baseline_bps = _parse_float(row.get("baseline_mean_net_bps",
         row.get("random_baseline_bps", row.get("baseline_mean_net_return_bps",))))
 
-    r.beats_baseline = row.get("beats_baseline", row.get("candidate", None))
+    r.beats_baseline = row.get("beats_baseline", row.get("candidate"))
     if r.beats_baseline is not None:
         r.beats_baseline = bool(r.beats_baseline)
 
@@ -282,13 +284,13 @@ def _extract_records(
                 records.append(rec)
             else:
                 # Also recurse into child dicts for nested summaries
-                for k, v in obj.items():
+                for v in obj.values():
                     if isinstance(v, (dict, list)):
                         _extract_records(v, filepath, project, study, records, warnings, depth + 1)
 
         else:
             # Recurse into values
-            for k, v in obj.items():
+            for v in obj.values():
                 if isinstance(v, (dict, list)):
                     _extract_records(v, filepath, project, study, records, warnings, depth + 1)
 
@@ -392,7 +394,8 @@ _SKIP_NAMES = {"research_status_summary.json", "research_status_summary.csv", "r
 
 
 def mine_reports(reports_dir: str) -> tuple[list[ResearchRecord], list[str]]:
-    """Walk reports_dir and extract ResearchRecords from supported files.
+    """
+    Walk reports_dir and extract ResearchRecords from supported files.
 
     Returns (records, warnings).
     """

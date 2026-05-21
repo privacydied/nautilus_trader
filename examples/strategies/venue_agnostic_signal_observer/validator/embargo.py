@@ -9,17 +9,19 @@ under-embargoes dense stress windows and over-embargoes sparse quiet ones.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import timedelta
 from typing import Sequence
 
 
 @dataclass(frozen=True)
 class TimeInterval:
     """A closed label interval [start, end] in UTC."""
+
     start: datetime
     end: datetime
 
-    def overlaps(self, other: "TimeInterval") -> bool:
+    def overlaps(self, other: TimeInterval) -> bool:
         return self.start <= other.end and self.end >= other.start
 
     def duration_seconds(self) -> float:
@@ -29,6 +31,7 @@ class TimeInterval:
 @dataclass(frozen=True)
 class TimestampedObservation:
     """An observation with an explicit label interval."""
+
     idx: int
     event_time: datetime
     label_interval: TimeInterval
@@ -39,7 +42,8 @@ def purge_train_obs(
     train_obs: Sequence[TimestampedObservation],
     test_interval: TimeInterval,
 ) -> tuple[list[TimestampedObservation], int]:
-    """Remove train observations whose label interval overlaps the test interval.
+    """
+    Remove train observations whose label interval overlaps the test interval.
 
     Returns (surviving_obs, purged_count).
     """
@@ -58,7 +62,8 @@ def embargo_train_obs(
     test_interval: TimeInterval,
     embargo_seconds: float,
 ) -> tuple[list[TimestampedObservation], int]:
-    """Remove train observations within embargo_seconds after test_interval.end.
+    """
+    Remove train observations within embargo_seconds after test_interval.end.
 
     Embargo is wall-clock based. Observations whose event_time falls in
     (test_interval.end, test_interval.end + embargo_seconds] are removed.

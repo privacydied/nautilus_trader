@@ -15,66 +15,56 @@ Public data observer only. No auth. No orders. No execution.
 
 from __future__ import annotations
 
-import hashlib
 import logging
-import math
 import random
-from dataclasses import dataclass, replace
-from typing import Any, Sequence
+from dataclasses import replace
+from typing import Sequence
 
-from .funding_dispersion_carry import (
-    ASSETS,
-    FDR_ALPHA,
-    FDR_FAMILY_SIZE,
-    FDR_METHOD,
-    FUNDING_SANITY_BAND_BPS,
-    GATE_A_MIN_EVENTS,
-    GATE_B_MIN_EVENTS,
-    HOLD_LENGTHS,
-    HOLDOUT_MIN_EVENTS,
-    MIN_SETTLEMENTS_IN_WINDOW,
-    NULL_ALPHA,
-    NULL_ITERATIONS,
-    NULL_SEED,
-    PRE_NULL_MEAN_NET_CARRY_GT,
-    PRE_NULL_MEDIAN_NET_CARRY_GT,
-    PRE_NULL_MIN_EVENTS,
-    PRE_NULL_MIN_WIN_RATE,
-    PRE_NULL_WORST_DECILE_FLOOR_BPS,
-    PRIMARY_CAMPAIGN_COST_BPS,
-    DIAGNOSTIC_COST_BPS,
-    SAFETY_MODE,
-    THRESHOLDS_BPS,
-    TRAIN_FRACTION,
-    VENUES,
-    VERDICT_ARCHIVE_CANDIDATE,
-    VERDICT_DATA_INSUFFICIENT,
-    VERDICT_FDR_BLOCKED,
-    VERDICT_FUNDING_UNIT_AMBIGUOUS,
-    VERDICT_HOLDOUT_FAILED,
-    VERDICT_NEEDS_MORE_DATA,
-    VERDICT_NULL_REJECTED,
-    VERDICT_REJECTED,
-    VERDICT_REJECTED_COST_WALL,
-    LABEL_PASS_PRE_NULL,
-    LABEL_PASS_NULL,
-    ALLOWED_VERDICTS,
-    FORBIDDEN_VERDICTS,
-    CellIdentifier,
-    CellRecord,
-    CampaignResult,
-    DispersionEvent,
-    GateAResult,
-    GateBComboResult,
-    SettlementRecord,
-    FundingSeries,
-    WindowResolution,
-    RunMetadata,
-    build_all_cell_identifiers,
-    compute_settlement_carry_bps,
-    compute_realized_carry_bps,
-    validate_verdict,
-)
+from .funding_dispersion_carry import ASSETS
+from .funding_dispersion_carry import FDR_ALPHA
+from .funding_dispersion_carry import FDR_FAMILY_SIZE
+from .funding_dispersion_carry import FUNDING_SANITY_BAND_BPS
+from .funding_dispersion_carry import GATE_A_MIN_EVENTS
+from .funding_dispersion_carry import GATE_B_MIN_EVENTS
+from .funding_dispersion_carry import HOLD_LENGTHS
+from .funding_dispersion_carry import HOLDOUT_MIN_EVENTS
+from .funding_dispersion_carry import LABEL_PASS_NULL
+from .funding_dispersion_carry import LABEL_PASS_PRE_NULL
+from .funding_dispersion_carry import MIN_SETTLEMENTS_IN_WINDOW
+from .funding_dispersion_carry import NULL_ALPHA
+from .funding_dispersion_carry import NULL_ITERATIONS
+from .funding_dispersion_carry import NULL_SEED
+from .funding_dispersion_carry import PRE_NULL_MEAN_NET_CARRY_GT
+from .funding_dispersion_carry import PRE_NULL_MEDIAN_NET_CARRY_GT
+from .funding_dispersion_carry import PRE_NULL_MIN_EVENTS
+from .funding_dispersion_carry import PRE_NULL_MIN_WIN_RATE
+from .funding_dispersion_carry import PRE_NULL_WORST_DECILE_FLOOR_BPS
+from .funding_dispersion_carry import PRIMARY_CAMPAIGN_COST_BPS
+from .funding_dispersion_carry import THRESHOLDS_BPS
+from .funding_dispersion_carry import TRAIN_FRACTION
+from .funding_dispersion_carry import VENUES
+from .funding_dispersion_carry import VERDICT_ARCHIVE_CANDIDATE
+from .funding_dispersion_carry import VERDICT_DATA_INSUFFICIENT
+from .funding_dispersion_carry import VERDICT_FDR_BLOCKED
+from .funding_dispersion_carry import VERDICT_FUNDING_UNIT_AMBIGUOUS
+from .funding_dispersion_carry import VERDICT_HOLDOUT_FAILED
+from .funding_dispersion_carry import VERDICT_NEEDS_MORE_DATA
+from .funding_dispersion_carry import VERDICT_NULL_REJECTED
+from .funding_dispersion_carry import VERDICT_REJECTED
+from .funding_dispersion_carry import VERDICT_REJECTED_COST_WALL
+from .funding_dispersion_carry import CampaignResult
+from .funding_dispersion_carry import CellRecord
+from .funding_dispersion_carry import DispersionEvent
+from .funding_dispersion_carry import FundingSeries
+from .funding_dispersion_carry import GateAResult
+from .funding_dispersion_carry import GateBComboResult
+from .funding_dispersion_carry import RunMetadata
+from .funding_dispersion_carry import SettlementRecord
+from .funding_dispersion_carry import WindowResolution
+from .funding_dispersion_carry import build_all_cell_identifiers
+from .funding_dispersion_carry import compute_settlement_carry_bps
+from .funding_dispersion_carry import validate_verdict
+
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +75,8 @@ logger = logging.getLogger(__name__)
 
 
 def detect_funding_unit(rates: Sequence[float]) -> str:
-    """Detect whether funding rates are in decimal or percent format.
+    """
+    Detect whether funding rates are in decimal or percent format.
 
     Returns "decimal", "percent", or "unknown".
 
@@ -99,7 +90,7 @@ def detect_funding_unit(rates: Sequence[float]) -> str:
     abs_rates = [abs(r) for r in rates]
 
     # Check if they look like decimals (typical: 0.0001 to 0.05)
-    all_decimal = all(r <= 0.05 for r in abs_rates)
+    all(r <= 0.05 for r in abs_rates)
     # Check if they look like percents (typical: 0.01 to 500, representing 0.01% to 500%)
     # But percents would be much larger: 0.01% = 0.0001 decimal, but if expressed as percent: 0.01
     # Actually: percent means values like 0.01 (=0.01% = 1 bps), 0.1 (=0.1% = 10 bps), 500 (=500%)
@@ -163,7 +154,8 @@ def stage0_load_and_normalize(
     WindowResolution,
     str | None,  # verdict if pipeline should stop, else None
 ]:
-    """Stage 0: Load, normalize, align, split.
+    """
+    Stage 0: Load, normalize, align, split.
 
     Returns (normalized_series, window_resolution, early_exit_verdict).
     If early_exit_verdict is not None, the pipeline must stop.
@@ -192,7 +184,7 @@ def stage0_load_and_normalize(
 
         records = tuple(
             SettlementRecord(timestamp_ns=ts, funding_rate_bps=r_bps)
-            for ts, r_bps in zip(timestamps, rates_bps)
+            for ts, r_bps in zip(timestamps, rates_bps, strict=False)
         )
         normalized[key] = FundingSeries(
             venue=key.split("_")[0],
@@ -276,7 +268,8 @@ def stage1_gate_a(
     series: dict[str, FundingSeries],
     window: WindowResolution,
 ) -> tuple[list[GateAResult], str | None]:
-    """Stage 1: Count dispersion events per asset per threshold on train portion.
+    """
+    Stage 1: Count dispersion events per asset per threshold on train portion.
 
     Returns (gate_a_results, early_exit_verdict).
     Early exit verdict is NEEDS_MORE_DATA_OR_NO_TAIL if both assets have < 50
@@ -336,7 +329,8 @@ def stage2_gate_b(
     series: dict[str, FundingSeries],
     window: WindowResolution,
 ) -> tuple[list[GateBComboResult], str | None]:
-    """Stage 2: Evaluate economic feasibility across the full frozen grid.
+    """
+    Stage 2: Evaluate economic feasibility across the full frozen grid.
 
     Returns (combo_results, early_exit_verdict).
     Two ordered exit checks:
@@ -404,7 +398,8 @@ def stage3_grid_evaluation(
     series: dict[str, FundingSeries],
     window: WindowResolution,
 ) -> list[CellRecord]:
-    """Stage 3: Evaluate all 24 cells on the 70% train portion.
+    """
+    Stage 3: Evaluate all 24 cells on the 70% train portion.
 
     Always produces all 24 cell records. No kill condition.
     """
@@ -433,7 +428,7 @@ def stage3_grid_evaluation(
         )
         valid_campaigns = [c for c in campaigns if c is not None]
         truncated = sum(1 for c in campaigns if c is None)
-        overlapping_suppressed = sum(1 for _ in campaigns) - len(valid_campaigns) - truncated
+        sum(1 for _ in campaigns) - len(valid_campaigns) - truncated
         # Actually: total_events_fired - valid_campaigns - truncated = overlapping_suppressed
         # Need to re-think counting. Let me revise.
         # total fireable events = all events that meet threshold
@@ -469,13 +464,11 @@ def stage3_grid_evaluation(
 
             # Convergence rate (diagnostic only): fraction of campaigns where
             # |dispersion| at end of hold < |dispersion| at entry
-            convergence_count = 0
             for c in valid_campaigns:
-                entry_disp = abs(c.realized_carry_bps)  # proxy; proper convergence needs dispersion data
+                abs(c.realized_carry_bps)  # proxy; proper convergence needs dispersion data
                 # Note: convergence is recorded as a diagnostic; use a simplified measure
                 # The actual definition checks if end-dispersion < entry-dispersion
                 # We record it but it never enters a gate
-                pass
             convergence_rate = 0.0  # placeholder — convergence diagnostic
 
             record = CellRecord(
@@ -530,7 +523,8 @@ def stage3_grid_evaluation(
 
 
 def stage4_pre_null_economic_gates(cells: list[CellRecord]) -> list[CellRecord]:
-    """Stage 4: Label each cell by the first matching rule.
+    """
+    Stage 4: Label each cell by the first matching rule.
 
     Ordered rules:
     1. valid_count < 50 → NEEDS_MORE_DATA_OR_NO_TAIL
@@ -574,7 +568,8 @@ def stage5_event_vector_shift_null(
     seed: int = NULL_SEED,
     iterations: int = NULL_ITERATIONS,
 ) -> list[CellRecord]:
-    """Stage 5: Event-vector circular shift null on PASS_PRE_NULL cells.
+    """
+    Stage 5: Event-vector circular shift null on PASS_PRE_NULL cells.
 
     The null holds the future-carry series intact and shifts the event/direction
     vector relative to it. NOT a timestamp shuffle, NOT a whole-series rotation.
@@ -646,7 +641,7 @@ def stage5_event_vector_shift_null(
         # Null distribution: circular shift the event/direction vector
         # relative to the intact differential series
         count_ge = 0
-        n_events = len(event_positions)
+        len(event_positions)
 
         for _ in range(iterations):
             # Random circular shift of the event/direction vector
@@ -657,7 +652,7 @@ def stage5_event_vector_shift_null(
 
             # For each shifted event, compute the carry over the next N settlements
             shifted_carries = []
-            for pos, direction in zip(shifted_positions, event_directions):
+            for pos, direction in zip(shifted_positions, event_directions, strict=False):
                 carry = 0.0
                 for j in range(1, cell.hold_length + 1):
                     settlement_idx = pos + j
@@ -708,7 +703,8 @@ def stage5_event_vector_shift_null(
 
 
 def stage6_fdr(cells: list[CellRecord]) -> list[CellRecord]:
-    """Stage 6: Benjamini-Yekutieli FDR across all 24 cells.
+    """
+    Stage 6: Benjamini-Yekutieli FDR across all 24 cells.
 
     Family size is frozen at 24 (FDR_FAMILY_SIZE).
     Cells not null-tested carry p = 1 so the denominator stays 24.
@@ -756,7 +752,8 @@ def stage6_fdr(cells: list[CellRecord]) -> list[CellRecord]:
 
 
 def _benjamini_yekutieli(p_values: list[float], alpha: float) -> list[float]:
-    """Compute BY-adjusted p-values.
+    """
+    Compute BY-adjusted p-values.
 
     BY uses harmonic correction c(m) = sum(1/i for i=1..m).
     Adjusted p[i] = p[i] * m * c(m) / rank(i), capped at 1.0, enforced monotone.
@@ -782,7 +779,7 @@ def _benjamini_yekutieli(p_values: list[float], alpha: float) -> list[float]:
     # Actually for FDR step-up, adjusted p-values should be monotonically
     # non-decreasing with rank. Enforce from the top down:
     # adj[i] = min(adj[i], adj[i+1]) for step-up procedure
-    sorted_by_rank = sorted(adj_sorted, key=lambda x: x[0])  # back to original order by sort position
+    sorted(adj_sorted, key=lambda x: x[0])  # back to original order by sort position
 
     # Actually let me redo this properly
     adjusted = [0.0] * m
@@ -794,7 +791,7 @@ def _benjamini_yekutieli(p_values: list[float], alpha: float) -> list[float]:
     # Enforce monotonicity: starting from the largest p-value rank,
     # ensure adj is non-decreasing (step-up procedure)
     # Sort indices by adjusted value
-    sorted_indices = sorted(range(m), key=lambda i: adjusted[i])
+    sorted(range(m), key=lambda i: adjusted[i])
     # Actually, let's use the standard BY step-up procedure:
     # The adjusted p-values should be made monotone by taking cummin from the top
     # Re-index by sorted p-value order
@@ -824,7 +821,8 @@ def stage7_holdout_confirmation(
     series: dict[str, FundingSeries],
     window: WindowResolution,
 ) -> list[CellRecord]:
-    """Stage 7: Re-evaluate FDR survivors on the 30% holdout.
+    """
+    Stage 7: Re-evaluate FDR survivors on the 30% holdout.
 
     Survivors must independently satisfy:
     - >= 20 valid non-overlapping events on holdout
@@ -914,7 +912,8 @@ def stage7_holdout_confirmation(
 
 
 def stage8_study_verdict(cells: list[CellRecord], early_exit: str | None = None) -> tuple[str, RunMetadata | None]:
-    """Stage 8: Deterministic study-level verdict from the ordered rule list.
+    """
+    Stage 8: Deterministic study-level verdict from the ordered rule list.
 
     The rule list is Section 13 of the precommitment. No discretionary override.
     Returns (verdict_string, run_metadata).
@@ -1041,7 +1040,8 @@ def _compute_non_overlapping_campaigns(
     hold_length: int,
     window_end_ns: int,
 ) -> list[CampaignResult | None]:
-    """Compute non-overlapping campaigns for a cell.
+    """
+    Compute non-overlapping campaigns for a cell.
 
     Returns list of CampaignResult for valid campaigns, None for truncated ones.
     """
@@ -1140,7 +1140,8 @@ def run_pipeline(
     raw_series: dict[str, list[tuple[int, float]]],
     seed: int = NULL_SEED,
 ) -> tuple[str, list[CellRecord], RunMetadata]:
-    """Run the complete pipeline Stage 0 → Stage 8.
+    """
+    Run the complete pipeline Stage 0 → Stage 8.
 
     This is the main entry point for the evaluation. It should only be called
     after the precommitment is frozen and committed to the project.
@@ -1205,8 +1206,8 @@ def _build_metadata(
     cells: list[CellRecord] | None = None,
 ) -> RunMetadata:
     """Build the full reproducibility metadata block (Section 16)."""
-    import sys
     import datetime
+    import sys
 
     content_hashes = {}
     unit_detected = {}
@@ -1224,7 +1225,7 @@ def _build_metadata(
         schema_version="1",
         git_sha=_git_sha(),
         seed=seed,
-        generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        generated_at=datetime.datetime.now(datetime.UTC).isoformat(),
         python_version=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         run_args={},
         window_start=str(window.window_start_ns),

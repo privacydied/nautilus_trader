@@ -22,15 +22,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
 from datetime import UTC
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .stage2_precommitment_utils import load_precommitment, get_test_family_dimensions
 from .run_artifacts import atomic_write_json
+from .stage2_precommitment_utils import get_test_family_dimensions
+from .stage2_precommitment_utils import load_precommitment
 
 
 def _ts_now_iso() -> str:
@@ -54,7 +54,8 @@ def _by_threshold(rank: int, m: int, q: float) -> float:
 
 
 def _step_up(p_values: list[float], thresholds: list[float]) -> int:
-    """Standard step-up procedure.
+    """
+    Standard step-up procedure.
 
     Returns the largest rank i where p[i] <= threshold[i].
     Returns -1 if none meet the criterion (all rejected).
@@ -70,7 +71,8 @@ def _fdr_correct(
     q: float,
     method: str,
 ) -> list[dict[str, Any]]:
-    """Apply BH or BY FDR correction to test results.
+    """
+    Apply BH or BY FDR correction to test results.
 
     Each element in test_results must have 'p_value' and dimension keys.
     Mutates elements in-place to add 'rejected' and 'threshold' fields.
@@ -105,7 +107,7 @@ def _fdr_correct(
         r["fdr_q"] = q
 
     # Return in original order (sort back)
-    index_map = {id(item): item for item in test_results}
+    {id(item): item for item in test_results}
     # Better: track original index
     for i, r in enumerate(sorted_results):
         r["_original_index"] = test_results.index(r) if r in test_results else i
@@ -120,7 +122,8 @@ def run_fdr(
     sensitivity_q: float = 0.10,
     pvalue_source: str = "native_permutation",
 ) -> dict[str, Any]:
-    """Run BH and BY FDR correction on p-value data.
+    """
+    Run BH and BY FDR correction on p-value data.
 
     Parameters
     ----------

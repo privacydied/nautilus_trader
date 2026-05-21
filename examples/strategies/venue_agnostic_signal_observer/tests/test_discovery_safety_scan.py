@@ -1,4 +1,5 @@
-"""Tests for the AST-based safety scanner.
+"""
+Tests for the AST-based safety scanner.
 
 Covers tests 103-114 from the discovery freeze specification.
 """
@@ -10,11 +11,11 @@ from pathlib import Path
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer.discovery.safety_scan import (
-    SafetyFinding,
-    scan_discovery_package,
     FORBIDDEN_IMPORTS,
-    FORBIDDEN_ORDER_TERMS,
-    FORBIDDEN_ENV_FRAGMENTS,
+)
+from examples.strategies.venue_agnostic_signal_observer.discovery.safety_scan import SafetyFinding
+from examples.strategies.venue_agnostic_signal_observer.discovery.safety_scan import (
+    scan_discovery_package,
 )
 
 
@@ -176,7 +177,6 @@ import ccxt
 
     def test_113_clis_dont_import_network_libraries(self):
         """Lock/validation CLIs do not import network libraries per AST scan."""
-        import ast
         from pathlib import Path
 
         base = Path(__file__).resolve().parent.parent
@@ -197,12 +197,11 @@ import ccxt
                             assert forbidden not in alias.name, (
                                 f"{cli_file.name}: forbidden import {forbidden}"
                             )
-                elif isinstance(node, ast.ImportFrom):
-                    if node.module:
-                        for forbidden in FORBIDDEN_IMPORTS:
-                            assert forbidden not in node.module, (
-                                f"{cli_file.name}: forbidden import {forbidden} from {node.module}"
-                            )
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    for forbidden in FORBIDDEN_IMPORTS:
+                        assert forbidden not in node.module, (
+                            f"{cli_file.name}: forbidden import {forbidden} from {node.module}"
+                        )
 
     def test_114_fixture_based_assertions(self, tmp_path):
         """Scanner tests use fixture files with known violations and assert specific findings."""

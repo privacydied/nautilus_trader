@@ -1,4 +1,5 @@
-"""Local-file parsers for Binance, Kraken, and Coinbase historical files.
+"""
+Local-file parsers for Binance, Kraken, and Coinbase historical files.
 
 Observer-only. No network calls, no auth, no order paths.
 
@@ -27,16 +28,17 @@ import csv
 import io
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Sequence, Union
+from typing import List
+from typing import Sequence
 
-from .offline_historical_models import (
-    RESOLUTION_AGG_TRADE,
-    RESOLUTION_BAR,
-    RESOLUTION_TRADE,
-    OfflineBarRecord,
-    OfflineTradeRecord,
-)
-from .offline_historical_normalize import to_nanoseconds, validate_timestamp_range
+from .offline_historical_models import RESOLUTION_AGG_TRADE
+from .offline_historical_models import RESOLUTION_BAR
+from .offline_historical_models import RESOLUTION_TRADE
+from .offline_historical_models import OfflineBarRecord
+from .offline_historical_models import OfflineTradeRecord
+from .offline_historical_normalize import to_nanoseconds
+from .offline_historical_normalize import validate_timestamp_range
+
 
 # ---------------------------------------------------------------------------
 # Supported source kinds
@@ -84,7 +86,7 @@ class ParseResult:
 # ---------------------------------------------------------------------------
 
 
-def _open_csv(path: Union[str, Path]) -> List[List[str]]:
+def _open_csv(path: str | Path) -> List[List[str]]:
     p = Path(path)
     text = p.read_text(encoding="utf-8")
     reader = csv.reader(io.StringIO(text))
@@ -103,7 +105,7 @@ def _ts_range(timestamps_ns: Sequence[int]) -> tuple[int, int]:
 
 
 def parse_binance_agg_trades(
-    path: Union[str, Path],
+    path: str | Path,
     venue: str,
     symbol: str,
     base_asset: str,
@@ -115,7 +117,8 @@ def parse_binance_agg_trades(
     expected_end_ns: int,
     tolerance_ns: int = 86_400_000_000_000,
 ) -> ParseResult:
-    """Parse a Binance aggTrades CSV file.
+    """
+    Parse a Binance aggTrades CSV file.
 
     Expected CSV header (optional):
       agg_trade_id, price, qty, first_trade_id, last_trade_id,
@@ -197,7 +200,7 @@ def parse_binance_agg_trades(
 
 
 def parse_binance_klines(
-    path: Union[str, Path],
+    path: str | Path,
     venue: str,
     symbol: str,
     base_asset: str,
@@ -209,7 +212,8 @@ def parse_binance_klines(
     expected_end_ns: int,
     tolerance_ns: int = 86_400_000_000_000,
 ) -> ParseResult:
-    """Parse a Binance klines CSV file.
+    """
+    Parse a Binance klines CSV file.
 
     Expected CSV columns (no header):
       open_time, open, high, low, close, volume, close_time,
@@ -280,7 +284,7 @@ def parse_binance_klines(
 
 
 def parse_kraken_ohlcvt(
-    path: Union[str, Path],
+    path: str | Path,
     venue: str,
     symbol: str,
     base_asset: str,
@@ -290,7 +294,8 @@ def parse_kraken_ohlcvt(
     expected_end_ns: int,
     tolerance_ns: int = 86_400_000_000_000,
 ) -> ParseResult:
-    """Parse a Kraken OHLCVT CSV file.
+    """
+    Parse a Kraken OHLCVT CSV file.
 
     Expected columns: timestamp(s), open, high, low, close, vwap, volume, count
 
@@ -361,7 +366,7 @@ def parse_kraken_ohlcvt(
 
 
 def parse_kraken_trades(
-    path: Union[str, Path],
+    path: str | Path,
     venue: str,
     symbol: str,
     base_asset: str,
@@ -371,7 +376,8 @@ def parse_kraken_trades(
     expected_end_ns: int,
     tolerance_ns: int = 86_400_000_000_000,
 ) -> ParseResult:
-    """Parse a Kraken historical trades CSV.
+    """
+    Parse a Kraken historical trades CSV.
 
     Expected columns: timestamp(s), price, volume
     """
@@ -434,7 +440,7 @@ def parse_kraken_trades(
 
 
 def parse_coinbase_candles(
-    path: Union[str, Path],
+    path: str | Path,
     venue: str,
     symbol: str,
     base_asset: str,
@@ -444,7 +450,8 @@ def parse_coinbase_candles(
     expected_end_ns: int,
     tolerance_ns: int = 86_400_000_000_000,
 ) -> ParseResult:
-    """Parse a Coinbase candles CSV.
+    """
+    Parse a Coinbase candles CSV.
 
     Expected columns: start(s), low, high, open, close, volume
 
@@ -513,7 +520,7 @@ def parse_coinbase_candles(
 
 
 def parse_coinbase_trades(
-    path: Union[str, Path],
+    path: str | Path,
     venue: str,
     symbol: str,
     base_asset: str,
@@ -523,7 +530,8 @@ def parse_coinbase_trades(
     expected_end_ns: int,
     tolerance_ns: int = 86_400_000_000_000,
 ) -> ParseResult:
-    """Parse a Coinbase simple CSV trade export.
+    """
+    Parse a Coinbase simple CSV trade export.
 
     Expected columns: time(s), price, size, side
     """
@@ -588,7 +596,4 @@ def parse_coinbase_trades(
 
 
 def _check_and_note_sorting(timestamps_ns: List[int]) -> bool:
-    for i in range(1, len(timestamps_ns)):
-        if timestamps_ns[i] < timestamps_ns[i - 1]:
-            return True
-    return False
+    return any(timestamps_ns[i] < timestamps_ns[i - 1] for i in range(1, len(timestamps_ns)))

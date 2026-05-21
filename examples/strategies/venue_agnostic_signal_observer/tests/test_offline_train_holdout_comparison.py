@@ -1,11 +1,11 @@
-"""Tests for Phase 2B-2C1 offline train-holdout comparison.
+"""
+Tests for Phase 2B-2C1 offline train-holdout comparison.
 
 Uses synthetic JSON fixtures only. No source market data loading.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -13,22 +13,50 @@ import pytest
 
 from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     COMPARISON_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     STATUS_HOLDOUT_EVALUATION_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     STATUS_INPUT_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     STATUS_NO_HOLDOUT_EVALUATED_SURVIVORS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     STATUS_NO_HOLDOUT_SURVIVORS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     STATUS_NO_TRAIN_SURVIVORS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     STATUS_OFFLINE_TRAIN_HOLDOUT_COMPARISON_READY,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     STATUS_SURVIVOR_FREEZE_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     STATUS_TRAIN_EVALUATION_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     STATUS_UNUSABLE_COMPARISON_INPUT,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     OfflineTrainHoldoutComparisonConfig,
-    OfflineTrainHoldoutComparisonCell,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     OfflineTrainHoldoutComparisonReport,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     build_offline_train_holdout_comparison_manifest_payload,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     build_offline_train_holdout_comparison_report,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     compute_comparison_config_hash,
-    compute_comparison_hash,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_train_holdout_comparison import (
     write_offline_train_holdout_comparison_outputs,
 )
 
@@ -870,7 +898,7 @@ def test_records_missing_holdout_result_separately():
     assert "cell_a" not in report.missing_holdout_cell_ids
     assert "cell_b" in report.missing_holdout_cell_ids
     assert len(report.comparison_cells) == 2
-    cell_b = [c for c in report.comparison_cells if c.cell_id == "cell_b"][0]
+    cell_b = next(c for c in report.comparison_cells if c.cell_id == "cell_b")
     assert not cell_b.comparison_passed
     assert "missing_holdout_result" in cell_b.failure_reasons
 

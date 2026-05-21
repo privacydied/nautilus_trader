@@ -220,11 +220,10 @@ class TestDiscovery:
     """Test zip file discovery."""
 
     def test_discovers_aggtrade_zips(self, multi_symbol_cache):
+        import examples.strategies.venue_agnostic_signal_observer.convert_archive_zips_to_parquet as mod
         from examples.strategies.venue_agnostic_signal_observer.convert_archive_zips_to_parquet import (
             _discover_zip_files,
         )
-
-        import examples.strategies.venue_agnostic_signal_observer.convert_archive_zips_to_parquet as mod
         old_root = mod.CACHE_ROOT
         mod.CACHE_ROOT = multi_symbol_cache
         try:
@@ -243,12 +242,10 @@ class TestSkipIfExists:
     """Test resumable conversion — skip valid existing Parquet."""
 
     def test_skip_valid_parquet(self, multi_symbol_cache):
+        import examples.strategies.venue_agnostic_signal_observer.convert_archive_zips_to_parquet as mod
         from examples.strategies.venue_agnostic_signal_observer.convert_archive_zips_to_parquet import (
-            _zip_to_parquet,
             convert_all,
         )
-
-        import examples.strategies.venue_agnostic_signal_observer.convert_archive_zips_to_parquet as mod
         old_cache = mod.CACHE_ROOT
         old_parquet = mod.PARQUET_ROOT
         mod.CACHE_ROOT = multi_symbol_cache
@@ -292,8 +289,10 @@ class TestValidParquetCheck:
 
     def test_valid_file(self, tmp_cache):
         from examples.strategies.venue_agnostic_signal_observer.convert_archive_zips_to_parquet import (
-            _zip_to_parquet,
             _is_valid_parquet,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.convert_archive_zips_to_parquet import (
+            _zip_to_parquet,
         )
 
         out_dir = tmp_cache / "parquet" / "btcusdt"

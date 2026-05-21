@@ -1,4 +1,5 @@
-"""Tests for research observatory reliability V1 infrastructure.
+"""
+Tests for research observatory reliability V1 infrastructure.
 
 Covers:
 1. run_artifacts: create_run_id, safe_output_dir, atomic writes
@@ -15,38 +16,29 @@ Covers:
 from __future__ import annotations
 
 import json
-import os
 import time
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from venue_agnostic_signal_observer.run_artifacts import (
-    atomic_write_json,
-    atomic_write_text,
-    atomic_write_jsonl,
-    create_run_id,
-    safe_output_dir,
-)
-from venue_agnostic_signal_observer.run_index import (
-    append_run_index_row,
-    build_run_index_row,
-    get_latest_status,
-    read_run_index,
-)
-from venue_agnostic_signal_observer.quarantine import (
-    get_quarantined_run_ids,
-    is_quarantined,
-    quarantine_run,
-    read_quarantine,
-)
-from venue_agnostic_signal_observer.artifact_metadata import (
-    CURRENT_SCHEMA_VERSION,
-    SUPPORTED_SCHEMA_VERSIONS,
-    check_schema_version,
-    get_metadata_field,
-)
+from venue_agnostic_signal_observer.artifact_metadata import CURRENT_SCHEMA_VERSION
+from venue_agnostic_signal_observer.artifact_metadata import SUPPORTED_SCHEMA_VERSIONS
+from venue_agnostic_signal_observer.artifact_metadata import check_schema_version
+from venue_agnostic_signal_observer.artifact_metadata import get_metadata_field
+from venue_agnostic_signal_observer.quarantine import get_quarantined_run_ids
+from venue_agnostic_signal_observer.quarantine import is_quarantined
+from venue_agnostic_signal_observer.quarantine import quarantine_run
+from venue_agnostic_signal_observer.quarantine import read_quarantine
+from venue_agnostic_signal_observer.run_artifacts import atomic_write_json
+from venue_agnostic_signal_observer.run_artifacts import atomic_write_jsonl
+from venue_agnostic_signal_observer.run_artifacts import atomic_write_text
+from venue_agnostic_signal_observer.run_artifacts import create_run_id
+from venue_agnostic_signal_observer.run_artifacts import safe_output_dir
+from venue_agnostic_signal_observer.run_index import append_run_index_row
+from venue_agnostic_signal_observer.run_index import build_run_index_row
+from venue_agnostic_signal_observer.run_index import get_latest_status
+from venue_agnostic_signal_observer.run_index import read_run_index
 
 
 # ===========================================================================
@@ -402,7 +394,6 @@ class TestGitDirtyMetadata:
         """Build a row with mocked git dirty status."""
         with patch("subprocess.run") as mock_run:
             def side_effect(cmd, *args, **kwargs):
-                import subprocess
                 if "rev-parse" in cmd:
                     m = mock_run.return_value
                     m.returncode = 0
@@ -853,16 +844,14 @@ class TestValidateCaptureModule:
                 f.write(json.dumps(tick) + "\n")
 
         # Manifest claims 5 ticks for this stream (mismatch with 3)
-        binance_stream_key = None
-        for possible_key in [f"binance_perp_BTC/USDT", f"binance_perp_BTC-USDT"]:
+        for possible_key in ["binance_perp_BTC/USDT", "binance_perp_BTC-USDT"]:
             if possible_key:
-                binance_stream_key = f"binance_perp_BTC/USDT"
                 break
 
         manifest = {
             "run_id": run_id,
             "streams": {
-                f"binance_perp_BTC/USDT": {
+                "binance_perp_BTC/USDT": {
                     "tick_count": 5,
                     "status": "ok",
                     "first_tick_ts": 1715700000000000000,

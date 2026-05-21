@@ -82,7 +82,8 @@ def compute_file_sha256(path: Path) -> str:
 def load_precommitment(
     path: Path | None = None,
 ) -> dict[str, Any]:
-    """Load and return the stage2_precommitment.json content.
+    """
+    Load and return the stage2_precommitment.json content.
 
     Raises FileNotFoundError if the file is missing.
     Raises ValueError if JSON parsing fails.
@@ -122,7 +123,8 @@ def get_signal_family(precommit: dict[str, Any] | None = None) -> str:
 def validate_markdown_json_match(
     precommit: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
-    """Check that key values in the JSON match expected markdown content.
+    """
+    Check that key values in the JSON match expected markdown content.
 
     This is a cross-reference check — the markdown and JSON should declare
     the same committed values.  Returns (ok, reason).
@@ -207,7 +209,8 @@ def validate_markdown_json_match(
 
 
 class CollectionLock:
-    """Manage the Stage 2 collection lock file.
+    """
+    Manage the Stage 2 collection lock file.
 
     The lock records the precommitment state at the moment the first
     corpus-admissible FULL_ACTIVE capture attempt starts.  Every later
@@ -263,7 +266,8 @@ class CollectionLock:
         lock_reason: str = "first FULL_ACTIVE capture attempt starting",
         notes: str | None = None,
     ) -> dict[str, Any]:
-        """Create the collection lock file.
+        """
+        Create the collection lock file.
 
         Must be called immediately before the first FULL_ACTIVE capture
         subprocess starts.
@@ -300,7 +304,8 @@ class CollectionLock:
         return lock
 
     def verify(self) -> tuple[bool, str]:
-        """Verify that the existing lock matches current precommitment state.
+        """
+        Verify that the existing lock matches current precommitment state.
 
         Returns (ok, reason).
         """

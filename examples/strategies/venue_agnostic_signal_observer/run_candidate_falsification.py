@@ -6,14 +6,19 @@ import argparse
 import sys
 from pathlib import Path
 
+
 try:
     from venue_agnostic_signal_observer.candidate_falsification import (
         compute_candidate_falsification_summary,
+    )
+    from venue_agnostic_signal_observer.candidate_falsification import (
         write_candidate_falsification_reports,
     )
 except ModuleNotFoundError:  # Support `python -m examples.strategies...` from repo root.
     from examples.strategies.venue_agnostic_signal_observer.candidate_falsification import (
         compute_candidate_falsification_summary,
+    )
+    from examples.strategies.venue_agnostic_signal_observer.candidate_falsification import (
         write_candidate_falsification_reports,
     )
 

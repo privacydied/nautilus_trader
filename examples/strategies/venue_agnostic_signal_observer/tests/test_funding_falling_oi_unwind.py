@@ -9,18 +9,15 @@ All Stage A tests are self-contained (no HTTP) except where noted.
 Stage B evaluator tests use synthetic data.
 """
 
-import hashlib
-import io
 import json
 import os
 import sys
-import tempfile
-import zipfile
-from collections import OrderedDict
-from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 
 import pytest
+
 
 # Ensure the module is importable
 sys.path.insert(
@@ -28,29 +25,15 @@ sys.path.insert(
     os.path.join(os.path.dirname(__file__), ".."),
 )
 
-from funding_falling_oi_unwind_phase0 import (
-    FIXED_PROBE_DATES,
-    BASE_URL,
-    SYMBOL,
-    OI_PRIMARY_FIELD,
-    TIMESTAMP_FIELD,
-    WARMUP_DAYS,
-    MIN_CELL_EVENTS,
-    MIN_HOLDOUT_EVENTS,
-    FUNDING_HOURS,
-    MAX_ACCEPTABLE_P95_OFFSET_MINUTES,
-    _monthly_funding_path,
-    _daily_oi_path,
-    _spot_klines_path,
-    probe_url,
-    extract_csv_from_zip,
-    parse_timestamp,
-    run_phase0a,
-    run_phase0b,
-    sha256_of_file,
-    get_git_sha,
-    _has_spot_availability,
-)
+from funding_falling_oi_unwind_phase0 import FIXED_PROBE_DATES
+from funding_falling_oi_unwind_phase0 import MAX_ACCEPTABLE_P95_OFFSET_MINUTES
+from funding_falling_oi_unwind_phase0 import MIN_CELL_EVENTS
+from funding_falling_oi_unwind_phase0 import MIN_HOLDOUT_EVENTS
+from funding_falling_oi_unwind_phase0 import _daily_oi_path
+from funding_falling_oi_unwind_phase0 import _has_spot_availability
+from funding_falling_oi_unwind_phase0 import _monthly_funding_path
+from funding_falling_oi_unwind_phase0 import _spot_klines_path
+
 
 # Re-usable OI regime computation (matches the logic inside run_phase0b)
 def _compute_oi_regime_for_test(settlement_ts, oi_rows):
@@ -154,7 +137,7 @@ def test_funding_threshold_bottom_5_percent():
 def test_settlements_without_180d_history_excluded():
     """Settlements without full 180-day history are excluded from eligibility."""
     # Create funding data with first settlement at t0
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     n_days = 200  # More than 180
     data = []
     for d in range(n_days):
@@ -182,7 +165,7 @@ def test_settlements_without_180d_history_excluded():
 
 def test_oi_alignment_uses_only_rows_at_or_before():
     """OI alignment uses only rows with ts <= settlement timestamp."""
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
 
     # OI rows at 0, 5, 10, ... minutes past each hour
     oi_rows = []
@@ -205,7 +188,7 @@ def test_oi_alignment_uses_only_rows_at_or_before():
 
 def test_future_oi_rows_forbidden():
     """Future OI rows (ts > settlement) must not be used."""
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     settlement = base + timedelta(hours=8)
 
     # All OI rows are after settlement
@@ -223,10 +206,10 @@ def test_future_oi_rows_forbidden():
 def test_oi_start_zero_excludes_event():
     """OI_start value <= 0 or non-finite must exclude the event."""
     oi_rows = [
-        {"ts": datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc), "oi": 0.0},
-        {"ts": datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc), "oi": 100.0},
+        {"ts": datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC), "oi": 0.0},
+        {"ts": datetime(2024, 1, 1, 8, 0, 0, tzinfo=UTC), "oi": 100.0},
     ]
-    settlement = datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc)
+    settlement = datetime(2024, 1, 1, 8, 0, 0, tzinfo=UTC)
 
     regime, _ = _compute_oi_regime_for_test(settlement, oi_rows)
     assert regime == "OI_UNALIGNED"
@@ -235,10 +218,10 @@ def test_oi_start_zero_excludes_event():
 def test_oi_start_negative_excludes_event():
     """OI_start negative value must exclude the event."""
     oi_rows = [
-        {"ts": datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc), "oi": -1.0},
-        {"ts": datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc), "oi": 100.0},
+        {"ts": datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC), "oi": -1.0},
+        {"ts": datetime(2024, 1, 1, 8, 0, 0, tzinfo=UTC), "oi": 100.0},
     ]
-    settlement = datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc)
+    settlement = datetime(2024, 1, 1, 8, 0, 0, tzinfo=UTC)
 
     regime, _ = _compute_oi_regime_for_test(settlement, oi_rows)
     assert regime == "OI_UNALIGNED"
@@ -246,12 +229,11 @@ def test_oi_start_negative_excludes_event():
 
 def test_oi_start_nan_excludes_event():
     """OI_start NaN value must exclude the event."""
-    import math
     oi_rows = [
-        {"ts": datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc), "oi": float("nan")},
-        {"ts": datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc), "oi": 100.0},
+        {"ts": datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC), "oi": float("nan")},
+        {"ts": datetime(2024, 1, 1, 8, 0, 0, tzinfo=UTC), "oi": 100.0},
     ]
-    settlement = datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc)
+    settlement = datetime(2024, 1, 1, 8, 0, 0, tzinfo=UTC)
 
     regime, _ = _compute_oi_regime_for_test(settlement, oi_rows)
     assert regime == "OI_UNALIGNED"
@@ -259,12 +241,11 @@ def test_oi_start_nan_excludes_event():
 
 def test_oi_start_infinite_excludes_event():
     """OI_start infinite value must exclude the event."""
-    import math
     oi_rows = [
-        {"ts": datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc), "oi": float("inf")},
-        {"ts": datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc), "oi": 100.0},
+        {"ts": datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC), "oi": float("inf")},
+        {"ts": datetime(2024, 1, 1, 8, 0, 0, tzinfo=UTC), "oi": 100.0},
     ]
-    settlement = datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc)
+    settlement = datetime(2024, 1, 1, 8, 0, 0, tzinfo=UTC)
 
     regime, _ = _compute_oi_regime_for_test(settlement, oi_rows)
     assert regime == "OI_UNALIGNED"
@@ -312,7 +293,6 @@ def test_daily_only_oi_unsupported():
 def test_low_event_count_returns_needs_more_data():
     """Low event count (< 50 per cell) returns NEEDS_MORE_DATA."""
     total = 30
-    holdout = 10
     assert total < MIN_CELL_EVENTS, "Would fail as NEEDS_MORE_DATA"
 
 
@@ -399,7 +379,6 @@ def test_exactly_2_cells_evaluated():
 
 def test_rising_oi_not_in_evaluator():
     """rising-OI cannot enter evaluator rows."""
-    evaluator_directions = ["negative_funding_extreme"]
     evaluator_oi_regimes = ["falling_oi"]
     assert "rising_oi" not in evaluator_oi_regimes
 
@@ -691,7 +670,7 @@ def test_fixed_probe_dates_exactly_6():
         "2023-01-01",
         "2024-01-01",
     ]
-    assert FIXED_PROBE_DATES == expected
+    assert expected == FIXED_PROBE_DATES
     assert len(FIXED_PROBE_DATES) == 6
 
 
@@ -859,9 +838,7 @@ def test_parse_klines_timestamp_invalid_returns_none():
 
 def test_spot_availability_late_month_24h():
     """Late-month event should have 24h availability that crosses into next month."""
-    from funding_falling_oi_unwind_phase0 import _has_spot_availability
-
-    base = datetime(2024, 1, 31, 16, 0, 0, tzinfo=timezone.utc)  # Jan 31 16:00
+    base = datetime(2024, 1, 31, 16, 0, 0, tzinfo=UTC)  # Jan 31 16:00
     target_24h = base + timedelta(hours=24)  # Feb 1 16:00
     assert base.month == 1
     assert target_24h.month == 2  # Crosses into Feb
@@ -870,12 +847,12 @@ def test_spot_availability_late_month_24h():
 
 def test_spot_availability_late_month_48h():
     """Late-month event should have 48h availability that crosses 2 months ahead."""
-    base = datetime(2024, 1, 30, 16, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 30, 16, 0, 0, tzinfo=UTC)
     target_48h = base + timedelta(hours=48)  # Feb 1 16:00
     assert base.month == 1
     assert target_48h.month == 2
 
-    base2 = datetime(2024, 12, 30, 16, 0, 0, tzinfo=timezone.utc)
+    base2 = datetime(2024, 12, 30, 16, 0, 0, tzinfo=UTC)
     target_48h_2 = base2 + timedelta(hours=48)  # Jan 1 16:00
     assert base2.month == 12
     assert target_48h_2.month == 1
@@ -888,10 +865,8 @@ def test_spot_availability_late_month_48h():
 
 def test_24h_vs_48h_are_distinct():
     """24h and 48h availability can differ for near-archive-end events."""
-    from funding_falling_oi_unwind_phase0 import _has_spot_availability
-
     # Build a spot klines set that ends just past 24h but before 48h
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     # Data from 2024-01-01 00:00 to 2024-01-02 13:00 (37 hours, covers 24h target)
     spot_klines = []
     for h in range(37):  # 0 to 36 = 37 rows, last at 2024-01-02 13:00
@@ -905,8 +880,8 @@ def test_24h_vs_48h_are_distinct():
     # 24h target = 2024-01-02 12:00, spot goes to 2024-01-02 13:00 (covers it)
     # 48h target = 2024-01-03 12:00, spot only to 2024-01-02 13:00
     # So 24h should be available, 48h should not
-    assert avail_24h == True, "24h should be available"
-    assert avail_48h == False, "48h should NOT be available"
+    assert avail_24h, "24h should be available"
+    assert not avail_48h, "48h should NOT be available"
 
 
 # ---------------------------------------------------------------------------
@@ -916,9 +891,7 @@ def test_24h_vs_48h_are_distinct():
 
 def test_utc_boundary_entry_exact():
     """Entry price at exact settlement timestamp boundary uses >= logic."""
-    from funding_falling_oi_unwind_phase0 import _has_spot_availability
-
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     # Spot klines ON the settlement boundary
     spot_klines = [
         {"ts": base, "close": 50000.0},  # at settlement
@@ -930,14 +903,12 @@ def test_utc_boundary_entry_exact():
     # Settlement at exact kline boundary
     settlement = base
     avail = _has_spot_availability(settlement, spot_klines, 24)
-    assert avail == True
+    assert avail
 
 
 def test_utc_boundary_entry_between_klines():
     """Entry price between klines uses the next available kline."""
-    from funding_falling_oi_unwind_phase0 import _has_spot_availability
-
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     spot_klines = [
         {"ts": base, "close": 50000.0},
         {"ts": base + timedelta(hours=1), "close": 50100.0},
@@ -948,14 +919,12 @@ def test_utc_boundary_entry_between_klines():
     # Settlement between klines (0:30, not aligned to hour)
     settlement = base + timedelta(minutes=30)
     avail = _has_spot_availability(settlement, spot_klines, 24)
-    assert avail == True, "Should use next available kline (hour 1) for entry"
+    assert avail, "Should use next available kline (hour 1) for entry"
 
 
 def test_utc_boundary_horizon_exact():
     """Forward price at exact horizon boundary matches >= logic."""
-    from funding_falling_oi_unwind_phase0 import _has_spot_availability
-
-    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     spot_klines = [
         {"ts": base, "close": 50000.0},
         {"ts": base + timedelta(hours=24), "close": 50200.0},
@@ -963,7 +932,7 @@ def test_utc_boundary_horizon_exact():
 
     settlement = base
     avail = _has_spot_availability(settlement, spot_klines, 24)
-    assert avail == True, "24h target at exact kline boundary should match"
+    assert avail, "24h target at exact kline boundary should match"
 
 
 # ---------------------------------------------------------------------------

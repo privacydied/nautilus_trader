@@ -1,4 +1,5 @@
-"""Tick-level lead-lag event-study engine.
+"""
+Tick-level lead-lag event-study engine.
 
 This module is **research observer only**. It generates signals from source-venue
 tick data, measures target-venue forward returns, and compares results against a
@@ -23,7 +24,11 @@ import statistics
 import uuid
 from dataclasses import dataclass
 
-from .tick_models import QuoteTickLite, TickForwardReturn, TickSignalEvent, TradeTickLite
+from .tick_models import QuoteTickLite
+from .tick_models import TickForwardReturn
+from .tick_models import TickSignalEvent
+from .tick_models import TradeTickLite
+
 
 _MS_TO_NS = 1_000_000
 
@@ -47,7 +52,8 @@ class TickLeadLagConfig:
 
 
 class TickLeadLagGenerator:
-    """Scan sorted source-venue trade ticks for lead-lag price moves.
+    """
+    Scan sorted source-venue trade ticks for lead-lag price moves.
 
     For every ``(lookback_ms, threshold_bps)`` pair the generator walks through
     the trade stream, computes the move from the earliest trade inside the
@@ -64,7 +70,8 @@ class TickLeadLagGenerator:
         self._last_signal_ts: dict[tuple[int, float], int] = {}
 
     def generate(self, trades: list[TradeTickLite]) -> list[TickSignalEvent]:
-        """Generate signals from a sorted list of source-venue trade ticks.
+        """
+        Generate signals from a sorted list of source-venue trade ticks.
 
         Parameters
         ----------
@@ -174,7 +181,8 @@ class TickLeadLagGenerator:
 def _extract_ts_prices(
     ticks: list[TradeTickLite] | list[QuoteTickLite],
 ) -> tuple[list[int], list[float]]:
-    """Return parallel ``(ts_event, price)`` arrays from a tick list.
+    """
+    Return parallel ``(ts_event, price)`` arrays from a tick list.
 
     For :class:`TradeTickLite` the ``price`` field is used directly.
     For :class:`QuoteTickLite` the ``mid`` property is used.
@@ -203,7 +211,8 @@ def evaluate_tick_signal(
     quote_mismatch_buffer_bps: float = 0.0,
     quote_mismatch: bool = False,
 ) -> list[TickForwardReturn]:
-    """Measure forward returns on the target venue for a single signal.
+    """
+    Measure forward returns on the target venue for a single signal.
 
     Uses :func:`bisect.bisect_left` for efficient timestamp lookup.  The
     ``target_ticks`` list **must** be sorted by ``ts_event`` ascending.
@@ -365,7 +374,8 @@ def generate_random_baseline(
     asset: str,
     seed: int = 42,
 ) -> list[TickSignalEvent]:
-    """Generate a random-timestamp control group matching the signal count.
+    """
+    Generate a random-timestamp control group matching the signal count.
 
     Timestamps are uniformly distributed across the temporal range of the
     source tick series.  Direction, lookback, and threshold are chosen at
@@ -435,7 +445,8 @@ def evaluate_candidate_group(
     min_events: int = 50,
     baseline_margin_bps: float = 1.0,
 ) -> dict[str, object]:
-    """Gate a candidate signal group against a random baseline.
+    """
+    Gate a candidate signal group against a random baseline.
 
     All six gates must pass for ``candidate`` to be ``True``.
 
@@ -590,7 +601,8 @@ def generate_synthetic_positive_lead_lag_ticks(
     target_delay_ns: int = 2_000_000_000,
     catch_up_fraction: float = 0.8,
 ) -> tuple[list[TradeTickLite], list[TradeTickLite]]:
-    """Generate synthetic ticks with a known positive lead-lag relationship.
+    """
+    Generate synthetic ticks with a known positive lead-lag relationship.
 
     The source venue receives periodic upward price jumps every
     ``jump_interval`` ticks.  The target venue sees each jump after a fixed
@@ -665,7 +677,8 @@ def generate_synthetic_no_edge_ticks(
     base_price: float = 50_000.0,
     noise_std_bps: float = 5.0,
 ) -> tuple[list[TradeTickLite], list[TradeTickLite]]:
-    """Generate synthetic ticks with no cross-venue edge.
+    """
+    Generate synthetic ticks with no cross-venue edge.
 
     Both source and target are independent random walks with identical noise
     characteristics.

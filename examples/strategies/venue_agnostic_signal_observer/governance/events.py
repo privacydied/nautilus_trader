@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field, asdict
-from datetime import UTC, datetime
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
@@ -52,7 +54,7 @@ class LedgerEvent:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "LedgerEvent":
+    def from_dict(cls, d: dict[str, Any]) -> LedgerEvent:
         return cls(
             ledger_index=d["ledger_index"],
             event_type=EventType(d["event_type"]),

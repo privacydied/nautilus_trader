@@ -1,4 +1,5 @@
-"""Tests for cross-asset beta-lag archive v0 study.
+"""
+Tests for cross-asset beta-lag archive v0 study.
 
 Covers archive adapter, stress label generation, evaluation, null, FDR,
 reconciliation, and synthetic end-to-end fixture.
@@ -7,76 +8,95 @@ reconciliation, and synthetic end-to-end fixture.
 from __future__ import annotations
 
 import json
-import math
 import os
-import random
-import tempfile
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from unittest.mock import MagicMock, patch
+from datetime import UTC
+from datetime import datetime
 
 import pytest
 
+from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import AGGTRADE_PATH
+from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import BASE_URL
+from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import KLINES_1M_PATH
 from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
-    BASE_URL,
-    AGGTRADE_PATH,
-    KLINES_1M_PATH,
-    download_daily_agg_trades,
-    download_daily_klines_1m,
-    parse_agg_trade_csv,
-    parse_1m_klines_csv,
     _detect_ts_unit,
-    _ts_to_ns,
-    _isfinite_positive,
+)
+from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
     _iter_date_range,
-    check_archive_availability,
-    scan_archive_availability,
-    compute_common_calendar,
-    build_file_manifest,
+)
+from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import _ts_to_ns
+from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
     compute_kline_candidate_days,
 )
-
+from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
+    parse_1m_klines_csv,
+)
+from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
+    parse_agg_trade_csv,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    ALL_SYMBOLS,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    ENTRY_DELAY_NS,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    FAMILY_SIZE,
+)
 from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
     SOURCE_SYMBOLS,
-    TARGET_SYMBOLS,
-    ALL_SYMBOLS,
-    HORIZONS_MS,
-    STRESS_RULES,
-    STRESS_DEDUP_COOLDOWN_NS,
-    FAMILY_SIZE,
-    VENUE,
-    TOTAL_COST_BPS,
-    MIN_EVENTS_PER_CELL,
-    MIN_EVENTS_HOLDOUT,
-    WIN_RATE_THRESHOLD,
-    BASELINE_DELTA_BPS,
-    NULL_ALPHA,
-    FDR_ALPHA,
-    SEED,
-
-    StressLabel,
-    generate_stress_labels,
-    deduplicate_labels,
-    assign_independent_windows,
-    check_target_coverage,
-    compute_forward_returns_for_stress,
-    compute_cell_stats,
-    cell_group_key,
-    all_cell_keys,
-    generate_baseline_events,
-    run_null_test,
-    apply_by_fdr,
-    reconcile_event_vector,
-    build_stress_day_download_plan,
-
-    CoverageInterval,
-    CellStats,
-    ENTRY_DELAY_NS,
-    MS_TO_NS,
 )
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    TOTAL_COST_BPS,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import VENUE
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    CellStats,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    StressLabel,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    all_cell_keys,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    apply_by_fdr,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    assign_independent_windows,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    build_stress_day_download_plan,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    cell_group_key,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    check_target_coverage,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    compute_cell_stats,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    compute_forward_returns_for_stress,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    deduplicate_labels,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    generate_baseline_events,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    generate_stress_labels,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    reconcile_event_vector,
+)
+from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+    run_null_test,
+)
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TickForwardReturn
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
 
-from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite, TickForwardReturn
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -148,10 +168,10 @@ class TestArchiveCacheReuse:
 
 class TestCsvParser:
     def test_agg_trade_csv_no_header(self):
-        """aggTrade CSV has no header. Parse by position."""
+        """AggTrade CSV has no header. Parse by position."""
         csv_content = "123456,50000.0,0.5,100,200,1704067200000,False,True\n123457,50001.0,0.3,101,201,1704067201000,True,True\n"
-        import zipfile
         import io
+        import zipfile
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
             zf.writestr("BTCUSDT-aggTrades-2024-01-01.csv", csv_content)
@@ -166,8 +186,8 @@ class TestCsvParser:
     def test_1m_klines_csv_with_header(self):
         """1m klines has no header. Parse by position."""
         csv_content = "1704067200000,42000.0,42100.0,41900.0,42050.0,100.0,4200000.0,500,50.0,2100000.0,0\n"
-        import zipfile
         import io
+        import zipfile
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
             zf.writestr("BTCUSDT-1m-2024-01-01.csv", csv_content)
@@ -225,7 +245,8 @@ class TestTimestampDetection:
 class TestAggTradeConversion:
     def test_basic_conversion(self):
         csv_content = "123456,50000.0,0.5,100,200,1704067200000,False,True\n"
-        import zipfile, io
+        import io
+        import zipfile
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
             zf.writestr("test.csv", csv_content)
@@ -243,7 +264,8 @@ class TestAggTradeConversion:
     def test_nanosecond_timestamps(self):
         """ts_event is stored as nanosecond epoch."""
         csv_content = "1,50000.0,0.5,1,2,1704067200000,False,True\n"
-        import zipfile, io
+        import io
+        import zipfile
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
             zf.writestr("test.csv", csv_content)
@@ -261,7 +283,8 @@ class TestAggTradeConversion:
 class TestRowValidation:
     def test_reject_zero_price(self):
         csv_content = "1,0.0,0.5,1,2,1704067200000,False,True\n"
-        import zipfile, io
+        import io
+        import zipfile
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
             zf.writestr("test.csv", csv_content)
@@ -270,7 +293,8 @@ class TestRowValidation:
 
     def test_reject_negative_price(self):
         csv_content = "1,-100.0,0.5,1,2,1704067200000,False,True\n"
-        import zipfile, io
+        import io
+        import zipfile
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
             zf.writestr("test.csv", csv_content)
@@ -279,7 +303,8 @@ class TestRowValidation:
 
     def test_reject_nan_price(self):
         csv_content = "1,nan,0.5,1,2,1704067200000,False,True\n"
-        import zipfile, io
+        import io
+        import zipfile
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
             zf.writestr("test.csv", csv_content)
@@ -288,7 +313,8 @@ class TestRowValidation:
 
     def test_reject_inf_price(self):
         csv_content = "1,inf,0.5,1,2,1704067200000,False,True\n"
-        import zipfile, io
+        import io
+        import zipfile
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
             zf.writestr("test.csv", csv_content)
@@ -422,7 +448,7 @@ class TestStressDedup:
         labels1 = generate_stress_labels(ticks, "BTCUSDT", lookback_seconds=30, threshold_bps=30.0)
         labels2 = generate_stress_labels(ticks, "BTCUSDT", lookback_seconds=30, threshold_bps=30.0)
         assert len(labels1) == len(labels2)
-        for l1, l2 in zip(labels1, labels2):
+        for l1, l2 in zip(labels1, labels2, strict=False):
             assert l1.stress_end_ns == l2.stress_end_ns
 
 
@@ -560,7 +586,7 @@ class TestFamilySize:
 
     def test_cell_key_format(self):
         gk = cell_group_key("BTCUSDT", "SOLUSDT", 30, "bullish", 30000)
-        assert "BTCUSDT->SOLUSDT/30s/bullish/30000ms" == gk
+        assert gk == "BTCUSDT->SOLUSDT/30s/bullish/30000ms"
 
 
 # ---------------------------------------------------------------------------
@@ -683,7 +709,7 @@ class TestSafetyScan:
             fpath = os.path.join(base, fname)
             if not os.path.exists(fpath):
                 continue
-            content = open(fpath, "r").read()
+            content = open(fpath).read()
             for forbidden in self.FORBIDDEN:
                 assert forbidden not in content, \
                     f"File {fname} contains forbidden string '{forbidden}'"
@@ -795,13 +821,12 @@ def test_new_files_safety_scan():
         "live trading",
     ]
     # Allow these in import statements that reference type hints or dependencies
-    import_lines_to_skip: List[str] = []
 
     for fname in new_files:
         fpath = os.path.join(base, fname)
         if not os.path.exists(fpath):
             continue
-        with open(fpath, "r") as f:
+        with open(fpath) as f:
             content = f.read()
         for fb in forbidden:
             if fb in content:
@@ -829,7 +854,8 @@ class TestKlinePrefilter:
             "1704067260000,42050.0,42200.0,41950.0,42100.0,150.0,"
             "1704067320000,6300000.0,750,75.0,3150000.0,0\n"
         )
-        import zipfile, io
+        import io
+        import zipfile
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
             zf.writestr("test.csv", csv_content)
@@ -839,9 +865,6 @@ class TestKlinePrefilter:
 
     def test_kline_prefilter_marks_candidate_day(self):
         """Kline prefilter marks a day with large price swing as candidate."""
-        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
-            compute_kline_candidate_days,
-        )
         base_ns = 1704067200000000000  # 2024-01-01 in ns
         klines = {
             "BTCUSDT": [
@@ -858,9 +881,6 @@ class TestKlinePrefilter:
 
     def test_kline_prefilter_conservative(self):
         """Kline prefilter includes days near threshold."""
-        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
-            compute_kline_candidate_days,
-        )
         base_ns = 1704067200000000000
         # Small swing but high-low = 25 bps
         klines = {
@@ -874,9 +894,6 @@ class TestKlinePrefilter:
 
     def test_kline_prefilter_no_false_positive_on_quiet_day(self):
         """Kline prefilter does not mark a very quiet day (no large moves)."""
-        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
-            compute_kline_candidate_days,
-        )
         base_ns = 1704067200000000000
         klines = {
             "BTCUSDT": [
@@ -889,9 +906,6 @@ class TestKlinePrefilter:
 
     def test_kline_prefilter_does_not_create_final_labels(self):
         """Kline prefilter output has no label_id or StressLabel fields."""
-        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
-            compute_kline_candidate_days,
-        )
         base_ns = 1704067200000000000
         klines = {
             "ETHUSDT": [
@@ -1011,13 +1025,6 @@ class TestPrefilterIntegration:
 
     def test_prefilter_summary_structure(self):
         """Verify prefilter summary dict keys."""
-        from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
-            compute_kline_candidate_days,
-        )
-        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
-            build_stress_day_download_plan,
-        )
-
         base_ns = 1704067200000000000
         klines = {
             "BTCUSDT": [
@@ -1038,7 +1045,7 @@ class TestPrefilterIntegration:
     def test_timestamp_unit_ms_us(self):
         """Kline parser handles both ms and us timestamps."""
         from examples.strategies.venue_agnostic_signal_observer.binance_vision_archive import (
-            parse_1m_klines_csv, _ts_to_ns,
+            _ts_to_ns,
         )
         # ms timestamp (pre-2025)
         ms_ns = _ts_to_ns(1704067200000)
@@ -1087,11 +1094,12 @@ class TestSourceSizing:
 
     def test_source_sizing_does_not_download_targets(self):
         """Verify source sizing runner references only source symbols."""
+        # Cannot easily mock main() here, but verify the module's symbol refs
+        import inspect
+
         from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_beta_lag_archive_source_sizing import (
             main as sizing_main,
         )
-        # Cannot easily mock main() here, but verify the module's symbol refs
-        import inspect
         source = inspect.getsource(sizing_main)
         # Should reference SOURCE_SYMBOLS but not download targets
         assert "SOURCE_SYMBOLS" in source
@@ -1136,6 +1144,7 @@ class TestSourceSizing:
         # It only mentions the file in its docstring and output report
         # Verify no update-to-registry logic exists
         import inspect
+
         from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_beta_lag_archive_source_sizing import (
             main,
         )
@@ -1143,19 +1152,21 @@ class TestSourceSizing:
         # The runner must NOT import or call any registry update function
         assert "update_registry" not in source
         assert "append_to_rejected" not in source
-        assert "REJECTED_RESEARCH.md." not in source.replace('"', '').replace("'", "")
+        assert "REJECTED_RESEARCH.md." not in source.replace('"', "").replace("'", "")
 
     def test_day_end_window_includes_next_day(self):
         """Day-end stress windows should include next-day target estimate."""
         # A stress event at 23:59:30 UTC needs next-day aggTrades for forward returns
         stress_ns = 1704153560000000000  # 2024-01-01 23:59:20 UTC in ns
-        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_beta_lag_archive_source_sizing import _date_from_ns
+        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_beta_lag_archive_source_sizing import (
+            _date_from_ns,
+        )
         stress_day = _date_from_ns(stress_ns)
         assert stress_day == "2024-01-01"
 
         # Next day needed for forward coverage beyond midnight
-        from datetime import timedelta, datetime, timezone
-        dt = datetime.strptime(stress_day, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        from datetime import timedelta
+        dt = datetime.strptime(stress_day, "%Y-%m-%d").replace(tzinfo=UTC)
         next_day = (dt + timedelta(days=1)).strftime("%Y-%m-%d")
         assert next_day == "2024-01-02"
 
@@ -1181,7 +1192,9 @@ class TestSourceSizing:
 class TestCanonicalReportBridge:
     def test_canonical_report_bridge_writes_expected_artifacts(self, tmp_path):
         """Active runner bridge writes canonical write_report artifacts and FINAL_REPORT.md."""
-        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import StressLabel
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            StressLabel,
+        )
         from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_beta_lag_archive import (
             _write_canonical_report_bridge,
         )
@@ -1255,8 +1268,6 @@ class TestCheckpointWriteAndLoad:
         """Checkpoint write + load preserves payload."""
         from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
             write_checkpoint,
-            load_checkpoint_manifest,
-            write_checkpoint_manifest,
         )
         output_dir = tmp_path / "test_resume"
         output_dir.mkdir()
@@ -1277,8 +1288,10 @@ class TestCheckpointWriteAndLoad:
     def test_checkpoint_manifest_roundtrip(self, tmp_path):
         """Checkpoint manifest tracks completed phases."""
         from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
-            write_checkpoint_manifest,
             load_checkpoint_manifest,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint_manifest,
         )
         output_dir = tmp_path / "test_manifest"
         output_dir.mkdir()
@@ -1307,8 +1320,10 @@ class TestCheckpointConfigMismatch:
     def test_config_mismatch_rejected(self, tmp_path):
         """A manifest with different config identity should fail validation."""
         from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
-            write_checkpoint_manifest,
             validate_checkpoint_config,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint_manifest,
         )
         output_dir = tmp_path / "test_mismatch"
         output_dir.mkdir()
@@ -1344,10 +1359,16 @@ class TestCheckpointConfigMismatch:
     def test_partial_phase_checkpoint_without_manifest_is_valid(self, tmp_path):
         """Partial run dirs with phase files but no final manifest are resumable."""
         from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
-            write_checkpoint,
-            validate_checkpoint_config,
             compute_resume_phase,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
             discover_checkpoint_phases,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            validate_checkpoint_config,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint,
         )
         output_dir = tmp_path / "partial"
         output_dir.mkdir()
@@ -1366,9 +1387,13 @@ class TestResumePhaseComputation:
     def test_resume_phase_returns_latest_complete(self, tmp_path):
         """compute_resume_phase returns the latest valid checkpoint phase."""
         from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
-            write_checkpoint,
-            write_checkpoint_manifest,
             compute_resume_phase,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint_manifest,
         )
         output_dir = tmp_path / "test_resume_phase"
         output_dir.mkdir()
@@ -1402,9 +1427,13 @@ class TestResumePhaseComputation:
     def test_corrupt_checkpoint_skipped(self, tmp_path):
         """Corrupt checkpoint file is silently skipped, resume uses valid ones."""
         from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
-            write_checkpoint,
-            write_checkpoint_manifest,
             compute_resume_phase,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint_manifest,
         )
         output_dir = tmp_path / "test_corrupt"
         output_dir.mkdir()
@@ -1434,8 +1463,10 @@ class TestResumePhaseComputation:
     def test_partial_checkpoint_config_mismatch_rejected(self, tmp_path):
         """Partial checkpoint files still validate config identity."""
         from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
-            write_checkpoint,
             compute_resume_phase,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            write_checkpoint,
         )
         output_dir = tmp_path / "partial_mismatch"
         output_dir.mkdir()
@@ -1516,9 +1547,10 @@ class TestNullEngineSelection:
 
     def test_null_engine_method_validation(self):
         """Null method names make engine semantics explicit and incompatible combos fail."""
-        import pytest
         from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
             default_null_method_for_engine,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
             validate_null_engine_method,
         )
         assert default_null_method_for_engine("cpu") == "timestamp_shift"
@@ -1544,12 +1576,13 @@ class TestNullEngineSelection:
 
     def test_gpu_null_requires_torch(self):
         """GPU null function exists and handles import gracefully."""
-        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
-            run_null_test_gpu,
-        )
         # GPU function should exist and be callable (may fail on import if no torch)
         # We test that the import is structured correctly
         import inspect
+
+        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
+            run_null_test_gpu,
+        )
         source = inspect.getsource(run_null_test_gpu)
         assert "torch" in source
         assert "+ 1" in source  # p-value correction
@@ -1561,7 +1594,8 @@ class TestNullEngineSelection:
         )
         ok, reason = check_cuda_available("cuda:0")
         assert isinstance(ok, bool)
-        assert isinstance(reason, str) and len(reason) > 0
+        assert isinstance(reason, str)
+        assert len(reason) > 0
 
     def test_cell_verdict_independent_of_null_engine(self):
         """Cell verdict gates are unchanged regardless of null engine."""
@@ -1569,9 +1603,6 @@ class TestNullEngineSelection:
         # depend on null engine. They shouldn't — null just provides p-values.
         from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_beta_lag_archive import (
             _cell_verdict,
-        )
-        from examples.strategies.venue_agnostic_signal_observer.cross_asset_beta_lag_archive import (
-            MIN_EVENTS_PER_CELL,
         )
         # Gates passed + sufficient events
         assert _cell_verdict(True, 100) == "GATES_PASSED"

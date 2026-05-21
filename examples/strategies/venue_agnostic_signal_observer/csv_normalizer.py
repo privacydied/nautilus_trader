@@ -1,4 +1,5 @@
-"""Normalize and align multi-venue OHLCV CSVs to a common timestamp grid.
+"""
+Normalize and align multi-venue OHLCV CSVs to a common timestamp grid.
 
 For lead-lag experiments we need source and target series on the same
 timebase so we can compute price moves at a given lookback and measure
@@ -11,7 +12,8 @@ Strategy:
   - Return aligned (timestamps, source_prices, target_prices) triples
 """
 import csv
-from typing import List, Tuple, Optional
+from typing import List
+from typing import Tuple
 
 
 def load_ohlc_csv(path: str) -> List[dict]:
@@ -54,7 +56,8 @@ def resample_to_grid(
     max_gap: float = 0.0,
     method: str = "ffill",
 ) -> Tuple[List[float], List[float]]:
-    """Resample irregular price data to a uniform time grid.
+    """
+    Resample irregular price data to a uniform time grid.
 
     Args:
         rows: sorted OHLCV dicts from load_ohlc_csv
@@ -77,8 +80,8 @@ def resample_to_grid(
 
     row_idx = 0
     n_rows = len(rows)
-    last_valid_price: Optional[float] = None
-    last_valid_ts: Optional[float] = None
+    last_valid_price: float | None = None
+    last_valid_ts: float | None = None
 
     grid_ts = grid_start
     while grid_ts <= grid_end:
@@ -115,7 +118,8 @@ def align_venues(
     max_gap: float = 0.0,
     overlap_only: bool = True,
 ) -> Tuple[List[float], List[float], List[float]]:
-    """Load two venue CSVs and resample them to a shared grid.
+    """
+    Load two venue CSVs and resample them to a shared grid.
 
     Args:
         source_csv: path to source venue OHLCV CSV
@@ -156,8 +160,8 @@ def align_venues(
     common = sorted(ts_set)
 
     # Price lookup
-    src_price = dict(zip(source_ts, source_prices))
-    tgt_price = dict(zip(target_ts, target_prices))
+    src_price = dict(zip(source_ts, source_prices, strict=False))
+    tgt_price = dict(zip(target_ts, target_prices, strict=False))
 
     timestamps = common
     s_prices = [src_price[t] for t in common]

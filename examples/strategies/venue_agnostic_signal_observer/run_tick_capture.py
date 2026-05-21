@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Public WebSocket tick-data capture — read-only, no auth, no orders.
+"""
+Public WebSocket tick-data capture — read-only, no auth, no orders.
 
 This script connects to **public, unauthenticated** WebSocket trade feeds from
 supported cryptocurrency venues (Kraken, Coinbase, Binance, OKX, Bybit, Bitfinex) and writes normalised
@@ -37,20 +38,23 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
 import time
 from collections import defaultdict
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from dataclasses import field
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import symbol_aliases
-
 import websockets
 
+from . import symbol_aliases
 from .tick_models import TradeTickLite
+
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +64,8 @@ logger = logging.getLogger(__name__)
 
 
 def binance_stream_path(symbol: str) -> str:
-    """Return the Binance WebSocket stream path for a symbol.
+    """
+    Return the Binance WebSocket stream path for a symbol.
 
     Normalises common symbol notations into the lowercase ``basequote@trade``
     form that Binance expects, e.g. ``BTC/USD`` → ``btcusd@trade``.
@@ -70,7 +75,8 @@ def binance_stream_path(symbol: str) -> str:
 
 
 def coinbase_symbol(symbol: str) -> str:
-    """Normalise a symbol for Coinbase's product_id format.
+    """
+    Normalise a symbol for Coinbase's product_id format.
 
     Accepts ``BTC/USD`` → ``BTC-USD`` (identity if already hyphenated).
     """
@@ -83,7 +89,8 @@ def _normalize_symbol(
     errors: list[str],
     warnings: list[str],
 ) -> str:
-    """Resolve a raw venue symbol to canonical ``ASSET/QUOTE`` format.
+    """
+    Resolve a raw venue symbol to canonical ``ASSET/QUOTE`` format.
 
     Uses ``symbol_aliases.resolve_symbol`` to look up the canonical form.
     If resolution fails, the raw symbol is prefixed with ``UNRESOLVED:`` and
@@ -107,7 +114,8 @@ def _normalize_symbol(
 
 
 class IncrementalJSONLWriter:
-    """Append-only JSONL writer that opens and closes per-write for safety.
+    """
+    Append-only JSONL writer that opens and closes per-write for safety.
 
     Designed for incremental tick capture where data loss on crash must be
     minimised.
@@ -142,7 +150,8 @@ async def run_binance_feed(
     deadline_seconds: float = 300,
     max_retries: int = 3,
 ) -> None:
-    """Capture trades from Binance public WebSocket feed.
+    """
+    Capture trades from Binance public WebSocket feed.
 
     Binance does not require a subscription message — the stream path encodes
     the subscription.  Each symbol gets its own stream concatenated into a
@@ -233,7 +242,7 @@ async def run_binance_feed(
             if not deadline or not deadline.is_set():
                 await asyncio.sleep(5)
 
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             retry += 1
             if retry > max_retries:
                 logger.error(
@@ -249,7 +258,7 @@ async def run_binance_feed(
             if not deadline or not deadline.is_set():
                 await asyncio.sleep(5)
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             retry += 1
             logger.error(
                 "[binance] unexpected error (retry %d/%d): %s",
@@ -388,12 +397,12 @@ async def run_kraken_feed(
                             size=size,
                             side=side,
                             trade_id=None,
-                            raw=dict(
-                                price=price_str,
-                                volume=size_str,
-                                time=ts_str,
-                                side=side_str,
-                            ),
+                            raw={
+                                "price": price_str,
+                                "volume": size_str,
+                                "time": ts_str,
+                                "side": side_str,
+                            },
                         )
 
                         if norm_sym not in writers:
@@ -424,7 +433,7 @@ async def run_kraken_feed(
             if not deadline or not deadline.is_set():
                 await asyncio.sleep(5)
 
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             retry += 1
             if retry > max_retries:
                 logger.error(
@@ -440,7 +449,7 @@ async def run_kraken_feed(
             if not deadline or not deadline.is_set():
                 await asyncio.sleep(5)
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             retry += 1
             logger.error(
                 "[kraken] unexpected error (retry %d/%d): %s",
@@ -589,7 +598,7 @@ async def run_coinbase_feed(
             if not deadline or not deadline.is_set():
                 await asyncio.sleep(5)
 
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             retry += 1
             if retry > max_retries:
                 logger.error(
@@ -605,7 +614,7 @@ async def run_coinbase_feed(
             if not deadline or not deadline.is_set():
                 await asyncio.sleep(5)
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             retry += 1
             logger.error(
                 "[coinbase] unexpected error (retry %d/%d): %s",
@@ -633,7 +642,8 @@ def okx_symbol(symbol: str) -> str:
 
 
 def parse_okx_trade(td: dict, norm_sym: str) -> TradeTickLite:
-    """Parse a single OKX trade payload dict into a TradeTickLite.
+    """
+    Parse a single OKX trade payload dict into a TradeTickLite.
 
     Expected fields: ``instId``, ``tradeId``, ``px``, ``sz``, ``side``, ``ts`` (ms epoch as str).
     Raises ``KeyError`` / ``ValueError`` on malformed inputs.
@@ -730,7 +740,7 @@ async def run_okx_feed(
                         counts[norm_sym] += 1
                         if stats is not None:
                             stats.record(f"okx|{norm_sym}", ts_ns, price)
-        except (websockets.ConnectionClosed, asyncio.TimeoutError) as exc:
+        except (TimeoutError, websockets.ConnectionClosed) as exc:
             retry += 1
             if stats is not None:
                 stats.record_reconnect("okx")
@@ -741,7 +751,7 @@ async def run_okx_feed(
             logger.warning("[okx] reconnect %d/%d: %s", retry, max_retries, exc)
             if not deadline or not deadline.is_set():
                 await asyncio.sleep(5)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             retry += 1
             if stats is not None:
                 stats.record_reconnect("okx")
@@ -765,7 +775,8 @@ def bybit_symbol(symbol: str) -> str:
 
 
 def parse_bybit_trade(td: dict, norm_sym: str) -> TradeTickLite:
-    """Parse a single Bybit publicTrade entry into a TradeTickLite.
+    """
+    Parse a single Bybit publicTrade entry into a TradeTickLite.
 
     Expected fields: ``T`` (ms epoch), ``s``, ``S`` (Buy/Sell), ``v``, ``p``, ``i``.
     Raises ``KeyError`` / ``ValueError`` on malformed inputs.
@@ -866,7 +877,7 @@ async def run_bybit_feed(
                         counts[norm_sym] += 1
                         if stats is not None:
                             stats.record(f"bybit|{norm_sym}", ts_ns, price)
-        except (websockets.ConnectionClosed, asyncio.TimeoutError) as exc:
+        except (TimeoutError, websockets.ConnectionClosed) as exc:
             retry += 1
             if stats is not None:
                 stats.record_reconnect("bybit")
@@ -877,7 +888,7 @@ async def run_bybit_feed(
             logger.warning("[bybit] reconnect %d/%d: %s", retry, max_retries, exc)
             if not deadline or not deadline.is_set():
                 await asyncio.sleep(5)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             retry += 1
             if stats is not None:
                 stats.record_reconnect("bybit")
@@ -914,7 +925,8 @@ def _map_bybit_symbol(raw: str, symbols: list[str]) -> str | None:
 
 
 def bitfinex_symbol(symbol: str) -> str:
-    """Map a user symbol to a Bitfinex public-trades ws symbol.
+    """
+    Map a user symbol to a Bitfinex public-trades ws symbol.
 
     Examples:
         ``BTC/USD`` -> ``tBTCUSD``
@@ -956,7 +968,7 @@ def _map_bitfinex_symbol(raw: str, symbols: list[str]) -> str | None:
         if bitfinex_symbol(s) == raw:
             return s
     # Strip leading 't' and try matching plain forms
-    bare = raw[1:] if raw.startswith("t") else raw
+    bare = raw.removeprefix("t")
     for s in symbols:
         if s.replace("/", "").replace(":", "").upper() == bare.replace(":", "").upper():
             return s
@@ -964,7 +976,8 @@ def _map_bitfinex_symbol(raw: str, symbols: list[str]) -> str | None:
 
 
 def parse_bitfinex_trade(td: list, norm_sym: str) -> TradeTickLite:
-    """Parse a Bitfinex trade payload (``[ID, MTS, AMOUNT, PRICE]``) into a TradeTickLite.
+    """
+    Parse a Bitfinex trade payload (``[ID, MTS, AMOUNT, PRICE]``) into a TradeTickLite.
 
     Side is inferred from the sign of AMOUNT (positive=buy, negative=sell).
     Raises ``ValueError``/``IndexError``/``TypeError`` on malformed inputs.
@@ -997,7 +1010,8 @@ async def run_bitfinex_feed(
     deadline_seconds: float = 300,
     max_retries: int = 3,
 ) -> None:
-    """Capture trades from Bitfinex public WebSocket feed (no auth).
+    """
+    Capture trades from Bitfinex public WebSocket feed (no auth).
 
     Bitfinex requires one subscribe message per symbol on a shared connection,
     and assigns a per-subscription ``chanId`` that must be tracked to demux trade
@@ -1087,7 +1101,7 @@ async def run_bitfinex_feed(
                         counts[norm_sym] += 1
                         if stats is not None:
                             stats.record(f"bitfinex|{norm_sym}", tick.ts_event, tick.price)
-        except (websockets.ConnectionClosed, asyncio.TimeoutError) as exc:
+        except (TimeoutError, websockets.ConnectionClosed) as exc:
             retry += 1
             if stats is not None:
                 stats.record_reconnect("bitfinex")
@@ -1098,7 +1112,7 @@ async def run_bitfinex_feed(
             logger.warning("[bitfinex] reconnect %d/%d: %s", retry, max_retries, exc)
             if not deadline or not deadline.is_set():
                 await asyncio.sleep(5)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             retry += 1
             if stats is not None:
                 stats.record_reconnect("bitfinex")
@@ -1201,7 +1215,7 @@ def _parse_iso8601_to_ns(ts_str: str) -> int:
 
         dt = datetime.fromisoformat(ts_str_clean)
         return int(dt.timestamp() * 1_000_000_000)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("failed to parse ISO 8601 '%s': %s", ts_str, exc)
         return 0
 
@@ -1484,8 +1498,8 @@ async def _main(args: argparse.Namespace) -> None:
     for venue in venues:
         for sym in symbols:
             norm = _normalize_symbol(sym, venue, stats.errors, stats.warnings)
-            err_set = list(stats.errors)
-            warn_set = list(stats.warnings)
+            list(stats.errors)
+            list(stats.warnings)
             # Only create writer once per normalised symbol
             if norm not in venue_writers[venue]:
                 venue_writers[venue][norm] = _make_writer(venue, norm)
@@ -1497,7 +1511,7 @@ async def _main(args: argparse.Namespace) -> None:
 
     deadline = asyncio.Event()
     start_time = time.monotonic()
-    run_start_utc = datetime.now(tz=timezone.utc).isoformat()
+    run_start_utc = datetime.now(tz=UTC).isoformat()
 
     # Deadline watchdog
     async def _deadline_watch() -> None:
@@ -1537,12 +1551,10 @@ async def _main(args: argparse.Namespace) -> None:
     # The deadline task should be the one that completed
     for t in pending:
         t.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await t
-        except asyncio.CancelledError:
-            pass
 
-    run_end_utc = datetime.now(tz=timezone.utc).isoformat()
+    run_end_utc = datetime.now(tz=UTC).isoformat()
     elapsed = time.monotonic() - start_time
 
     # Explicit warnings for zero-tick streams and subscription failures

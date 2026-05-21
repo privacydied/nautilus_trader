@@ -1,4 +1,5 @@
-"""GPU-ready lead/lag heatmap diagnostics for venue_agnostic_signal_observer.
+"""
+GPU-ready lead/lag heatmap diagnostics for venue_agnostic_signal_observer.
 
 Diagnostic only. No candidate generation. No verdict promotion/rejection.
 No network, no orders, no registry updates, no live trading.
@@ -13,9 +14,12 @@ from __future__ import annotations
 
 import csv
 import math
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     pass  # torch imported lazily at call time
@@ -92,7 +96,7 @@ def _split_ints(s: str) -> list[int]:
 def _finite_pair_series(x: list[float], y: list[float]) -> tuple[list[float], list[float]]:
     out_x: list[float] = []
     out_y: list[float] = []
-    for a, b in zip(x, y):
+    for a, b in zip(x, y, strict=False):
         if math.isfinite(a) and math.isfinite(b):
             out_x.append(float(a))
             out_y.append(float(b))
@@ -108,14 +112,14 @@ def _pearson(x: list[float], y: list[float]) -> float | None:
     vy = sum((v - my) ** 2 for v in y)
     if vx <= 0 or vy <= 0:
         return None
-    cov = sum((a - mx) * (b - my) for a, b in zip(x, y))
+    cov = sum((a - mx) * (b - my) for a, b in zip(x, y, strict=False))
     return cov / math.sqrt(vx * vy)
 
 
 def _alignment(x: list[float], y: list[float]) -> float | None:
     if len(x) < 2 or len(y) < 2 or len(x) != len(y):
         return None
-    same = sum(1 for a, b in zip(x, y) if (a >= 0 and b >= 0) or (a < 0 and b < 0))
+    same = sum(1 for a, b in zip(x, y, strict=False) if (a >= 0 and b >= 0) or (a < 0 and b < 0))
     return same / len(x)
 
 
@@ -144,7 +148,7 @@ def _bucketize_series(values: list[float], bucket_ms: int) -> list[float]:
 def check_cuda_available(device: str = "cuda:0") -> tuple[bool, str]:
     """Return (available, reason). Never raises."""
     try:
-        import torch  # noqa: PLC0415
+        import torch
     except ImportError:
         return False, "torch_not_installed"
 
@@ -176,11 +180,12 @@ def _gpu_correlation_batch(
     device: str = "cuda:0",
     batch_size: int = 8192,
 ) -> list[tuple[float | None, float | None, int]]:
-    """Compute correlation and alignment for all lags using GPU batching.
+    """
+    Compute correlation and alignment for all lags using GPU batching.
 
     Returns list of (correlation, directional_alignment, sample_count) per lag.
     """
-    import torch  # noqa: PLC0415
+    import torch
 
     results: list[tuple[float | None, float | None, int]] = []
     n = len(source_bucket)
@@ -190,7 +195,7 @@ def _gpu_correlation_batch(
     tgt_tensor = torch.tensor(target_bucket, dtype=torch.float64)
 
     for lag_ms in lags_ms:
-        shift = max(0, int(round(lag_ms / bucket_ms))) if bucket_ms > 0 else 0
+        shift = max(0, round(lag_ms / bucket_ms)) if bucket_ms > 0 else 0
         if shift >= n or shift >= m or shift >= min(n, m):
             results.append((None, None, 0))
             continue
@@ -264,7 +269,8 @@ def compute_lead_lag_heatmap(
     signal_type: str = "unknown",
     devices: list[str] | None = None,
 ) -> LeadLagHeatmapSummary:
-    """Compute lead/lag heatmap diagnostics between source and target series.
+    """
+    Compute lead/lag heatmap diagnostics between source and target series.
 
     Diagnostic only. Does not create trade candidates, change verdicts,
     update registry, or alter evaluator behavior.
@@ -317,7 +323,7 @@ def compute_lead_lag_heatmap(
     multi_devices: list[str] = list(devices) if devices else []
     if use_gpu:
         if multi_devices:
-            from .gpu_devices import validate_cuda_devices  # noqa: PLC0415
+            from .gpu_devices import validate_cuda_devices
             ok, reason = validate_cuda_devices(multi_devices)
         else:
             ok, reason = check_cuda_available(device)
@@ -332,10 +338,10 @@ def compute_lead_lag_heatmap(
         # GPU path: batch all lags. Multi-GPU shards lag buckets across
         # devices and concatenates in lag order to preserve determinism.
         if len(multi_devices) > 1:
-            from .gpu_devices import split_work_evenly  # noqa: PLC0415
+            from .gpu_devices import split_work_evenly
             shards = split_work_evenly(len(lags_ms), len(multi_devices))
             gpu_results = []
-            for dev_str, shard in zip(multi_devices, shards):
+            for dev_str, shard in zip(multi_devices, shards, strict=False):
                 if len(shard) == 0:
                     continue
                 shard_lags = lags_ms[shard.start:shard.stop]
@@ -358,7 +364,7 @@ def compute_lead_lag_heatmap(
                 device=effective_device,
                 batch_size=batch_size,
             )
-        for (corr, align, sample_count), lag_ms in zip(gpu_results, lags_ms):
+        for (corr, align, sample_count), lag_ms in zip(gpu_results, lags_ms, strict=False):
             verdict = _DIAGNOSTIC_READY if sample_count >= min_samples else _INSUFFICIENT_SAMPLES
             row = asdict(LeadLagHeatmapRow(
                 source_venue=source_venue,
@@ -377,7 +383,7 @@ def compute_lead_lag_heatmap(
     else:
         # CPU path
         for lag_ms in lags_ms:
-            shift = max(0, int(round(lag_ms / bucket_ms))) if bucket_ms > 0 else 0
+            shift = max(0, round(lag_ms / bucket_ms)) if bucket_ms > 0 else 0
             n_src = len(src_bucket)
             n_tgt = len(tgt_bucket)
 
@@ -473,6 +479,6 @@ def write_heatmap_reports(summary: LeadLagHeatmapSummary, out_dir: str | Path) -
         f.write("| source | target | symbol | signal | lag_ms | corr | alignment | samples | overlap_s | verdict |\n")
         f.write("|--------|--------|--------|--------|--------|------|-----------|---------|-----------|--------|\n")
         for r in summary.rows:
-            corr_str = f"{r['correlation']:.4f}" if r['correlation'] is not None and math.isfinite(r['correlation']) else "N/A"
-            align_str = f"{r['directional_alignment']:.4f}" if r['directional_alignment'] is not None and math.isfinite(r['directional_alignment']) else "N/A"
+            corr_str = f"{r['correlation']:.4f}" if r["correlation"] is not None and math.isfinite(r["correlation"]) else "N/A"
+            align_str = f"{r['directional_alignment']:.4f}" if r["directional_alignment"] is not None and math.isfinite(r["directional_alignment"]) else "N/A"
             f.write(f"| {r['source_venue']} | {r['target_venue']} | {r['symbol']} | {r['signal_type']} | {r['lag_ms']} | {corr_str} | {align_str} | {r['sample_count']} | {r['overlap_seconds']} | {r['verdict']} |\n")

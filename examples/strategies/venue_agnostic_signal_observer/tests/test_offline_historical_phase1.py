@@ -1,4 +1,5 @@
-"""Phase 1 offline historical data-lane tests.
+"""
+Phase 1 offline historical data-lane tests.
 
 All 26 required tests plus the safety scan.
 Synthetic/local fixtures only — no network, no auth, no live adapters.
@@ -6,47 +7,67 @@ Synthetic/local fixtures only — no network, no auth, no live adapters.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import tempfile
 import textwrap
 from pathlib import Path
-from typing import List
 
 import pytest
 
+from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import HashCache
+from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import (
+    compute_data_corpus_hash,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import sha256_file
 from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
     OFFLINE_DATA_SCHEMA_VERSION,
-    RESOLUTION_AGG_TRADE,
-    RESOLUTION_BAR,
-    RESOLUTION_TRADE,
-    WINDOW_MODE_CAUSAL,
-    WINDOW_MODE_RETROSPECTIVE_DIAGNOSTIC,
-    OfflinePrepareManifest,
-    OfflineSourceFile,
-    can_promote_from_window_mode,
-    validate_family2_signal_variants,
 )
-from examples.strategies.venue_agnostic_signal_observer.offline_historical_normalize import (
-    to_nanoseconds,
-    validate_timestamp_range,
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    RESOLUTION_AGG_TRADE,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    RESOLUTION_BAR,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    RESOLUTION_TRADE,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    WINDOW_MODE_CAUSAL,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    WINDOW_MODE_RETROSPECTIVE_DIAGNOSTIC,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    OfflinePrepareManifest,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    OfflineSourceFile,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    can_promote_from_window_mode,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    validate_family2_signal_variants,
 )
 from examples.strategies.venue_agnostic_signal_observer.offline_historical_sources import (
     parse_binance_agg_trades,
-    parse_binance_klines,
-    parse_coinbase_candles,
-    parse_kraken_ohlcvt,
-    parse_kraken_trades,
 )
-from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import (
-    HashCache,
-    compute_data_corpus_hash,
-    sha256_file,
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_sources import (
+    parse_binance_klines,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_sources import (
+    parse_coinbase_candles,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_sources import (
+    parse_kraken_ohlcvt,
 )
 from examples.strategies.venue_agnostic_signal_observer.offline_replay_manifest import (
     assert_compatible_offline_corpus,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_replay_manifest import (
     build_manifest,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_replay_manifest import (
     write_manifest,
 )
 
@@ -92,53 +113,53 @@ def _coinbase_candles_csv(ts_s: float = _T0_MS / 1000) -> str:
 
 
 def _make_source_file(**overrides) -> OfflineSourceFile:
-    defaults = dict(
-        path="/tmp/test.csv",
-        logical_source_id="test_source",
-        venue="binance",
-        symbol="BTC/USDT",
-        base_asset="BTC",
-        quote_asset="USDT",
-        source_kind="binance_spot_agg_trades",
-        stream_type="agg_trades",
-        resolution_type=RESOLUTION_AGG_TRADE,
-        timestamp_unit="ms",
-        expected_start_ns=_EXPECTED_START_NS,
-        expected_end_ns=_EXPECTED_END_NS,
-        file_size_bytes=100,
-        mtime_ns=1_700_000_000_000_000_000,
-        file_sha256="abc123",
-        row_count=10,
-        data_start_ns=_T0_NS,
-        data_end_ns=_T1_NS,
-    )
+    defaults = {
+        "path": "/tmp/test.csv",
+        "logical_source_id": "test_source",
+        "venue": "binance",
+        "symbol": "BTC/USDT",
+        "base_asset": "BTC",
+        "quote_asset": "USDT",
+        "source_kind": "binance_spot_agg_trades",
+        "stream_type": "agg_trades",
+        "resolution_type": RESOLUTION_AGG_TRADE,
+        "timestamp_unit": "ms",
+        "expected_start_ns": _EXPECTED_START_NS,
+        "expected_end_ns": _EXPECTED_END_NS,
+        "file_size_bytes": 100,
+        "mtime_ns": 1_700_000_000_000_000_000,
+        "file_sha256": "abc123",
+        "row_count": 10,
+        "data_start_ns": _T0_NS,
+        "data_end_ns": _T1_NS,
+    }
     defaults.update(overrides)
     return OfflineSourceFile(**defaults)
 
 
 def _make_manifest(**overrides) -> OfflinePrepareManifest:
     sf = _make_source_file()
-    defaults = dict(
-        run_id="test_run",
-        phase="offline_historical_prepare",
-        generated_at_utc="2024-01-01T00:00:00+00:00",
-        git_sha="deadbeef",
-        schema_version=OFFLINE_DATA_SCHEMA_VERSION,
-        precommitment_hash=None,
-        data_corpus_hash=compute_data_corpus_hash([sf], OFFLINE_DATA_SCHEMA_VERSION),
-        source_files=[],
-        timestamp_validation={},
-        hash_cache_used=True,
-        hash_cache_entries_reused=0,
-        hash_cache_entries_recomputed=1,
-        normalized_time_range={},
-        stream_counts={},
-        resolution_summary={},
-        quote_currency_summary={},
-        safety="public_data_observer_only",
-        forbidden_capabilities_present=False,
-        next_phase_allowed=True,
-    )
+    defaults = {
+        "run_id": "test_run",
+        "phase": "offline_historical_prepare",
+        "generated_at_utc": "2024-01-01T00:00:00+00:00",
+        "git_sha": "deadbeef",
+        "schema_version": OFFLINE_DATA_SCHEMA_VERSION,
+        "precommitment_hash": None,
+        "data_corpus_hash": compute_data_corpus_hash([sf], OFFLINE_DATA_SCHEMA_VERSION),
+        "source_files": [],
+        "timestamp_validation": {},
+        "hash_cache_used": True,
+        "hash_cache_entries_reused": 0,
+        "hash_cache_entries_recomputed": 1,
+        "normalized_time_range": {},
+        "stream_counts": {},
+        "resolution_summary": {},
+        "quote_currency_summary": {},
+        "safety": "public_data_observer_only",
+        "forbidden_capabilities_present": False,
+        "next_phase_allowed": True,
+    }
     defaults.update(overrides)
     return OfflinePrepareManifest(**defaults)
 
@@ -592,7 +613,7 @@ def test_corpus_guard_rejects_different_nonnull_precommitment_hashes():
 
 
 def test_corpus_guard_allows_null_precommitment_vs_nonnull():
-    """null vs non-null precommitment does not trigger rejection."""
+    """Null vs non-null precommitment does not trigger rejection."""
     sf = _make_source_file()
     h = compute_data_corpus_hash([sf], OFFLINE_DATA_SCHEMA_VERSION)
     m1 = _make_manifest(data_corpus_hash=h, precommitment_hash=None)
@@ -681,7 +702,7 @@ def test_offline_files_contain_no_forbidden_execution_terms():
                     stripped = line.strip()
                     if term in stripped:
                         # Skip comment lines that enumerate forbidden terms
-                        if stripped.startswith("#") or stripped.startswith('"') or stripped.startswith("'"):
+                        if stripped.startswith(("#", '"', "'")):
                             continue
                         # Skip list literals of forbidden terms (like in this test file)
                         if term in stripped and ("_FORBIDDEN_TERMS" in stripped or '"' + term + '"' in stripped or "'" + term + "'" in stripped):

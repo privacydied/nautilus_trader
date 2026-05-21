@@ -907,9 +907,7 @@ def _corpus_readiness() -> dict[str, Any]:
         "next_action": (
             "CORPUS_READY — frozen-grid discovery can run manually"
             if ready
-            else "ACCUMULATING — {} more stress windows needed before frozen-grid rerun".format(
-                remaining
-            )
+            else f"ACCUMULATING — {remaining} more stress windows needed before frozen-grid rerun"
         ),
     }
 

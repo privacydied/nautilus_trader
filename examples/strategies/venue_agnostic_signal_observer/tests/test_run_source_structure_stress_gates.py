@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -22,8 +20,7 @@ def _make_tick_json(ts_ns: int, price: float, symbol: str = "BTCUSDT") -> str:
 
 def _write_ticks(path: Path, prices: list[float], symbol: str = "BTCUSDT"):
     with open(path, "w") as f:
-        for i, p in enumerate(prices):
-            f.write(_make_tick_json(i * 1_000_000_000, p, symbol) + "\n")
+        f.writelines(_make_tick_json(i * 1_000_000_000, p, symbol) + "\n" for i, p in enumerate(prices))
 
 
 class TestCLIRunner:
@@ -32,7 +29,9 @@ class TestCLIRunner:
         _write_ticks(src, [1000.0 + i * 0.1 for i in range(200)])
 
         out = tmp_path / "out"
-        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import main
+        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import (
+            main,
+        )
         rc = main([
             "--source-files", str(src),
             "--out-dir", str(out),
@@ -51,7 +50,9 @@ class TestCLIRunner:
         _write_ticks(src, [1000.0 + i * 0.1 for i in range(200)])
 
         out = tmp_path / "out"
-        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import main
+        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import (
+            main,
+        )
         rc = main([
             "--source-files", str(src),
             "--out-dir", str(out),
@@ -67,7 +68,9 @@ class TestCLIRunner:
         _write_ticks(src, [1000.0] * 10)
 
         out = tmp_path / "out"
-        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import main
+        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import (
+            main,
+        )
         with pytest.raises(SystemExit, match="TARGET_INPUT_FORBIDDEN"):
             main([
                 "--source-files", str(src),
@@ -80,7 +83,9 @@ class TestCLIRunner:
         _write_ticks(src, [1000.0] * 10)
 
         out = tmp_path / "out"
-        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import main
+        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import (
+            main,
+        )
         with pytest.raises(SystemExit, match="TARGET_INPUT_FORBIDDEN"):
             main([
                 "--source-files", str(src),
@@ -93,7 +98,9 @@ class TestCLIRunner:
         _write_ticks(src, [3000.0 + i * 0.1 for i in range(200)], "ETHUSDT")
 
         out = tmp_path / "out"
-        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import main
+        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import (
+            main,
+        )
         rc = main([
             "--source-files", str(src),
             "--out-dir", str(out),
@@ -110,7 +117,9 @@ class TestCLIRunner:
         _write_ticks(eth, [3000.0 + i * 0.1 for i in range(200)], "ETHUSDT")
 
         out = tmp_path / "out"
-        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import main
+        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import (
+            main,
+        )
         rc = main([
             "--source-files", str(btc), str(eth),
             "--out-dir", str(out),
@@ -125,7 +134,9 @@ class TestCLIRunner:
         _write_ticks(src, [1000.0 + i * 0.1 for i in range(200)])
 
         out = tmp_path / "out"
-        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import main
+        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import (
+            main,
+        )
         rc = main([
             "--source-files", str(src),
             "--out-dir", str(out),
@@ -146,7 +157,9 @@ class TestCLIRunner:
         _write_ticks(src, [1000.0 + i * 0.1 for i in range(200)])
 
         out = tmp_path / "out"
-        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import main
+        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import (
+            main,
+        )
         rc = main([
             "--source-files", str(src),
             "--out-dir", str(out),
@@ -164,7 +177,9 @@ class TestCLITargetInputRefusal:
         src = tmp_path / "ticks_btcusdt.jsonl"
         _write_ticks(src, [1000.0] * 10)
 
-        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import main
+        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import (
+            main,
+        )
         with pytest.raises(SystemExit):
             main([
                 "--source-files", str(src),
@@ -173,13 +188,16 @@ class TestCLITargetInputRefusal:
             ])
 
     def test_forbidden_symbols_in_source_files(self, tmp_path):
-        """Passing a file named like a target should still work if it's in --source-files.
+        """
+        Passing a file named like a target should still work if it's in --source-files.
         The check is on the symbol argument, not the filename.
         """
         src = tmp_path / "ticks_solusdt.jsonl"
         _write_ticks(src, [100.0 + i * 0.1 for i in range(200)], "SOLUSDT")
 
-        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import main
+        from examples.strategies.venue_agnostic_signal_observer.run_source_structure_stress_gates import (
+            main,
+        )
         # This should raise because SOLUSDT is a forbidden symbol
         with pytest.raises(SystemExit, match="TARGET_INPUT_FORBIDDEN"):
             main([

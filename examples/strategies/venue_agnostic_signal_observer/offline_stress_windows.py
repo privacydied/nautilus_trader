@@ -1,4 +1,5 @@
-"""Phase 2A offline historical causal stress-window indexer.
+"""
+Phase 2A offline historical causal stress-window indexer.
 
 Consumes Phase 1 prepared datasets or reloads a Phase 1 prepare manifest plus the
 same source-config path used during prepare. Produces deterministic stress-window
@@ -10,26 +11,29 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from dataclasses import asdict, dataclass, field, replace
-from datetime import datetime, timezone
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
+from dataclasses import replace
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any
+from typing import Sequence
 
-from .offline_corpus_hash import HashCache, compute_data_corpus_hash, sha256_file
-from .offline_historical_models import (
-    OFFLINE_DATA_SCHEMA_VERSION,
-    RESOLUTION_AGG_TRADE,
-    RESOLUTION_BAR,
-    RESOLUTION_TRADE,
-    WINDOW_MODE_CAUSAL,
-    WINDOW_MODE_RETROSPECTIVE_DIAGNOSTIC,
-    OfflineBarRecord,
-    OfflinePreparedDataset,
-    OfflinePrepareManifest,
-    OfflineSourceFile,
-    OfflineTradeRecord,
-    can_promote_from_window_mode,
-)
+from .offline_corpus_hash import HashCache
+from .offline_corpus_hash import compute_data_corpus_hash
+from .offline_corpus_hash import sha256_file
+from .offline_historical_models import RESOLUTION_AGG_TRADE
+from .offline_historical_models import RESOLUTION_TRADE
+from .offline_historical_models import WINDOW_MODE_CAUSAL
+from .offline_historical_models import WINDOW_MODE_RETROSPECTIVE_DIAGNOSTIC
+from .offline_historical_models import OfflineBarRecord
+from .offline_historical_models import OfflinePreparedDataset
+from .offline_historical_models import OfflinePrepareManifest
+from .offline_historical_models import OfflineSourceFile
+from .offline_historical_models import OfflineTradeRecord
+from .offline_historical_models import can_promote_from_window_mode
 from .run_offline_historical_prepare import _dispatch_parse
 
 
@@ -68,7 +72,7 @@ class StressRuleConfig:
     trigger_metric: str
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    def replace(self, **changes: Any) -> "StressRuleConfig":
+    def replace(self, **changes: Any) -> StressRuleConfig:
         return replace(self, **changes)
 
 
@@ -95,7 +99,7 @@ class OfflineStressWindow:
     cooldown_ns: int
     resolution_type: str
     data_corpus_hash: str
-    precommitment_hash: Optional[str]
+    precommitment_hash: str | None
     metadata: dict[str, Any]
 
 
@@ -125,11 +129,11 @@ def _get_git_sha() -> str:
 
 
 def _now_utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _parse_iso(ts: str) -> int:
-    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    dt = datetime.fromisoformat(ts)
     return int(dt.timestamp() * 1_000_000_000)
 
 
@@ -211,7 +215,7 @@ def _build_window(
     rule: StressRuleConfig,
     trigger_timestamp_ns: int,
     trigger_value: float,
-    precommitment_hash: Optional[str],
+    precommitment_hash: str | None,
     metadata: dict[str, Any],
 ) -> OfflineStressWindow:
     promotion_allowed = can_promote_from_window_mode(selection_mode)
@@ -275,7 +279,8 @@ def _points_for_stream(
 def _eligible_slice(
     points: Sequence[dict[str, Any]], index: int, lookback_ns: int, left: int = 0
 ) -> tuple[int, int]:
-    """Return (start, end) indices of points within lookback_ns of points[index].
+    """
+    Return (start, end) indices of points within lookback_ns of points[index].
 
     Uses a sliding-window left bound to avoid O(n²) list creation.
     Since points are sorted by timestamp_ns, advancing from *left* is correct.
@@ -317,7 +322,7 @@ def _evaluate_rule_on_points(
     points: Sequence[dict[str, Any]],
     rule: StressRuleConfig,
     selection_mode: str,
-    precommitment_hash: Optional[str],
+    precommitment_hash: str | None,
 ) -> tuple[list[OfflineStressWindow], list[dict[str, Any]], int]:
     if source.resolution_type not in rule.supported_resolutions:
         return [], [{
@@ -341,7 +346,7 @@ def _evaluate_rule_on_points(
 
     cooldown_ns = rule.cooldown_seconds * 1_000_000_000
     lookback_ns = rule.lookback_seconds * 1_000_000_000
-    last_emitted_ts: Optional[int] = None
+    last_emitted_ts: int | None = None
     windows: list[OfflineStressWindow] = []
     suppressed = 0
     window_left = 0
@@ -426,11 +431,11 @@ def build_stress_window_index(
     stress_rules: Sequence[StressRuleConfig],
     *,
     selection_mode: str,
-    precommitment_hash: Optional[str] = None,
-    run_id: Optional[str] = None,
-    input_prepare_manifest_path: Optional[str] = None,
-    input_prepare_manifest_hash: Optional[str] = None,
-    git_sha: Optional[str] = None,
+    precommitment_hash: str | None = None,
+    run_id: str | None = None,
+    input_prepare_manifest_path: str | None = None,
+    input_prepare_manifest_hash: str | None = None,
+    git_sha: str | None = None,
 ) -> StressWindowIndexResult:
     if selection_mode not in {WINDOW_MODE_CAUSAL, WINDOW_MODE_RETROSPECTIVE_DIAGNOSTIC}:
         raise ValueError(f"Unknown selection_mode: {selection_mode!r}")
@@ -477,7 +482,7 @@ def build_stress_window_index(
         raise ValueError(f"Unexpected status {status!r}")
 
     manifest_metadata = {
-        "run_id": run_id or f"offline_stress_window_index_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
+        "run_id": run_id or f"offline_stress_window_index_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}",
         "phase": "offline_stress_window_index",
         "generated_at_utc": _now_utc_iso(),
         "git_sha": git_sha or dataset.git_sha or _get_git_sha(),
@@ -578,7 +583,7 @@ def _corpus_hash_mismatch_result(
     recomputed_hash: str,
 ) -> StressWindowIndexResult:
     metadata = {
-        "run_id": f"offline_stress_window_index_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}",
+        "run_id": f"offline_stress_window_index_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}",
         "phase": "offline_stress_window_index",
         "generated_at_utc": _now_utc_iso(),
         "git_sha": _get_git_sha(),

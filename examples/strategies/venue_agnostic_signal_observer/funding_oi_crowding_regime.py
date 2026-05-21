@@ -22,8 +22,12 @@ import os
 import urllib.request
 import zipfile
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -92,7 +96,7 @@ def extract_csv_from_zip(zip_bytes):
 
 
 def parse_ts(ts_str):
-    return datetime.strptime(ts_str.strip(), DT_FMT).replace(tzinfo=timezone.utc)
+    return datetime.strptime(ts_str.strip(), DT_FMT).replace(tzinfo=UTC)
 
 
 def load_funding_monthly(ym):
@@ -111,7 +115,7 @@ def load_funding_monthly(ym):
         try:
             calc_time_ms = int(r["calc_time"])
             funding_rate = float(r["last_funding_rate"])
-            ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=timezone.utc)
+            ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=UTC)
             result.append({"ts": ts, "funding_rate": funding_rate})
         except (ValueError, KeyError):
             continue
@@ -286,11 +290,8 @@ def run_phase0b(output_dir="reports/funding_oi_crowding_regime_v0"):
         "negative_extreme_falling_oi": 0,
     }
 
-    train_counts = {k: 0 for k in [
-        "aligned_settlements", "oi_unaligned", "positive_extreme_rising_oi",
-        "positive_extreme_falling_oi", "negative_extreme_rising_oi",
-        "negative_extreme_falling_oi"]}
-    holdout_counts = {k: 0 for k in train_counts}
+    train_counts = dict.fromkeys(["aligned_settlements", "oi_unaligned", "positive_extreme_rising_oi", "positive_extreme_falling_oi", "negative_extreme_rising_oi", "negative_extreme_falling_oi"], 0)
+    holdout_counts = dict.fromkeys(train_counts, 0)
 
     eval_sorted = sorted(eval_events, key=lambda x: x["ts"])
     split_idx = int(len(eval_sorted) * 0.7)

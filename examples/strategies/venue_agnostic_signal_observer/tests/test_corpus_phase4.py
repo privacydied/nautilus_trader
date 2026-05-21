@@ -12,11 +12,11 @@ Covers:
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
-from ..corpus import aggregate_corpus, emit_corpus_events, CaptureRecord
-from ..governance import EvidenceLedger, replay_ledger
+from venue_agnostic_signal_observer.corpus import CaptureRecord
+from venue_agnostic_signal_observer.corpus import aggregate_corpus
+from venue_agnostic_signal_observer.corpus import emit_corpus_events
+from venue_agnostic_signal_observer.governance import EvidenceLedger
+from venue_agnostic_signal_observer.governance import replay_ledger
 
 
 def _cap(capture_id, mean_return, n=50, returns=None):
@@ -106,7 +106,8 @@ class TestLedgerEmitter:
 
     def test_events_can_be_appended_to_phase2_ledger(self, tmp_path):
         """Phase 4 events feed into Phase 2 ledger — no parallel state store."""
-        from ..governance.events import make_candidate_lock_event, make_grid_lock_event
+        from venue_agnostic_signal_observer.governance.events import make_candidate_lock_event
+        from venue_agnostic_signal_observer.governance.events import make_grid_lock_event
         ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
         ledger.append(make_grid_lock_event(0, "g1"))
         ledger.append(make_candidate_lock_event(1, "c1", "g1"))
@@ -129,9 +130,9 @@ class TestLedgerEmitter:
 
     def test_demotion_event_visible_in_replay(self, tmp_path):
         """Demotion from Phase 4 is reflected in Phase 2 replay state."""
-        from ..governance.events import (
-            make_grid_lock_event, make_candidate_lock_event, make_approval_event
-        )
+        from venue_agnostic_signal_observer.governance.events import make_approval_event
+        from venue_agnostic_signal_observer.governance.events import make_candidate_lock_event
+        from venue_agnostic_signal_observer.governance.events import make_grid_lock_event
         ledger = EvidenceLedger(tmp_path / "ledger.jsonl")
         ledger.append(make_grid_lock_event(0, "g1"))
         ledger.append(make_candidate_lock_event(1, "c1", "g1"))

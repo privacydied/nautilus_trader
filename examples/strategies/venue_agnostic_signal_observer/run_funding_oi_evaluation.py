@@ -18,16 +18,16 @@ import csv
 import hashlib
 import io
 import json
-import math
 import os
 import random
-import sys
-import time
 import urllib.request
 import zipfile
-from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import as_completed
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
+
 
 # ---------------------------------------------------------------------------
 # Precommitment frozen parameters (read-only)
@@ -175,7 +175,7 @@ def load_funding_all():
                     try:
                         calc_time_ms = int(r["calc_time"])
                         rate = float(r["last_funding_rate"])
-                        ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=timezone.utc)
+                        ts = datetime.fromtimestamp(calc_time_ms / 1000, tz=UTC)
                         all_funding.append({"ts": ts, "funding_rate": rate})
                     except (ValueError, KeyError):
                         pass
@@ -203,7 +203,7 @@ def load_oi_daily_cached(date_str):
     result = []
     for r in rows:
         try:
-            ts = datetime.strptime(r[TIMESTAMP_FIELD].strip(), DT_FMT).replace(tzinfo=timezone.utc)
+            ts = datetime.strptime(r[TIMESTAMP_FIELD].strip(), DT_FMT).replace(tzinfo=UTC)
             oi = float(r[OI_PRIMARY_FIELD])
             result.append({"ts": ts, "oi": oi})
         except (ValueError, KeyError):
@@ -219,7 +219,6 @@ def load_oi_for_dates(dates, max_workers=8):
     oi_by_date = {}
     loaded = 0
     failed = 0
-    total_bytes = 0
 
     with ThreadPoolExecutor(max_workers=max_workers) as exe:
         fut_map = {exe.submit(load_oi_daily_cached, d): d for d in dates}
@@ -265,7 +264,7 @@ def load_spot_klines_monthly(ym):
             try:
                 open_ms = int(parts[0])
                 close = float(parts[4])
-                ts = datetime.fromtimestamp(open_ms / 1000, tz=timezone.utc)
+                ts = datetime.fromtimestamp(open_ms / 1000, tz=UTC)
                 result.append({"ts": ts, "close": close})
             except (ValueError, IndexError):
                 pass
@@ -278,7 +277,6 @@ def load_all_spot_klines():
     months = list(iter_months(START_YM, END_YM))
     print(f"Loading {len(months)} monthly spot 1h klines files...")
     all_klines = []
-    total_bytes = 0
     for i, ym in enumerate(months):
         rows = load_spot_klines_monthly(ym)
         if rows:
@@ -877,7 +875,7 @@ def run_evaluation():
     # 6. Merge gate + null into cell verdicts
     # ======================================================================
     cell_verdicts = []
-    for pr, nr in zip(primary_results, null_results):
+    for pr, nr in zip(primary_results, null_results, strict=False):
         cv = dict(pr)
         cv["null_p_value"] = nr.get("p_value")
         cv["null_mean"] = nr.get("null_mean")
@@ -940,7 +938,7 @@ def run_evaluation():
                   f"verdict={hr['holdout_verdict']}")
 
     # Merge holdout into cell verdicts
-    for cv, hr in zip(cell_verdicts, holdout_results):
+    for cv, hr in zip(cell_verdicts, holdout_results, strict=False):
         cv["holdout_n_train"] = hr["n_train"]
         cv["holdout_n_holdout"] = hr["n_holdout"]
         cv["holdout_verdict"] = hr["holdout_verdict"]
@@ -1102,10 +1100,10 @@ def run_evaluation():
     # ======================================================================
     lines = []
     lines.append(f"# Phase 1 Evaluation: {run_id}")
-    lines.append(f"")
-    lines.append(f"## Family 3: BTCUSDT Funding × Open Interest Crowding Regime v0")
-    lines.append(f"")
-    lines.append(f"### Metadata")
+    lines.append("")
+    lines.append("## Family 3: BTCUSDT Funding × Open Interest Crowding Regime v0")
+    lines.append("")
+    lines.append("### Metadata")
     lines.append(f"- **Run ID:** {run_id}")
     lines.append(f"- **Seed:** {SEED}")
     lines.append(f"- **Precommitment SHA-256:** `{PRECOMMITMENT_SHA256}`")
@@ -1119,14 +1117,14 @@ def run_evaluation():
     lines.append(f"- **Aligned events:** {metadata['aligned_extreme_events']}")
     lines.append(f"- **OI_UNALIGNED:** {metadata['unaligned_extreme_events']}")
     lines.append(f"- **Holdout split:** {split_ts}")
-    lines.append(f"")
-    lines.append(f"### Study Verdict")
+    lines.append("")
+    lines.append("### Study Verdict")
     lines.append(f"**{study_verdict}** — {study_detail}")
-    lines.append(f"")
-    lines.append(f"### Primary Cells (rising OI, 50 bps cost)")
-    lines.append(f"")
-    lines.append(f"| Cell | N | Mean (bps) | Median (bps) | Win Rate | Worst Decile | Null p | FDR | Holdout | Verdict |")
-    lines.append(f"|---|---|---|---|---|---|---|---|---|---|")
+    lines.append("")
+    lines.append("### Primary Cells (rising OI, 50 bps cost)")
+    lines.append("")
+    lines.append("| Cell | N | Mean (bps) | Median (bps) | Win Rate | Worst Decile | Null p | FDR | Holdout | Verdict |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|")
     for cv in cell_verdicts:
         lines.append(
             f"| {cv['cell_key']} | {cv['n_events']} | "
@@ -1139,11 +1137,11 @@ def run_evaluation():
             f"{cv.get('holdout_n_holdout', '?')} ({cv.get('holdout_verdict', '?')}) | "
             f"**{cv.get('final_verdict', cv.get('verdict'))}** |"
         )
-    lines.append(f"")
-    lines.append(f"### Diagnostic Cells (falling OI, 6 bps cost)")
-    lines.append(f"")
-    lines.append(f"| Cell | N | Mean (bps) | Win Rate | Verdict |")
-    lines.append(f"|---|---|---|---|---|")
+    lines.append("")
+    lines.append("### Diagnostic Cells (falling OI, 6 bps cost)")
+    lines.append("")
+    lines.append("| Cell | N | Mean (bps) | Win Rate | Verdict |")
+    lines.append("|---|---|---|---|---|")
     for dr in diagnostic_results:
         lines.append(
             f"| {dr['cell_key']} | {dr['n_events']} | "
@@ -1151,29 +1149,29 @@ def run_evaluation():
             f"{dr.get('win_rate', 'N/A')} | "
             f"**{dr.get('verdict', 'N/A')}** |"
         )
-    lines.append(f"")
+    lines.append("")
     lines.append(f"### FDR Table (Benjamini-Yekutieli, alpha={FDR_ALPHA})")
-    lines.append(f"")
-    lines.append(f"| Cell | Raw p-value | BY Rejected |")
-    lines.append(f"|---|---|---|")
+    lines.append("")
+    lines.append("| Cell | Raw p-value | BY Rejected |")
+    lines.append("|---|---|---|")
     for ft in fdr_table:
         lines.append(f"| {ft['cell']} | {ft['p_value']:.4f} | {ft['rejected']} |")
-    lines.append(f"")
-    lines.append(f"### Holdout Results")
-    lines.append(f"")
-    lines.append(f"| Cell | Train N | Holdout N | Train Mean (bps) | Verdict |")
-    lines.append(f"|---|---|---|---|---|")
+    lines.append("")
+    lines.append("### Holdout Results")
+    lines.append("")
+    lines.append("| Cell | Train N | Holdout N | Train Mean (bps) | Verdict |")
+    lines.append("|---|---|---|---|---|")
     for hr in holdout_results:
         lines.append(
             f"| {hr['cell_key']} | {hr['n_train']} | {hr['n_holdout']} | "
             f"{hr.get('train_mean_net_bps', 'N/A')} | "
             f"{hr.get('holdout_verdict', 'N/A')} |"
         )
-    lines.append(f"")
-    lines.append(f"---")
-    lines.append(f"")
-    lines.append(f"*Precommitment not modified. Seed not re-rolled. No private-key/order/execution/bot/ledger-write path used.*")
-    lines.append(f"*Generated by run_funding_oi_evaluation.py*")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    lines.append("*Precommitment not modified. Seed not re-rolled. No private-key/order/execution/bot/ledger-write path used.*")
+    lines.append("*Generated by run_funding_oi_evaluation.py*")
 
     md_out = os.path.join(output_dir, "summary.md")
     with open(md_out, "w") as f:

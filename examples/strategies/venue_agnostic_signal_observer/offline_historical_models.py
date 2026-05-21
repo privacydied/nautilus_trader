@@ -1,4 +1,5 @@
-"""Frozen dataclasses for Phase 1 offline historical data lane.
+"""
+Frozen dataclasses for Phase 1 offline historical data lane.
 
 Observer-only, public-data-only, local-file-first. No execution, no order
 submission, no private keys, no live adapters.
@@ -6,8 +7,10 @@ submission, no private keys, no live adapters.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence
+from dataclasses import dataclass
+from typing import Dict
+from typing import List
+from typing import Sequence
 
 
 OFFLINE_DATA_SCHEMA_VERSION = "offline_historical_v1"
@@ -95,8 +98,8 @@ class OfflineTradeRecord:
     timestamp_ns: int
     price: float
     size: float
-    side: Optional[str]           # "buy" | "sell" | None
-    trade_id: Optional[str]
+    side: str | None           # "buy" | "sell" | None
+    trade_id: str | None
     source_file: str              # logical_source_id of originating OfflineSourceFile
     source_kind: str
     resolution_type: str          # RESOLUTION_TRADE or RESOLUTION_AGG_TRADE
@@ -116,7 +119,7 @@ class OfflineBarRecord:
     low: float
     close: float
     volume: float
-    trade_count: Optional[int]
+    trade_count: int | None
     source_file: str              # logical_source_id
     source_kind: str
     resolution_type: str          # must always be RESOLUTION_BAR
@@ -154,7 +157,7 @@ class OfflinePrepareManifest:
     generated_at_utc: str
     git_sha: str
     schema_version: str
-    precommitment_hash: Optional[str]  # nullable
+    precommitment_hash: str | None  # nullable
     data_corpus_hash: str
     source_files: List[dict]
     timestamp_validation: dict
@@ -176,7 +179,8 @@ class OfflinePrepareManifest:
 
 
 def can_promote_from_window_mode(mode: str) -> bool:
-    """Return True only if the window mode may allow candidate promotion.
+    """
+    Return True only if the window mode may allow candidate promotion.
 
     ``retrospective_diagnostic_only`` always returns False — enforced in code,
     not just prose.
@@ -196,7 +200,8 @@ def can_promote_from_window_mode(mode: str) -> bool:
 
 
 def validate_family2_signal_variants(variants: Sequence[str]) -> None:
-    """Raise ValueError if any Family 2 variant is soft/implicit or unknown.
+    """
+    Raise ValueError if any Family 2 variant is soft/implicit or unknown.
 
     Prevents the Phase 2 grid from silently expanding when new signal
     generators are added.

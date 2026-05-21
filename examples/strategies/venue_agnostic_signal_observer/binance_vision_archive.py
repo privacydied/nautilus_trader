@@ -1,4 +1,5 @@
-"""Binance Vision public archive downloader and parser.
+"""
+Binance Vision public archive downloader and parser.
 
 Download-only mode for cross-asset beta-lag archive v0 study.
 No authentication. No live endpoints. Public data observer only.
@@ -13,15 +14,17 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
-import json
-import os
 import urllib.request
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Tuple, Dict
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Tuple
 
 from .tick_models import TradeTickLite
 
@@ -107,8 +110,8 @@ def _iter_date_range(start_date: str, end_date: str) -> List[str]:
     """Yield YYYY-MM-DD strings from start_date to end_date inclusive."""
     dates: List[str] = []
     fmt = "%Y-%m-%d"
-    cur = datetime.strptime(start_date, fmt).replace(tzinfo=timezone.utc)
-    end = datetime.strptime(end_date, fmt).replace(tzinfo=timezone.utc)
+    cur = datetime.strptime(start_date, fmt).replace(tzinfo=UTC)
+    end = datetime.strptime(end_date, fmt).replace(tzinfo=UTC)
     while cur <= end:
         dates.append(cur.strftime(fmt))
         cur += _timedelta_days(1)
@@ -129,7 +132,7 @@ def _timedelta_days(n: int):
 def _download_with_retry(url: str, timeout: int = DOWNLOAD_TIMEOUT) -> bytes:
     """Download URL with bounded retries and exponential backoff."""
     import time
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             req = urllib.request.Request(url)
@@ -139,7 +142,7 @@ def _download_with_retry(url: str, timeout: int = DOWNLOAD_TIMEOUT) -> bytes:
             last_err = e
             if attempt < MAX_RETRIES:
                 time.sleep(RETRY_BACKOFF * attempt)
-    raise IOError(f"Download failed after {MAX_RETRIES} retries: {url} -- {last_err}")
+    raise OSError(f"Download failed after {MAX_RETRIES} retries: {url} -- {last_err}")
 
 
 def download_daily_agg_trades(
@@ -147,8 +150,9 @@ def download_daily_agg_trades(
     date_str: str,
     *,
     cache: bool = True,
-) -> Tuple[Optional[bytes], Optional[str]]:
-    """Download one daily aggTrade zip from Binance Vision.
+) -> Tuple[bytes | None, str | None]:
+    """
+    Download one daily aggTrade zip from Binance Vision.
 
     Args:
         symbol: e.g. "BTCUSDT"
@@ -171,7 +175,7 @@ def download_daily_agg_trades(
 
     try:
         data = _download_with_retry(url)
-    except IOError:
+    except OSError:
         return None, None
 
     h = _sha256_bytes(data)
@@ -189,8 +193,9 @@ def download_daily_klines_1m(
     date_str: str,
     *,
     cache: bool = True,
-) -> Tuple[Optional[bytes], Optional[str]]:
-    """Download one daily 1m kline zip from Binance Vision.
+) -> Tuple[bytes | None, str | None]:
+    """
+    Download one daily 1m kline zip from Binance Vision.
 
     Returns (zip_bytes, sha256) or (None, None).
     """
@@ -208,7 +213,7 @@ def download_daily_klines_1m(
 
     try:
         data = _download_with_retry(url)
-    except IOError:
+    except OSError:
         return None, None
 
     h = _sha256_bytes(data)
@@ -226,7 +231,8 @@ def check_archive_availability(
     source: str = "aggTrades",
     timeout: int = 10,
 ) -> bool:
-    """Quick HEAD/GET check if an archive file exists for given symbol/date.
+    """
+    Quick HEAD/GET check if an archive file exists for given symbol/date.
 
     Does not download the full file.
     """
@@ -249,7 +255,8 @@ def check_archive_availability(
 
 
 def _detect_ts_unit(ts_value: int) -> int:
-    """Auto-detect timestamp unit: ms (13 digits), us (16 digits), ns (19 digits).
+    """
+    Auto-detect timestamp unit: ms (13 digits), us (16 digits), ns (19 digits).
 
     Returns divisor to convert to seconds.
     """
@@ -264,7 +271,8 @@ def _detect_ts_unit(ts_value: int) -> int:
 
 
 def _ts_to_ns(ts_value: int) -> int:
-    """Convert timestamp to nanosecond epoch.
+    """
+    Convert timestamp to nanosecond epoch.
 
     Binance aggTrade timestamps are in milliseconds.
     Binance 1m kline timestamps may be ms or us depending on year.
@@ -286,7 +294,8 @@ def parse_agg_trade_csv(
     symbol: str,
     venue: str = "binance_spot_archive",
 ) -> List[TradeTickLite]:
-    """Parse aggTrade CSV from a Binance Vision zip (no-header format).
+    """
+    Parse aggTrade CSV from a Binance Vision zip (no-header format).
 
     aggTrade CSVs have no header row. Columns are positional:
       0: agg_trade_id
@@ -356,7 +365,8 @@ def parse_agg_trade_csv_with_status(
     symbol: str,
     venue: str = "binance_spot_archive",
 ) -> ArchiveParseResult:
-    """Parse aggTrade CSV with typed missing/parse/schema status.
+    """
+    Parse aggTrade CSV with typed missing/parse/schema status.
 
     ``zip_bytes is None`` represents a known-missing archive file. Malformed zip
     payloads are parse errors. Well-formed CSVs with no valid rows are schema
@@ -374,7 +384,8 @@ def parse_agg_trade_csv_with_status(
 
 
 def parse_1m_klines_csv(zip_bytes: bytes) -> List[dict[str, Any]]:
-    """Parse 1m klines CSV from Binance Vision (NO header).
+    """
+    Parse 1m klines CSV from Binance Vision (NO header).
 
     Daily 1m klines CSVs have NO header row. Columns are positional:
       0: open_time
@@ -444,7 +455,8 @@ def scan_archive_availability(
     source: str = "aggTrades",
     max_workers: int = 8,
 ) -> dict[str, dict[str, Any]]:
-    """Scan archive availability for all symbols across date range.
+    """
+    Scan archive availability for all symbols across date range.
 
     Uses sparse sampling at boundaries and known Binance Vision conventions
     to estimate availability without checking every single date.
@@ -470,7 +482,7 @@ def scan_archive_availability(
         if first_ok and last_ok and mid_ok:
             avail = [first_date, mid_date, last_date]
             # Estimate all dates as available
-            total_avail = len(dates)
+            len(dates)
             estimated_missing = 0
         elif first_ok:
             # Estimate forward from first date
@@ -496,8 +508,9 @@ def scan_archive_availability(
 
 def compute_common_calendar(
     availability: dict[str, dict[str, Any]],
-) -> Tuple[Optional[str], Optional[str], int]:
-    """Compute the common date range across all symbols.
+) -> Tuple[str | None, str | None, int]:
+    """
+    Compute the common date range across all symbols.
 
     Returns (common_start, common_end, common_days) or (None, None, 0) if no
     overlap.
@@ -559,7 +572,8 @@ def compute_kline_candidate_days(
     hl_threshold_bps: float = 15.0,
     oc_threshold_bps: float = 15.0,
 ) -> List[Dict[str, Any]]:
-    """Identify candidate stress days from 1m klines.
+    """
+    Identify candidate stress days from 1m klines.
 
     This is a conservative (low-threshold) prefilter only.
     It marks candidate days where source stress *may* have occurred.
@@ -587,13 +601,12 @@ def compute_kline_candidate_days(
             continue
 
         # Group klines by calendar date
-        from datetime import timedelta
         day_klines: Dict[str, List[Dict[str, Any]]] = {}
         for k in klines:
             ts_ns = k.get("open_time_ns", 0)
             ts_sec = ts_ns // 1_000_000_000
             from datetime import datetime
-            dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
+            dt = datetime.fromtimestamp(ts_sec, tz=UTC)
             date_key = dt.strftime("%Y-%m-%d")
             day_klines.setdefault(date_key, []).append(k)
 
@@ -661,7 +674,7 @@ def estimate_kline_file_size_mb(symbol: str) -> float:
 
 def append_ticks_jsonl(path: Path, ticks: List[Any]) -> None:
     """Append TradeTickLite objects to a JSONL file. Creates file if needed."""
-    import json as _json  # noqa: PLC0415
+    import json as _json
 
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8") as f:
@@ -680,12 +693,12 @@ def append_ticks_jsonl(path: Path, ticks: List[Any]) -> None:
 
 def load_ticks_jsonl(path: Path) -> List[Any]:
     """Load TradeTickLite objects from a JSONL file."""
-    import json as _json  # noqa: PLC0415
+    import json as _json
 
-    from .tick_models import TradeTickLite  # noqa: PLC0415
+    from .tick_models import TradeTickLite
 
     ticks: List[Any] = []
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             row = _json.loads(line)
             ticks.append(TradeTickLite(

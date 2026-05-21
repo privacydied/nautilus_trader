@@ -16,9 +16,9 @@ The Miner cannot self-certify structural-change exemptions.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
-from .grid import FrozenGrid, GridCell
+from .grid import FrozenGrid
+from .grid import GridCell
 
 
 KNOWN_LOCKED_REJECTION_KEYS = {
@@ -59,17 +59,15 @@ class RejectionGuardResult:
 def _overlaps_locked_rejection(cell: GridCell, locked_refs: list[str]) -> bool:
     """Check if a cell's signal_type or cell_id overlaps a locked rejection."""
     cell_key = cell.signal_type.lower().replace("-", "_").replace(" ", "_")
-    for ref in locked_refs:
-        if ref in cell_key or cell_key in ref:
-            return True
-    return False
+    return any(ref in cell_key or cell_key in ref for ref in locked_refs)
 
 
 def check_rejection_guard(
     grid: FrozenGrid,
     additional_locked_refs: list[str] | None = None,
 ) -> RejectionGuardResult:
-    """Check all grid cells against locked rejections.
+    """
+    Check all grid cells against locked rejections.
 
     Cells that overlap locked rejections without human-authored
     structural-change rationale are flagged as blocked.

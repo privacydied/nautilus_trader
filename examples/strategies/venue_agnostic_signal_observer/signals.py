@@ -1,19 +1,20 @@
 """Signal generators for the venue-agnostic signal observer."""
-from typing import List, Optional, Dict, Any
 import csv
 import math
-import time
+from typing import Dict
+from typing import List
 
-from .models import SignalEvent
 from .config import SignalSourceConfig
+from .models import SignalEvent
 
 
 # -------------------------------------------------------------------
 # Manual CSV signal source
 # -------------------------------------------------------------------
 
-def load_signals_from_csv(path: str, mapping: Optional[Dict[str, str]] = None) -> List[SignalEvent]:
-    """Load signal events from a CSV file.
+def load_signals_from_csv(path: str, mapping: Dict[str, str] | None = None) -> List[SignalEvent]:
+    """
+    Load signal events from a CSV file.
 
     Expected CSV columns (can be remapped via ``mapping``):
         timestamp, source_venue, source_instrument, target_venue,
@@ -76,7 +77,8 @@ def load_signals_from_csv(path: str, mapping: Optional[Dict[str, str]] = None) -
 # -------------------------------------------------------------------
 
 class CrossMarketSignalGenerator:
-    """Generates signals when a source instrument moves faster than a threshold.
+    """
+    Generates signals when a source instrument moves faster than a threshold.
 
     This generator is strictly sequential and uses only information available
     at or before each price bar's timestamp.  No lookahead.
@@ -96,7 +98,8 @@ class CrossMarketSignalGenerator:
         source_timestamps: List[float],
         source_prices: List[float],
     ) -> List[SignalEvent]:
-        """Generate cross-market signals from a source price series.
+        """
+        Generate cross-market signals from a source price series.
 
         source_timestamps / source_prices must be aligned, monotonically
         increasing, and represent the *same* index frequency.
@@ -106,7 +109,7 @@ class CrossMarketSignalGenerator:
         """
         events: List[SignalEvent] = []
         counter = 0
-        last_signal_ts: Optional[float] = None
+        last_signal_ts: float | None = None
 
         for i in range(1, len(source_prices)):
             ts = source_timestamps[i]

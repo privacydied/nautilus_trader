@@ -1,4 +1,5 @@
-"""Tests for the lead-lag real-data pipeline.
+"""
+Tests for the lead-lag real-data pipeline.
 
 Covers:
   - Real CSV round-trip via synthetic data → CSV → loader → align → sweep
@@ -6,27 +7,15 @@ Covers:
   - Lead-lag signals fire correctly on known moves
   - No crashes on edge cases (empty data, short series, no moves)
 """
-import csv
-import tempfile
-from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.config import (
-    FeeModel,
-    Horizon,
-    LeadLagConfig,
-)
-from examples.strategies.venue_agnostic_signal_observer.data_loading import (
-    generate_synthetic_data,
-)
-from examples.strategies.venue_agnostic_signal_observer.forward_returns import (
-    evaluate_signal,
-)
-from examples.strategies.venue_agnostic_signal_observer.lead_lag import (
-    generate_lead_lag_signals,
-    generate_random_baseline,
-)
+from examples.strategies.venue_agnostic_signal_observer.config import FeeModel
+from examples.strategies.venue_agnostic_signal_observer.config import Horizon
+from examples.strategies.venue_agnostic_signal_observer.data_loading import generate_synthetic_data
+from examples.strategies.venue_agnostic_signal_observer.forward_returns import evaluate_signal
+from examples.strategies.venue_agnostic_signal_observer.lead_lag import generate_lead_lag_signals
+from examples.strategies.venue_agnostic_signal_observer.lead_lag import generate_random_baseline
 from examples.strategies.venue_agnostic_signal_observer.reports import write_outputs
 
 
@@ -148,7 +137,7 @@ class TestLeadLagSignalGeneration:
         ts = [1_700_000_000.0 + i * 10.0 for i in range(200)]
         # Alternating big moves: every bar moves 100bps up or down
         prices = [50_000.0 * (1.01 if i % 2 == 0 else 0.99) ** i for i in range(200)]
-        
+
         signals_cooldown = generate_lead_lag_signals(
             source_timestamps=ts,
             source_prices=prices,
@@ -307,7 +296,7 @@ class TestLeadLagEndToEnd:
     def test_baseline_near_zero_mean(self, flat_series, fee_model, horizons):
         """Random baseline on flat data should produce mean close to 0."""
         ts, prices = flat_series
-        
+
         signals = generate_random_baseline(
             source_timestamps=ts,
             signal_count=20,
@@ -316,7 +305,7 @@ class TestLeadLagEndToEnd:
             target_venue="KRAKEN",
             target_instrument="BTC/USD",
         )
-        
+
         all_results = []
         for sig in signals:
             results = evaluate_signal(sig, ts, prices, horizons, fee_model)
@@ -332,7 +321,7 @@ class TestLeadLagEndToEnd:
 
     def test_report_output(self, synthetic_series, fee_model, horizons, tmp_path):
         ts, source, target = synthetic_series
-        
+
         signals = generate_lead_lag_signals(
             source_timestamps=ts,
             source_prices=source,
@@ -344,17 +333,19 @@ class TestLeadLagEndToEnd:
             move_threshold_bps=20.0,
             cooldown_seconds=30.0,
         )
-        
+
         all_results = []
         for sig in signals:
             results = evaluate_signal(sig, ts, target, horizons, fee_model)
             all_results.extend(results)
-        
+
         signal_dicts = [s.to_dict() for s in signals]
-        
+
         # Create a mock summary for write_outputs
-        from examples.strategies.venue_agnostic_signal_observer.models import SignalEvaluationSummary
-        
+        from examples.strategies.venue_agnostic_signal_observer.models import (
+            SignalEvaluationSummary,
+        )
+
         summary = SignalEvaluationSummary(
             total_signals=len(signals),
             valid_evaluations=len([r for r in all_results if r.valid]),
@@ -364,9 +355,9 @@ class TestLeadLagEndToEnd:
             run_start=ts[0],
             run_end=ts[-1],
         )
-        
+
         write_outputs(signal_dicts, all_results, summary, tmp_path)
-        
+
         assert (tmp_path / "signal_events.jsonl").exists()
         assert (tmp_path / "forward_returns.jsonl").exists()
         assert (tmp_path / "summary.json").exists()

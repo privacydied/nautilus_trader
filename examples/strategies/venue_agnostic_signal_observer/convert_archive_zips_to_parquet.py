@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Convert cached Binance Vision aggTrade zips to Parquet.
+"""
+Convert cached Binance Vision aggTrade zips to Parquet.
 
 Reads zipped CSVs from the binance_vision cache, writes one Parquet file per
 symbol-day. Never produces JSONL. Never makes network calls.
@@ -34,9 +35,14 @@ import os
 import sys
 import time
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Tuple
+
 
 SAFETY_MODE = "public_data_observer_only"
 
@@ -69,11 +75,12 @@ HEARTBEAT_INTERVAL_SECONDS = 120  # fallback: print every 2 min
 
 
 def _now_utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _ts_to_ns(ts_value: int) -> int:
-    """Auto-detect timestamp unit and convert to nanoseconds.
+    """
+    Auto-detect timestamp unit and convert to nanoseconds.
 
     Binance aggTrade timestamps changed format in 2025:
     - Pre-2025: milliseconds (13 digits)
@@ -89,12 +96,13 @@ def _ts_to_ns(ts_value: int) -> int:
 
 
 def _parse_zip_csv(csv_bytes: bytes) -> Tuple[list, list, list, list]:
-    """Parse a Binance Vision aggTrade CSV (no header) into column arrays.
+    """
+    Parse a Binance Vision aggTrade CSV (no header) into column arrays.
 
     Returns (ts_event_ns, price_f32, size_f32, is_buyer_maker_bool).
     Uses csv.reader for correct CSV field splitting.
     """
-    import csv  # noqa: PLC0415
+    import csv
 
     ts_ns_list: list = []
     price_list: list = []
@@ -125,9 +133,9 @@ def _parse_zip_csv(csv_bytes: bytes) -> Tuple[list, list, list, list]:
     return ts_ns_list, price_list, size_list, side_list
 
 
-def _zip_to_parquet(zf: zipfile.ZipFile, csv_name: str) -> "pa.Table":  # type: ignore[name-defined]  # noqa: F821
+def _zip_to_parquet(zf: zipfile.ZipFile, csv_name: str) -> pa.Table:  # type: ignore[name-defined]  # noqa: F821
     """Read one CSV from a zip and return a pyarrow Table."""
-    import pyarrow as pa  # noqa: PLC0415
+    import pyarrow as pa
 
     with zf.open(csv_name) as f:
         csv_bytes = f.read()
@@ -153,7 +161,7 @@ def _zip_to_parquet(zf: zipfile.ZipFile, csv_name: str) -> "pa.Table":  # type: 
 
 def _is_valid_parquet(path: Path) -> bool:
     """Check if a Parquet file exists and has the expected schema with nonzero rows."""
-    import pyarrow.parquet as pq  # noqa: PLC0415
+    import pyarrow.parquet as pq
 
     if not path.exists():
         return False
@@ -171,7 +179,8 @@ def _is_valid_parquet(path: Path) -> bool:
 
 
 def _discover_zip_files() -> List[Tuple[str, str, Path]]:
-    """Walk the cache root and find all aggTrade zip files.
+    """
+    Walk the cache root and find all aggTrade zip files.
 
     Returns list of (symbol_upper, date_str, zip_path).
     Filename pattern: {SYMBOL}_{YYYY-MM-DD}_aggTrades.zip
@@ -204,7 +213,8 @@ def convert_all(
     heartbeat_interval_files: int = HEARTBEAT_INTERVAL_FILES,
     heartbeat_interval_seconds: int = HEARTBEAT_INTERVAL_SECONDS,
 ) -> Dict[str, Any]:
-    """Convert all cached aggTrade zips to Parquet.
+    """
+    Convert all cached aggTrade zips to Parquet.
 
     Parameters
     ----------
@@ -219,13 +229,12 @@ def convert_all(
     -------
     dict with summary stats.
     """
-    import pyarrow as pa  # noqa: PLC0415
-    import pyarrow.parquet as pq  # noqa: PLC0415
+    import pyarrow.parquet as pq
 
     # Discover zip files
     print(f"[{_now_utc_iso()}] PHASE 1: Discovering cached zip files...")
     zip_files = _discover_zip_files()
-    print(f"  Found {len(zip_files)} zip files across {len(set(s for s, _, _ in zip_files))} symbols")
+    print(f"  Found {len(zip_files)} zip files across {len({s for s, _, _ in zip_files})} symbols")
 
     if not zip_files:
         print("  No zip files found. Nothing to do.")
@@ -244,7 +253,7 @@ def convert_all(
     print(f"  Output: {PARQUET_ROOT}")
     print(f"  Compression: {COMPRESSION} level {COMPRESSION_LEVEL}")
     print(f"  Row group size: {ROW_GROUP_SIZE}")
-    print(f"  Price/size precision: float32")
+    print("  Price/size precision: float32")
     print(f"  Force overwrite: {force}")
     print()
 
@@ -357,11 +366,11 @@ if __name__ == "__main__":
     # Unbuffered stdout
     sys.stdout.reconfigure(line_buffering=True)
 
-    print(f"=== Zip-to-Parquet Converter ===", flush=True)
+    print("=== Zip-to-Parquet Converter ===", flush=True)
     print(f"SAFETY_MODE: {SAFETY_MODE}", flush=True)
     print(f"Cache root: {CACHE_ROOT}", flush=True)
     print(f"Parquet output: {PARQUET_ROOT}", flush=True)
-    print(f"==============================\n", flush=True)
+    print("==============================\n", flush=True)
 
     result = convert_all(force=args.force, heartbeat_interval_files=args.heartbeat_every)
     print(f"\nDone. Result: {result}", flush=True)

@@ -1,4 +1,5 @@
-"""Manifest writer and corpus compatibility guard for offline historical Phase 1.
+"""
+Manifest writer and corpus compatibility guard for offline historical Phase 1.
 
 Writes per-run manifests to:
   <out_dir>/<run_id>/offline_prepare_manifest.json
@@ -11,19 +12,19 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Dict
+from typing import List
+from typing import Sequence
 
-from .offline_historical_models import (
-    OFFLINE_DATA_SCHEMA_VERSION,
-    OfflineBarRecord,
-    OfflinePrepareManifest,
-    OfflineSourceFile,
-    OfflineTradeRecord,
-)
 from .offline_corpus_hash import compute_data_corpus_hash
+from .offline_historical_models import OFFLINE_DATA_SCHEMA_VERSION
+from .offline_historical_models import OfflineBarRecord
+from .offline_historical_models import OfflinePrepareManifest
+from .offline_historical_models import OfflineSourceFile
+from .offline_historical_models import OfflineTradeRecord
 
 
 # ---------------------------------------------------------------------------
@@ -50,8 +51,8 @@ def build_manifest(
     hash_cache_used: bool,
     hash_cache_entries_reused: int,
     hash_cache_entries_recomputed: int,
-    precommitment_hash: Optional[str],
-    timestamp_validation_meta: Optional[dict] = None,
+    precommitment_hash: str | None,
+    timestamp_validation_meta: dict | None = None,
     schema_version: str = OFFLINE_DATA_SCHEMA_VERSION,
 ) -> OfflinePrepareManifest:
 
@@ -95,7 +96,7 @@ def build_manifest(
     return OfflinePrepareManifest(
         run_id=run_id,
         phase="offline_historical_prepare",
-        generated_at_utc=datetime.now(timezone.utc).isoformat(),
+        generated_at_utc=datetime.now(UTC).isoformat(),
         git_sha=git_sha,
         schema_version=schema_version,
         precommitment_hash=precommitment_hash,
@@ -148,7 +149,8 @@ def write_manifest(
     out_dir: Path,
     overwrite: bool = False,
 ) -> Path:
-    """Write manifest JSON to <out_dir>/<run_id>/offline_prepare_manifest.json.
+    """
+    Write manifest JSON to <out_dir>/<run_id>/offline_prepare_manifest.json.
 
     Raises FileExistsError if the run directory already exists and
     ``overwrite`` is False.
@@ -193,7 +195,8 @@ def write_manifest(
 
 
 def assert_compatible_offline_corpus(manifests: Sequence[OfflinePrepareManifest]) -> None:
-    """Raise ValueError if manifests cannot be safely mixed.
+    """
+    Raise ValueError if manifests cannot be safely mixed.
 
     Checks:
     - data_corpus_hash must all match

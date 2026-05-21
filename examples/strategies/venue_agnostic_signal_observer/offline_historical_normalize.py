@@ -1,4 +1,5 @@
-"""Timestamp normalisation for offline historical data.
+"""
+Timestamp normalisation for offline historical data.
 
 Supports seconds, milliseconds, microseconds, and nanoseconds.
 
@@ -13,15 +14,14 @@ Rules:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 
-from .offline_historical_models import (
-    TIMESTAMP_UNIT_MS,
-    TIMESTAMP_UNIT_NS,
-    TIMESTAMP_UNIT_S,
-    TIMESTAMP_UNIT_US,
-    VALID_TIMESTAMP_UNITS,
-)
+from .offline_historical_models import TIMESTAMP_UNIT_MS
+from .offline_historical_models import TIMESTAMP_UNIT_NS
+from .offline_historical_models import TIMESTAMP_UNIT_S
+from .offline_historical_models import TIMESTAMP_UNIT_US
+from .offline_historical_models import VALID_TIMESTAMP_UNITS
+
 
 # ---------------------------------------------------------------------------
 # Plausible range guard — epoch ns for 2000-01-01 and 2100-01-01
@@ -44,8 +44,9 @@ _UNIT_TO_NS: dict[str, int] = {
 # ---------------------------------------------------------------------------
 
 
-def to_nanoseconds(raw: int | float, unit: str) -> int:
-    """Convert a raw timestamp value to integer nanoseconds.
+def to_nanoseconds(raw: float, unit: str) -> int:
+    """
+    Convert a raw timestamp value to integer nanoseconds.
 
     ``unit`` must be one of the VALID_TIMESTAMP_UNITS.  Fails loudly for
     unknown units or values that would fall outside the year-2000..2100 guard.
@@ -71,7 +72,8 @@ def validate_timestamp_range(
     expected_end_ns: int,
     tolerance_ns: int = 86_400_000_000_000,  # 1 day default tolerance
 ) -> None:
-    """Raise if ``timestamp_ns`` lies implausibly outside the declared window.
+    """
+    Raise if ``timestamp_ns`` lies implausibly outside the declared window.
 
     A one-day tolerance is applied by default to handle off-by-one day edge
     effects at file boundaries.
@@ -105,12 +107,13 @@ class NormalisedTimestampBatch:
 def normalise_timestamp_batch(
     raw_values: List[int | float],
     unit: str,
-    expected_start_ns: Optional[int] = None,
-    expected_end_ns: Optional[int] = None,
+    expected_start_ns: int | None = None,
+    expected_end_ns: int | None = None,
     tolerance_ns: int = 86_400_000_000_000,
     allow_sort: bool = True,
 ) -> NormalisedTimestampBatch:
-    """Normalise a list of raw timestamps to nanoseconds.
+    """
+    Normalise a list of raw timestamps to nanoseconds.
 
     If ``expected_start_ns`` and ``expected_end_ns`` are provided, every
     normalised timestamp is range-validated.

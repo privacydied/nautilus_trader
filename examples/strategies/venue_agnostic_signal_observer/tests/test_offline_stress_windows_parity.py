@@ -1,4 +1,5 @@
-"""Parity tests for the O(n) stress-window rewrite (commit 91d5f02789).
+"""
+Parity tests for the O(n) stress-window rewrite (commit 91d5f02789).
 
 This file contains two categories of parity test:
 
@@ -23,32 +24,42 @@ git show 91d5f02789^:<file> to avoid re-deriving from intent.
 
 from __future__ import annotations
 
-import hashlib
-import json
-from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
+from typing import Sequence
 
-import pytest
-
-from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
-    OFFLINE_DATA_SCHEMA_VERSION,
-    RESOLUTION_AGG_TRADE,
-    WINDOW_MODE_CAUSAL,
-    OfflineSourceFile,
-    OfflineTradeRecord,
-)
 from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import (
     compute_data_corpus_hash,
-    sha256_file,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_corpus_hash import sha256_file
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    OFFLINE_DATA_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    RESOLUTION_AGG_TRADE,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    WINDOW_MODE_CAUSAL,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    OfflineSourceFile,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_historical_models import (
+    OfflineTradeRecord,
 )
 from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
-    OFFLINE_STRESS_WINDOW_SCHEMA_VERSION,
     STATUS_OFFLINE_STRESS_INDEX_READY,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     StressRuleConfig,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     StressWindowIndexResult,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
     build_stress_window_index,
 )
+
 
 NS = 1_000_000_000
 
@@ -188,7 +199,8 @@ def _hist_evaluate_rule_on_points(
     source: OfflineSourceFile,
     rule: StressRuleConfig,
 ) -> list[dict[str, Any]]:
-    """Replicate the pre-rewrite _evaluate_rule_on_points for parity comparison.
+    """
+    Replicate the pre-rewrite _evaluate_rule_on_points for parity comparison.
 
     Uses the historical _eligible_points, _range_bps, and _absolute_return_bps.
     Returns window payload dicts (not OfflineStressWindow objects) for comparison.
@@ -235,7 +247,8 @@ def _hist_evaluate_rule_on_points(
 # =========================================================================
 
 class TestHistoricalEquivalenceParity:
-    """Tests that compare the optimized path against the historical reference.
+    """
+    Tests that compare the optimized path against the historical reference.
 
     These tests use the actual pre-rewrite implementation recovered from
     ``git show 91d5f02789^``.  Every assertion here is labelled
@@ -245,7 +258,8 @@ class TestHistoricalEquivalenceParity:
     def test_eligible_slice_returns_identical_points(
         self, tmp_path: Path,
     ) -> None:
-        """HISTORICAL-EQUIVALENCE PARITY: _eligible_slice vs _eligible_points.
+        """
+        HISTORICAL-EQUIVALENCE PARITY: _eligible_slice vs _eligible_points.
 
         For every index in a fixture, compare the points selected by the
         historical _eligible_points (O(n²) list creation) against the
@@ -288,7 +302,7 @@ class TestHistoricalEquivalenceParity:
                 f"index={index}, lookback_ns={lookback_ns}: "
                 f"old returned {len(old_selected)} points, new returned {len(new_selected)}"
             )
-            for old_pt, new_pt in zip(old_selected, new_selected):
+            for old_pt, new_pt in zip(old_selected, new_selected, strict=False):
                 assert old_pt["timestamp_ns"] == new_pt["timestamp_ns"], (
                     f"index={index}: timestamp mismatch"
                 )
@@ -299,7 +313,8 @@ class TestHistoricalEquivalenceParity:
     def test_eligible_slice_sliding_window_matches_historical(
         self, tmp_path: Path,
     ) -> None:
-        """HISTORICAL-EQUIVALENCE PARITY: sliding-pointer _eligible_slice in loop context.
+        """
+        HISTORICAL-EQUIVALENCE PARITY: sliding-pointer _eligible_slice in loop context.
 
         Replicates the actual loop from _evaluate_rule_on_points, using the
         sliding window_left pointer, and compares each window against the
@@ -307,8 +322,9 @@ class TestHistoricalEquivalenceParity:
         """
         from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
             _eligible_slice,
+        )
+        from examples.strategies.venue_agnostic_signal_observer.offline_stress_windows import (
             _range_bps,
-            _absolute_return_bps,
         )
 
         raw_trades = [
@@ -381,7 +397,7 @@ class TestHistoricalEquivalenceParity:
             f"optimized produced {len(opt_windows)}"
         )
         # HISTORICAL-EQUIVALENCE PARITY: each window matches
-        for i, (hw, ow) in enumerate(zip(hist_windows, opt_windows)):
+        for i, (hw, ow) in enumerate(zip(hist_windows, opt_windows, strict=False)):
             assert hw["trigger_timestamp_ns"] == ow["trigger_timestamp_ns"], (
                 f"window[{i}] trigger_timestamp_ns: "
                 f"historical={hw['trigger_timestamp_ns']}, "
@@ -401,7 +417,8 @@ class TestHistoricalEquivalenceParity:
     def test_full_stress_window_index_matches_historical_reference(
         self, tmp_path: Path,
     ) -> None:
-        """HISTORICAL-EQUIVALENCE PARITY: full build_stress_window_index vs historical.
+        """
+        HISTORICAL-EQUIVALENCE PARITY: full build_stress_window_index vs historical.
 
         Runs the full current build_stress_window_index and compares the
         produced windows against the historical reference implementation.
@@ -448,7 +465,7 @@ class TestHistoricalEquivalenceParity:
             f"Full build: historical={len(hist_windows)} windows, "
             f"optimized={len(opt_result.windows)}"
         )
-        for i, (ow, hw) in enumerate(zip(opt_result.windows, hist_windows)):
+        for _i, (ow, hw) in enumerate(zip(opt_result.windows, hist_windows, strict=False)):
             assert ow.trigger_timestamp_ns == hw["trigger_timestamp_ns"]
             # Allow tiny float rounding differences
             assert abs(ow.trigger_value - hw["trigger_value"]) < 1e-9
@@ -459,7 +476,8 @@ class TestHistoricalEquivalenceParity:
 # =========================================================================
 
 class TestOverlappingStressWindowDedup:
-    """Tests that overlapping stress windows are correctly handled.
+    """
+    Tests that overlapping stress windows are correctly handled.
 
     The sliding-pointer rewrite is most likely to break on fixtures where
     two stress events have overlapping eligible lookback windows but
@@ -477,7 +495,8 @@ class TestOverlappingStressWindowDedup:
     """
 
     def test_overlapping_windows_both_survive_cooldown(self, tmp_path: Path) -> None:
-        """Two stress events with overlapping eligible windows, both surviving cooldown.
+        """
+        Two stress events with overlapping eligible windows, both surviving cooldown.
 
         Fixture:
           Points at 0s, 100s, 200s, 300s, 400s, 500s, 600s, 700s
@@ -565,7 +584,8 @@ class TestOverlappingStressWindowDedup:
         )
 
     def test_overlapping_windows_with_suppression(self, tmp_path: Path) -> None:
-        """Stress events where one intermediate trigger is suppressed by cooldown.
+        """
+        Stress events where one intermediate trigger is suppressed by cooldown.
 
         Points at 500s have a price spike (115) that exceeds threshold, but
         is within 200s cooldown of the 400s trigger and thus suppressed.
@@ -616,7 +636,8 @@ class TestOverlappingStressWindowDedup:
         assert timestamps[1] == 700 * NS
 
     def test_overlapping_windows_historical_parity(self, tmp_path: Path) -> None:
-        """HISTORICAL-EQUIVALENCE PARITY: overlapping fixture via both paths.
+        """
+        HISTORICAL-EQUIVALENCE PARITY: overlapping fixture via both paths.
 
         Runs the overlapping fixture through both the historical reference
         and the optimized path to confirm they agree.
@@ -658,7 +679,7 @@ class TestOverlappingStressWindowDedup:
             f"Overlapping fixture: historical={len(hist)} windows, "
             f"optimized={len(opt.windows)}"
         )
-        for i, (ow, hw) in enumerate(zip(opt.windows, hist)):
+        for _i, (ow, hw) in enumerate(zip(opt.windows, hist, strict=False)):
             assert ow.trigger_timestamp_ns == hw["trigger_timestamp_ns"]
             assert abs(ow.trigger_value - hw["trigger_value"]) < 1e-9
 
@@ -668,7 +689,8 @@ class TestOverlappingStressWindowDedup:
 # =========================================================================
 
 class TestMultiStreamCoverageParity:
-    """Tests that the sliding-pointer rewrite handles multiple streams correctly.
+    """
+    Tests that the sliding-pointer rewrite handles multiple streams correctly.
 
     The actual pipeline processes two Kraken streams (USD and USDT).  Each
     source file gets its own ``_evaluate_rule_on_points`` call, so
@@ -682,7 +704,8 @@ class TestMultiStreamCoverageParity:
     """
 
     def test_two_streams_produce_independent_windows(self, tmp_path: Path) -> None:
-        """HISTORICAL-EQUIVALENCE PARITY: two streams with different price activity.
+        """
+        HISTORICAL-EQUIVALENCE PARITY: two streams with different price activity.
 
         Stream A (BTC/USD): early spike at 200s, baseline otherwise.
         Stream B (BTC/USDT): flat until late spike at 600s.
@@ -791,7 +814,8 @@ class TestMultiStreamCoverageParity:
     def test_multi_stream_matches_independent_references(
         self, tmp_path: Path,
     ) -> None:
-        """HISTORICAL-EQUIVALENCE PARITY: multi-stream vs historical per-stream.
+        """
+        HISTORICAL-EQUIVALENCE PARITY: multi-stream vs historical per-stream.
 
         Runs both streams independently through the historical reference,
         then verifies the optimized multi-stream output matches the union.
@@ -878,7 +902,8 @@ class TestMultiStreamCoverageParity:
     def test_multi_stream_with_range_and_absolute_rules(
         self, tmp_path: Path,
     ) -> None:
-        """HISTORICAL-EQUIVALENCE PARITY: two rules on two streams.
+        """
+        HISTORICAL-EQUIVALENCE PARITY: two rules on two streams.
 
         This exercises the full product of (sources × rules) that the
         pipeline uses.  Each source+rule pair starts with ``window_left=0``.

@@ -1,4 +1,5 @@
-"""Tests for Phase 2B-2C3A offline native null p-value generation.
+"""
+Tests for Phase 2B-2C3A offline native null p-value generation.
 
 Synthetic JSON fixtures only. No source market data loading.
 No FDR running, no final verdicts, no cost sensitivity.
@@ -6,49 +7,74 @@ No FDR running, no final verdicts, no cost sensitivity.
 
 from __future__ import annotations
 
-import hashlib
 import json
-import math
 from pathlib import Path
 
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     EXCL_COMPARISON_FAILED,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     EXCL_EVENT_RETURNS_MISSING,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     EXCL_FAMILY4_CONDITIONING,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     EXCL_HOLDOUT_RESULT_MISSING,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     EXCL_INSUFFICIENT_EVENTS,
-    EXCL_INVALID_EVENT_RETURNS,
-    EXCL_NOT_EDGE_FAMILY,
-    EXCL_NOT_HOLDOUT_SURVIVOR,
-    EXCL_UNSUPPORTED_METHOD,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     FDR_PVALUE_SCHEMA_VERSION,
-    NULL_SCHEMA_VERSION,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     STATUS_COMPARISON_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     STATUS_HOLDOUT_EVALUATION_HASH_MISMATCH,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     STATUS_INPUT_HASH_MISMATCH,
-    STATUS_INSUFFICIENT_NULL_EVENTS,
-    STATUS_INVALID_EVENT_RETURNS,
-    STATUS_INVALID_NULL_CONFIG,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     STATUS_NO_NULL_ELIGIBLE_CELLS,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     STATUS_NULL_EVENT_RETURNS_MISSING,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     STATUS_OFFLINE_NATIVE_NULL_READY,
-    STATUS_UNUSABLE_NULL_INPUT,
-    OfflineNativeNullCellResult,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     OfflineNativeNullConfig,
-    OfflineNativeNullReport,
-    _canonical_json,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import _canonical_json
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     _extract_event_returns,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     _is_conditioning_family,
-    _is_edge_family,
-    _sha256_json,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import _is_edge_family
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     _sign_flip_mean_greater,
-    build_offline_native_null_report,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     build_offline_native_null_manifest_payload,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
+    build_offline_native_null_report,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     compute_event_evidence_hash,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     compute_native_null_config_hash,
-    compute_native_null_hash,
+)
+from examples.strategies.venue_agnostic_signal_observer.offline_native_null import (
     write_offline_native_null_outputs,
 )
 
@@ -435,50 +461,56 @@ class TestInvalidEventReturns:
     def test_rejects_non_numeric_event_return(self) -> None:
         cells = [_comp_cell("cell_a", comparison_passed=True)]
         comp_payload = _comp_payload(cells=cells)
-        comp_manifest = _comp_manifest(comp_payload)
+        _comp_manifest(comp_payload)
         holdout_cells = [
             _holdout_cell("cell_a", event_net_bps=[1.0, "bad", 3.0]),
         ]
         holdout_payload = _holdout_payload(cells=holdout_cells)
-        holdout_manifest = _holdout_manifest(holdout_payload)
+        _holdout_manifest(holdout_payload)
 
         result = _extract_event_returns(holdout_cells[0])
-        assert isinstance(result, str) and "non_numeric" in result
+        assert isinstance(result, str)
+        assert "non_numeric" in result
 
     def test_rejects_nan_event_return(self) -> None:
         holdout_cells = [
             _holdout_cell("cell_a", event_net_bps=[1.0, float("nan")]),
         ]
         result = _extract_event_returns(holdout_cells[0])
-        assert isinstance(result, str) and "invalid_event_return" in result
+        assert isinstance(result, str)
+        assert "invalid_event_return" in result
 
     def test_rejects_inf_event_return(self) -> None:
         holdout_cells = [
             _holdout_cell("cell_a", event_net_bps=[1.0, float("inf")]),
         ]
         result = _extract_event_returns(holdout_cells[0])
-        assert isinstance(result, str) and "invalid_event_return" in result
+        assert isinstance(result, str)
+        assert "invalid_event_return" in result
 
     def test_rejects_empty_event_returns(self) -> None:
         holdout_cells = [
             _holdout_cell("cell_a", event_net_bps=[]),
         ]
         result = _extract_event_returns(holdout_cells[0])
-        assert isinstance(result, str) and "missing" in result
+        assert isinstance(result, str)
+        assert "missing" in result
 
     def test_rejects_negative_inf_event_return(self) -> None:
         holdout_cells = [
             _holdout_cell("cell_a", event_net_bps=[1.0, float("-inf")]),
         ]
         result = _extract_event_returns(holdout_cells[0])
-        assert isinstance(result, str) and "invalid_event_return" in result
+        assert isinstance(result, str)
+        assert "invalid_event_return" in result
 
 
 class TestSignFlipExact:
     """Test 12: Exact sign-flip p-value is correct for a known vector."""
 
     def test_exact_sign_flip_known_vector(self) -> None:
-        """For returns [2.0, 1.0], observed mean = 1.5.
+        """
+        For returns [2.0, 1.0], observed mean = 1.5.
         2^2 = 4 sign flips:
           (+,+): mean = 1.5 >= 1.5 -> extreme
           (+,-): mean = 0.5 < 1.5 -> not extreme
@@ -494,7 +526,8 @@ class TestSignFlipExact:
         assert p_value == 0.25
 
     def test_exact_sign_flip_all_positive(self) -> None:
-        """All returns positive. Mean > 0 should be preserved by all flips.
+        """
+        All returns positive. Mean > 0 should be preserved by all flips.
         2^2 = 4 sign flips. Observe mean = 2.0.
         Signs: (++, +-, -+, --)
           ++: 2.0 >= 2.0 -> extreme
@@ -509,7 +542,8 @@ class TestSignFlipExact:
         assert p_value == 0.25
 
     def test_exact_sign_flip_tiny_pvalue(self) -> None:
-        """3 events, all large positive. observed mean = 10.
+        """
+        3 events, all large positive. observed mean = 10.
         2^3 = 8 sign flips. Only (+,+,+) >= 10.
         p = 1/8 = 0.125
         """
@@ -545,8 +579,10 @@ class TestMonteCarloSeedChanges:
     """Test 15: Monte Carlo mode changes when seed changes."""
 
     def test_monte_carlo_different_seed(self) -> None:
-        """Monte Carlo may have collisions but different seeds should
-        produce different results for a non-trivial return vector."""
+        """
+        Monte Carlo may have collisions but different seeds should
+        produce different results for a non-trivial return vector.
+        """
         config1 = OfflineNativeNullConfig(exact_max_events=1, random_seed=42)
         config2 = OfflineNativeNullConfig(exact_max_events=1, random_seed=9999)
         returns = [0.1, -0.2, 0.3, -0.05, 0.15] * 10  # 50 events
@@ -840,9 +876,7 @@ class TestOutputDirectory:
         run_dir.mkdir(parents=True)
         (run_dir / "existing.txt").write_text("existing")
 
-        from examples.strategies.venue_agnostic_signal_observer.run_artifacts import (
-            safe_output_dir,
-        )
+        from examples.strategies.venue_agnostic_signal_observer.run_artifacts import safe_output_dir
         with pytest.raises(FileExistsError):
             safe_output_dir(run_dir)
 
@@ -931,12 +965,10 @@ class TestSafety:
 
         found: set[str] = set()
         for node in ast.walk(tree):
-            if isinstance(node, ast.Name):
-                if node.id in forbidden:
-                    found.add(node.id)
-            if isinstance(node, ast.Attribute):
-                if node.attr in forbidden:
-                    found.add(node.attr)
+            if isinstance(node, ast.Name) and node.id in forbidden:
+                found.add(node.id)
+            if isinstance(node, ast.Attribute) and node.attr in forbidden:
+                found.add(node.attr)
 
         assert not found, f"Found forbidden identifiers: {sorted(found)}"
 
@@ -957,12 +989,10 @@ class TestSafety:
 
         found: set[str] = set()
         for node in ast.walk(tree):
-            if isinstance(node, ast.Name):
-                if node.id in forbidden:
-                    found.add(node.id)
-            if isinstance(node, ast.Attribute):
-                if node.attr in forbidden:
-                    found.add(node.attr)
+            if isinstance(node, ast.Name) and node.id in forbidden:
+                found.add(node.id)
+            if isinstance(node, ast.Attribute) and node.attr in forbidden:
+                found.add(node.attr)
 
         assert not found, f"Found forbidden identifiers: {sorted(found)}"
 
@@ -971,8 +1001,10 @@ class TestNoPvaluesFromSummaries:
     """Test 29: No p-values generated from summary metrics."""
 
     def test_no_pvalues_from_summaries(self) -> None:
-        """Holdout cells with only summaries (no event vectors)
-        must produce NULL_EVENT_RETURNS_MISSING, not fake p-values."""
+        """
+        Holdout cells with only summaries (no event vectors)
+        must produce NULL_EVENT_RETURNS_MISSING, not fake p-values.
+        """
         cells = [
             _comp_cell("cell_a", comparison_passed=True),
         ]
@@ -1231,7 +1263,8 @@ class TestNativeNullRefusalWithoutEventVectors:
         assert report.pvalue_input is None
 
     def test_does_not_infer_vectors_from_summaries(self) -> None:
-        """Test 23: Native null does not infer event vectors from net_mean_bps, win_rate, etc.
+        """
+        Test 23: Native null does not infer event vectors from net_mean_bps, win_rate, etc.
 
         This is the core safety property: even if summary stats exist, native null
         must NOT fabricate event vectors from them.

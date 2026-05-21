@@ -1,4 +1,5 @@
-"""Tests for lead_lag_heatmap_gpu module.
+"""
+Tests for lead_lag_heatmap_gpu module.
 
 Coverage:
 1. Known synthetic source leads target at known lag → significant correlation
@@ -16,37 +17,27 @@ Coverage:
 """
 from __future__ import annotations
 
-import importlib
 import inspect
 import json
 import math
-import os
-import sys
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
-from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import (
-    DEFAULT_LAGS_MS,
-    _DIAGNOSTIC_READY,
-    _GPU_UNAVAILABLE,
-    _INSUFFICIENT_OVERLAP,
-    _INSUFFICIENT_SAMPLES,
-    _NO_SIGNAL_SERIES,
-    LeadLagHeatmapRow,
-    LeadLagHeatmapSummary,
-    _alignment,
-    _bucketize_series,
-    _finite_pair_series,
-    _pearson,
-    check_cuda_available,
-    compute_lead_lag_heatmap,
-    write_heatmap_reports,
-)
+from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import _DIAGNOSTIC_READY
+from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import _GPU_UNAVAILABLE
+from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import _INSUFFICIENT_OVERLAP
+from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import _INSUFFICIENT_SAMPLES
+from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import _NO_SIGNAL_SERIES
+from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import LeadLagHeatmapRow
+from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import LeadLagHeatmapSummary
+from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import check_cuda_available
+from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import compute_lead_lag_heatmap
+from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import write_heatmap_reports
 from venue_agnostic_signal_observer.run_lead_lag_heatmap import build_parser
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -263,7 +254,7 @@ class TestCPUGPUParity:
         assert cpu_summary.verdict == gpu_summary.verdict
         assert len(cpu_summary.rows) == len(gpu_summary.rows)
 
-        for cpu_r, gpu_r in zip(cpu_summary.rows, gpu_summary.rows):
+        for cpu_r, gpu_r in zip(cpu_summary.rows, gpu_summary.rows, strict=False):
             assert cpu_r["lag_ms"] == gpu_r["lag_ms"]
             assert cpu_r["source_venue"] == gpu_r["source_venue"]
             # Correlation should agree to a few decimals
@@ -282,7 +273,8 @@ class TestCPUGPUParity:
 
 class TestGPUUnavailable:
     def test_gpu_unavailable_with_mocked_torch(self):
-        """Mock torch.cuda.is_available to return False; verify GPU_UNAVAILABLE_DIAGNOSTIC.
+        """
+        Mock torch.cuda.is_available to return False; verify GPU_UNAVAILABLE_DIAGNOSTIC.
 
         Also handles torch installed without CUDA support (no torch.cuda module).
         """
@@ -367,7 +359,7 @@ class TestChunkSizeInvariance:
         )
 
         assert len(s1.rows) == len(s2.rows)
-        for r1, r2 in zip(s1.rows, s2.rows):
+        for r1, r2 in zip(s1.rows, s2.rows, strict=False):
             assert r1["lag_ms"] == r2["lag_ms"]
             if r1["correlation"] is not None and r2["correlation"] is not None:
                 assert math.isclose(r1["correlation"], r2["correlation"], rel_tol=1e-9)
@@ -423,7 +415,7 @@ class TestNoForbiddenImports:
         for word in forbidden:
             for line in source.split("\n"):
                 stripped = line.strip()
-                if stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("'''"):
+                if stripped.startswith(("#", '"""', "'''")):
                     continue
                 if word.lower() in stripped.lower() and "import" in stripped.lower():
                     if "venue_agnostic_signal_observer" in stripped:

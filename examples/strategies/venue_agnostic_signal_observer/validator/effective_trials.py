@@ -11,9 +11,9 @@ carried forward as a constant.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Sequence
-import math
 
 
 @dataclass
@@ -45,7 +45,8 @@ def compute_effective_trial_count(
     cell_return_series: list[list[float]],
     correlation_threshold: float = 0.7,
 ) -> EffectiveTrialResult:
-    """Cluster cells by return-series correlation; count clusters.
+    """
+    Cluster cells by return-series correlation; count clusters.
 
     Parameters
     ----------

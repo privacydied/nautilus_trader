@@ -18,27 +18,24 @@ Covers:
 from __future__ import annotations
 
 import json
-import tempfile
-from datetime import datetime, timedelta, UTC
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 from pathlib import Path
 
-import pytest
-
-from ..bot import BotGate, load_manifest
-from ..governance import (
-    EvidenceLedger,
-    make_grid_lock_event,
-    make_candidate_lock_event,
-    make_estimator_evidence_event,
-    make_approval_event,
-    make_revocation_event,
-    make_demotion_event,
-    make_kill_switch_event,
-)
+from venue_agnostic_signal_observer.bot import BotGate
+from venue_agnostic_signal_observer.governance import EvidenceLedger
+from venue_agnostic_signal_observer.governance import make_approval_event
+from venue_agnostic_signal_observer.governance import make_candidate_lock_event
+from venue_agnostic_signal_observer.governance import make_demotion_event
+from venue_agnostic_signal_observer.governance import make_estimator_evidence_event
+from venue_agnostic_signal_observer.governance import make_grid_lock_event
+from venue_agnostic_signal_observer.governance import make_kill_switch_event
+from venue_agnostic_signal_observer.governance import make_revocation_event
 
 
 def _make_manifest(tmp_path: Path, candidate_hash: str, expired: bool = False) -> Path:
-    from ..bot.manifest import _compute_manifest_hash
+    from venue_agnostic_signal_observer.bot.manifest import _compute_manifest_hash
     expires = None
     if expired:
         expires = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
@@ -73,7 +70,8 @@ def _approved_ledger(tmp_path: Path) -> Path:
 class TestBotGateSafety:
     def test_no_discovery_in_gate_source(self):
         import inspect
-        from ..bot import gate as mod
+
+        from venue_agnostic_signal_observer.bot import gate as mod
         src = inspect.getsource(mod)
         # Gate must not call discovery/miner functions or use live-trading imports
         functional_forbidden = ["scan_grid", "run_sweep", "compute_dsr",
@@ -83,7 +81,8 @@ class TestBotGateSafety:
 
     def test_no_live_execution_in_manifest_source(self):
         import inspect
-        from ..bot import manifest as mod
+
+        from venue_agnostic_signal_observer.bot import manifest as mod
         src = inspect.getsource(mod)
         assert "nautilus_trader" not in src
         assert "submit_order" not in src
@@ -197,7 +196,7 @@ class TestBotGateSafety:
     def test_manifest_grid_hash_mismatch_fails(self, tmp_path):
         ledger_path = _approved_ledger(tmp_path)
         manifest_path = _make_manifest(tmp_path, "c1")
-        from ..bot.manifest import _compute_manifest_hash
+        from venue_agnostic_signal_observer.bot.manifest import _compute_manifest_hash
         data = json.loads(manifest_path.read_text())
         data[0]["grid_hash"] = "g2"
         data[0]["manifest_hash"] = _compute_manifest_hash([

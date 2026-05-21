@@ -1,10 +1,11 @@
 """Report writing for the signal observer."""
-import json
 import csv
+import json
 from pathlib import Path
-from typing import List, Dict
+from typing import List
 
-from .models import ForwardReturnResult, SignalEvaluationSummary
+from .models import ForwardReturnResult
+from .models import SignalEvaluationSummary
 
 
 def write_outputs(
@@ -38,8 +39,7 @@ def write_outputs(
 
 def _write_jsonl(rows: List[dict], path: Path):
     with open(path, "w") as fh:
-        for row in rows:
-            fh.write(json.dumps(row) + "\n")
+        fh.writelines(json.dumps(row) + "\n" for row in rows)
 
 
 def _write_json(data, path: Path):

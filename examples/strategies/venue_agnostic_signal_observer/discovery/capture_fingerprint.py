@@ -1,4 +1,5 @@
-"""Capture/data fingerprint helpers for the discovery freeze system.
+"""
+Capture/data fingerprint helpers for the discovery freeze system.
 
 Provides sha256_file and build_capture_manifest_ref to pin specific capture
 artifacts.  This is a local file fingerprint helper only — it does not connect
@@ -21,7 +22,8 @@ from .exceptions import CaptureFingerprintError
 # ---------------------------------------------------------------------------
 
 def sha256_file(path: str | Path) -> str:
-    """Compute SHA-256 hex digest of a file's raw bytes.
+    """
+    Compute SHA-256 hex digest of a file's raw bytes.
 
     Raises FileNotFoundError if the file does not exist.
     """
@@ -42,7 +44,8 @@ def sha256_file(path: str | Path) -> str:
 
 @dataclass(frozen=True)
 class CaptureManifestRef:
-    """A frozen reference to a capture manifest artifact.
+    """
+    A frozen reference to a capture manifest artifact.
 
     This pins one specific capture artifact via its raw bytes hash.
     It is NOT used to prove equivalence between two captures — only to
@@ -72,7 +75,8 @@ class CaptureManifestRef:
 # ---------------------------------------------------------------------------
 
 def build_capture_manifest_ref(path: str | Path) -> CaptureManifestRef:
-    """Build a CaptureManifestRef from a capture manifest JSON file.
+    """
+    Build a CaptureManifestRef from a capture manifest JSON file.
 
     Args:
         path: Path to the manifest JSON file.

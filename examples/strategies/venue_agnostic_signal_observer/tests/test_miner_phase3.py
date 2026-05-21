@@ -12,16 +12,11 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
-
-from ..miner import (
-    FrozenGrid,
-    GridCell,
-    GridSpec,
-    build_grid,
-    run_sweep,
-    check_rejection_guard,
-)
+from venue_agnostic_signal_observer.miner import GridCell
+from venue_agnostic_signal_observer.miner import GridSpec
+from venue_agnostic_signal_observer.miner import build_grid
+from venue_agnostic_signal_observer.miner import check_rejection_guard
+from venue_agnostic_signal_observer.miner import run_sweep
 
 
 def _make_cell(cell_id, signal_type="neutral_signal", blocked=False, rationale=None):
@@ -163,7 +158,8 @@ class TestSweep:
 
     def test_sweep_does_not_import_execution_clients(self):
         import inspect
-        from ..miner import sweep as sweep_mod
+
+        from venue_agnostic_signal_observer.miner import sweep as sweep_mod
         src = inspect.getsource(sweep_mod)
         forbidden = ["NautilusTrader", "nautilus_trader", "ccxt", "private_key", "api_key"]
         for f in forbidden:

@@ -1,4 +1,5 @@
-"""Phase 2B-2C3A: Native null p-value generation for comparison survivors.
+"""
+Phase 2B-2C3A: Native null p-value generation for comparison survivors.
 
 Consumes Phase 2B-2C1 comparison artifact and Phase 2B-2B2 holdout evaluation
 artifact. Generates exact/deterministic Monte Carlo sign-flip p-values from
@@ -18,12 +19,16 @@ import json
 import math
 import random
 import subprocess
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .run_artifacts import atomic_write_json, safe_output_dir
+from .run_artifacts import atomic_write_json
+from .run_artifacts import safe_output_dir
+
 
 NULL_SCHEMA_VERSION = "offline_native_null_v1"
 FDR_PVALUE_SCHEMA_VERSION = "offline_fdr_pvalues_v1"
@@ -234,18 +239,12 @@ def _parse_config(raw: dict[str, Any] | None) -> OfflineNativeNullConfig:
 
 
 def _is_edge_family(family_id: str) -> bool:
-    for prefix in _EDGE_FAMILY_PREFIXES:
-        if family_id.startswith(prefix):
-            return True
-    return False
+    return any(family_id.startswith(prefix) for prefix in _EDGE_FAMILY_PREFIXES)
 
 
 def _is_conditioning_family(family_id: str) -> bool:
     lower = family_id.lower()
-    for indicator in _CONDITIONING_INDICATORS:
-        if indicator in lower:
-            return True
-    return False
+    return any(indicator in lower for indicator in _CONDITIONING_INDICATORS)
 
 
 # ============================================================
@@ -257,7 +256,8 @@ def _sign_flip_mean_greater(
     event_returns: list[float],
     config: OfflineNativeNullConfig,
 ) -> tuple[float, bool, int | None]:
-    """Compute one-sided greater p-value via sign-flip null.
+    """
+    Compute one-sided greater p-value via sign-flip null.
 
     Args:
         event_returns: Vector of per-event net return bps.
@@ -313,7 +313,8 @@ def _sign_flip_mean_greater(
 def _extract_event_returns(
     holdout_cell: dict[str, Any],
 ) -> list[float] | str:
-    """Extract event-level return vector from a holdout evaluation cell result.
+    """
+    Extract event-level return vector from a holdout evaluation cell result.
 
     Returns:
         list[float] on success.
@@ -397,16 +398,16 @@ def _check_lineage_hashes(
     holdout_manifest: dict[str, Any],
     holdout_payload: dict[str, Any],
 ) -> str | None:
-    """Verify lineage hashes across comparison and holdout artifacts.
+    """
+    Verify lineage hashes across comparison and holdout artifacts.
 
     Returns None on success, or a status string on failure.
     """
     # comparison_hash match
     manifest_comp_hash = str(comparison_manifest.get("comparison_hash", ""))
     json_comp_hash = str(comparison_payload.get("comparison_hash", ""))
-    if manifest_comp_hash and json_comp_hash:
-        if manifest_comp_hash != json_comp_hash:
-            return STATUS_COMPARISON_HASH_MISMATCH
+    if manifest_comp_hash and json_comp_hash and manifest_comp_hash != json_comp_hash:
+        return STATUS_COMPARISON_HASH_MISMATCH
 
     # holdout_evaluation_hash match
     manifest_holdout_hash = str(holdout_manifest.get("holdout_evaluation_hash", ""))
@@ -455,7 +456,8 @@ def build_offline_native_null_report(
     holdout_evaluation_payload: dict[str, Any],
     null_config: OfflineNativeNullConfig | None = None,
 ) -> OfflineNativeNullReport:
-    """Build the native null p-value generation report.
+    """
+    Build the native null p-value generation report.
 
     Consumes comparison artifact and holdout evaluation artifact.
     If event-level return vectors are unavailable, emits NULL_EVENT_RETURNS_MISSING.
@@ -501,9 +503,9 @@ def build_offline_native_null_report(
 
     # ---- Extract artifacts ----
     comparison_cells = list(comparison_payload.get("comparison_cells", []))
-    holdout_surviving_ids = set(
+    holdout_surviving_ids = {
         str(cid) for cid in comparison_payload.get("holdout_surviving_cell_ids", [])
-    )
+    }
     holdout_cell_results = list(holdout_evaluation_payload.get("cell_results", []))
 
     # Build holdout result lookup

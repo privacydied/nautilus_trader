@@ -1,4 +1,5 @@
-"""CLI runner for the real-data lead-lag experiment.
+"""
+CLI runner for the real-data lead-lag experiment.
 
 Sweeps source→target venue pairs across lookback windows and move thresholds.
 Produces forward return reports and compares against a random baseline.
@@ -25,20 +26,21 @@ for comparison.
 from __future__ import annotations
 
 import argparse
-import math
 import json
+import math
 import statistics
-import sys
-import time
-from datetime import datetime, timezone
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .config import ObserverConfig, FeeModel, Horizon
+from .config import FeeModel
+from .config import Horizon
 from .data_loading import load_bars_from_csv
 from .forward_returns import evaluate_signal
-from .lead_lag import generate_lead_lag_signals, generate_random_baseline
-from .models import ForwardReturnResult, SignalEvaluationSummary
+from .lead_lag import generate_lead_lag_signals
+from .lead_lag import generate_random_baseline
+from .models import ForwardReturnResult
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +215,7 @@ def run_sweep(args: argparse.Namespace):
     )
 
     run_meta = {
-        "start_utc": datetime.now(timezone.utc).isoformat(),
+        "start_utc": datetime.now(UTC).isoformat(),
         "source_venues": source_venues,
         "source_assets": source_assets,
         "target_venues": target_venues,

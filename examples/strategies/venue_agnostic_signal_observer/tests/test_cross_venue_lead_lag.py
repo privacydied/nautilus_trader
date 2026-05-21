@@ -1,4 +1,5 @@
-"""Cross-venue tick-level lead-lag pipeline tests.
+"""
+Cross-venue tick-level lead-lag pipeline tests.
 
 Tests the full end-to-end flow:
 - Symbol normalization
@@ -10,30 +11,14 @@ Tests the full end-to-end flow:
 - Verdict logic
 """
 
-import json
-import os
 from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.event_study import (
-    evaluate_candidate_group,
-    evaluate_tick_signal,
-    generate_random_baseline,
-    generate_synthetic_no_edge_ticks,
-    generate_synthetic_positive_lead_lag_ticks,
-)
-from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import (
-    build_parser,
-    run_sweep,
-)
-from examples.strategies.venue_agnostic_signal_observer.tick_models import (
-    TickForwardReturn,
-    TradeTickLite,
-)
-from examples.strategies.venue_agnostic_signal_observer.tick_store import (
-    save_trades_jsonl,
-)
+from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import build_parser
+from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import run_sweep
+from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
+from examples.strategies.venue_agnostic_signal_observer.tick_store import save_trades_jsonl
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +31,8 @@ BASE_TS = 1_700_000_000 * NS
 
 @pytest.fixture
 def tick_data_dir(tmp_path: Path):
-    """Create a tick data directory with normalized venue files.
+    """
+    Create a tick data directory with normalized venue files.
 
     Source venue = coinbase, Target venue = kraken
     Both contain BTC/USD data but with different internal symbols.

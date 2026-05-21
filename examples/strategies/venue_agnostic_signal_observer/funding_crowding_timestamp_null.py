@@ -1,4 +1,5 @@
-"""Timestamp-shuffle null for Family 2 funding crowding reversal.
+"""
+Timestamp-shuffle null for Family 2 funding crowding reversal.
 
 This module implements the TIMESTAMP_SHUFFLE_NULL_ONLY invariant from the
 Family 2 precommitment. It tests whether the observed net reversal return
@@ -44,8 +45,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +90,8 @@ ACTUAL_MEAN_NET_BPS_MISMATCH: str = "ACTUAL_MEAN_NET_BPS_MISMATCH"
 
 @dataclass(frozen=True)
 class TimestampShuffleNullInput:
-    """Input for one frozen cell's timestamp-shuffle null test.
+    """
+    Input for one frozen cell's timestamp-shuffle null test.
 
     Parameters
     ----------
@@ -145,7 +146,8 @@ class TimestampShuffleNullInput:
 
 @dataclass(frozen=True)
 class TimestampShuffleNullResult:
-    """Result of one frozen cell's timestamp-shuffle null test.
+    """
+    Result of one frozen cell's timestamp-shuffle null test.
 
     Parameters
     ----------
@@ -210,7 +212,8 @@ class TimestampShuffleNullResult:
 
 
 def _percentile_from_sorted(sorted_values: list[float], p: float) -> float:
-    """Compute percentile from a sorted list using linear interpolation.
+    """
+    Compute percentile from a sorted list using linear interpolation.
 
     Same method used by permutation_null.py for consistency.
     """
@@ -220,7 +223,7 @@ def _percentile_from_sorted(sorted_values: list[float], p: float) -> float:
     if n == 1:
         return sorted_values[0]
     rank = p / 100.0 * (n - 1)
-    lower = int(math.floor(rank))
+    lower = math.floor(rank)
     upper = min(lower + 1, n - 1)
     frac = rank - lower
     return sorted_values[lower] + frac * (sorted_values[upper] - sorted_values[lower])
@@ -323,7 +326,8 @@ def _validate_input(input_data: TimestampShuffleNullInput) -> str | None:
 def run_timestamp_shuffle_null(
     input_data: TimestampShuffleNullInput,
 ) -> TimestampShuffleNullResult:
-    """Run the timestamp-shuffle null test for one frozen cell.
+    """
+    Run the timestamp-shuffle null test for one frozen cell.
 
     Parameters
     ----------

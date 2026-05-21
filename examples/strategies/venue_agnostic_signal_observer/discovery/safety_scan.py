@@ -1,4 +1,5 @@
-"""AST-based safety scanner for the discovery package.
+"""
+AST-based safety scanner for the discovery package.
 
 Scans every .py file in the discovery package for forbidden imports,
 forbidden first-party imports outside the package, forbidden env access,
@@ -15,7 +16,6 @@ from __future__ import annotations
 import ast
 import sys
 from pathlib import Path
-from typing import Any
 
 from .exceptions import DiscoverySafetyError
 
@@ -25,7 +25,8 @@ from .exceptions import DiscoverySafetyError
 # ---------------------------------------------------------------------------
 
 class SafetyFinding:
-    """A single safety violation found during scanning.
+    """
+    A single safety violation found during scanning.
 
     Attributes:
         file: Path to the file with the violation.
@@ -34,7 +35,7 @@ class SafetyFinding:
         detail: Human-readable description of the violation.
     """
 
-    __slots__ = ("file", "line", "kind", "detail")
+    __slots__ = ("detail", "file", "kind", "line")
 
     def __init__(
         self,
@@ -138,7 +139,8 @@ def _get_discovery_dir() -> Path:
 
 
 def scan_discovery_package() -> list[SafetyFinding]:
-    """Run the AST safety scanner on all .py files in the discovery package.
+    """
+    Run the AST safety scanner on all .py files in the discovery package.
 
     Returns a list of SafetyFinding objects. Raises DiscoverySafetyError
     if any violations are found.
@@ -240,7 +242,8 @@ def _check_import(file_path: str, module_name: str, lineno: int) -> list[SafetyF
 def _check_first_party_import(
     file_path: str, module_name: str, lineno: int
 ) -> list[SafetyFinding]:
-    """Check if a first-party import climbs outside the discovery package.
+    """
+    Check if a first-party import climbs outside the discovery package.
 
     The discovery package is at:
     examples.strategies.venue_agnostic_signal_observer.discovery
@@ -369,7 +372,8 @@ def _check_env_access_subscript(file_path: str, node: ast.Subscript) -> list[Saf
 
 
 def _check_subprocess(file_path: str, node: ast.Call) -> list[SafetyFinding]:
-    """Check subprocess usage.
+    """
+    Check subprocess usage.
 
     Only allow:
         subprocess.run(["git", "rev-parse", "HEAD"], ...)
@@ -477,7 +481,7 @@ def _check_subprocess(file_path: str, node: ast.Call) -> list[SafetyFinding]:
                 file=file_path,
                 line=node.lineno,
                 kind="FORBIDDEN_SUBPROCESS",
-                detail=f"{func}: only [\"git\", \"rev-parse\", \"HEAD\"] is allowed, "
+                detail=f'{func}: only ["git", "rev-parse", "HEAD"] is allowed, '
                 f"got {actual_args}",
             )
         )
@@ -521,7 +525,8 @@ def _is_truthy(node: ast.expr) -> bool:
 # ---------------------------------------------------------------------------
 
 def run_safety_scan_cli(argv: list[str] | None = None) -> int:
-    """CLI entrypoint for the safety scanner.
+    """
+    CLI entrypoint for the safety scanner.
 
     Returns 0 if no violations, 1 if violations found.
     Prints findings to stdout/stderr.

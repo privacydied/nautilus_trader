@@ -1,16 +1,17 @@
 """Signal observer — ties together signals, forward returns, and reporting."""
-import json
 import math
 import time
-from pathlib import Path
-from typing import List, Optional
+from typing import List
 
-from .config import ObserverConfig, Horizon
-from .models import SignalEvent, ForwardReturnResult, SignalEvaluationSummary, HorizonSummary
-from .signals import load_signals_from_csv, CrossMarketSignalGenerator
+from .config import ObserverConfig
+from .data_loading import load_bars_from_csv
 from .forward_returns import evaluate_signal
-from .data_loading import load_bars_from_csv, generate_synthetic_data
-from .reports import write_outputs
+from .models import ForwardReturnResult
+from .models import HorizonSummary
+from .models import SignalEvaluationSummary
+from .models import SignalEvent
+from .signals import CrossMarketSignalGenerator
+from .signals import load_signals_from_csv
 
 
 class SignalObserver:
@@ -21,15 +22,16 @@ class SignalObserver:
 
     def run(
         self,
-        signals: Optional[List[SignalEvent]] = None,
-        signals_csv: Optional[str] = None,
-        bars_csv: Optional[str] = None,
-        source_timestamps: Optional[List[float]] = None,
-        source_prices: Optional[List[float]] = None,
-        target_timestamps: Optional[List[float]] = None,
-        target_prices: Optional[List[float]] = None,
+        signals: List[SignalEvent] | None = None,
+        signals_csv: str | None = None,
+        bars_csv: str | None = None,
+        source_timestamps: List[float] | None = None,
+        source_prices: List[float] | None = None,
+        target_timestamps: List[float] | None = None,
+        target_prices: List[float] | None = None,
     ):
-        """Run the observer.
+        """
+        Run the observer.
 
         Signal sources are mutually exclusive in priority:
         1. ``signals`` list passed directly
@@ -93,7 +95,7 @@ class SignalObserver:
 
 
 
-def _finite_values(values: List[Optional[float]]) -> List[float]:
+def _finite_values(values: List[float | None]) -> List[float]:
     return [v for v in values if v is not None and math.isfinite(v)]
 
 
@@ -124,9 +126,9 @@ def _build_summary(
     summary = SignalEvaluationSummary(
         run_start=run_start,
         run_end=run_end,
-        source_venues=list(set(s.source_venue for s in signals)),
-        target_venues=list(set(s.target_venue for s in signals)),
-        instruments=list(set(s.target_instrument for s in signals)),
+        source_venues=list({s.source_venue for s in signals}),
+        target_venues=list({s.target_venue for s in signals}),
+        instruments=list({s.target_instrument for s in signals}),
         horizons=[h.name for h in cfg.horizons],
         total_signals=len(signals),
         fee_bps=cfg.fee_model.fee_bps,

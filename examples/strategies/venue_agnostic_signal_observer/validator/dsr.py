@@ -11,9 +11,12 @@ No verdict produced here is TRADE_READY.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
 from enum import Enum
-from typing import Any, Sequence
+from typing import Any
+from typing import Sequence
 
 from .metadata import EstimatorMetadata
 
@@ -195,7 +198,8 @@ def compute_dsr(
     estimator_metadata: EstimatorMetadata | None = None,
     input_metadata: dict[str, Any] | None = None,
 ) -> DSRResult:
-    """Compute Deflated Sharpe Ratio for a candidate return series.
+    """
+    Compute Deflated Sharpe Ratio for a candidate return series.
 
     Parameters
     ----------

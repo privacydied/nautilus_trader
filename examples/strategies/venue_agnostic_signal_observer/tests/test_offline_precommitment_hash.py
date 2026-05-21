@@ -1,4 +1,5 @@
-"""Tests for OFFLINE_HISTORICAL_REPLAY_PRECOMMITMENT.json hash stability.
+"""
+Tests for OFFLINE_HISTORICAL_REPLAY_PRECOMMITMENT.json hash stability.
 
 The precommitment file must produce a deterministic, idempotent hash.
 If serialization ordering, timestamps, generated fields, or any
@@ -12,6 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 
 _PRECOMMITMENT_REPO_RELATIVE = "OFFLINE_HISTORICAL_REPLAY_PRECOMMITMENT.json"
 
@@ -35,7 +37,8 @@ def precommitment_bytes(precommitment_path: Path) -> bytes:
 
 
 class TestPrecommitmentHashStability:
-    """The precommitment file must have a stable, reproducible hash.
+    """
+    The precommitment file must have a stable, reproducible hash.
 
     The ``compute_precommitment_hash`` function in
     ``offline_replay_manifest.py`` computes ``sha256(path.read_bytes())``.
@@ -48,7 +51,8 @@ class TestPrecommitmentHashStability:
     def test_load_twice_produces_identical_bytes(
         self, precommitment_path: Path,
     ) -> None:
-        """Load the file twice, confirm raw bytes are identical.
+        """
+        Load the file twice, confirm raw bytes are identical.
 
         This catches nondeterministic write behavior — if the file contains
         a timestamp that changes between writes, the bytes will differ.
@@ -64,7 +68,8 @@ class TestPrecommitmentHashStability:
     def test_hash_twice_produces_identical_hash(
         self, precommitment_path: Path,
     ) -> None:
-        """Hash the file twice — confirm SHA-256 is identical.
+        """
+        Hash the file twice — confirm SHA-256 is identical.
 
         This is the actual hash that ``compute_precommitment_hash``
         computes.  If this assertion fails, the precommitment hash will
@@ -80,7 +85,8 @@ class TestPrecommitmentHashStability:
     def test_parsed_json_roundtrip_produces_identical_hash(
         self, precommitment_bytes: bytes,
     ) -> None:
-        """Parse and re-serialize with sort_keys=True — hash must match.
+        """
+        Parse and re-serialize with sort_keys=True — hash must match.
 
         This simulates what the pipeline does internally (json.dumps with
         sort_keys).  If the original file has any unstable field or a
@@ -101,7 +107,8 @@ class TestPrecommitmentHashStability:
     def test_roundtrip_parses_to_same_dict(
         self, precommitment_bytes: bytes,
     ) -> None:
-        """Parse twice — confirm identical Python dict.
+        """
+        Parse twice — confirm identical Python dict.
 
         This catches JSON-level nondeterminism (float precision, duplicate
         keys, unicode normalization).

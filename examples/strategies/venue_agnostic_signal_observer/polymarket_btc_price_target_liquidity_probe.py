@@ -1,4 +1,5 @@
-"""Polymarket BTC Price Target liquidity probe — observer-only, no orders.
+"""
+Polymarket BTC Price Target liquidity probe — observer-only, no orders.
 
 Phase 0 liquidity and observability for Polymarket BTC Price Target
 binary markets. Discovers markets, extracts numerical strikes, maps
@@ -13,18 +14,20 @@ import csv
 import json
 import logging
 import math
-import os
 import re
 import statistics
 import subprocess
 import time
-import uuid
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
+from datetime import UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
+
 
 logger = logging.getLogger(__name__)
 
@@ -404,7 +407,8 @@ def classify_btc_market_family(
     market_text: str,
     slug: str | None = None,
 ) -> tuple[str, str]:
-    """Classify a Polymarket market into a BTC family.
+    """
+    Classify a Polymarket market into a BTC family.
 
     Returns (family, reason).
     """
@@ -446,7 +450,8 @@ def classify_btc_market_family(
 
 
 def extract_strike(text: str) -> tuple[str, float | None, str, str, str]:
-    """Extract numerical strike price from market question/title.
+    """
+    Extract numerical strike price from market question/title.
 
     Returns (status, strike_price, source_field, matched_text, reason).
     """
@@ -502,7 +507,7 @@ def extract_strike(text: str) -> tuple[str, float | None, str, str, str]:
         )
 
     if len(unique_strikes) == 1:
-        strike = list(unique_strikes)[0]
+        strike = next(iter(unique_strikes))
         return (
             STRIKE_EXTRACTED, strike, "question",
             str(int(strike)),
@@ -523,7 +528,8 @@ def extract_strike(text: str) -> tuple[str, float | None, str, str, str]:
 
 
 def parse_tokens_from_market(market: dict) -> tuple[str | None, str | None, list[str]]:
-    """Parse YES/NO CLOB token IDs from a Gamma API market dict.
+    """
+    Parse YES/NO CLOB token IDs from a Gamma API market dict.
 
     Returns (yes_token_id, no_token_id, all_token_ids).
     """
@@ -571,8 +577,8 @@ def compute_tte_seconds(end_date_iso: str | None) -> float | None:
     if not end_date_iso:
         return None
     try:
-        end = datetime.fromisoformat(end_date_iso.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
+        end = datetime.fromisoformat(end_date_iso)
+        now = datetime.now(UTC)
         return (end - now).total_seconds()
     except (ValueError, TypeError):
         return None
@@ -606,7 +612,8 @@ def compute_distance_bps(
     btc_proxy_price: float | None,
     strike_price: float | None,
 ) -> float | None:
-    """Compute distance from BTC proxy price to strike in bps.
+    """
+    Compute distance from BTC proxy price to strike in bps.
 
     positive = price is above strike, negative = price is below strike.
     """
@@ -672,7 +679,8 @@ def parse_orderbook_snapshot(
     token_id: str,
     side_label: str | None = None,
 ) -> OrderbookSnapshot:
-    """Parse a CLOB API orderbook response into a normalized snapshot.
+    """
+    Parse a CLOB API orderbook response into a normalized snapshot.
 
     Uses corrected top-of-book semantics:
     - best bid = max bid price
@@ -763,7 +771,8 @@ def parse_orderbook_snapshot(
 
 
 def _parse_levels(levels: Any) -> list[tuple[float, float]]:
-    """Parse bid/ask levels from raw API response.
+    """
+    Parse bid/ask levels from raw API response.
 
     Each level is typically [price_str, size_str] or {"price": "...", "size": "..."}.
     Returns list of (price, size) as floats, or empty list on failure.
@@ -834,7 +843,8 @@ async def fetch_gamma_markets(
     limit: int = 100,
     timeout: float = 10,
 ) -> list[dict[str, Any]]:
-    """Fetch active markets from the Gamma API.
+    """
+    Fetch active markets from the Gamma API.
     """
     url = f"{GAMMA_API_BASE}/markets"
     params: dict[str, Any] = {
@@ -997,14 +1007,15 @@ async def poll_clob_book(
 def compute_liquidity_verdict(
     samples: list[LiquiditySample],
 ) -> tuple[str, dict[str, Any]]:
-    """Compute Phase 0 verdict from collected samples.
+    """
+    Compute Phase 0 verdict from collected samples.
 
     Returns (verdict, stats_dict).
     """
     primary_subset = _primary_subset(samples)
     stats: dict[str, Any] = {}
     stats["total_samples"] = len(samples)
-    stats["total_primary_markets"] = len(set(s.market_id for s in samples if s.market_family == FAMILY_BTC_PRICE_TARGET))
+    stats["total_primary_markets"] = len({s.market_id for s in samples if s.market_family == FAMILY_BTC_PRICE_TARGET})
     stats["total_two_sided"] = sum(1 for s in samples if s.book_status == BOOK_TWO_SIDED)
     stats["total_one_sided"] = sum(1 for s in samples if s.book_status in (BOOK_ONE_SIDED_BID, BOOK_ONE_SIDED_ASK))
     stats["total_empty"] = sum(1 for s in samples if s.book_status == BOOK_EMPTY)
@@ -1014,7 +1025,7 @@ def compute_liquidity_verdict(
 
     if not primary_subset:
         # Check why
-        price_target_count = len(set(s.market_id for s in samples if s.market_family == FAMILY_BTC_PRICE_TARGET))
+        price_target_count = len({s.market_id for s in samples if s.market_family == FAMILY_BTC_PRICE_TARGET})
         if price_target_count == 0:
             return NEEDS_MORE_DATA_V, stats
         if len(samples) < PRIMARY_SUBSET_MIN_SAMPLES:
@@ -1104,7 +1115,8 @@ def compute_liquidity_verdict(
 
 
 def _primary_subset(samples: list[LiquiditySample]) -> list[LiquiditySample]:
-    """Filter to primary liquidity subset.
+    """
+    Filter to primary liquidity subset.
 
     Primary subset requires:
     - BTC_PRICE_TARGET family
@@ -1238,8 +1250,8 @@ def write_summary_json(
         "selected_data_path": data_path,
         "nautilus_components_used": inspection.data_side_components_found if data_path in (DATA_PATH_NAUTILUS, DATA_PATH_MIXED) else [],
         "public_rest_components_used": ["gamma-api.polymarket.com", "clob.polymarket.com/book", "api.binance.com"],
-        "start_utc": datetime.fromtimestamp(start_time, tz=timezone.utc).isoformat(),
-        "end_utc": datetime.fromtimestamp(end_time, tz=timezone.utc).isoformat(),
+        "start_utc": datetime.fromtimestamp(start_time, tz=UTC).isoformat(),
+        "end_utc": datetime.fromtimestamp(end_time, tz=UTC).isoformat(),
         "requested_duration_seconds": duration_seconds,
         "actual_duration_seconds": round(end_time - start_time, 2),
         "poll_interval_seconds": poll_interval,
@@ -1251,7 +1263,7 @@ def write_summary_json(
         "btc_other_markets_excluded": len(btc_other_markets),
         "non_btc_markets_excluded": len(non_btc_markets),
         "markets_strike_extracted": sum(1 for m in markets if m.strike_extraction_status == STRIKE_EXTRACTED),
-        "markets_sampled": len(set(s.market_id for s in samples)),
+        "markets_sampled": len({s.market_id for s in samples}),
         "valid_two_sided_samples": verdict_stats.get("total_two_sided", 0),
         "one_sided_or_empty": verdict_stats.get("total_one_sided", 0) + verdict_stats.get("total_empty", 0) + verdict_stats.get("total_crossed", 0),
         "primary_subset_count": verdict_stats.get("primary_subset_count", 0),

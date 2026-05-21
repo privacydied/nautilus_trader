@@ -1,4 +1,5 @@
-"""Deterministic offline stress-label generation for Edge Miner corpora.
+"""
+Deterministic offline stress-label generation for Edge Miner corpora.
 
 This module labels stress windows from already-loaded local tick data only. It has
 no external I/O beyond the caller writing artifacts, and it contains no execution
@@ -9,13 +10,17 @@ from __future__ import annotations
 
 import bisect
 import hashlib
+import itertools
 import json
 import math
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from dataclasses import asdict
+from dataclasses import dataclass
+from datetime import UTC
+from datetime import datetime
 from typing import Sequence
 
 from examples.strategies.venue_agnostic_signal_observer.tick_models import TradeTickLite
+
 
 LABEL_VERSION = "stress_label.v1"
 SOURCE_ASSETS = ("BTC", "ETH")
@@ -82,7 +87,7 @@ def _realized_vol_bps(prices: Sequence[float]) -> float | None:
     if len(prices) < 3:
         return None
     returns = []
-    for prev, cur in zip(prices, prices[1:]):
+    for prev, cur in itertools.pairwise(prices):
         if prev > 0:
             returns.append((cur / prev - 1.0) * 10_000)
     if len(returns) < 2:

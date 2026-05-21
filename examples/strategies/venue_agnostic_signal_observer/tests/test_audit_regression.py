@@ -1,4 +1,5 @@
-"""Regression tests for bug-audit pass 1 fixes.
+"""
+Regression tests for bug-audit pass 1 fixes.
 
 Each test is designed to FAIL with the original buggy code and PASS after the fix.
 """
@@ -11,12 +12,14 @@ import pytest
 # ===================================================================
 
 class TestLeadLagWindowReference:
-    """Bug: the while loop exits with j pointing OUTSIDE the window, then
+    """
+    Bug: the while loop exits with j pointing OUTSIDE the window, then
     max(0, j) clamps to 0 instead of using j+1 (the first tick inside).
-    This picks a stale reference price, inflating measured moves."""
+    This picks a stale reference price, inflating measured moves.
+    """
 
     def generate_signals(self, timestamps, prices, lookback_sec=3.0, threshold_bps=5.0):
-        from ..lead_lag import generate_lead_lag_signals
+        from venue_agnostic_signal_observer.lead_lag import generate_lead_lag_signals
         return generate_lead_lag_signals(
             source_timestamps=timestamps,
             source_prices=prices,
@@ -30,7 +33,8 @@ class TestLeadLagWindowReference:
         )
 
     def test_reference_price_inside_window(self):
-        """With timestamps [0, 8, 9, 10] and lookback=2s:
+        """
+        With timestamps [0, 8, 9, 10] and lookback=2s:
         At i=3 (ts=10), window_start=8.
         The while loop decrements j to 0 (ts=0, outside window).
         BUGGY: j = max(0, 0) = 0 → ref_price = prices[0] = 110.0
@@ -74,18 +78,20 @@ class TestLeadLagWindowReference:
 # ===================================================================
 
 class TestDerivativesDirectionOffByOne:
-    """Bug: ref_idx exits the while loop pointing to a tick OUTSIDE the
-    lookback window, then uses that price directly. Should use ref_idx+1."""
+    """
+    Bug: ref_idx exits the while loop pointing to a tick OUTSIDE the
+    lookback window, then uses that price directly. Should use ref_idx+1.
+    """
 
     def _make_gen(self):
-        from ..derivatives_lead_lag import DerivativesImpulseGenerator
+        from venue_agnostic_signal_observer.derivatives_lead_lag import DerivativesImpulseGenerator
         return DerivativesImpulseGenerator(
             lookbacks_ms=[2000],
             cooldown_ms=0,
         )
 
     def _make_trades(self, timestamps, prices):
-        from ..derivatives_lead_lag import DerivativeTradeTick
+        from venue_agnostic_signal_observer.derivatives_lead_lag import DerivativeTradeTick
         return [
             DerivativeTradeTick(
                 ts_event=t * 1_000_000_000,  # seconds to nanoseconds
@@ -95,11 +101,12 @@ class TestDerivativesDirectionOffByOne:
                 symbol="BTC/USDT",
                 side="buy",
             )
-            for t, p in zip(timestamps, prices)
+            for t, p in zip(timestamps, prices, strict=False)
         ]
 
     def test_resolve_direction_uses_tick_inside_window(self):
-        """With timestamps [0, 8, 9, 10] and lookback=2000ms at ts=10:
+        """
+        With timestamps [0, 8, 9, 10] and lookback=2000ms at ts=10:
         Loop exits with ref_idx=0 (ts=0 is outside the 2s window).
         BUGGY: ref_price = 110.0 → 100.3 < 110.0 → "short"
         FIXED: ref_idx+1=1, ref_price = 100.0 → 100.3 >= 100.0 → "long"
@@ -123,13 +130,15 @@ class TestDerivativesDirectionOffByOne:
 # ===================================================================
 
 class TestBaselineUsesRealTicks:
-    """Bug: baseline was evaluated against valid[:1] (a list of TickForwardReturn)
+    """
+    Bug: baseline was evaluated against valid[:1] (a list of TickForwardReturn)
     instead of actual TradeTickLite data. _extract_ts_prices expects .price
-    or .mid which TickForwardReturn doesn't have."""
+    or .mid which TickForwardReturn doesn't have.
+    """
 
     def _make_target_ticks(self, count=100):
         """Ticks spanning 100 seconds — enough for 5000ms forward returns."""
-        from ..tick_models import TradeTickLite
+        from venue_agnostic_signal_observer.tick_models import TradeTickLite
         # Use nanoseconds with a wide enough range
         base_ns = 1_000_000_000_000  # 1e12 ns
         return [
@@ -146,7 +155,8 @@ class TestBaselineUsesRealTicks:
 
     def test_base_tick_types_work_with_eval(self):
         """generate_random_baseline + evaluate_tick_signal with real ticks"""
-        from ..event_study import generate_random_baseline, evaluate_tick_signal
+        from venue_agnostic_signal_observer.event_study import evaluate_tick_signal
+        from venue_agnostic_signal_observer.event_study import generate_random_baseline
 
         ticks = self._make_target_ticks(100)
         baseline_events = generate_random_baseline(
@@ -180,12 +190,16 @@ class TestBaselineUsesRealTicks:
 # ===================================================================
 
 class TestRawVsDirectionAdjustedReturn:
-    """Bug: both fields received the same direction-adjusted value.
-    raw_return_bps should be the unsigned price change."""
+    """
+    Bug: both fields received the same direction-adjusted value.
+    raw_return_bps should be the unsigned price change.
+    """
 
     def _make_result(self, direction, prices, ts=None):
-        from ..forward_returns import evaluate_signal, Horizon, FeeModel
-        from ..models import SignalEvent
+        from venue_agnostic_signal_observer.forward_returns import FeeModel
+        from venue_agnostic_signal_observer.forward_returns import Horizon
+        from venue_agnostic_signal_observer.forward_returns import evaluate_signal
+        from venue_agnostic_signal_observer.models import SignalEvent
         if ts is None:
             ts = [1000.0 + i * 10 for i in range(100)]
         sig = SignalEvent(
@@ -195,7 +209,7 @@ class TestRawVsDirectionAdjustedReturn:
             signal_type="test", direction=direction, strength=1.0,
         )
         results = evaluate_signal(sig, ts, prices, [Horizon("10s", 10.0)], FeeModel(fee_bps=0, slippage_bps=0))
-        return [r for r in results if r.valid][0]
+        return next(r for r in results if r.valid)
 
     def test_short_raw_positive_adjusted_negative(self):
         """Price up 50000→50100 (+20 bps). For short: raw=+20, adjusted=-20."""
@@ -224,15 +238,19 @@ class TestRawVsDirectionAdjustedReturn:
 # ===================================================================
 
 class TestCaptureExceptionLogging:
-    """Bug: gather(return_exceptions=True) silently swallowed exceptions.
-    The fix adds a branch to log any BaseException results."""
+    """
+    Bug: gather(return_exceptions=True) silently swallowed exceptions.
+    The fix adds a branch to log any BaseException results.
+    """
 
     def test_exception_branch_exists_in_post_processing(self):
-        """Verify that the code handles BaseException in the results loop
-        by inspecting that the source file contains the fix."""
+        """
+        Verify that the code handles BaseException in the results loop
+        by inspecting that the source file contains the fix.
+        """
         import inspect
-        from pathlib import Path
-        from .. import run_derivatives_spot_capture
+
+        from venue_agnostic_signal_observer import run_derivatives_spot_capture
         source = inspect.getsource(run_derivatives_spot_capture)
         assert "isinstance(r, BaseException)" in source, (
             "run_derivatives_spot_capture should log exceptions from gather(). "
@@ -245,12 +263,14 @@ class TestCaptureExceptionLogging:
 # ===================================================================
 
 class TestLargeTradeDirectionMapping:
-    """Bug: direction was set to 'buy'/'sell' (exchange terms) instead of
+    """
+    Bug: direction was set to 'buy'/'sell' (exchange terms) instead of
     'long'/'short' (internal convention). Evaluate only checks for
-    direction=='short', so 'sell' was treated as long."""
+    direction=='short', so 'sell' was treated as long.
+    """
 
     def _make_ticks(self, last_side="sell", count=100):
-        from ..tick_models import TradeTickLite
+        from venue_agnostic_signal_observer.tick_models import TradeTickLite
         base_price = 50000.0
         ticks = [
             TradeTickLite(
@@ -276,7 +296,10 @@ class TestLargeTradeDirectionMapping:
 
     def test_large_sell_is_short_not_sell(self):
         """A large sell trade should produce a signal with direction='short'."""
-        from ..trade_flow_impulse import TradeFlowImpulseSignalGenerator, TradeFlowImpulseConfig
+        from venue_agnostic_signal_observer.trade_flow_impulse import TradeFlowImpulseConfig
+        from venue_agnostic_signal_observer.trade_flow_impulse import (
+            TradeFlowImpulseSignalGenerator,
+        )
 
         ticks = self._make_ticks(last_side="sell")
         cfg = TradeFlowImpulseConfig(
@@ -304,7 +327,10 @@ class TestLargeTradeDirectionMapping:
 
     def test_large_buy_is_long_not_buy(self):
         """A large buy trade should produce a signal with direction='long'."""
-        from ..trade_flow_impulse import TradeFlowImpulseSignalGenerator, TradeFlowImpulseConfig
+        from venue_agnostic_signal_observer.trade_flow_impulse import TradeFlowImpulseConfig
+        from venue_agnostic_signal_observer.trade_flow_impulse import (
+            TradeFlowImpulseSignalGenerator,
+        )
 
         ticks = self._make_ticks(last_side="buy", count=100)
         cfg = TradeFlowImpulseConfig(
@@ -339,12 +365,12 @@ class TestReconnectLoop:
 
     def test_with_reconnect_function_exists(self):
         """_with_reconnect_loop must exist in the capture module."""
-        from ..run_derivatives_spot_capture import _with_reconnect_loop
+        from venue_agnostic_signal_observer.run_derivatives_spot_capture import _with_reconnect_loop
         assert callable(_with_reconnect_loop)
 
     def test_reconnect_constants_defined(self):
         """Bounded reconnect constants must be present."""
-        from .. import run_derivatives_spot_capture as cap
+        from venue_agnostic_signal_observer import run_derivatives_spot_capture as cap
         assert hasattr(cap, "_RECONNECT_MAX_ATTEMPTS")
         assert hasattr(cap, "_RECONNECT_BUDGET_S")
         assert cap._RECONNECT_MAX_ATTEMPTS <= 5
@@ -353,11 +379,12 @@ class TestReconnectLoop:
     def test_capture_functions_return_str_or_none(self):
         """Capture functions must return str|None (reconnect reason)."""
         import inspect
-        from ..run_derivatives_spot_capture import (
-            capture_binance_perp,
-            capture_kraken_spot,
+
+        from venue_agnostic_signal_observer.run_derivatives_spot_capture import capture_binance_perp
+        from venue_agnostic_signal_observer.run_derivatives_spot_capture import (
             capture_coinbase_spot,
         )
+        from venue_agnostic_signal_observer.run_derivatives_spot_capture import capture_kraken_spot
         for fn in (capture_binance_perp, capture_kraken_spot, capture_coinbase_spot):
             ret = inspect.signature(fn).return_annotation
             # Should be str | None, not None (the old void return type)
@@ -375,7 +402,8 @@ class TestSessionCleanup:
     def test_ws_close_cleans_session(self):
         """_ws_close must look for _aiohttp_session attribute."""
         import inspect
-        from ..run_derivatives_spot_capture import _ws_close
+
+        from venue_agnostic_signal_observer.run_derivatives_spot_capture import _ws_close
         src = inspect.getsource(_ws_close)
         assert "_aiohttp_session" in src, (
             "_ws_close does not clean up aiohttp session — session leak risk"
@@ -390,7 +418,7 @@ class TestTaskExceptionSurfacing:
 
     def test_task_exceptions_in_manifest_structure(self):
         """The manifest must include 'task_exceptions' key."""
-        from .. import run_derivatives_spot_capture as cap
+        from venue_agnostic_signal_observer import run_derivatives_spot_capture as cap
         path = cap.__file__
         with open(path) as f:
             src = f.read()
@@ -403,8 +431,9 @@ class TestTaskExceptionSurfacing:
 
     def test_exception_branch_uses_task_name(self):
         """Exception handling must use Task.get_name() for identification."""
-        from .. import run_derivatives_spot_capture as cap
         import inspect
+
+        from venue_agnostic_signal_observer import run_derivatives_spot_capture as cap
         src = inspect.getsource(cap)
         assert "task_name = t.get_name()" in src, (
             "Exception handling does not use Task.get_name() — errors anonymous"
@@ -418,7 +447,7 @@ class TestReconnectOverlapPreservesUnion:
     """Verify first_tick_ts survives reconnect and overlap is computed as union."""
 
     def _make_stats(self, **kwargs):
-        from ..run_derivatives_spot_capture import StreamStats
+        from venue_agnostic_signal_observer.run_derivatives_spot_capture import StreamStats
         s = StreamStats(kwargs.pop("name", "test"))
         for k, v in kwargs.items():
             setattr(s, k, v)
@@ -426,8 +455,9 @@ class TestReconnectOverlapPreservesUnion:
 
     def test_post_reconnect_first_tick_ts_not_overwritten(self):
         """first_tick_ts must survive reconnect via 'is None' guard."""
-        from .. import run_derivatives_spot_capture as cap
         import inspect
+
+        from venue_agnostic_signal_observer import run_derivatives_spot_capture as cap
         # The guard pattern must exist in all three handlers
         src = inspect.getsource(cap)
         assert "if s.first_tick_ts is None:" in src, (
@@ -447,8 +477,7 @@ class TestReconnectOverlapPreservesUnion:
 
     def test_overlap_uses_min_max_across_reconnect(self):
         """compute_overlap_windows must use min/max of first/last across targets."""
-        from ..run_derivatives_spot_capture import (
-            StreamStats,
+        from venue_agnostic_signal_observer.run_derivatives_spot_capture import (
             compute_overlap_windows,
         )
 

@@ -21,12 +21,12 @@ Covers:
 from __future__ import annotations
 
 import json
-import math
 
 import pytest
 
-from ..validator.fdr import compute_fdr, _harmonic, FDRResult
-from ..validator.summary import run_validator
+from venue_agnostic_signal_observer.validator.fdr import _harmonic
+from venue_agnostic_signal_observer.validator.fdr import compute_fdr
+from venue_agnostic_signal_observer.validator.summary import run_validator
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +34,8 @@ from ..validator.summary import run_validator
 # ---------------------------------------------------------------------------
 
 class TestBHKnown:
-    """Verify BH step-up procedure against a hand-computed reference.
+    """
+    Verify BH step-up procedure against a hand-computed reference.
 
     p-values (sorted): [0.001, 0.008, 0.039, 0.041, 0.210, 0.240, 0.340, 0.650]
     m = 8, alpha = 0.05
@@ -111,7 +112,8 @@ class TestBHKnown:
 # ---------------------------------------------------------------------------
 
 class TestBYKnown:
-    """Verify BY against hand-computed reference.
+    """
+    Verify BY against hand-computed reference.
 
     Same p-values as BH test. m = 8.
     c(8) = 1 + 1/2 + 1/3 + 1/4 + 1/5 + 1/6 + 1/7 + 1/8
@@ -186,7 +188,7 @@ class TestBYMoreConservative:
     def test_by_adjusted_pvalues_gte_bh(self):
         by = compute_fdr(self.PVALUES, alpha=self.ALPHA, method="BY")
         bh = compute_fdr(self.PVALUES, alpha=self.ALPHA, method="BH")
-        for by_row, bh_row in zip(by.rows, bh.rows):
+        for by_row, bh_row in zip(by.rows, bh.rows, strict=False):
             if by_row.adjusted_p_value is not None and bh_row.adjusted_p_value is not None:
                 assert by_row.adjusted_p_value >= bh_row.adjusted_p_value - 1e-12
 
@@ -278,7 +280,7 @@ class TestDiagnosticRows:
             r.adjusted_p_value for r in result_no_diag.rows
             if r.adjusted_p_value is not None
         )
-        for a, b in zip(primary_adj_with, primary_adj_without):
+        for a, b in zip(primary_adj_with, primary_adj_without, strict=False):
             assert a == pytest.approx(b, rel=1e-9)
 
 
@@ -303,7 +305,7 @@ class TestRowKindDefault:
         )
         assert omitted.rejected_count == explicit.rejected_count
         assert omitted.family_size == explicit.family_size
-        for r_o, r_e in zip(omitted.rows, explicit.rows):
+        for r_o, r_e in zip(omitted.rows, explicit.rows, strict=False):
             assert r_o.adjusted_p_value == pytest.approx(r_e.adjusted_p_value)  # type: ignore[arg-type]
 
     def test_unknown_row_kind_raises(self):
@@ -407,7 +409,7 @@ class TestDeterminism:
         r2 = compute_fdr(self.PVALUES, alpha=0.05, method="BY", labels=self.LABELS)
         assert r1.rejected_count == r2.rejected_count
         assert r1.family_size == r2.family_size
-        for a, b in zip(r1.rows, r2.rows):
+        for a, b in zip(r1.rows, r2.rows, strict=False):
             assert a.adjusted_p_value == b.adjusted_p_value
             assert a.rejected == b.rejected
 
