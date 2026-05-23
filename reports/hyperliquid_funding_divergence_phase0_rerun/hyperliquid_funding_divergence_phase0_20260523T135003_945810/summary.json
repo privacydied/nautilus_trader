@@ -1,0 +1,16 @@
+{
+  "final_phase0_status": "PHASE0_KILLED_NO_FUNDING_DIVERGENCE_TAIL",
+  "kill_decision": "Phase 0 \u2014 killed at distribution audit, no precommitment written.",
+  "real_data_available": true,
+  "preferred_reference_basis": "median_reference",
+  "kill_decision_table": {
+    "BTC": {
+      "max_abs_divergence_bps_hourly": 5.855828000000001,
+      "p99_abs_divergence_bps_hourly": 1.0823310000000017
+    },
+    "ETH": {
+      "max_abs_divergence_bps_hourly": 2.2331860000000003,
+      "p99_abs_divergence_bps_hourly": 0.9238892650000007
+    }
+  }
+}

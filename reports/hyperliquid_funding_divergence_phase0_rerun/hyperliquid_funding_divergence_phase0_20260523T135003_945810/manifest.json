@@ -1,0 +1,169 @@
+{
+  "run_id": "hyperliquid_funding_divergence_phase0_20260523T135003_945810",
+  "generated_at_utc": "2026-05-23T13:50:03.947319Z",
+  "git_sha": "af4fe52086d3",
+  "git_branch": "feat/hyperliquid-funding-divergence-phase0-rerun",
+  "git_dirty": true,
+  "command_args": {
+    "output_root": "reports/hyperliquid_funding_divergence_phase0_rerun",
+    "hyperliquid_btc": "examples/strategies/venue_agnostic_signal_observer/data/hyperliquid_funding_archive_phase0/hyperliquid_funding_BTC_2024-01-01_to_2025-05-30.jsonl",
+    "hyperliquid_eth": "examples/strategies/venue_agnostic_signal_observer/data/hyperliquid_funding_archive_phase0/hyperliquid_funding_ETH_2024-01-01_to_2025-05-30.jsonl",
+    "binance_btc": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/binance_btc_funding.csv",
+    "binance_eth": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/binance_eth_funding.csv",
+    "bybit_btc": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/bybit_btc_funding.csv",
+    "bybit_eth": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/bybit_eth_funding.csv"
+  },
+  "pre_data_kill_criteria": {
+    "recorded_before_data_load": true,
+    "max_abs_threshold_bps_hourly": 10.0,
+    "p99_abs_threshold_bps_hourly": 8.0,
+    "constant_names": [
+      "KILL_CRITERION_MAX_ABS_BPS",
+      "KILL_CRITERION_P99_ABS_BPS"
+    ]
+  },
+  "data_sources": {
+    "hyperliquid_BTC": "examples/strategies/venue_agnostic_signal_observer/data/hyperliquid_funding_archive_phase0/hyperliquid_funding_BTC_2024-01-01_to_2025-05-30.jsonl",
+    "hyperliquid_ETH": "examples/strategies/venue_agnostic_signal_observer/data/hyperliquid_funding_archive_phase0/hyperliquid_funding_ETH_2024-01-01_to_2025-05-30.jsonl",
+    "binance_BTC": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/binance_btc_funding.csv",
+    "binance_ETH": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/binance_eth_funding.csv",
+    "bybit_BTC": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/bybit_btc_funding.csv",
+    "bybit_ETH": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/bybit_eth_funding.csv"
+  },
+  "data_source_provenance": [
+    {
+      "source_name": "hyperliquid_BTC",
+      "venue": "hyperliquid",
+      "asset": "BTC",
+      "native_symbol": "BTC",
+      "source_path_or_endpoint": "examples/strategies/venue_agnostic_signal_observer/data/hyperliquid_funding_archive_phase0/hyperliquid_funding_BTC_2024-01-01_to_2025-05-30.jsonl",
+      "source_first_row_timestamp_utc": "2024-01-01T00:00:00.151000Z",
+      "source_last_row_timestamp_utc": "2025-05-30T23:00:00.180000Z",
+      "source_row_count": 12383,
+      "source_sha256": "531d7189a8e406fb9044f242a56e3855e9011ff572f2237d116ad4b01ff1eb1b",
+      "source_native_funding_interval_hours": 1.0,
+      "source_timestamp_unit_detected": "ms",
+      "timestamp_unit_detection_method": "jsonl timestamp_ms/time/timestamp field with epoch digit length",
+      "interval_detection_method": "median adjacent timestamp delta hours",
+      "source_format": "jsonl"
+    },
+    {
+      "source_name": "hyperliquid_ETH",
+      "venue": "hyperliquid",
+      "asset": "ETH",
+      "native_symbol": "ETH",
+      "source_path_or_endpoint": "examples/strategies/venue_agnostic_signal_observer/data/hyperliquid_funding_archive_phase0/hyperliquid_funding_ETH_2024-01-01_to_2025-05-30.jsonl",
+      "source_first_row_timestamp_utc": "2024-01-01T00:00:00.151000Z",
+      "source_last_row_timestamp_utc": "2025-05-30T23:00:00.180000Z",
+      "source_row_count": 12383,
+      "source_sha256": "46663673457ad6567dd6f09ca36f18a09d024f101bc29515009b7b4f87460f84",
+      "source_native_funding_interval_hours": 1.0,
+      "source_timestamp_unit_detected": "ms",
+      "timestamp_unit_detection_method": "jsonl timestamp_ms/time/timestamp field with epoch digit length",
+      "interval_detection_method": "median adjacent timestamp delta hours",
+      "source_format": "jsonl"
+    },
+    {
+      "source_name": "binance_BTC",
+      "venue": "binance",
+      "asset": "BTC",
+      "native_symbol": "BTC-PERP",
+      "source_path_or_endpoint": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/binance_btc_funding.csv",
+      "source_first_row_timestamp_utc": "2024-01-01T00:00:00Z",
+      "source_last_row_timestamp_utc": "2025-05-31T16:00:00Z",
+      "source_row_count": 1551,
+      "source_sha256": "3b3917e1a06e7e8207fa8fa9adcec10dfb60eacab2724b3475b20f9ebde47b24",
+      "source_native_funding_interval_hours": 8.0,
+      "source_timestamp_unit_detected": "ms",
+      "timestamp_unit_detection_method": "iso8601 marker or epoch digit length",
+      "interval_detection_method": "median adjacent timestamp delta hours"
+    },
+    {
+      "source_name": "binance_ETH",
+      "venue": "binance",
+      "asset": "ETH",
+      "native_symbol": "ETH-PERP",
+      "source_path_or_endpoint": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/binance_eth_funding.csv",
+      "source_first_row_timestamp_utc": "2024-01-01T00:00:00Z",
+      "source_last_row_timestamp_utc": "2025-05-31T16:00:00Z",
+      "source_row_count": 1551,
+      "source_sha256": "8f9516c49915dde7fb47f9a8241f6840d0b130419042bf7f24c4b3b398c2fc6d",
+      "source_native_funding_interval_hours": 8.0,
+      "source_timestamp_unit_detected": "ms",
+      "timestamp_unit_detection_method": "iso8601 marker or epoch digit length",
+      "interval_detection_method": "median adjacent timestamp delta hours"
+    },
+    {
+      "source_name": "bybit_BTC",
+      "venue": "bybit",
+      "asset": "BTC",
+      "native_symbol": "BTCUSDT",
+      "source_path_or_endpoint": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/bybit_btc_funding.csv",
+      "source_first_row_timestamp_utc": "2024-01-01T00:00:00Z",
+      "source_last_row_timestamp_utc": "2025-06-01T00:00:00Z",
+      "source_row_count": 1552,
+      "source_sha256": "754f09debaa0b3b37a8331a2931223207bdddc4023bf876e0989199f006963e2",
+      "source_native_funding_interval_hours": 8.0,
+      "source_timestamp_unit_detected": "ms",
+      "timestamp_unit_detection_method": "iso8601 marker or epoch digit length",
+      "interval_detection_method": "median adjacent timestamp delta hours"
+    },
+    {
+      "source_name": "bybit_ETH",
+      "venue": "bybit",
+      "asset": "ETH",
+      "native_symbol": "ETHUSDT",
+      "source_path_or_endpoint": "examples/strategies/venue_agnostic_signal_observer/data/funding_dispersion_carry_v1_archives/bybit_eth_funding.csv",
+      "source_first_row_timestamp_utc": "2024-01-01T00:00:00Z",
+      "source_last_row_timestamp_utc": "2025-06-01T00:00:00Z",
+      "source_row_count": 1552,
+      "source_sha256": "969d02c10f5018a00ca2f03f9ea9f1862d4fb145148bb2fb75edc285484d998a",
+      "source_native_funding_interval_hours": 8.0,
+      "source_timestamp_unit_detected": "ms",
+      "timestamp_unit_detection_method": "iso8601 marker or epoch digit length",
+      "interval_detection_method": "median adjacent timestamp delta hours"
+    }
+  ],
+  "source_row_counts": {
+    "hyperliquid_BTC": 12383,
+    "hyperliquid_ETH": 12383,
+    "binance_BTC": 1551,
+    "binance_ETH": 1551,
+    "bybit_BTC": 1552,
+    "bybit_ETH": 1552
+  },
+  "aligned_row_counts": {
+    "BTC_binance": 12383,
+    "BTC_bybit": 12383,
+    "BTC_median_reference": 12383,
+    "ETH_binance": 12383,
+    "ETH_bybit": 12383,
+    "ETH_median_reference": 12383
+  },
+  "interval_ambiguity_detected": false,
+  "safety_mode": "public_data_observer_only",
+  "no_forward_returns_used": true,
+  "no_pnl_used": true,
+  "no_price_path_after_event_used": true,
+  "no_orders": true,
+  "no_private_keys": true,
+  "no_execution": true,
+  "no_shadow_execution": true,
+  "no_bot_path": true,
+  "no_null_testing": true,
+  "no_fdr": true,
+  "no_holdout": true,
+  "phase0_not_precommitment": true,
+  "branch_handling": "remote branch feat/hyperliquid-funding-divergence-phase0 absent at start; created from develop",
+  "kill_decision_table": {
+    "BTC": {
+      "max_abs_divergence_bps_hourly": 5.855828000000001,
+      "p99_abs_divergence_bps_hourly": 1.0823310000000017
+    },
+    "ETH": {
+      "max_abs_divergence_bps_hourly": 2.2331860000000003,
+      "p99_abs_divergence_bps_hourly": 0.9238892650000007
+    }
+  },
+  "final_phase0_status": "PHASE0_KILLED_NO_FUNDING_DIVERGENCE_TAIL"
+}
