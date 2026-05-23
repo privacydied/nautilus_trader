@@ -1,0 +1,33 @@
+{
+  "captured_at_unix_ms": 1779437402837,
+  "coin": "BTC",
+  "cost_probe_initial": "PLAUSIBLE",
+  "endpoint": "https://api.hyperliquid.xyz/info",
+  "estimated_round_trip_bps": {
+    "maker": 3.0,
+    "taker_crossing_top_of_book": 9.129271619062393
+  },
+  "fee_schedule": {
+    "maker_fee_bps": 1.5,
+    "source": "Hyperliquid published standard perp fee tier; /info meta response does not expose account-tier fee rates.",
+    "taker_fee_bps": 4.5
+  },
+  "raw_meta_available_keys": [
+    "universe",
+    "marginTables",
+    "collateralToken"
+  ],
+  "request": {
+    "coin": "BTC",
+    "type": "l2Book"
+  },
+  "spread_bps": 0.12927161906239296,
+  "top_of_book": {
+    "ask_n_orders": 68,
+    "ask_px": 77357.0,
+    "ask_sz": 29.56361,
+    "bid_n_orders": 2,
+    "bid_px": 77356.0,
+    "bid_sz": 0.00075
+  }
+}

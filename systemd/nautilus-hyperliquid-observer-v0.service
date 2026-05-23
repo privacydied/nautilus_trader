@@ -1,0 +1,15 @@
+[Unit]
+Description=Nautilus Hyperliquid public market-data observer v0
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/nasirjones/py/nautilus_trader
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3.14 -u -m examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_observer --coins BTC,ETH,SOL,LINK,DOGE,AVAX --channels l2book,trades,funding,mark --book-depth 20 --book-snapshot-interval-seconds 1 --out /mnt/nasirjones/py/nautilus_trader/data/hyperliquid_live/v0 --max-rss-gb 4
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

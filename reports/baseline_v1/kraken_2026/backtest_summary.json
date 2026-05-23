@@ -1,0 +1,19 @@
+{
+  "starting_balance": 10000.0,
+  "total_trades": 223,
+  "winning_trades": 19,
+  "losing_trades": 204,
+  "win_rate_percent": 8.52,
+  "average_win": 41.06,
+  "average_loss": -24.78,
+  "total_pnl": -4274.38,
+  "total_fees": 4087.88,
+  "sharpe_ratio": 0.0,
+  "final_equity": 10000.0,
+  "backtest_start": 1767225600000000000,
+  "backtest_end": 1778538000000000000,
+  "instrument_id": "KRAKEN",
+  "total_orders": 446,
+  "average_holding_time": "",
+  "largest_losing_streak": ""
+}

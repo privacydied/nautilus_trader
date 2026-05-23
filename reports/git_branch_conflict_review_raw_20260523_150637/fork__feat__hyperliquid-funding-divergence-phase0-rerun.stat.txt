@@ -1,0 +1,25 @@
+ examples/strategies/REJECTED_RESEARCH.md           | 243 ++++++++++
+ .../HYPERLIQUID_FUNDING_DIVERGENCE_PHASE0_AUDIT.md | 105 +++++
+ .../hyperliquid_funding_archive_backfill.py        | 369 ++++++++++++++++
+ .../hyperliquid_funding_divergence_phase0.py       | 412 +++++++++++++++++
+ .../run_hyperliquid_funding_archive_backfill.py    | 289 ++++++++++++
+ .../run_hyperliquid_funding_divergence_phase0.py   | 207 +++++++++
+ .../test_hyperliquid_funding_archive_backfill.py   | 487 +++++++++++++++++++++
+ .../test_hyperliquid_funding_divergence_phase0.py  | 207 +++++++++
+ .../PHASE0_REPORT.md                               |  60 +++
+ .../alignment_summary.csv                          |   1 +
+ .../calendar_stratification.csv                    |   1 +
+ .../divergence_bucket_counts.csv                   |   1 +
+ .../divergence_distribution.csv                    |   1 +
+ .../manifest.json                                  |  48 ++
+ .../persistence_half_life.csv                      |   1 +
+ .../summary.json                                   |   5 +
+ .../PHASE0_REPORT.md                               | 256 +++++++++++
+ .../alignment_summary.csv                          |   5 +
+ .../calendar_stratification.csv                    | 199 +++++++++
+ .../divergence_bucket_counts.csv                   |  37 ++
+ .../divergence_distribution.csv                    |   7 +
+ .../manifest.json                                  | 169 +++++++
+ .../persistence_half_life.csv                      |  37 ++
+ .../summary.json                                   |  16 +
+ 24 files changed, 3163 insertions(+)

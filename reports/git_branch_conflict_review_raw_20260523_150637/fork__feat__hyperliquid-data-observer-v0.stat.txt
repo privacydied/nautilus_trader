@@ -1,0 +1,12 @@
+ .../hyperliquid_cost_feasibility.py                | 169 +++++++++
+ .../hyperliquid_observer.py                        | 403 +++++++++++++++++++++
+ .../hyperliquid_s3_archive.py                      | 149 ++++++++
+ .../run_hyperliquid_cost_feasibility.py            |  31 ++
+ .../run_hyperliquid_observer.py                    |  45 +++
+ .../run_hyperliquid_s3_archive.py                  |  52 +++
+ .../tests/test_hyperliquid_cost_feasibility.py     |  58 +++
+ .../tests/test_hyperliquid_observer.py             |  43 +++
+ .../tests/test_hyperliquid_s3_archive.py           | 131 +++++++
+ reports/hyperliquid_cost_probe_phase1.json         |  33 ++
+ systemd/nautilus-hyperliquid-observer-v0.service   |  15 +
+ 11 files changed, 1129 insertions(+)
