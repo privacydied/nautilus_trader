@@ -151,6 +151,21 @@ def test_manifest_structure(tmp_path: Path) -> None:
     assert manifest["provenance"]["request_type"] == "fundingHistory"
     assert manifest["provenance"]["authentication"] == "none"
     
+    assert manifest["phase0_ready"] is False
+    assert manifest["source_public_unauthenticated"] is True
+    assert manifest["auth_headers_used"] is False
+    assert manifest["api_keys_used"] is False
+    assert manifest["order_or_execution_paths_used"] is False
+    assert manifest["polling_mode"] is False
+    assert manifest["explicit_date_range_only"] is True
+    assert manifest["timestamp_unit_detected"] == "ms"
+    assert manifest["cadence_status"] == "HOURLY_ROWS_NOT_CONFIRMED"
+    assert manifest["detected_rate_basis"] == "native_decimal_hourly_funding_rate"
+    assert manifest["native_interval_hours"] == 1.0
+    assert "source_sha256" in manifest
+    assert "source_first_row_timestamp_utc" in manifest
+    assert "source_last_row_timestamp_utc" in manifest
+
     assert "rows_sorted_by_timestamp" in manifest["validation"]
     assert "immutable_archive" in manifest["validation"]
     assert "jsonl_format" in manifest["validation"]
@@ -163,7 +178,7 @@ def test_jsonl_output_format(tmp_path: Path) -> None:
         {"time": 1704070800000, "fundingRate": 0.0002},
     ]
     
-    with patch.object(backfill, 'fetch_funding_history', return_value=mock_data):
+    with patch.object(backfill, 'fetch_funding_history', side_effect=[mock_data, []]):
         result = backfill.backfill_asset(
             coin="BTC",
             start_date="2024-01-01",
@@ -237,7 +252,9 @@ def test_safety_constants_and_guards() -> None:
 def test_backfill_multiple_assets(tmp_path: Path) -> None:
     """Test backfilling multiple assets."""
     def mock_fetch(coin, start_time_ms, end_time_ms=None, sleep_ms=500):
-        return [{"time": start_time_ms, "fundingRate": 0.0001}]
+        if start_time_ms > backfill._date_to_ms("2024-01-01"):
+            return []
+        return [{"time": end_time_ms or start_time_ms, "fundingRate": 0.0001}]
     
     with patch.object(backfill, 'fetch_funding_history', side_effect=mock_fetch):
         results = backfill.backfill_assets(
@@ -365,7 +382,7 @@ def test_manifest_sha256_verification(tmp_path: Path) -> None:
         {"time": 1704067200000, "fundingRate": 0.0001},
     ]
     
-    with patch.object(backfill, 'fetch_funding_history', return_value=mock_data):
+    with patch.object(backfill, 'fetch_funding_history', side_effect=[mock_data, []]):
         result = backfill.backfill_asset(
             coin="BTC",
             start_date="2024-01-01",
@@ -389,7 +406,7 @@ def test_timestamp_sorting(tmp_path: Path) -> None:
         {"time": 1704070800000, "fundingRate": 0.0002},
     ]
     
-    with patch.object(backfill, 'fetch_funding_history', return_value=mock_data):
+    with patch.object(backfill, 'fetch_funding_history', side_effect=[mock_data, []]):
         result = backfill.backfill_asset(
             coin="BTC",
             start_date="2024-01-01",
