@@ -122,6 +122,27 @@ def test_runner_pre_data_integrity_and_provenance(tmp_path: Path) -> None:
     assert first["source_native_funding_interval_hours"] in (1.0, 8.0)
 
 
+def test_load_hyperliquid_archive_jsonl_for_phase0(tmp_path: Path) -> None:
+    path = tmp_path / "hl_btc.jsonl"
+    rows = [
+        {"coin": "BTC", "timestamp_ms": 1704067200000, "funding_rate": 0.0001},
+        {"coin": "BTC", "timestamp_ms": 1704070800000, "funding_rate": 0.0002},
+        {"coin": "BTC", "timestamp_ms": 1704074400000, "funding_rate": -0.0001},
+    ]
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    loaded, provenance, unusable = h.load_funding_file(path, "hyperliquid", "BTC")
+
+    assert unusable is None
+    assert len(loaded) == 3
+    assert loaded[0].timestamp_utc == datetime(2024, 1, 1, tzinfo=UTC)
+    assert loaded[0].hourly_funding_bps == pytest.approx(1.0)
+    assert loaded[1].projected_8h_funding_bps == pytest.approx(16.0)
+    assert provenance["source_format"] == "jsonl"
+    assert provenance["source_timestamp_unit_detected"] == "ms"
+    assert provenance["source_native_funding_interval_hours"] == pytest.approx(1.0)
+
+
 def test_interval_ambiguity_hard_fail(tmp_path: Path) -> None:
     hl = tmp_path / "hl_btc_bad.csv"
     _write_funding(hl, "hyperliquid", "BTC", [0, 8, 16], [0.0001, 0.0001, 0.0001])

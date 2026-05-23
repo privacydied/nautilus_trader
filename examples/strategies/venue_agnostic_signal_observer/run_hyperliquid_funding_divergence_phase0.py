@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     unusable: dict[str, Any] | None = None
     for (venue, asset), p in paths.items():
         if not p: continue
-        rows, prov, bad = h.load_funding_csv(Path(p), venue, asset)
+        rows, prov, bad = h.load_funding_file(Path(p), venue, asset)
         loaded[(venue, asset)] = rows
         manifest["data_source_provenance"].append(prov)
         manifest["source_row_counts"][f"{venue}_{asset}"] = len(rows)

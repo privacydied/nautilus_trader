@@ -1,0 +1,5 @@
+asset,reference_venue,hyperliquid_rows,aligned_rows,missing_reference_rows,p50_alignment_lag_seconds,p95_alignment_lag_seconds,max_alignment_lag_seconds,alignment_status
+BTC,binance,12383,12383,0,14400.0,25200.096,28800.005,OK
+BTC,bybit,12383,12383,0,10800.96,25200.095,25201.106,OK
+ETH,binance,12383,12383,0,14400.0,25200.096,28800.005,OK
+ETH,bybit,12383,12383,0,10800.96,25200.095,25201.106,OK

@@ -196,6 +196,58 @@ def load_funding_csv(path: Path, venue: str, asset: str) -> tuple[list[Normalize
     return rows, provenance, None
 
 
+def load_funding_jsonl(path: Path, venue: str, asset: str) -> tuple[list[NormalizedFundingRow], dict[str, Any], dict[str, Any] | None]:
+    rows: list[NormalizedFundingRow] = []
+    units: set[str] = set()
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            raw = json.loads(line)
+            ts_raw = raw.get("timestamp_ms") or raw.get("time") or raw.get("timestamp") or raw.get("timestamp_utc")
+            rate_raw = raw.get("funding_rate") or raw.get("fundingRate") or raw.get("native_funding_rate")
+            sym = raw.get("symbol") or raw.get("native_symbol") or raw.get("coin") or f"{asset}-PERP"
+            interval_raw = raw.get("native_interval_hours") or raw.get("funding_interval_hours") or ""
+            if ts_raw is None or rate_raw is None:
+                continue
+            ts, unit = _parse_timestamp(ts_raw)
+            units.add(unit)
+            interval = float(interval_raw) if interval_raw not in (None, "") else EXPECTED_INTERVAL_HOURS[venue]
+            rows.append(normalize_funding_row(
+                venue=venue, asset=asset, native_symbol=str(sym), timestamp_utc=ts,
+                native_funding_rate=float(rate_raw), native_interval_hours=interval,
+                source_file_or_endpoint=str(path),
+            ))
+    rows.sort(key=lambda r: r.timestamp_utc)
+    detected = _detect_interval_hours([r.timestamp_utc for r in rows])
+    expected = EXPECTED_INTERVAL_HOURS[venue]
+    provenance = {
+        "source_name": f"{venue}_{asset}", "venue": venue, "asset": asset,
+        "native_symbol": rows[0].native_symbol if rows else f"{asset}-PERP",
+        "source_path_or_endpoint": str(path),
+        "source_first_row_timestamp_utc": rows[0].timestamp_utc.isoformat().replace("+00:00", "Z") if rows else "",
+        "source_last_row_timestamp_utc": rows[-1].timestamp_utc.isoformat().replace("+00:00", "Z") if rows else "",
+        "source_row_count": len(rows), "source_sha256": _sha256(path),
+        "source_native_funding_interval_hours": detected,
+        "source_timestamp_unit_detected": sorted(units)[0] if len(units) == 1 else ("iso8601" if not units else "ambiguous"),
+        "timestamp_unit_detection_method": "jsonl timestamp_ms/time/timestamp field with epoch digit length",
+        "interval_detection_method": "median adjacent timestamp delta hours",
+        "source_format": "jsonl",
+    }
+    if detected is None or abs(detected - expected) > 0.1:
+        return rows, provenance, {
+            "interval_ambiguity_detected": True, "unusable_reason": "native funding interval does not match expected venue cadence",
+            "offending_source": str(path), "expected_interval_hours": expected, "detected_interval_hours": detected,
+        }
+    return rows, provenance, None
+
+
+def load_funding_file(path: Path, venue: str, asset: str) -> tuple[list[NormalizedFundingRow], dict[str, Any], dict[str, Any] | None]:
+    if path.suffix.lower() == ".jsonl":
+        return load_funding_jsonl(path, venue, asset)
+    return load_funding_csv(path, venue, asset)
+
+
 def align_last_observed_reference(hyperliquid_rows: list[NormalizedFundingRow], reference_rows: list[NormalizedFundingRow], reference_basis: str) -> tuple[list[AlignedDivergenceRow], int]:
     refs = sorted(reference_rows, key=lambda r: r.timestamp_utc)
     ref_ts = [r.timestamp_utc for r in refs]

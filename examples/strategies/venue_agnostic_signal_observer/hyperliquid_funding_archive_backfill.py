@@ -217,15 +217,18 @@ def backfill_asset(
                 # Skip malformed entries but continue
                 continue
         
-        # Pagination: advance start time from last returned timestamp
-        if len(rows) < MAX_ROWS_PER_REQUEST:
-            # Got fewer than max, so we've reached the end
+        # Pagination: advance start time from last returned timestamp. Hyperliquid
+        # time-range responses are capped, and the cap is endpoint-defined; do not
+        # assume a fixed page size. Continue while the last returned timestamp is
+        # still before the requested end time.
+        last_ts = max(int(row.get("time", current_start_ms)) for row in rows)
+        if last_ts >= end_ms:
             break
-        
-        # Advance to next page using the last timestamp
-        last_ts = rows[-1].get("time", current_start_ms)
-        current_start_ms = last_ts + 1  # Move past last returned entry
-        
+        next_start_ms = last_ts + 1  # Move past last returned entry
+        if next_start_ms <= current_start_ms:
+            raise RuntimeError("Pagination did not advance - possible API response loop")
+        current_start_ms = next_start_ms
+
         # Safety: prevent infinite loops
         if total_api_calls > 1000:
             raise RuntimeError("Exceeded maximum API calls (1000) - possible pagination loop")
@@ -275,18 +278,52 @@ def backfill_asset(
         },
     }
     
+    first_ts = all_rows[0].timestamp_iso if all_rows else ""
+    last_ts = all_rows[-1].timestamp_iso if all_rows else ""
+    detected_interval: float | None = None
+    cadence_confirmed = False
+
     # Check for cadence consistency (should be 1-hour intervals)
     if len(all_rows) >= 2:
         intervals = []
         for i in range(1, len(all_rows)):
             delta_ms = all_rows[i].timestamp_ms - all_rows[i-1].timestamp_ms
             intervals.append(delta_ms / (1000 * 3600))  # Convert to hours
-        
+
         if intervals:
-            median_interval = sorted(intervals)[len(intervals) // 2]
-            manifest["validation"]["detected_interval_hours"] = median_interval
-            manifest["validation"]["interval_consistent_with_1h"] = abs(median_interval - 1.0) < 0.1
-    
+            detected_interval = sorted(intervals)[len(intervals) // 2]
+            cadence_confirmed = abs(detected_interval - 1.0) < 0.1
+            manifest["validation"]["detected_interval_hours"] = detected_interval
+            manifest["validation"]["interval_consistent_with_1h"] = cadence_confirmed
+
+    manifest.update({
+        "phase0_ready": bool(all_rows) and cadence_confirmed,
+        "source_public_unauthenticated": True,
+        "auth_headers_used": False,
+        "api_keys_used": False,
+        "order_or_execution_paths_used": False,
+        "polling_mode": False,
+        "explicit_date_range_only": True,
+        "timestamp_unit_detected": "ms",
+        "cadence_status": "HOURLY_ROWS_CONFIRMED" if cadence_confirmed else "HOURLY_ROWS_NOT_CONFIRMED",
+        "detected_rate_basis": "native_decimal_hourly_funding_rate",
+        "native_interval_hours": 1.0,
+        "source_sha256": manifest["output_jsonl_sha256"],
+        "source_first_row_timestamp_utc": first_ts,
+        "source_last_row_timestamp_utc": last_ts,
+        "source_row_count": len(all_rows),
+    })
+
+    manifest["validation"].update({
+        "phase0_ready": manifest["phase0_ready"],
+        "timestamp_unit_detected": manifest["timestamp_unit_detected"],
+        "cadence_status": manifest["cadence_status"],
+        "detected_rate_basis": manifest["detected_rate_basis"],
+        "native_interval_hours": manifest["native_interval_hours"],
+        "source_first_row_timestamp_utc": first_ts,
+        "source_last_row_timestamp_utc": last_ts,
+    })
+
     # Write manifest
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     
