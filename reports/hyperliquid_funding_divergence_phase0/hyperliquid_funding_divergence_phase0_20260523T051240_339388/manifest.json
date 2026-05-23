@@ -1,0 +1,48 @@
+{
+  "run_id": "hyperliquid_funding_divergence_phase0_20260523T051240_339388",
+  "generated_at_utc": "2026-05-23T05:12:40.340848Z",
+  "git_sha": "fa6723283402",
+  "git_branch": "feat/hyperliquid-funding-divergence-phase0",
+  "git_dirty": true,
+  "command_args": {
+    "output_root": "reports/hyperliquid_funding_divergence_phase0",
+    "hyperliquid_btc": null,
+    "hyperliquid_eth": null,
+    "binance_btc": null,
+    "binance_eth": null,
+    "bybit_btc": null,
+    "bybit_eth": null
+  },
+  "pre_data_kill_criteria": {
+    "recorded_before_data_load": true,
+    "max_abs_threshold_bps_hourly": 10.0,
+    "p99_abs_threshold_bps_hourly": 8.0,
+    "constant_names": [
+      "KILL_CRITERION_MAX_ABS_BPS",
+      "KILL_CRITERION_P99_ABS_BPS"
+    ]
+  },
+  "data_sources": {},
+  "data_source_provenance": [],
+  "source_row_counts": {},
+  "aligned_row_counts": {},
+  "interval_ambiguity_detected": false,
+  "safety_mode": "public_data_observer_only",
+  "no_forward_returns_used": true,
+  "no_pnl_used": true,
+  "no_price_path_after_event_used": true,
+  "no_orders": true,
+  "no_private_keys": true,
+  "no_execution": true,
+  "no_shadow_execution": true,
+  "no_bot_path": true,
+  "no_null_testing": true,
+  "no_fdr": true,
+  "no_holdout": true,
+  "phase0_not_precommitment": true,
+  "branch_handling": "remote branch feat/hyperliquid-funding-divergence-phase0 absent at start; created from develop",
+  "final_phase0_status": "PHASE0_SOURCE_UNAVAILABLE",
+  "kill_decision": "source unavailable",
+  "real_data_available": false,
+  "kill_decision_table": {}
+}
