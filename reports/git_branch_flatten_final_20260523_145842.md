@@ -101,8 +101,8 @@ reports/hyperliquid_funding_divergence_phase0/hyperliquid_funding_divergence_pha
 
 ## Push status
 
-- Pushed: not yet at time this report was written.
-- Required push command: `git push fork chore/flatten-fork-branches-preserve-registry`
+- Pushed: yes, to fork.
+- Exact push command used: `git push fork chore/flatten-fork-branches-preserve-registry`
 
 Do not merge this consolidation branch into `develop`/`main` without explicit human approval.
 
