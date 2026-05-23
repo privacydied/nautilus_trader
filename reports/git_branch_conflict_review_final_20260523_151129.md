@@ -109,4 +109,4 @@ examples/strategies/venue_agnostic_signal_observer/tests/test_hyperliquid_fundin
 
 ## Push status
 
-- Pending at report creation. Intended command: `git push fork chore/flatten-fork-branches-preserve-registry`.
+- Pushed: yes. Command used: `git push fork chore/flatten-fork-branches-preserve-registry`.
