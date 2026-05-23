@@ -1,0 +1,78 @@
+{
+  "atr_method": "TradingView atr() / Wilder RMA equivalent",
+  "atr_period": 10,
+  "bar_count": 723,
+  "branch": "stage2-watcher-runtime",
+  "comparison_note_versus_9bps_round_trip_cost_wall": "Low-cost net mean trade -10.90 bps versus the 9.00 bps round-trip cost wall; gross mean trade -1.90 bps.",
+  "data_source_path": "/mnt/nasirjones/py/nautilus_trader_stage2_runtime/data/lead_lag/kraken_btc_usd_1m_20260505_20260512.csv",
+  "date_range": {
+    "end": "2026-05-12T19:05:00Z",
+    "start": "2026-05-12T07:05:00Z"
+  },
+  "execution_model": "long_flat_close_execution_diagnostic",
+  "git_sha": "beb2e57a96e5-dirty",
+  "kraken_like_cost_comparison": {
+    "entry_fee_bps": 40.0,
+    "exit_fee_bps": 40.0,
+    "metrics": {
+      "best_trade_bps": -33.622826460213346,
+      "gross_pnl_bps": -37.986852784585025,
+      "max_drawdown_bps": -1637.9868527845852,
+      "mean_gross_trade_bps": -1.8993426392292512,
+      "mean_net_trade_bps": -81.89934263922926,
+      "median_gross_trade_bps": -5.013675404773599,
+      "median_net_trade_bps": -85.0136754047736,
+      "net_pnl_bps": -1637.9868527845852,
+      "total_fees_bps": 1600.0,
+      "trade_count": 20,
+      "win_rate": 0.0,
+      "worst_trade_bps": -99.32022179067295
+    },
+    "round_trip_bps": 80.0
+  },
+  "locked_rejection_statement": "This diagnostic does not reopen the locked Kraken BTC/USD OHLCV indicator rejection.",
+  "low_cost_net_metrics": {
+    "best_trade_bps": 37.377173539786654,
+    "gross_pnl_bps": -37.986852784585025,
+    "max_drawdown_bps": -255.36402632437168,
+    "mean_gross_trade_bps": -1.8993426392292512,
+    "mean_net_trade_bps": -10.899342639229252,
+    "median_gross_trade_bps": -5.013675404773599,
+    "median_net_trade_bps": -14.013675404773599,
+    "net_pnl_bps": -217.98685278458504,
+    "total_fees_bps": 180.0,
+    "trade_count": 20,
+    "win_rate": 0.1,
+    "worst_trade_bps": -28.320221790672942
+  },
+  "low_cost_taker_model": {
+    "entry_fee_bps": 4.5,
+    "exit_fee_bps": 4.5,
+    "round_trip_bps": 9.0
+  },
+  "multiplier": 3.0,
+  "non_promotion_statement": "This is not CANDIDATE, not REJECTED, not EXECUTION_READY, not TRADE_READY.",
+  "recommendation": "Do not proceed",
+  "report_dir": "/mnt/nasirjones/py/nautilus_trader_stage2_runtime/reports/supertrend_low_cost_sanity_check_20260523T145058Z",
+  "safety": "public_data_observer_only",
+  "source": "hl2",
+  "status": "SUPERtrend_LOW_COST_SANITY_CHECK_READY",
+  "timeframes_available_used": [
+    "1m"
+  ],
+  "turnover_number_of_flips": 42,
+  "zero_cost_gross_metrics": {
+    "best_trade_bps": 46.377173539786654,
+    "gross_pnl_bps": -37.986852784585025,
+    "max_drawdown_bps": -84.36402632437168,
+    "mean_gross_trade_bps": -1.8993426392292512,
+    "mean_net_trade_bps": -1.8993426392292512,
+    "median_gross_trade_bps": -5.013675404773599,
+    "median_net_trade_bps": -5.013675404773599,
+    "net_pnl_bps": -37.986852784585025,
+    "total_fees_bps": 0.0,
+    "trade_count": 20,
+    "win_rate": 0.25,
+    "worst_trade_bps": -19.320221790672942
+  }
+}
