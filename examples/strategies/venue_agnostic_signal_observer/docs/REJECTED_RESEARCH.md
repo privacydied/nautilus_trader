@@ -61,6 +61,7 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 || **Family 3 funding × OI crowding regime v0** | Binance BTCUSDT funding extremes × OI regime (rising/falling) → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M metrics + funding + spot) | **SIGNAL_ABSENCE_AT_COST** | 6 primary cells (2 directions × 1 OI regime × 3 horizons). All 6 cells failed evaluation gates (mean net bps < 0). Best cell: negative_extreme × rising_oi 48h = -19.3 bps mean net, 48.4% win rate. All mean net bps negative (range: -19 to -126 bps). 2/6 cells passed null test (negative extremes less bad than random at p<0.05) but still negative. No cell reached FDR or holdout. Blocker: cost wall + signal absence. 456 aligned extreme × rising events (226 neg) adequate for detection but directional mapping does not overcome 50 bps cost. See run `funding_oi_crowding_regime_v0_20260519T010334_54ceff`. Precommitment SHA: `5f911c3f`. Tag: `family3-funding-oi-crowding-regime-signal-absence` |
 || **Family 3 v1 funding × falling-OI unwind mapping** | Binance BTCUSDT negative funding extreme × falling OI → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M metrics + funding + spot) | **REJECTED** | 2 primary cells, 24h and 48h. Stage A POPULATION_SUFFICIENT after ms/µs spot-kline parser fix and preflight. Both cells GATES_FAILED at 50 bps primary cost: 24h mean_net -45.14 bps, WR 0.395; 48h mean_net -38.00 bps, WR 0.435. Both beat timestamp-shuffle null (p=0.010 / 0.035), but remained economically negative. "Less bad than random," not tradeable. | `family3-funding-falling-oi-unwind-v1-rejected` |
 || **Hyperliquid BTC->LINK fixed-cell paper replay v0** | Cross-asset beta-lag / BTC stress into LINK perp | Hyperliquid LINK perpetual public S3/archive order-book replay | **PAPER_EXECUTION_DIAGNOSTIC_FAIL_NOT_PROMOTED** | Corrected taker/taker executable ask/bid replay: 348/348 valid round trips, mean net +6.13 bps, median net +2.57 bps, win rate 51.7%, mean lower confidence bound -8.87 bps, pass criterion false. Prior +39.47 bps diagnostic pass invalidated by TIME_RANGE_LOADING_BUG. Not a formal v1 evaluation or null-tested research verdict; exact fixed cell not promoted to v1/shadow. | `hyperliquid-btc-link-fixed-cell-paper-replay-v0-not-promoted` |
+|| **Hyperliquid multi-asset funding carry Phase 0** | Single-venue cross-sectional perp funding carry | Hyperliquid perps | **PHASE0_KILLED_NO_CROSS_SECTIONAL_FUNDING_TAIL** | Real public Hyperliquid universe discovery/backfill path built; Phase 0A/0B diagnostics only. Phase 0B spread tail absent: p50 0.035 bps, p90 0.194 bps, p95 0.257 bps vs frozen kill gates p50 >= 3 bps and p90 >= 10 bps. All 18 grid cells underpowered. `v1_unlocked: false`. Not a full `REJECTED` strategy verdict: no v1 evaluator, strategy PnL, null, FDR, holdout, execution, shadow executor, or bot path was used. | `hyperliquid-multi-asset-funding-carry-phase0-killed-no-tail` |
 
 ## Rejection Details
 
@@ -521,6 +522,53 @@ is negative and inconsistent.
 - Seed: 42
 - Safety: `public_data_observer_only`
 
+### Hyperliquid Multi-Asset Funding Carry Phase 0
+
+**Tag:** `hyperliquid-multi-asset-funding-carry-phase0-killed-no-tail`
+
+**Verdict:** `PHASE0_KILLED_NO_CROSS_SECTIONAL_FUNDING_TAIL`
+
+**Study:** Hyperliquid multi-asset funding carry Phase 0.
+
+**Signal family:** Single-venue cross-sectional perp funding carry.
+
+**Venue:** Hyperliquid perps.
+
+**Verdict classification:** This is a Phase 0 killed/no-tail entry, not a full
+`REJECTED` strategy verdict. No v1 evaluator, strategy PnL, null, FDR, holdout,
+execution, shadow executor, or bot path was used.
+
+**Key result:** The real public Hyperliquid universe discovery/backfill path was
+built and Phase 0A/0B diagnostics were run only. Phase 0B found the
+cross-sectional funding spread tail absent under the frozen kill gates:
+
+| Metric | Observed | Frozen Phase 0 gate |
+|---|---:|---:|
+| p50 cross-sectional spread | 0.035 bps | >= 3 bps |
+| p90 cross-sectional spread | 0.194 bps | >= 10 bps |
+| p95 cross-sectional spread | 0.257 bps | diagnostic only |
+
+All 18 frozen grid cells were underpowered. `v1_unlocked: false`.
+
+**What this closes:**
+- Hyperliquid single-venue cross-sectional funding carry under the current
+  2025-05-23 to 2026-05-22 archive window.
+- Frozen Phase 0 grid/gates only.
+- Current public-data funding archive and fee/accrual feasibility assumptions.
+
+**What this does NOT close:**
+- Different venue.
+- Different cost model.
+- Maker/rebate model.
+- Longer historical archive if materially more symbols obtain longer coverage.
+- Liquidation/cascade aftershock hypothesis.
+- Cross-asset beta-lag stress hypothesis.
+- Directional price-PnL or order-book microstructure hypotheses.
+
+**Safety boundary:** Public data only. No orders, private keys, auth, live
+execution, shadow executor, bot path, null/FDR, holdout, strategy PnL, or v1
+precommitment was used.
+
 ### Hyperliquid BTC->LINK Fixed-Cell Paper Replay v0
 
 **Tag:** `hyperliquid-btc-link-fixed-cell-paper-replay-v0-not-promoted`
@@ -742,3 +790,32 @@ No forward returns, PnL, price-path dependent variables, orders, private keys, a
 | Derivatives lead-lag v1 | notional burst, price shock, signed imbalance | Coinbase→Kraken BTC | REJECTED | Best -18.74 bps, win rate 0% | — |
 ```
 
+
+### hyperliquid-oi-velocity-compression-breakout-phase0
+
+**Verdict:** `REJECTED_PHASE0_MECHANISM_FAILURE`
+
+**Final Phase 0C status:** `PHASE0C_DIRECTION_PROXY_UNSTABLE`
+
+**Report directory:** `reports/hyperliquid_oi_velocity_compression_phase0/20260524T041302Z`
+
+Phase 0A and Phase 0B passed, but Phase 0C failed due to unstable direction proxy agreement and no directional signed edge. The event population exists, but the mechanism is not directionally stable; do not build v1.
+
+Evidence:
+
+| Check | Result |
+| --- | ---: |
+| Phase 0A usable symbols | 34 |
+| Phase 0A missing symbols | PEPE only |
+| Phase 0B events | 31,508 |
+| Max single-symbol concentration | 0.03199 |
+| Phase 0C direction proxy disagreement rate | 0.49943 |
+| 1h hit rate | 0.4816 |
+| 1h median signed return | 0.0 bps |
+| 4h hit rate | 0.4901 |
+| 4h median signed return | 0.0 bps |
+| 12h hit rate | 0.4901 |
+| 12h median signed return | -0.3111 bps |
+| 12h median absolute return | 17.1898 bps |
+
+Safety: public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, or bot path were used.
