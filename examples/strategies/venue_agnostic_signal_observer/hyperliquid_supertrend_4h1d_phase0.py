@@ -302,8 +302,9 @@ def realized_vol_percentiles(hourly: list[PriceRow]) -> dict[datetime, float | N
         var = sum((x - mu) ** 2 for x in window) / len(window)
         vols.append((log_returns[i][0], math.sqrt(var) * math.sqrt(24 * 365)))
     result: dict[datetime, float | None] = {}
-    for ts, vol in vols:
-        prior = [v for t, v in vols if ts - timedelta(days=30) <= t < ts]
+    for i, (ts, vol) in enumerate(vols):
+        cutoff = ts - timedelta(days=30)
+        prior = [v for t, v in vols[max(0, i - 24 * 31):i] if cutoff <= t < ts]
         if not prior:
             result[ts] = None
         else:

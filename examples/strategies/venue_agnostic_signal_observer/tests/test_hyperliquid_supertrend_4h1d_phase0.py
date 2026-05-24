@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from examples.strategies.venue_agnostic_signal_observer import hyperliquid_supertrend_4h1d_phase0 as h
+from examples.strategies.venue_agnostic_signal_observer import hyperliquid_supertrend_archive_ingest as ingest
 
 
 def dt(day: int, hour: int = 0) -> datetime:
@@ -185,6 +186,57 @@ def test_precommitment_hash_match_and_mismatch(tmp_path: Path) -> None:
     bad = h.run_phase0(out_root=tmp_path / "bad", precommitment_path=pre, expected_hash_path=hp)
     assert bad["summary"]["phase0a_verdict"] == h.PRECOMMITMENT_HASH_MISMATCH
     assert bad["summary"]["overall_status"] == h.PRECOMMITMENT_HASH_MISMATCH
+
+
+def test_archive_ingest_preserves_intraday_timestamps_and_ignores_non_price_fields(tmp_path: Path) -> None:
+    source = tmp_path / "asset_ctxs"
+    source.mkdir()
+    path = source / "HYPE.jsonl"
+    path.write_text(
+        "\n".join([
+            '{"symbol":"HYPE","ts_event":"2025-05-01T00:00:00Z","price":10.0,"price_source":"mark","unused_metric":999}',
+            '{"symbol":"HYPE","ts_event":"2025-05-01T00:15:00Z","price":11.0,"price_source":"mark","unused_metric":1000}',
+            '{"symbol":"HYPE","ts_event":"2025-05-01T00:45:00Z","price":9.0,"price_source":"mark","unused_metric":1001}',
+            '{"symbol":"HYPE","ts_event":"2025-05-01T01:00:00Z","price":12.0,"price_source":"mark","unused_metric":1002}',
+            '{"symbol":"HYPE","ts_event":"2025-05-01T01:30:00Z","price":13.0,"price_source":"mark","unused_metric":1003}',
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    minute_rows = ingest.load_asset_ctxs_minute_prices(source, ("HYPE",))
+    assert minute_rows["HYPE"][1]["timestamp_utc"] == datetime(2025, 5, 1, 0, 15, tzinfo=UTC)
+    assert "unused_metric" not in minute_rows["HYPE"][0]
+    hourly = ingest.minute_prices_to_hourly_ohlc(minute_rows)
+    assert [r["timestamp_utc"] for r in hourly] == ["2025-05-01T00:00:00Z", "2025-05-01T01:00:00Z"]
+    assert hourly[0]["open"] == 10.0
+    assert hourly[0]["high"] == 11.0
+    assert hourly[0]["low"] == 9.0
+    assert hourly[0]["close"] == 9.0
+
+
+def test_phase0a_ingests_canonical_archive_csvs(tmp_path: Path) -> None:
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    prices = tmp_path / "prices.csv"
+    funds = tmp_path / "funding.csv"
+    with prices.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["timestamp_utc", "symbol", "open", "high", "low", "close", "price_source"])
+        writer.writeheader()
+        for symbol in h.FROZEN_UNIVERSE:
+            for i in range(24 * 397):
+                ts = start + timedelta(hours=i)
+                writer.writerow({"timestamp_utc": ts.isoformat().replace("+00:00", "Z"), "symbol": symbol, "open": 100, "high": 101, "low": 99, "close": 100 + (i % 7) * 0.01, "price_source": "mark"})
+    with funds.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["timestamp_utc", "symbol", "funding_rate", "funding_source"])
+        writer.writeheader()
+        for symbol in h.FROZEN_UNIVERSE:
+            for i in range(24 * 397):
+                ts = start + timedelta(hours=i)
+                writer.writerow({"timestamp_utc": ts.isoformat().replace("+00:00", "Z"), "symbol": symbol, "funding_rate": 0.0, "funding_source": "test"})
+    price_rows_loaded = h.load_price_csv(prices)
+    funding_rows_loaded = h.load_funding_csv(funds)
+    verdict, coverage = h.assess_coverage(h.group_by_symbol(price_rows_loaded), h.group_by_symbol(funding_rows_loaded))
+    assert verdict == h.PHASE0A_PASSED
+    assert all(row["phase0a_symbol_status"] == h.PHASE0A_PASSED for row in coverage)
+    assert max(float(row["max_price_gap_hours"]) for row in coverage) == 1.0
 
 
 def test_phase0a_failure_blocks_data_outputs_with_headers(tmp_path: Path) -> None:
