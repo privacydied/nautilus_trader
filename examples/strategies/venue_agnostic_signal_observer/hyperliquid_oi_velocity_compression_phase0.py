@@ -201,7 +201,7 @@ def load_symbol_frame(data_dir: Path, symbol: str) -> list[dict[str, Any]]:
         forbidden = [k for k in row if "funding" in k.lower()]
         if forbidden:
             raise RuntimeError("PHASE0A_FUNDING_QUARANTINE_VIOLATION")
-        ts = parse_ts(row.get("timestamp", row.get("ts", row.get("time", row.get("timestamp_ms")))))
+        ts = parse_ts(row.get("timestamp", row.get("ts_event", row.get("ts", row.get("time", row.get("timestamp_ms"))))))
         mark = _float_field(row, ("mark_price", "mark", "price", "last_price", "close"))
         index = _float_field(row, ("index_price", "index"), required=False)
         out.append({
