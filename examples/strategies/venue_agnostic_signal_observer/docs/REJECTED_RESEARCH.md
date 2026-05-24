@@ -18,10 +18,11 @@ changing something structural.
 
 ## Mined Status
 
-The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 48 study groups:
+The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 49 study groups:
 - **37 REJECTED**
 - **11 NEEDS_MORE_DATA** (insufficient events / zero signals / no tail / market availability blocked)
 - **1 MARKET_MODERATE_DIAGNOSTIC** (quiet/moderate capture, below volatility gate)
+- **1 PHASE0_CLOSED_INDICATOR_FAMILY_DIAGNOSTIC** (scoped Phase 0 diagnostic family closure; not counted as a broad venue or strategy-family rejection)
 - **1 UNKNOWN**
 
 ## Null Testing Discipline
@@ -62,7 +63,7 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 || **Family 3 v1 funding × falling-OI unwind mapping** | Binance BTCUSDT negative funding extreme × falling OI → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M metrics + funding + spot) | **REJECTED** | 2 primary cells, 24h and 48h. Stage A POPULATION_SUFFICIENT after ms/µs spot-kline parser fix and preflight. Both cells GATES_FAILED at 50 bps primary cost: 24h mean_net -45.14 bps, WR 0.395; 48h mean_net -38.00 bps, WR 0.435. Both beat timestamp-shuffle null (p=0.010 / 0.035), but remained economically negative. "Less bad than random," not tradeable. | `family3-funding-falling-oi-unwind-v1-rejected` |
 || **Hyperliquid BTC->LINK fixed-cell paper replay v0** | Cross-asset beta-lag / BTC stress into LINK perp | Hyperliquid LINK perpetual public S3/archive order-book replay | **PAPER_EXECUTION_DIAGNOSTIC_FAIL_NOT_PROMOTED** | Corrected taker/taker executable ask/bid replay: 348/348 valid round trips, mean net +6.13 bps, median net +2.57 bps, win rate 51.7%, mean lower confidence bound -8.87 bps, pass criterion false. Prior +39.47 bps diagnostic pass invalidated by TIME_RANGE_LOADING_BUG. Not a formal v1 evaluation or null-tested research verdict; exact fixed cell not promoted to v1/shadow. | `hyperliquid-btc-link-fixed-cell-paper-replay-v0-not-promoted` |
 || **Hyperliquid multi-asset funding carry Phase 0** | Single-venue cross-sectional perp funding carry | Hyperliquid perps | **PHASE0_KILLED_NO_CROSS_SECTIONAL_FUNDING_TAIL** | Real public Hyperliquid universe discovery/backfill path built; Phase 0A/0B diagnostics only. Phase 0B spread tail absent: p50 0.035 bps, p90 0.194 bps, p95 0.257 bps vs frozen kill gates p50 >= 3 bps and p90 >= 10 bps. All 18 grid cells underpowered. `v1_unlocked: false`. Not a full `REJECTED` strategy verdict: no v1 evaluator, strategy PnL, null, FDR, holdout, execution, shadow executor, or bot path was used. | `hyperliquid-multi-asset-funding-carry-phase0-killed-no-tail` |
-| **Hyperliquid Supertrend 4h/1d altcoin perp Phase 0** | Supertrend trend-following, ATR(10), multiplier 3.0 | Hyperliquid perps, frozen 20 altcoin perps excluding BTC/ETH/SOL | **PHASE0_KILLED_NO_V1_UNLOCKED** | Phase 0A passed; Phase 0B passed on 4h and 1d; Phase 0C killed the frozen design. 4h: `PHASE0C_NO_GROSS_EDGE`, 791 entries, median gross -152.8785 bps, median net primary -173.3985 bps. 1d: `PHASE0C_GROSS_POSITIVE_NET_NEGATIVE`, 151 entries, median gross +51.6581 bps, median net primary -65.4625 bps. Overall: `PHASE0C_NO_GROSS_EDGE`; `v1_unlocked: false`. Not a full `REJECTED` strategy verdict: no null, FDR, holdout, orders, private keys, auth, live execution, shadow, or bot path was used. | `hyperliquid-supertrend-4h1d-altcoin-perp-phase0-killed-no-v1` |
+| **Hyperliquid Supertrend 4h/1d altcoin perp v0** | Supertrend Phase 0 indicator diagnostic | Hyperliquid altcoin perpetuals | **PHASE0_CLOSED_INDICATOR_FAMILY_DIAGNOSTIC** | Frozen 20-symbol public-data Hyperliquid altcoin perp universe. 4h failed gross layer: 791 entries, median gross -152.87848344544423 bps, median net primary -173.39852944544424 bps (`PHASE0C_NO_GROSS_EDGE`). 1d was gross-positive but net-negative: 151 entries, median gross +51.65811718806597 bps, median net primary -65.46250328485137 bps (`PHASE0C_GROSS_POSITIVE_NET_NEGATIVE`). Recovered per-entry artifacts reconcile exactly; residual diagnostic emitted regime concentration, Supertrend exit/giveback blocker, and family closure statuses. Exact v0 branch closed; not promoted and not a broad Hyperliquid rejection. | `hyperliquid-supertrend-4h1d-altcoin-perp-v0-closed` |
 
 ## Rejection Details
 
@@ -647,6 +648,95 @@ precommitment was used.
 
 ---
 
+### Hyperliquid Supertrend 4h/1d Altcoin Perp v0
+
+**Tag:** `hyperliquid-supertrend-4h1d-altcoin-perp-v0-closed`
+
+**Verdict:** `PHASE0_CLOSED_INDICATOR_FAMILY_DIAGNOSTIC`
+
+**Study identity:** Hyperliquid Supertrend 4h/1d altcoin perp v0 Phase 0. This is a scoped registry closure for the tested v0 indicator-family branch, not a broad Hyperliquid venue rejection, not a new strategy, not a v1 precommitment, and not authorized for execution.
+
+**Original v0 branch / SHA:**
+- Branch: `feat/hyperliquid-supertrend-4h1d-altcoin-perp-phase0`
+- Commit: `dde42bbae1fff4d54a49d97f9a621abebfdfe4c4`
+
+**Tested conditions:**
+- Venue/instruments: Hyperliquid altcoin perpetuals
+- Universe: frozen 20-symbol altcoin perp universe
+- Timeframes: 4h and 1d
+- Signal family: existing v0 Supertrend entry/exit mechanics only
+- Cost/funding: fixed v0 cost assumptions and funding treatment
+- Data: public data only
+- Phase: Phase 0 feasibility framing only; no v1 evaluator, null/FDR/holdout, paper trading, shadow execution, or live execution was unlocked
+
+**Original v0 Phase 0 result:**
+
+| Timeframe | Status | Entries | Median gross bps | Median net primary bps |
+|---|---|---:|---:|---:|
+| 4h | `PHASE0C_NO_GROSS_EDGE` | 791 | -152.87848344544423 | -173.39852944544424 |
+| 1d | `PHASE0C_GROSS_POSITIVE_NET_NEGATIVE` | 151 | +51.65811718806597 | -65.46250328485137 |
+
+Overall v0 was previously reported as `PHASE0C_NO_GROSS_EDGE` because the 4h timeframe failed at the gross-return layer and the 1d timeframe failed net economics.
+
+**Registry closure evidence:**
+- Branch: `docs/hyperliquid-supertrend-v0-registry-closure`
+- Commit: `c1ca12dd8f2caa0e5cc836a7c4b877dc14205ebb`
+
+**Artifact recovery evidence:**
+- Branch: `diag/hyperliquid-supertrend-v0-entry-artifact-recovery`
+- Commit: `ed5c35c6a1157da042d835098bafa573dd6ae2de`
+- Recovered report directory: `reports/hyperliquid_supertrend_4h1d_phase0/hyperliquid_supertrend_4h1d_phase0_20260524T172027_434119_20efb6`
+- Recovered report directory SHA256: `08bd8e008c0780dd320f64f836abf3804f712129d428604c5eb1425f23346e52`
+- Full per-entry artifact: `reports/hyperliquid_supertrend_4h1d_phase0/hyperliquid_supertrend_4h1d_phase0_20260524T172027_434119_20efb6/entries_full.csv`
+- `entries_full.csv` SHA256: `53aa0230d2e2504b4750c39e6c5b4a2f7b261a94f6e9e8fa3c59e8b93c1cbe41`
+- Recovered counts: 791 4h entries and 151 1d entries
+
+Full per-entry artifacts were later recovered and reconciled exactly against the regenerated `summary.json`; no aggregate-only fabrication was used.
+
+**Residual diagnostic evidence:**
+- Branch: `diag/hyperliquid-supertrend-v0-1d-residual`
+- Commit: `f889ef1d27c8bef99e10b5095383850e80271202`
+- Output: `reports/hyperliquid_supertrend_v0_residual_diagnostic/20260524T172206Z`
+- Entry input: recovered `entries_full.csv`
+- Price archive: `data/hyperliquid_supertrend_4h1d_phase0/hourly_prices.csv`
+- Price archive SHA256: `e8d642ba3a11af1935712818beb24be1a5d4c2d5905994c018db87db24cac0ec`
+
+Residual diagnostic statuses emitted:
+- `V0_RESIDUAL_DIAGNOSTIC_READY`
+- `REGIME_CONCENTRATION_WARNING_DIAGNOSTIC`
+- `EXIT_MECHANIC_PRIMARY_BLOCKER_DIAGNOSTIC`
+- `FAMILY_CLOSURE_RECOMMENDED_DIAGNOSTIC`
+
+**Closure rationale:**
+- 4h fails at the gross-return layer: median gross was negative before net economics.
+- 1d has positive median gross but negative median net under the fixed v0 assumptions.
+- The 1d residual diagnostic found regime concentration plus Supertrend exit/giveback damage; the gross-positive 1d result is not promoted and must not seed a fitted follow-up.
+- The tested v0 indicator-family branch is closed.
+
+**What this closes:**
+- This exact Hyperliquid Supertrend 4h/1d altcoin perp v0 design.
+- The frozen 20-symbol universe.
+- The existing Supertrend entry/exit mechanics.
+- The existing v0 cost/funding assumptions.
+- The Phase 0 feasibility framing for this branch.
+
+**What this does NOT close:**
+- Hyperliquid as a venue.
+- All trend-following.
+- All altcoin perps.
+- Any separately precommitted literature-grounded trend hypothesis.
+- Non-Supertrend exits, unless independently justified in a future precommitment.
+- Order-book/microstructure hypotheses.
+- Cross-asset beta-lag stress hypotheses.
+- Liquidation/cascade aftershock hypotheses.
+- Maker/rebate or lower-cost execution models, unless separately precommitted and not derived from this diagnostic.
+
+**Locked gate:** Do not reopen this exact v0 by changing Supertrend parameters, ATR parameters, symbols, timeframes, date range, cost assumptions, `max_hold_bars`, or exit rules. Any future Hyperliquid altcoin indicator-family hypothesis must be independently justified from public literature or first principles. The residual diagnostic cannot be used to choose parameters, symbols, regimes, exit rules, or cost models.
+
+**Safety boundary:** Public data only. No orders, private keys, auth, live execution, shadow executor, bot path, paper trading, null/FDR, holdout, strategy PnL, or v1 precommitment was used for this registry closure. No new experiments were run for this registry update.
+
+---
+
 ## Locked Gates — Do Not Revisit Without Structural Change
 
 1. **Kraken BTC/USD spot OHLCV indicators** (5m, 1h, Donchian, EMA, ATR). ~80 bps round-trip taker fees. Rejected V1-V4. Stop.
@@ -675,6 +765,8 @@ precommitment was used.
 13. **Family 3 v1 funding × falling-OI unwind mapping** — BTCUSDT negative-funding + falling-OI → spot BTC 24h/48h forward returns. Both primary cells GATES_FAILED at frozen 50 bps cost despite passing timestamp-shuffle null. Mean net remained negative (−45.14 / −38.00 bps), win rates were sub-threshold (0.395 / 0.435), and worst decile losses were large (−491 / −605 bps). Do not reopen this exact BTCUSDT 2-cell archive design by changing split, seed, horizons, OI cutoff, funding percentile, null iterations, or cost. Reopening requires a materially different mechanism: multi-asset portfolio, perp return leg with funding-paid-while-held, cross-exchange OI divergence, tick-level OI, or materially different fee/execution model.
 
 14. **Hyperliquid BTC->LINK fixed-cell paper replay v0** — BTC 60s bullish stress → LINK perp, 300s horizon, 100 USDC taker/taker executable ask/bid replay. Corrected paper replay was `PAPER_EXECUTION_DIAGNOSTIC_FAIL`: mean net +6.13 bps, median net +2.57 bps, win rate 0.517, mean lower confidence bound −8.87 bps, pass criterion false. Do not revive this exact fixed-cell result using the invalidated +39.47 bps run. Any future revisit must cite the corrected replay as baseline, use first-eligible executable snapshot semantics, include funding treatment or explicitly mark `FUNDING_NOT_INCLUDED_DIAGNOSTIC`, and define a fresh precommitment if adding data, assets, horizons, or execution models.
+
+15. **Hyperliquid Supertrend 4h/1d altcoin perp v0** — Frozen 20-symbol Hyperliquid altcoin perp Supertrend Phase 0. 4h failed at gross-return layer; 1d was gross-positive but net-negative and residual diagnostics found regime concentration plus Supertrend exit/giveback damage. Do not reopen this exact v0 by changing Supertrend parameters, ATR parameters, symbols, timeframes, date range, cost assumptions, `max_hold_bars`, or exit rules. Any future Hyperliquid altcoin indicator-family hypothesis requires independent public-literature or first-principles justification and cannot use the residual diagnostic to choose parameters, symbols, regimes, exit rules, or cost models.
 
 ## Still Open
 
