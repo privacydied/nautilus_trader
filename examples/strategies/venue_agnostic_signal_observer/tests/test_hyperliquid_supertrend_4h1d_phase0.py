@@ -249,3 +249,127 @@ def test_phase0a_failure_blocks_data_outputs_with_headers(tmp_path: Path) -> Non
     with (report / "entries_preview.csv").open(newline="", encoding="utf-8") as f:
         rows = list(csv.reader(f))
     assert rows == [h.ENTRY_COLUMNS]
+
+
+
+def test_full_entries_artifact_written_with_all_rows_and_metadata(tmp_path: Path) -> None:
+    run_dir = tmp_path / "report"
+    run_dir.mkdir()
+    manifest_base = {"run_id": "test_run", "verified_matches_precommitment_file": True, "data_sources_used": []}
+    rows = [
+        {
+            "symbol": "HYPE",
+            "timeframe": "4h",
+            "entry_ts": "2024-01-01T00:00:00Z",
+            "exit_ts": "2024-01-02T00:00:00Z",
+            "direction": "long",
+            "entry_price": 100.0,
+            "exit_price": 101.0,
+            "holding_period_bars": 6,
+            "hold_bars": 6,
+            "max_hold_bars": h.MAX_HOLD_BARS,
+            "exit_reason": "signal_flip",
+            "realized_vol_percentile_at_entry": 0.5,
+            "gross_return_bps": 100.0,
+            "funding_accrual_bps": 0.0,
+            "net_return_bps_primary": 90.0,
+            "net_return_bps_diagnostic": 94.0,
+            "source_entry_idx": 10,
+            "source_exit_idx": 16,
+        },
+        {
+            "symbol": "HYPE",
+            "timeframe": "1d",
+            "entry_ts": "2024-01-03T00:00:00Z",
+            "exit_ts": "2024-01-06T00:00:00Z",
+            "direction": "short",
+            "entry_price": 100.0,
+            "exit_price": 99.0,
+            "holding_period_bars": 3,
+            "hold_bars": 3,
+            "max_hold_bars": h.MAX_HOLD_BARS,
+            "exit_reason": "max_hold",
+            "realized_vol_percentile_at_entry": 0.6,
+            "gross_return_bps": 100.0,
+            "funding_accrual_bps": -5.0,
+            "net_return_bps_primary": 85.0,
+            "net_return_bps_diagnostic": 89.0,
+            "source_entry_idx": 20,
+            "source_exit_idx": 23,
+        },
+    ]
+    result = h._write_all(
+        run_dir,
+        manifest_base,
+        [],
+        [],
+        rows,
+        [],
+        [],
+        [],
+        h.PHASE0A_PASSED,
+        {"4h": h.PHASE0B_PASSED, "1d": h.PHASE0B_PASSED},
+        {},
+        [],
+    )
+    full_path = run_dir / "entries_full.csv"
+    preview_path = run_dir / "entries_preview.csv"
+    assert full_path.exists()
+    assert preview_path.exists()
+    with full_path.open(newline="", encoding="utf-8") as f:
+        full_rows = list(csv.DictReader(f))
+    assert [r["timeframe"] for r in full_rows] == ["4h", "1d"]
+    assert len(full_rows) == 2
+    assert {"entry_timestamp", "exit_timestamp", "explicit_fee_bps", "realized_total_cost_bps", "hold_bars", "max_hold_bars"}.issubset(full_rows[0])
+    summary = result["summary"]
+    manifest = result["manifest"]
+    assert summary["entry_artifacts"]["entries_full"]["row_count"] == 2
+    assert summary["entry_artifacts"]["entries_full"]["sha256"] == h.sha256_file(full_path)
+    assert summary["entry_counts_by_timeframe"] == {"4h": 1, "1d": 1}
+    assert manifest["entry_artifacts"]["entries_preview"]["artifact_role"] == "preview_truncated_first_200_rows"
+    assert manifest["entry_artifacts"]["entries_full"]["artifact_role"] == "primary_full_per_entry_artifact"
+
+
+def test_summary_counts_and_medians_reconcile_with_entries_full(tmp_path: Path) -> None:
+    run_dir = tmp_path / "report"
+    run_dir.mkdir()
+    manifest_base = {"run_id": "test_run", "verified_matches_precommitment_file": True, "data_sources_used": []}
+    rows = []
+    for timeframe, gross_values, net_values in [
+        ("4h", [-200.0, -100.0, 50.0], [-210.0, -110.0, 40.0]),
+        ("1d", [-25.0, 50.0, 125.0], [-35.0, 40.0, 115.0]),
+    ]:
+        for i, (gross, net) in enumerate(zip(gross_values, net_values, strict=True)):
+            rows.append({
+                "symbol": "HYPE", "timeframe": timeframe,
+                "entry_ts": f"2024-01-0{i+1}T00:00:00Z", "exit_ts": f"2024-01-0{i+2}T00:00:00Z",
+                    "direction": "long", "entry_price": 100, "exit_price": 101,
+                "holding_period_bars": 1, "hold_bars": 1, "max_hold_bars": h.MAX_HOLD_BARS,
+                "exit_reason": "signal_flip", "realized_vol_percentile_at_entry": 0.5,
+                "gross_return_bps": gross, "funding_accrual_bps": 0.0,
+                "net_return_bps_primary": net, "net_return_bps_diagnostic": net + 4.0,
+                "source_entry_idx": i, "source_exit_idx": i + 1,
+            })
+    result = h._write_all(
+        run_dir, manifest_base, [], [], rows, [], [], [], h.PHASE0A_PASSED,
+        {"4h": h.PHASE0B_PASSED, "1d": h.PHASE0B_PASSED}, {}, [],
+    )
+    assert result["summary"]["entry_counts_by_timeframe"] == {"4h": 3, "1d": 3}
+    assert result["summary"]["entry_aggregate_reconciliation"]["4h"]["median_gross_return_bps"] == -100.0
+    assert result["summary"]["entry_aggregate_reconciliation"]["4h"]["median_net_return_bps_primary"] == -110.0
+    assert result["summary"]["entry_aggregate_reconciliation"]["1d"]["median_gross_return_bps"] == 50.0
+    assert result["summary"]["entry_aggregate_reconciliation"]["1d"]["median_net_return_bps_primary"] == 40.0
+
+
+def test_entry_artifact_recovery_does_not_change_frozen_parameters() -> None:
+    assert h.TIMEFRAMES == ("4h", "1d")
+    assert h.ATR_PERIOD == 10
+    assert h.ATR_MULTIPLIER == 3.0
+    assert h.MAX_HOLD_BARS == 30
+    assert h.PRIMARY_COST_BPS == 10.0
+    assert h.DIAGNOSTIC_COST_BPS == 6.0
+    assert h.VOL_PERCENTILE_THRESHOLD == 0.50
+    assert h.FROZEN_UNIVERSE == (
+        "HYPE", "XRP", "DOGE", "BNB", "ADA", "LINK", "AVAX", "SUI", "TRX", "LTC",
+        "BCH", "TON", "DOT", "AAVE", "UNI", "APT", "ARB", "OP", "SEI", "INJ",
+    )

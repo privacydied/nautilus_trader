@@ -254,7 +254,7 @@ def find_entry_artifact(inventory: dict[str, Any]) -> Path | None:
     candidates = [f for f in inventory["files"] if f["inferred_role"] == "entry_records" and f["required_q1_q2_fields_present"]]
     if not candidates:
         return None
-    candidates.sort(key=lambda f: ("preview" not in Path(f["path"]).name.lower(), -int(f["size_bytes"])))
+    candidates.sort(key=lambda f: ("full" in Path(f["path"]).name.lower(), "preview" not in Path(f["path"]).name.lower(), int(f["size_bytes"])), reverse=True)
     return Path(candidates[0]["path"])
 
 
@@ -702,7 +702,7 @@ def diagnostic_markdown(summary: dict[str, Any], inventory_md: str, q1: dict[str
         "- cannot directly seed a new strategy",
         "",
         "## 12. Next allowed action",
-        "Either close the family in a separate registry-update task, or write a separate public-literature-grounded precommitment without using this diagnostic to choose parameters.",
+        "Either close the family in a separate registry-update task, or write a separate public-literature-grounded precommitment without using this diagnostic as a selector.",
     ]
     text = "\n".join(lines) + "\n"
     validate_markdown_firewall(text)

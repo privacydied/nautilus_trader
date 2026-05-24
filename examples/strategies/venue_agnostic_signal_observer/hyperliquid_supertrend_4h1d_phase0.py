@@ -75,6 +75,14 @@ ENTRY_COLUMNS: Final[list[str]] = [
     "gross_return_bps", "funding_accrual_bps", "net_return_bps_primary",
     "net_return_bps_diagnostic",
 ]
+FULL_ENTRY_COLUMNS: Final[list[str]] = [
+    "symbol", "timeframe", "entry_ts", "exit_ts", "entry_timestamp", "exit_timestamp",
+    "entry_price", "exit_price", "direction", "gross_return_bps", "net_return_bps",
+    "net_return_bps_primary", "net_return_bps_diagnostic", "funding_accrual_bps", "funding_bps",
+    "explicit_fee_bps", "realized_total_cost_bps", "exit_reason", "holding_period_bars",
+    "hold_bars", "max_hold_bars", "realized_vol_percentile_at_entry", "source_entry_idx",
+    "source_exit_idx",
+]
 MECHANISM_COLUMNS: Final[list[str]] = [
     "timeframe", "n_entries", "mean_gross_return_bps", "median_gross_return_bps",
     "mean_funding_accrual_bps", "median_funding_accrual_bps", "mean_net_return_bps_primary",
@@ -131,6 +139,8 @@ class Entry:
     funding_accrual_bps: float
     net_return_bps_primary: float
     net_return_bps_diagnostic: float
+    source_entry_idx: int | None = None
+    source_exit_idx: int | None = None
 
 
 def universe_hash(symbols: tuple[str, ...] = FROZEN_UNIVERSE) -> str:
@@ -446,6 +456,8 @@ def materialize_entries(plans: list[dict[str, Any]], funding_by_symbol: dict[str
             gross_return_bps=gross, funding_accrual_bps=fund,
             net_return_bps_primary=gross + fund - PRIMARY_COST_BPS,
             net_return_bps_diagnostic=gross + fund - DIAGNOSTIC_COST_BPS,
+            source_entry_idx=plan.get("entry_idx"),
+            source_exit_idx=plan.get("exit_idx"),
         ))
     return entries
 
@@ -627,17 +639,83 @@ def _write_all(run_dir: Path, manifest_base: dict[str, Any], coverage_rows: list
         "overall_status": status,
         "data_sources_used": data_sources,
     })
-    summary = {"run_id": manifest["run_id"], "phase0a_verdict": phase0a, "phase0b_verdict_by_timeframe": phase0b, "phase0c_verdict_by_timeframe": phase0c, "overall_status": status, "report_dir": str(run_dir)}
+    entries_full_path = run_dir / "entries_full.csv"
+    entries_preview_path = run_dir / "entries_preview.csv"
     _write_csv(run_dir / "coverage_by_symbol.csv", COVERAGE_COLUMNS, coverage_rows)
     _write_csv(run_dir / "regime_qualification_by_symbol.csv", REGIME_COLUMNS, cell_rows)
-    _write_csv(run_dir / "entries_preview.csv", ENTRY_COLUMNS, entry_rows[:200])
+    _write_csv(entries_full_path, FULL_ENTRY_COLUMNS, entry_rows)
+    _write_csv(entries_preview_path, ENTRY_COLUMNS, entry_rows[:200])
     _write_csv(run_dir / "mechanism_sanity_by_timeframe.csv", MECHANISM_COLUMNS, mech_rows)
     _write_csv(run_dir / "funding_vs_gross_decomposition.csv", ["timeframe", "median_gross_return_bps", "median_funding_accrual_bps", "median_abs_funding_to_abs_gross_ratio"], decomp_rows)
     _write_csv(run_dir / "flip_count_by_symbol.csv", ["symbol", "timeframe", "flip_count_per_symbol_per_year"], flip_rows)
+    entry_artifacts = _entry_artifact_metadata(entries_full_path, entries_preview_path, entry_rows)
+    entry_counts = _entry_counts_by_timeframe(entry_rows)
+    entry_reconciliation = _entry_aggregate_reconciliation(entry_rows)
+    manifest["entry_artifacts"] = entry_artifacts
+    manifest["entry_counts_by_timeframe"] = entry_counts
+    summary = {
+        "run_id": manifest["run_id"],
+        "phase0a_verdict": phase0a,
+        "phase0b_verdict_by_timeframe": phase0b,
+        "phase0c_verdict_by_timeframe": phase0c,
+        "overall_status": status,
+        "report_dir": str(run_dir),
+        "entry_artifacts": entry_artifacts,
+        "entry_counts_by_timeframe": entry_counts,
+        "entry_aggregate_reconciliation": entry_reconciliation,
+    }
     atomic_write_json(run_dir / "summary.json", summary)
     atomic_write_text(run_dir / "summary.md", _summary_md(summary, manifest))
     atomic_write_json(run_dir / "manifest.json", manifest)
     return {"run_dir": str(run_dir), "summary": summary, "manifest": manifest}
+
+
+def _entry_counts_by_timeframe(entry_rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in entry_rows:
+        timeframe = str(row.get("timeframe") or "")
+        if timeframe:
+            counts[timeframe] = counts.get(timeframe, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _entry_aggregate_reconciliation(entry_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in entry_rows:
+        grouped[str(row.get("timeframe") or "")].append(row)
+    out: dict[str, dict[str, Any]] = {}
+    for timeframe, rows in sorted(grouped.items()):
+        if not timeframe:
+            continue
+        gross = [float(r["gross_return_bps"]) for r in rows if r.get("gross_return_bps") not in (None, "")]
+        net = [float(r["net_return_bps_primary"]) for r in rows if r.get("net_return_bps_primary") not in (None, "")]
+        out[timeframe] = {
+            "n_entries": len(rows),
+            "median_gross_return_bps": median(gross) if gross else None,
+            "median_net_return_bps_primary": median(net) if net else None,
+        }
+    return out
+
+
+def _entry_artifact_metadata(full_path: Path, preview_path: Path, entry_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    full_rows = len(entry_rows)
+    preview_rows = min(full_rows, 200)
+    return {
+        "entries_full": {
+            "path": str(full_path),
+            "sha256": sha256_file(full_path),
+            "row_count": full_rows,
+            "artifact_role": "primary_full_per_entry_artifact",
+            "truncated": False,
+        },
+        "entries_preview": {
+            "path": str(preview_path),
+            "sha256": sha256_file(preview_path),
+            "row_count": preview_rows,
+            "artifact_role": "preview_truncated_first_200_rows",
+            "truncated": full_rows > preview_rows,
+        },
+    }
 
 
 def _empty_coverage_row(symbol: str) -> dict[str, Any]:
@@ -646,9 +724,19 @@ def _empty_coverage_row(symbol: str) -> dict[str, Any]:
 
 def _entry_to_row(e: Entry) -> dict[str, Any]:
     row = asdict(e)
-    row["entry_ts"] = _iso(e.entry_ts)
-    row["exit_ts"] = _iso(e.exit_ts)
+    entry_ts = _iso(e.entry_ts)
+    exit_ts = _iso(e.exit_ts)
+    row["entry_ts"] = entry_ts
+    row["exit_ts"] = exit_ts
+    row["entry_timestamp"] = entry_ts
+    row["exit_timestamp"] = exit_ts
     row["direction"] = "long" if e.direction > 0 else "short"
+    row["hold_bars"] = e.holding_period_bars
+    row["max_hold_bars"] = MAX_HOLD_BARS
+    row["funding_bps"] = e.funding_accrual_bps
+    row["explicit_fee_bps"] = PRIMARY_COST_BPS
+    row["realized_total_cost_bps"] = e.gross_return_bps - e.net_return_bps_primary
+    row["net_return_bps"] = e.net_return_bps_primary
     return row
 
 
