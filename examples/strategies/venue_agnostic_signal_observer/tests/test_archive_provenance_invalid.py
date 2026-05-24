@@ -14,8 +14,9 @@ from examples.strategies.venue_agnostic_signal_observer.liquidation_flush_afters
 )
 
 
-def test_no_real_archive_rows() -> None:
-    repo_root = Path.cwd()
+def test_no_real_archive_rows(tmp_path: Path) -> None:
+    # Use an isolated temporary directory that contains no archive data.
+    repo_root = tmp_path
     archive_paths = discover_archive_paths(repo_root)
     rows, diagnostics = load_archive_rows(archive_paths)
     assert rows == []
