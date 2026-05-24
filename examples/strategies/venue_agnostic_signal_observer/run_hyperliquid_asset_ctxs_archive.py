@@ -49,6 +49,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    # Guard against typo in output path
+    out_str = str(args.out)
+    if "hyperliquid" not in out_str:
+        raise ValueError(f"Output directory must contain 'hyperliquid' spelling; got: {out_str}")
     dates = _read_date_list(args.date_list)
     coins = [part.strip().upper() for part in args.coins.split(",") if part.strip()]
     try:
