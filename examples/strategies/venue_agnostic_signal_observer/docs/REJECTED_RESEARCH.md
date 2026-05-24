@@ -62,6 +62,7 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 || **Family 3 v1 funding × falling-OI unwind mapping** | Binance BTCUSDT negative funding extreme × falling OI → spot BTC forward returns | Binance Vision archive (BTCUSDT USDⓈ-M metrics + funding + spot) | **REJECTED** | 2 primary cells, 24h and 48h. Stage A POPULATION_SUFFICIENT after ms/µs spot-kline parser fix and preflight. Both cells GATES_FAILED at 50 bps primary cost: 24h mean_net -45.14 bps, WR 0.395; 48h mean_net -38.00 bps, WR 0.435. Both beat timestamp-shuffle null (p=0.010 / 0.035), but remained economically negative. "Less bad than random," not tradeable. | `family3-funding-falling-oi-unwind-v1-rejected` |
 || **Hyperliquid BTC->LINK fixed-cell paper replay v0** | Cross-asset beta-lag / BTC stress into LINK perp | Hyperliquid LINK perpetual public S3/archive order-book replay | **PAPER_EXECUTION_DIAGNOSTIC_FAIL_NOT_PROMOTED** | Corrected taker/taker executable ask/bid replay: 348/348 valid round trips, mean net +6.13 bps, median net +2.57 bps, win rate 51.7%, mean lower confidence bound -8.87 bps, pass criterion false. Prior +39.47 bps diagnostic pass invalidated by TIME_RANGE_LOADING_BUG. Not a formal v1 evaluation or null-tested research verdict; exact fixed cell not promoted to v1/shadow. | `hyperliquid-btc-link-fixed-cell-paper-replay-v0-not-promoted` |
 || **Hyperliquid multi-asset funding carry Phase 0** | Single-venue cross-sectional perp funding carry | Hyperliquid perps | **PHASE0_KILLED_NO_CROSS_SECTIONAL_FUNDING_TAIL** | Real public Hyperliquid universe discovery/backfill path built; Phase 0A/0B diagnostics only. Phase 0B spread tail absent: p50 0.035 bps, p90 0.194 bps, p95 0.257 bps vs frozen kill gates p50 >= 3 bps and p90 >= 10 bps. All 18 grid cells underpowered. `v1_unlocked: false`. Not a full `REJECTED` strategy verdict: no v1 evaluator, strategy PnL, null, FDR, holdout, execution, shadow executor, or bot path was used. | `hyperliquid-multi-asset-funding-carry-phase0-killed-no-tail` |
+| **Hyperliquid Supertrend 4h/1d altcoin perp Phase 0** | Supertrend trend-following, ATR(10), multiplier 3.0 | Hyperliquid perps, frozen 20 altcoin perps excluding BTC/ETH/SOL | **PHASE0_KILLED_NO_V1_UNLOCKED** | Phase 0A passed; Phase 0B passed on 4h and 1d; Phase 0C killed the frozen design. 4h: `PHASE0C_NO_GROSS_EDGE`, 791 entries, median gross -152.8785 bps, median net primary -173.3985 bps. 1d: `PHASE0C_GROSS_POSITIVE_NET_NEGATIVE`, 151 entries, median gross +51.6581 bps, median net primary -65.4625 bps. Overall: `PHASE0C_NO_GROSS_EDGE`; `v1_unlocked: false`. Not a full `REJECTED` strategy verdict: no null, FDR, holdout, orders, private keys, auth, live execution, shadow, or bot path was used. | `hyperliquid-supertrend-4h1d-altcoin-perp-phase0-killed-no-v1` |
 
 ## Rejection Details
 
@@ -702,6 +703,70 @@ falsification) remains available for other observer studies that share a compati
 report schema. The v2 evaluator, heatmap, cost sensitivity, permutation null, and
 falsification tools are generic across observer frameworks that produce lead-lag-group
 output format, not exclusive to the now-rejected derivatives v2 hypothesis.
+
+### Hyperliquid Supertrend 4h/1d altcoin perp Phase 0
+
+**Study ID:** `hyperliquid_supertrend_4h1d_altcoin_perp_v0`
+
+**Tag:** `hyperliquid-supertrend-4h1d-altcoin-perp-phase0-killed-no-v1`
+
+**Verdict label:** `PHASE0_KILLED_NO_V1_UNLOCKED`
+
+**Branch:** `feat/hyperliquid-supertrend-4h1d-altcoin-perp-phase0`
+
+**Commit SHA:** `dde42bbae1fff4d54a49d97f9a621abebfdfe4c4`
+
+**Report:** `reports/hyperliquid_supertrend_4h1d_phase0/hyperliquid_supertrend_4h1d_phase0_20260524T053716_587572_3ae25f`
+
+**Precommitment hash:** `91460cf160b6df75ed853bcd87642d8cfa8ceda07b5fa48576c5d529bf608bb1`
+
+**Study:** Hyperliquid Supertrend 4h/1d altcoin perp Phase 0.
+
+**Signal family:** Supertrend trend-following, ATR(10), multiplier 3.0.
+
+**Venue:** Hyperliquid perpetuals.
+
+**Universe:** Frozen 20 altcoin perps excluding BTC, ETH, and SOL: HYPE, XRP, DOGE, BNB, ADA, LINK, AVAX, SUI, TRX, LTC, BCH, TON, DOT, AAVE, UNI, APT, ARB, OP, SEI, INJ.
+
+**Data window:** 2025-03-01T00:00:00Z to 2026-04-30T23:00:00Z.
+
+**Rows:** 204,480 hourly price rows; 204,460 funding rows.
+
+**Phase results:**
+
+| Phase | Result |
+|---|---|
+| Phase 0A | `PHASE0A_PASSED` |
+| Phase 0B 4h | `PHASE0B_PASSED` |
+| Phase 0B 1d | `PHASE0B_PASSED` |
+| Phase 0C 4h | `PHASE0C_NO_GROSS_EDGE` |
+| Phase 0C 1d | `PHASE0C_GROSS_POSITIVE_NET_NEGATIVE` |
+| Overall | `PHASE0C_NO_GROSS_EDGE` |
+| v1 unlocked | false |
+
+**Mechanism diagnostics:**
+
+| Timeframe | Entries | Median gross bps | Median net primary bps | Interpretation |
+|---|---:|---:|---:|---|
+| 4h | 791 | -152.87848344544423 | -173.39852944544424 | Failed because there was no median gross edge. |
+| 1d | 151 | 51.65811718806597 | -65.46250328485137 | Positive median gross, but failed after funding/cost under the frozen primary model. |
+
+**Conclusion:** This frozen Phase 0 Supertrend v0 design does not justify a v1 precommitment. The result is a Phase 0 killed/no-v1-unlocked outcome, not a full strategy `REJECTED` verdict.
+
+**What this closes:**
+- The exact frozen Phase 0 Supertrend v0 design above.
+- The frozen 4h/1d timeframes, ATR(10), multiplier 3.0, frozen universe, realized-volatility entry regime filter, and primary 10 bps round-trip model.
+
+**What this does NOT globally reject:**
+- Hyperliquid as a venue.
+- Altcoin perpetuals generally.
+- All trend-following mechanisms.
+- Maker execution or different execution assumptions.
+- Different timeframes.
+- Different regime filters.
+- Non-Supertrend mechanisms.
+
+**Safety and scope:** No null, FDR, or holdout was run. No orders, private keys, authentication, live execution, shadow execution, or bot path was used. Funding was used only as a held-position return component. OI remained quarantined from signal, filter, and ranking behavior.
 
 
 ---
