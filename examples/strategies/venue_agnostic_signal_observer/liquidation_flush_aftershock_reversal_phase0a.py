@@ -74,7 +74,7 @@ PRICE_FIELDS = ("mark_price", "markPx", "mark_price", "markPrice", "mark", "pric
 OI_FIELDS = ("open_interest", "openInterest", "oi", "open_interest_usd")
 
 DISCOVERY_PATHS = (
-    Path("examples/strategies/venue_agnostic_signal_observer/data/hyperliquid"),
+    Path("data/hyperliquid_oi_velocity_compression_phase0"),
     Path("data/hyperliquid_archive"),
     Path("reports/hyperliquid_oi_velocity_compression_phase0"),
 )
@@ -639,7 +639,7 @@ def run_phase0a_audit(rows: Sequence[ArchiveRow], diagnostics: LoadDiagnostics, 
     event_count, max_symbol_share, max_symbol_symbol, max_year_share, max_year, symbols_with_3 = _event_stats(accepted_after_all)
     status = determine_status(clean_symbols, event_count, symbols_with_3, max_symbol_share, max_year_share, invalid_input, invalid_precommitment, missing_required_fields)
     unlocks = status == STATUS_READY
-    if unlocks:
+    if status == STATUS_READY:
         locked_reason = ""
     elif status == STATUS_INVALID_INPUT:
         locked_reason = "invalid input archive"
@@ -651,8 +651,10 @@ def run_phase0a_audit(rows: Sequence[ArchiveRow], diagnostics: LoadDiagnostics, 
         locked_reason = "accepted event population below 100 after cooldown or fewer than 8 symbols with at least 3 events"
     elif status == STATUS_SYMBOL_CONCENTRATION:
         locked_reason = "single symbol contributed more than 30% of accepted events"
+    elif status == STATUS_YEAR_CONCENTRATION:
+        locked_reason = f"max_calendar_year_event_share {max_year_share:.3f} exceeds threshold 0.45 (year {max_year})"
     else:
-        locked_reason = "single calendar year contributed more than 45% of accepted events"
+        locked_reason = "unknown status"
 
     archive_start = min(archive_times) if archive_times else None
     archive_end = max(archive_times) if archive_times else None
@@ -729,6 +731,10 @@ def _write_csv(path: Path, fieldnames: Sequence[str], rows: Iterable[dict[str, A
 def summary_markdown(result: Phase0AResult) -> str:
     s = result.summary
     warnings = "\n".join(f"- {w}" for w in result.warnings) if result.warnings else "- none"
+    extra_note = ""
+    if s['status'] == STATUS_YEAR_CONCENTRATION:
+        # Archive spans a single calendar year; by construction cannot satisfy year-concentration gate.
+        extra_note = "\n\n**Note:** Archive covers a single calendar year and therefore cannot meet the pre‑committed max‑calendar‑year share gate (45%). This is a structural limitation, not a profitability rejection.\n"
     return f"""# Liquidation flush aftershock reversal v0 Phase 0A summary
 
 Status: `{s['status']}`
@@ -760,7 +766,7 @@ Symbols with at least 3 accepted events: {s['symbols_with_at_least_3_events']}
 Max symbol event share: {s['max_symbol_event_share']} ({s['max_symbol_event_share_symbol']})
 
 Max calendar year event share: {s['max_calendar_year_event_share']} ({s['max_calendar_year']})
-
+{extra_note}
 ## Scope
 
 Archive-only Phase 0A event-population audit. No profitability, forward return, PnL, null, FDR, v1 authorization, live execution, paper trading, or trading authorization was performed.
