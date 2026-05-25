@@ -184,8 +184,74 @@ def test_survivorship_ambiguity_prevents_clean_pass():
         month=null_summary(100),
         circular_shift=null_summary(100),
     )
-    assert verdict == "SURVIVORSHIP_AMBIGUITY"
+    assert verdict == phase0c.STATUS_SURVIVORSHIP_AMBIGUITY
 
+
+def test_primary_null_pass_circular_shift_failure_is_not_clean_pass():
+    verdict = phase0c.classify_phase0c(
+        real=phase0c.RealPrimaryMetrics(175.0, 125.0, 97.0, 0.56, 951),
+        survivorship_status="OK",
+        primary=null_summary(mean_95th=13.0, p_value=0.000999),
+        month=phase0c.NullSummary(
+            0,
+            948 / 951,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            status=phase0c.STATUS_MONTH_NULL_NOT_APPLICABLE,
+            missing_candidate_details=[
+                {"symbol": "ONDO", "month": "2024-01"},
+                {"symbol": "ONDO", "month": "2024-01"},
+                {"symbol": "ONDO", "month": "2024-01"},
+            ],
+        ),
+        circular_shift=null_summary(mean_95th=860.0, p_value=0.974),
+    )
+    assert verdict == phase0c.STATUS_NULL_REJECTED_CLUSTERING
+    assert verdict != phase0c.STATUS_NULL_VALIDATED_PASS
+
+
+def test_circular_shift_failure_plus_survivorship_ambiguity_preserves_both_blockers():
+    verdict = phase0c.classify_phase0c(
+        real=phase0c.RealPrimaryMetrics(175.0, 125.0, 97.0, 0.56, 951),
+        survivorship_status=phase0c.STATUS_SURVIVORSHIP_AMBIGUITY,
+        primary=null_summary(mean_95th=13.0, p_value=0.000999),
+        month=null_summary(mean_95th=0.0),
+        circular_shift=null_summary(mean_95th=860.0, p_value=0.974),
+    )
+    assert verdict == phase0c.STATUS_NULL_REJECTED_CLUSTERING_WITH_SURVIVORSHIP_AMBIGUITY
+
+
+def test_v1_drafting_false_when_circular_shift_fails():
+    summary = phase0c.build_summary(
+        phase0c.STATUS_NULL_REJECTED_CLUSTERING, "hash", Path("p0a"), Path("p0b"), True, True,
+        phase0c.RealPrimaryMetrics(175.0, 125.0, 97.0, 0.56, 951),
+        null_summary(mean_95th=13.0, p_value=0.000999),
+        null_summary(mean_95th=0.0),
+        null_summary(mean_95th=860.0, p_value=0.974),
+        1.0,
+        True,
+        {"survivorship_status": "OK"},
+    )
+    assert summary["final_verdict"] == phase0c.STATUS_NULL_REJECTED_CLUSTERING
+    assert summary["v1_unlock"] is False
+
+
+def test_v1_drafting_false_when_survivorship_ambiguity_exists():
+    summary = phase0c.build_summary(
+        phase0c.STATUS_SURVIVORSHIP_AMBIGUITY, "hash", Path("p0a"), Path("p0b"), True, True,
+        phase0c.RealPrimaryMetrics(175.0, 125.0, 97.0, 0.56, 951),
+        null_summary(mean_95th=13.0, p_value=0.000999),
+        null_summary(mean_95th=0.0),
+        null_summary(mean_95th=100.0, p_value=0.01),
+        1.0,
+        True,
+        {"survivorship_status": phase0c.STATUS_SURVIVORSHIP_AMBIGUITY},
+    )
+    assert summary["final_verdict"] == phase0c.STATUS_SURVIVORSHIP_AMBIGUITY
+    assert summary["v1_unlock"] is False
 
 
 def test_primary_null_missing_candidate_is_hard_non_pass():

@@ -43,6 +43,7 @@ STATUS_NULL_VALIDATED_PASS = "PHASE0C_FALSIFICATION_PASSED_DIAGNOSTIC"
 STATUS_NULL_REJECTED_PLACEBO_MATCH = "PLACEBO_EXPLAINED"
 STATUS_NULL_REJECTED_MONTH = "CALENDAR_REGIME_EXPLAINED"
 STATUS_NULL_REJECTED_CLUSTERING = "CLUSTERING_EXPLAINED"
+STATUS_NULL_REJECTED_CLUSTERING_WITH_SURVIVORSHIP_AMBIGUITY = "PHASE0C_CLUSTERING_EXPLAINED_WITH_SURVIVORSHIP_AMBIGUITY"
 STATUS_COST_FRAGILE = "COST_FRAGILE"
 STATUS_SURVIVORSHIP_AMBIGUITY = "SURVIVORSHIP_AMBIGUITY"
 STATUS_INCONCLUSIVE = "INCONCLUSIVE"
@@ -683,8 +684,6 @@ def compute_confidence_bound(values: Sequence[float], confidence: float = 0.95) 
 
 
 def classify_phase0c(real: RealPrimaryMetrics, survivorship_status: str, primary: NullSummary, month: NullSummary, circular_shift: NullSummary, direction_shuffle_p_value: float = 1.0, all_events_same_direction: bool = True) -> str:
-    if survivorship_status == STATUS_SURVIVORSHIP_AMBIGUITY:
-        return STATUS_SURVIVORSHIP_AMBIGUITY
     if primary.status == STATUS_PRIMARY_NULL_INSUFFICIENT_CANDIDATES:
         return STATUS_PRIMARY_NULL_INSUFFICIENT_CANDIDATES
     if primary.coverage < 0.8:
@@ -693,10 +692,17 @@ def classify_phase0c(real: RealPrimaryMetrics, survivorship_status: str, primary
         return STATUS_NULL_REJECTED_PLACEBO_MATCH
     if month.status != STATUS_MONTH_NULL_NOT_APPLICABLE and real.net_mean_bps <= month.mean_95th:
         return STATUS_NULL_REJECTED_MONTH
-    if real.net_mean_bps <= circular_shift.mean_95th:
+
+    circular_shift_failed = real.net_mean_bps <= circular_shift.mean_95th
+    survivorship_ambiguous = survivorship_status == STATUS_SURVIVORSHIP_AMBIGUITY
+    if circular_shift_failed and survivorship_ambiguous:
+        return STATUS_NULL_REJECTED_CLUSTERING_WITH_SURVIVORSHIP_AMBIGUITY
+    if circular_shift_failed:
         return STATUS_NULL_REJECTED_CLUSTERING
     if real.net_mean_bps - 25.0 <= 0 or real.net_mean_bps - 50.0 <= 0:
         return STATUS_COST_FRAGILE
+    if survivorship_ambiguous:
+        return STATUS_SURVIVORSHIP_AMBIGUITY
     return STATUS_NULL_VALIDATED_PASS
 
 

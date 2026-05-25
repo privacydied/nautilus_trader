@@ -64,6 +64,7 @@ Rationale: Null testing checks whether randomly shifted source timing could prod
 || **Hyperliquid BTC->LINK fixed-cell paper replay v0** | Cross-asset beta-lag / BTC stress into LINK perp | Hyperliquid LINK perpetual public S3/archive order-book replay | **PAPER_EXECUTION_DIAGNOSTIC_FAIL_NOT_PROMOTED** | Corrected taker/taker executable ask/bid replay: 348/348 valid round trips, mean net +6.13 bps, median net +2.57 bps, win rate 51.7%, mean lower confidence bound -8.87 bps, pass criterion false. Prior +39.47 bps diagnostic pass invalidated by TIME_RANGE_LOADING_BUG. Not a formal v1 evaluation or null-tested research verdict; exact fixed cell not promoted to v1/shadow. | `hyperliquid-btc-link-fixed-cell-paper-replay-v0-not-promoted` |
 || **Hyperliquid multi-asset funding carry Phase 0** | Single-venue cross-sectional perp funding carry | Hyperliquid perps | **PHASE0_KILLED_NO_CROSS_SECTIONAL_FUNDING_TAIL** | Real public Hyperliquid universe discovery/backfill path built; Phase 0A/0B diagnostics only. Phase 0B spread tail absent: p50 0.035 bps, p90 0.194 bps, p95 0.257 bps vs frozen kill gates p50 >= 3 bps and p90 >= 10 bps. All 18 grid cells underpowered. `v1_unlocked: false`. Not a full `REJECTED` strategy verdict: no v1 evaluator, strategy PnL, null, FDR, holdout, execution, shadow executor, or bot path was used. | `hyperliquid-multi-asset-funding-carry-phase0-killed-no-tail` |
 | **Hyperliquid Supertrend 4h/1d altcoin perp v0** | Supertrend Phase 0 indicator diagnostic | Hyperliquid altcoin perpetuals | **PHASE0_CLOSED_INDICATOR_FAMILY_DIAGNOSTIC** | Frozen 20-symbol public-data Hyperliquid altcoin perp universe. 4h failed gross layer: 791 entries, median gross -152.87848344544423 bps, median net primary -173.39852944544424 bps (`PHASE0C_NO_GROSS_EDGE`). 1d was gross-positive but net-negative: 151 entries, median gross +51.65811718806597 bps, median net primary -65.46250328485137 bps (`PHASE0C_GROSS_POSITIVE_NET_NEGATIVE`). Recovered per-entry artifacts reconcile exactly; residual diagnostic emitted regime concentration, Supertrend exit/giveback blocker, and family closure statuses. Exact v0 branch closed; not promoted and not a broad Hyperliquid rejection. | `hyperliquid-supertrend-4h1d-altcoin-perp-v0-closed` |
+|| **Hyperliquid venue-age-aware liquidation-flush aftershock reversal Phase 0A/0B/0C** | Venue-age-aware liquidation-flush aftershock reversal | Hyperliquid public archive altcoin perps | **PHASE0C_CLUSTERING_EXPLAINED_WITH_SURVIVORSHIP_AMBIGUITY** | Phase 0A population ready: 955 accepted after cooldown, 31 symbols with >=3 events. Phase 0B 24h diagnostic positive after 50 bps: mean +125.95 bps, median +97.65 bps, win rate 56.68%. Phase 0C primary timestamp placebo passed (p≈0.000999), month null incomplete but high coverage (948/951; 3 missing ONDO Jan 2024), circular-shift clustering null failed/explained result (p≈0.974), survivorship ambiguity present. 75/100 bps cost stress stayed positive, but does not override null failure. No Phase 0D, v1, paper, shadow, or live. Scope: rejects this public-archive venue-age-aware formulation, not every liquidation/cascade strategy. | — |
 
 ## Rejection Details
 
@@ -997,3 +998,31 @@ Safety: public-data observer/research only. No orders, auth, private keys, live 
 Economic evaluation, returns/PnL/null/FDR were not run.
 
 Safety: public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, or bot path were used.
+### Hyperliquid Venue-Age-Aware Liquidation-Flush Aftershock Reversal Phase 0A/0B/0C
+
+**Verdict:** `PHASE0C_CLUSTERING_EXPLAINED_WITH_SURVIVORSHIP_AMBIGUITY`
+
+**Study identity:** Hyperliquid venue-age-aware liquidation-flush aftershock reversal Phase 0A/0B/0C. This is a scoped public-archive Phase 0 diagnostic closure, not a broad rejection of every liquidation/cascade strategy and not authorization for execution.
+
+**Phase 0A population:**
+- `accepted_event_count_after_cooldown`: 955
+- `symbols_with_at_least_3_events`: 31
+
+**Phase 0B diagnostic return result:**
+- 24h net mean after 50 bps: +125.95 bps
+- 24h net median after 50 bps: +97.65 bps
+- Win rate: 56.68%
+
+**Phase 0C null/falsification result:**
+- Primary timestamp placebo passed: p≈0.000999
+- Month null incomplete but high coverage: 948/951 candidates, missing 3 ONDO Jan 2024 events
+- Circular-shift clustering null failed / explained result: p≈0.974
+- Survivorship ambiguity present
+- 75/100 bps cost stress remained positive, but positive cost stress does not override the circular-shift null failure or survivorship ambiguity
+
+**Decision:** No Phase 0D, no v1, no paper/shadow/live.
+
+**Boundary:** This rejects the tested public-archive Hyperliquid venue-age-aware liquidation-flush aftershock reversal formulation, not every possible liquidation/cascade strategy.
+
+---
+
