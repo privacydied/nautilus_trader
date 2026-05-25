@@ -976,3 +976,24 @@ Evidence:
 | 12h median absolute return | 17.1898 bps |
 
 Safety: public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, or bot path were used.
+
+### Liquidation Flush Aftershock Reversal Phase0A (Hyperliquid)
+
+**Verdict:** `PHASE0A_TEMPORAL_DIVERSIFICATION_GATE_UNSATISFIABLE_FOR_VENUE_AGE`
+**Status:** NOT_REJECTED
+**Phase 0B:** LOCKED
+
+**Reason:** frozen `max_calendar_year_event_share <= 0.45` gate cannot be satisfied with only two calendar years of venue/archive data.
+
+**Archive window:** 2024-01-01 through 2025-12-31
+**accepted_event_count_after_cooldown:** 972
+**Year distribution:**
+- 2024: 560 events, share 0.576
+- 2025: 412 events, share 0.424
+
+**Theoretical minimum max-year share with 2 years:** 0.50
+**Frozen threshold:** 0.45
+
+Economic evaluation, returns/PnL/null/FDR were not run.
+
+Safety: public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, or bot path were used.
