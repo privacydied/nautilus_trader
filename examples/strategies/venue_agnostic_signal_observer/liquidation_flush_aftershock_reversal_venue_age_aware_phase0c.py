@@ -15,6 +15,7 @@ import random
 import statistics
 import time
 import csv
+import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -47,6 +48,9 @@ STATUS_SURVIVORSHIP_AMBIGUITY = "SURVIVORSHIP_AMBIGUITY"
 STATUS_INCONCLUSIVE = "INCONCLUSIVE"
 STATUS_ERROR = "PHASE0C_ERROR"
 STATUS_INSUFFICIENT_NULL_COVERAGE = "PHASE0C_INSUFFICIENT_NULL_COVERAGE"
+STATUS_PRIMARY_NULL_INSUFFICIENT_CANDIDATES = "PHASE0C_PRIMARY_NULL_INSUFFICIENT_CANDIDATES"
+STATUS_MONTH_NULL_INSUFFICIENT_CANDIDATES = "PHASE0C_MONTH_NULL_INSUFFICIENT_CANDIDATES"
+STATUS_MONTH_NULL_NOT_APPLICABLE = "MONTH_NULL_NOT_APPLICABLE_INSUFFICIENT_CANDIDATES"
 
 
 class SourceArtifactMismatch(RuntimeError):
@@ -59,6 +63,13 @@ class Phase0BReproductionFailed(RuntimeError):
 
 class Phase0CIncomplete(RuntimeError):
     """Raised when a partial report must not be treated as complete."""
+
+
+class Phase0CCacheInvalid(RuntimeError):
+    """Raised when a Phase 0C cache is missing, corrupt, or lacks metadata."""
+
+
+CACHE_SCHEMA_VERSION = "phase0c-cache-v2"
 
 
 @dataclass(frozen=True)
@@ -84,6 +95,11 @@ class NullSummary:
     win_rate_p95: float = 0.0
     median_distribution_median: float = 0.0
     status: str = "OK"
+    missing_candidate_details: list[dict[str, Any]] | None = None
+
+    @property
+    def missing_candidate_count(self) -> int:
+        return len(self.missing_candidate_details or [])
 
 
 @dataclass(frozen=True)
@@ -228,8 +244,9 @@ def perform_survivorship_audit(archive_path: Path, real_events: Sequence[dict[st
 
 def _build_cache(archive_path: Path) -> Phase0CLightCache:
     start = time.perf_counter()
+    print(f"PHASE0C_CACHE_BUILD_START archive_path={archive_path}", flush=True)
     rows, diagnostics = load_archive_rows([archive_path])
-    price_series = build_price_series(rows)
+    print(f"PHASE0C_CACHE_ARCHIVE_LOADED rows={len(rows)} elapsed_seconds={time.perf_counter() - start:.3f}", flush=True)
     symbol_rows: dict[str, list[ArchiveRow]] = {}
     for row in rows:
         if row.symbol.upper() in ALTCOIN_EXCLUDED_SYMBOLS:
@@ -239,7 +256,10 @@ def _build_cache(archive_path: Path) -> Phase0CLightCache:
         rows_for_symbol.sort(key=lambda row: row.timestamp)
     elapsed = time.perf_counter() - start
     diag = diagnostics if isinstance(diagnostics, dict) else asdict(diagnostics)
-    return Phase0CLightCache(price_series=price_series, symbol_rows=symbol_rows, build_elapsed_seconds=elapsed, diagnostics=diag)
+    diag["loaded_rows"] = len(rows)
+    diag["cache_symbol_count"] = len(symbol_rows)
+    print(f"PHASE0C_CACHE_BUILD_READY symbols={len(symbol_rows)} elapsed_seconds={elapsed:.3f}", flush=True)
+    return Phase0CLightCache(price_series={}, symbol_rows=symbol_rows, build_elapsed_seconds=elapsed, diagnostics=diag)
 
 
 def _build_profile_cache(phase0a_report_path: Path, archive_path: Path) -> Phase0CLightCache:
@@ -261,23 +281,174 @@ def _build_profile_cache(phase0a_report_path: Path, archive_path: Path) -> Phase
     return Phase0CLightCache(price_series=price_series, symbol_rows=symbol_rows, build_elapsed_seconds=elapsed, diagnostics=diag)
 
 
-def _load_or_build_cache(cache_path: Path, create: Callable[[], Phase0CLightCache]) -> Phase0CLightCache:
-    if cache_path.exists():
-        try:
-            with cache_path.open("rb") as f:
-                cached = pickle.load(f)
-            if isinstance(cached, Phase0CLightCache):
-                return cached
-        except (EOFError, pickle.PickleError, AttributeError):
-            cache_path.unlink(missing_ok=True)
+def _cache_metadata_path(cache_path: Path) -> Path:
+    return cache_path.with_suffix(cache_path.suffix + ".meta.json")
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _archive_manifest_hash(archive_path: Path) -> str:
+    h = hashlib.sha256()
+    paths = [archive_path] if archive_path.is_file() else sorted(p for p in archive_path.rglob("*") if p.is_file())
+    for path in paths:
+        if path.name.endswith("manifest.json") or path.suffix.lower() not in {".csv", ".jsonl", ".json", ".parquet"}:
+            continue
+        rel = str(path.relative_to(archive_path) if archive_path.is_dir() else path.name)
+        stat = path.stat()
+        h.update(rel.encode())
+        h.update(str(stat.st_size).encode())
+        h.update(str(stat.st_mtime_ns).encode())
+    return h.hexdigest()
+
+
+def _cache_row_bounds(cache: Phase0CLightCache) -> tuple[int, int, str | None, str | None]:
+    row_count = 0
+    first: datetime | None = None
+    last: datetime | None = None
+    for rows in cache.symbol_rows.values():
+        row_count += len(rows)
+        if not rows:
+            continue
+        local_first = rows[0].timestamp
+        local_last = rows[-1].timestamp
+        first = local_first if first is None or local_first < first else first
+        last = local_last if last is None or local_last > last else last
+    return row_count, len(cache.symbol_rows), utc_iso(first) if first else None, utc_iso(last) if last else None
+
+
+def _build_cache_metadata(cache_path: Path, cache: Phase0CLightCache, *, archive_path: Path, precommitment_sha256: str, build_started_utc: str, build_finished_utc: str) -> dict[str, Any]:
+    row_count, symbol_count, first_ts, last_ts = _cache_row_bounds(cache)
+    cache_sha = _sha256_file(cache_path)
+    return {
+        "cache_schema_version": CACHE_SCHEMA_VERSION,
+        "source_archive_path": str(archive_path),
+        "archive_manifest_hash": _archive_manifest_hash(archive_path),
+        "row_count": row_count,
+        "symbol_count": symbol_count,
+        "first_timestamp_utc": first_ts,
+        "last_timestamp_utc": last_ts,
+        "build_started_utc": build_started_utc,
+        "build_finished_utc": build_finished_utc,
+        "precommitment_sha256": precommitment_sha256,
+        "cache_sha256": cache_sha,
+        "cache_size_bytes": cache_path.stat().st_size,
+        "cache_path": str(cache_path),
+    }
+
+
+def _load_validated_cache(cache_path: Path) -> Phase0CLightCache:
+    metadata_path = _cache_metadata_path(cache_path)
+    if not cache_path.exists():
+        raise Phase0CCacheInvalid(f"cache missing: {cache_path}")
+    if cache_path.with_suffix(cache_path.suffix + ".tmp").exists():
+        raise Phase0CCacheInvalid(f"incomplete temp cache present: {cache_path.with_suffix(cache_path.suffix + '.tmp')}")
+    if not metadata_path.exists():
+        raise Phase0CCacheInvalid(f"cache metadata sidecar missing: {metadata_path}")
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise Phase0CCacheInvalid(f"cache metadata unreadable: {metadata_path}: {exc}") from exc
+    if metadata.get("cache_schema_version") != CACHE_SCHEMA_VERSION:
+        raise Phase0CCacheInvalid(f"cache schema mismatch: {metadata.get('cache_schema_version')}")
+    if not metadata.get("precommitment_sha256"):
+        raise Phase0CCacheInvalid("cache metadata missing precommitment_sha256")
+    if metadata.get("cache_path") != str(cache_path):
+        raise Phase0CCacheInvalid(f"cache path mismatch: metadata={metadata.get('cache_path')} actual={cache_path}")
+    if metadata.get("cache_size_bytes") != cache_path.stat().st_size:
+        raise Phase0CCacheInvalid("cache size mismatch between metadata and payload")
+    actual_sha = _sha256_file(cache_path)
+    if metadata.get("cache_sha256") != actual_sha:
+        raise Phase0CCacheInvalid(f"cache hash mismatch: metadata={metadata.get('cache_sha256')} actual={actual_sha}")
+    try:
+        with cache_path.open("rb") as f:
+            cached = pickle.load(f)
+    except Exception as exc:
+        raise Phase0CCacheInvalid(f"cache pickle unreadable: {cache_path}: {exc}") from exc
+    if not isinstance(cached, Phase0CLightCache):
+        raise Phase0CCacheInvalid(f"cache has invalid type: {type(cached).__name__}")
+    row_count, symbol_count, _, _ = _cache_row_bounds(cached)
+    if metadata.get("row_count") != row_count or metadata.get("symbol_count") != symbol_count:
+        raise Phase0CCacheInvalid("cache metadata row/symbol counts do not match payload")
+    return cached
+
+
+def _write_cache_atomic(cache_path: Path, cache: Phase0CLightCache, *, archive_path: Path, precommitment_sha256: str, build_started_utc: str, build_finished_utc: str) -> dict[str, Any]:
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
-    result = create()
+    tmp_meta_path = _cache_metadata_path(cache_path).with_suffix(_cache_metadata_path(cache_path).suffix + ".tmp")
+    tmp_path.unlink(missing_ok=True)
+    tmp_meta_path.unlink(missing_ok=True)
     with tmp_path.open("wb") as f:
-        pickle.dump(result, f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(cache, f, protocol=pickle.HIGHEST_PROTOCOL)
+        f.flush()
+        os.fsync(f.fileno())
     tmp_path.replace(cache_path)
+    metadata = _build_cache_metadata(
+        cache_path,
+        cache,
+        archive_path=archive_path,
+        precommitment_sha256=precommitment_sha256,
+        build_started_utc=build_started_utc,
+        build_finished_utc=build_finished_utc,
+    )
+    tmp_meta_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    with tmp_meta_path.open("rb") as f:
+        os.fsync(f.fileno())
+    tmp_meta_path.replace(_cache_metadata_path(cache_path))
+    _load_validated_cache(cache_path)
+    return metadata
+
+
+def _load_or_build_cache(cache_path: Path, create: Callable[[], Phase0CLightCache], archive_path: Path | None = None, precommitment_sha256: str = "") -> Phase0CLightCache:
+    if not precommitment_sha256:
+        raise Phase0CCacheInvalid("precommitment_sha256 is required to build or load Phase 0C cache")
+    tmp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
+    if tmp_path.exists():
+        print(f"PHASE0C_CACHE_TMP_IGNORED path={tmp_path} size={tmp_path.stat().st_size}", flush=True)
+        tmp_path.unlink(missing_ok=True)
+    if cache_path.exists():
+        return _load_validated_cache(cache_path)
+    if archive_path is None:
+        archive_path = cache_path.parent
+    build_started = utc_iso(datetime.now(UTC))
+    result = create()
+    build_finished = utc_iso(datetime.now(UTC))
+    _write_cache_atomic(cache_path, result, archive_path=archive_path, precommitment_sha256=precommitment_sha256, build_started_utc=build_started, build_finished_utc=build_finished)
     return result
 
+
+def build_phase0c_cache_only(archive_path: Path, cache_path: Path, precommitment_sha256: str) -> dict[str, Any]:
+    build_started = utc_iso(datetime.now(UTC))
+    start = time.perf_counter()
+    cache = _build_cache(archive_path)
+    build_finished = utc_iso(datetime.now(UTC))
+    metadata = _write_cache_atomic(
+        cache_path,
+        cache,
+        archive_path=archive_path,
+        precommitment_sha256=precommitment_sha256,
+        build_started_utc=build_started,
+        build_finished_utc=build_finished,
+    )
+    elapsed = time.perf_counter() - start
+    print(
+        f"PHASE0C_CACHE_READY path={cache_path} size={cache_path.stat().st_size} rows={metadata['row_count']} symbols={metadata['symbol_count']} elapsed_seconds={elapsed:.3f}",
+        flush=True,
+    )
+    return {
+        "status": "PHASE0C_CACHE_READY",
+        "cache_path": str(cache_path),
+        "cache_metadata_path": str(_cache_metadata_path(cache_path)),
+        "cache_size_bytes": cache_path.stat().st_size,
+        "cache_build_elapsed_seconds": elapsed,
+        "cache_metadata": metadata,
+    }
 
 def build_symbol_month_candidates(rows: Sequence[ArchiveRow]) -> dict[tuple[str, int, int], list[ArchiveRow]]:
     out: dict[tuple[str, int, int], list[ArchiveRow]] = {}
@@ -395,6 +566,28 @@ def _reproduce_phase0b_or_raise(real: RealPrimaryMetrics, phase0b_summary: dict[
         raise Phase0BReproductionFailed(f"Phase0B evaluated event count mismatch: actual={real.event_count} expected={primary.get('evaluated_event_count')}")
 
 
+def _candidate_coverage(real_events: Sequence[dict[str, Any]], eligible_candidates: dict[Any, list[ArchiveRow]]) -> dict[str, Any]:
+    missing: list[dict[str, Any]] = []
+    with_candidate = 0
+    for event in real_events:
+        symbol = str(event["symbol"]).upper()
+        event_ts = parse_ts(event["event_timestamp_utc"])
+        key = (symbol, event_ts.year, event_ts.month)
+        pool = eligible_candidates.get(key) or eligible_candidates.get(symbol) or []
+        if pool:
+            with_candidate += 1
+            continue
+        missing.append({"symbol": symbol, "month": f"{event_ts:%Y-%m}", "event_timestamp_utc": utc_iso(event_ts)})
+    required = len(real_events)
+    return {
+        "required_events": required,
+        "events_with_candidate": with_candidate,
+        "missing_candidate_count": len(missing),
+        "missing_candidate_examples": missing[:10],
+        "coverage_ratio": with_candidate / required if required else 1.0,
+    }
+
+
 def sample_matched_placebo_events(real_events: Sequence[dict[str, Any]], eligible_candidates: dict[Any, list[ArchiveRow]], *, seed: int, horizon_hours: int, min_hours_exclude: float = 48.0) -> list[dict[str, Any]]:
     rng = random.Random(seed)
     out: list[dict[str, Any]] = []
@@ -492,11 +685,13 @@ def compute_confidence_bound(values: Sequence[float], confidence: float = 0.95) 
 def classify_phase0c(real: RealPrimaryMetrics, survivorship_status: str, primary: NullSummary, month: NullSummary, circular_shift: NullSummary, direction_shuffle_p_value: float = 1.0, all_events_same_direction: bool = True) -> str:
     if survivorship_status == STATUS_SURVIVORSHIP_AMBIGUITY:
         return STATUS_SURVIVORSHIP_AMBIGUITY
+    if primary.status == STATUS_PRIMARY_NULL_INSUFFICIENT_CANDIDATES:
+        return STATUS_PRIMARY_NULL_INSUFFICIENT_CANDIDATES
     if primary.coverage < 0.8:
         return STATUS_INSUFFICIENT_NULL_COVERAGE
     if real.net_mean_bps <= primary.mean_95th:
         return STATUS_NULL_REJECTED_PLACEBO_MATCH
-    if real.net_mean_bps <= month.mean_95th:
+    if month.status != STATUS_MONTH_NULL_NOT_APPLICABLE and real.net_mean_bps <= month.mean_95th:
         return STATUS_NULL_REJECTED_MONTH
     if real.net_mean_bps <= circular_shift.mean_95th:
         return STATUS_NULL_REJECTED_CLUSTERING
@@ -531,7 +726,12 @@ def build_summary(status: str, precommitment_sha256: str, phase0a_report_path: P
         "cost_stress_75bps": cost["net_mean_bps_75"],
         "cost_stress_100bps": cost["net_mean_bps_100"],
         "primary_placebo_iterations": primary.iterations,
+        "primary_placebo_status": primary.status,
         "primary_placebo_matched_coverage": primary.coverage,
+        "primary_placebo_required_events": real.event_count,
+        "primary_placebo_events_with_candidate": real.event_count - primary.missing_candidate_count,
+        "primary_placebo_missing_candidate_count": primary.missing_candidate_count,
+        "primary_placebo_missing_candidate_examples": primary.missing_candidate_details or [],
         "primary_placebo_mean": primary.mean,
         "primary_placebo_median": primary.median,
         "primary_placebo_mean_95th": primary.mean_95th,
@@ -539,8 +739,13 @@ def build_summary(status: str, precommitment_sha256: str, phase0a_report_path: P
         "primary_null_p_value": primary.p_value,
         "secondary_placebo_iterations": month.iterations,
         "secondary_placebo_matched_coverage": month.coverage,
+        "secondary_placebo_required_events": real.event_count,
+        "secondary_placebo_events_with_candidate": real.event_count - month.missing_candidate_count,
+        "secondary_placebo_missing_candidate_count": month.missing_candidate_count,
+        "secondary_placebo_missing_candidate_examples": month.missing_candidate_details or [],
         "secondary_placebo_mean": month.mean,
         "secondary_placebo_month": month.mean_95th,
+        "secondary_placebo_status": month.status,
         "month_null_p_value": month.p_value,
         "circular_shift_iterations": circular_shift.iterations,
         "circular_shift_mean": circular_shift.mean,
@@ -553,7 +758,9 @@ def build_summary(status: str, precommitment_sha256: str, phase0a_report_path: P
         "survivorship_audit_status": survivorship_audit.get("survivorship_status"),
         "elapsed_seconds": elapsed_seconds,
         "cache_build_elapsed_seconds": cache_build_elapsed_seconds,
-        "estimated_full_run_elapsed_seconds": estimated_full_run_elapsed_seconds,
+        "cold_cache_estimate_available": (not profile_only) and estimated_full_run_elapsed_seconds is not None,
+        "warm_cache_estimated_validation_seconds": estimated_full_run_elapsed_seconds if not profile_only else None,
+        "estimated_full_run_elapsed_seconds": estimated_full_run_elapsed_seconds if not profile_only else None,
         "v1_unlock": False,
     }
 
@@ -629,15 +836,49 @@ def _run_nulls(real_events: Sequence[dict[str, Any]], cache: Phase0CCache | Phas
         for (symbol, _, _), pool in eligible_month.items():
             symbol_candidates.setdefault(symbol, []).extend(pool)
 
-    primary_iteration_returns: list[list[float]] = []
-    for i in range(iterations):
-        placebo = sample_matched_placebo_events(real_events, symbol_candidates, seed=20260525 + i, horizon_hours=24)
-        primary_iteration_returns.append(_event_returns(placebo, cache.symbol_rows))
+    primary_coverage = _candidate_coverage(real_events, symbol_candidates)
+    if primary_coverage["missing_candidate_count"]:
+        primary_summary = NullSummary(
+            iterations=0,
+            coverage=primary_coverage["coverage_ratio"],
+            mean=0.0,
+            median=0.0,
+            win_rate=0.0,
+            lower_confidence_bound=0.0,
+            p_value=1.0,
+            status=STATUS_PRIMARY_NULL_INSUFFICIENT_CANDIDATES,
+            missing_candidate_details=primary_coverage["missing_candidate_examples"],
+        )
+    else:
+        primary_iteration_returns: list[list[float]] = []
+        for i in range(iterations):
+            placebo = sample_matched_placebo_events(real_events, symbol_candidates, seed=20260525 + i, horizon_hours=24)
+            primary_iteration_returns.append(_event_returns(placebo, cache.symbol_rows))
+        primary_summary = _summarize_distribution(primary_iteration_returns, real_metrics.net_mean_bps)
 
-    month_iteration_returns: list[list[float]] = []
-    for i in range(iterations):
-        placebo = sample_matched_placebo_events(real_events, eligible_month, seed=20260526 + i, horizon_hours=24)
-        month_iteration_returns.append(_event_returns(placebo, cache.symbol_rows))
+    month_coverage = _candidate_coverage(real_events, eligible_month)
+    if month_coverage["missing_candidate_count"]:
+        month_summary = NullSummary(
+            iterations=0,
+            coverage=month_coverage["coverage_ratio"],
+            mean=0.0,
+            median=0.0,
+            win_rate=0.0,
+            lower_confidence_bound=0.0,
+            p_value=1.0,
+            status=STATUS_MONTH_NULL_NOT_APPLICABLE,
+            missing_candidate_details=month_coverage["missing_candidate_examples"],
+        )
+        print(
+            f"PHASE0C_MONTH_NULL_INSUFFICIENT_CANDIDATES missing={month_coverage['missing_candidate_count']} required={month_coverage['required_events']} coverage={month_coverage['coverage_ratio']:.6f}",
+            flush=True,
+        )
+    else:
+        month_iteration_returns: list[list[float]] = []
+        for i in range(iterations):
+            placebo = sample_matched_placebo_events(real_events, eligible_month, seed=20260526 + i, horizon_hours=24)
+            month_iteration_returns.append(_event_returns(placebo, cache.symbol_rows))
+        month_summary = _summarize_distribution(month_iteration_returns, real_metrics.net_mean_bps)
 
     circular_iteration_returns: list[list[float]] = []
     rng = random.Random(20260527)
@@ -654,8 +895,8 @@ def _run_nulls(real_events: Sequence[dict[str, Any]], cache: Phase0CCache | Phas
         direction_shuffle_p_value = empirical_p_value(real_metrics.net_mean_bps, [statistics.mean(shuffled_returns)] if shuffled_returns else [], True)
 
     return (
-        _summarize_distribution(primary_iteration_returns, real_metrics.net_mean_bps),
-        _summarize_distribution(month_iteration_returns, real_metrics.net_mean_bps),
+        primary_summary,
+        month_summary,
         _summarize_distribution(circular_iteration_returns, real_metrics.net_mean_bps),
         direction_shuffle_p_value,
         all_same_direction,
@@ -676,7 +917,7 @@ def run_phase0c(phase0a_report_path: Path, phase0b_report_path: Path, archive_pa
         existing = [symbol for symbol in event_symbols if (archive_path / f"{symbol}.jsonl").exists()]
         cache = Phase0CLightCache(price_series={}, symbol_rows={symbol: [] for symbol in existing}, build_elapsed_seconds=0.0, diagnostics={"profile_symbol_file_count": len(existing), "profile_archive_scan": "symbol_file_existence_only"})
     else:
-        cache = _load_or_build_cache(cache_path, lambda: _build_cache(archive_path))
+        cache = _load_or_build_cache(cache_path, lambda: _build_cache(archive_path), archive_path=archive_path, precommitment_sha256=precommitment_sha)
 
     if profile_only:
         real_metrics = _reproduce_phase0b_from_evaluation_csv(phase0b_report_path, phase0b_summary)
@@ -689,7 +930,6 @@ def run_phase0c(phase0a_report_path: Path, phase0b_report_path: Path, archive_pa
 
     if profile_only:
         elapsed = time.perf_counter() - start
-        estimated = elapsed + max(1, iterations + cluster_iterations) * max(0.001, real_metrics.event_count / 100000.0)
         empty = NullSummary(0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, status="PROFILE_ONLY_NOT_RUN")
         summary = build_summary(
             STATUS_PROFILE_RUN,
@@ -708,7 +948,7 @@ def run_phase0c(phase0a_report_path: Path, phase0b_report_path: Path, archive_pa
             profile_only=True,
             elapsed_seconds=elapsed,
             cache_build_elapsed_seconds=cache.build_elapsed_seconds,
-            estimated_full_run_elapsed_seconds=estimated,
+            estimated_full_run_elapsed_seconds=None,
             phase0a_event_artifact_hash=artifact_info["phase0a_event_artifact_hash"],
         )
     else:

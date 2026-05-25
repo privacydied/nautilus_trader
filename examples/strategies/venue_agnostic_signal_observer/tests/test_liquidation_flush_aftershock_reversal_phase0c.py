@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pickle
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -132,6 +133,42 @@ def test_price_series_nameerror_regression_direction_shuffle_non_all_long():
     assert direction_p is not None
 
 
+def test_month_null_without_candidate_is_reported_not_applicable_without_crashing():
+    base = datetime(2024, 1, 15, 12, tzinfo=UTC)
+    rows = [
+        archive_row("ALT", base - timedelta(hours=49), 99),
+        archive_row("ALT", base - timedelta(hours=25), 100),
+        archive_row("ALT", base + timedelta(hours=49), 101),
+        archive_row("ALT", base + timedelta(hours=73), 103),
+        archive_row("ALT", base, 100),
+        archive_row("ALT", base + timedelta(hours=24), 102),
+        archive_row("ONDO", datetime(2024, 2, 15, tzinfo=UTC), 90),
+        archive_row("ONDO", datetime(2024, 2, 16, tzinfo=UTC), 91),
+    ]
+    symbol_rows = {
+        "ALT": sorted([row for row in rows if row.symbol == "ALT"], key=lambda row: row.timestamp),
+        "ONDO": sorted([row for row in rows if row.symbol == "ONDO"], key=lambda row: row.timestamp),
+    }
+    cache = phase0c.Phase0CCache(rows, phase0c.build_price_series(rows), symbol_rows, 0.0, {})
+    real = phase0c.RealPrimaryMetrics(200.0, 150.0, 150.0, 1.0, 1)
+    primary, month, circular, direction_p, all_same = phase0c._run_nulls(
+        [event("ALT", base, "downside_liquidation_flush", 100), event("ONDO", base, "downside_liquidation_flush", 100)],
+        cache,
+        real,
+        iterations=1,
+        cluster_iterations=1,
+    )
+    assert primary.status == "OK"
+    assert month.status == phase0c.STATUS_MONTH_NULL_NOT_APPLICABLE
+    assert month.iterations == 0
+    assert month.coverage == pytest.approx(0.5)
+    assert month.missing_candidate_count == 1
+    assert month.missing_candidate_details == [{"symbol": "ONDO", "month": "2024-01", "event_timestamp_utc": "2024-01-15T12:00:00Z"}]
+    assert circular.status in {"OK", "NO_COVERAGE"}
+    assert direction_p == 1.0
+    assert all_same is True
+
+
 def test_cost_stress_arithmetic_from_gross_and_net50():
     cost = phase0c._compute_cost_stress(175.94987373067414)
     assert cost["net_mean_bps_50"] == pytest.approx(125.94987373067414)
@@ -148,6 +185,55 @@ def test_survivorship_ambiguity_prevents_clean_pass():
         circular_shift=null_summary(100),
     )
     assert verdict == "SURVIVORSHIP_AMBIGUITY"
+
+
+
+def test_primary_null_missing_candidate_is_hard_non_pass():
+    primary = phase0c.NullSummary(
+        0,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        status=phase0c.STATUS_PRIMARY_NULL_INSUFFICIENT_CANDIDATES,
+        missing_candidate_details=[{"symbol": "ONDO", "month": "2024-01"}],
+    )
+    verdict = phase0c.classify_phase0c(
+        real=phase0c.RealPrimaryMetrics(200.0, 150.0, 100.0, 0.6, 2),
+        survivorship_status="OK",
+        primary=primary,
+        month=null_summary(100),
+        circular_shift=null_summary(100),
+    )
+    assert verdict == phase0c.STATUS_PRIMARY_NULL_INSUFFICIENT_CANDIDATES
+
+
+def test_month_null_missing_candidate_summary_records_details_without_pass():
+    month = phase0c.NullSummary(
+        0,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        status=phase0c.STATUS_MONTH_NULL_NOT_APPLICABLE,
+        missing_candidate_details=[{"symbol": "ONDO", "month": "2024-01"}],
+    )
+    summary = phase0c.build_summary(
+        "SURVIVORSHIP_AMBIGUITY", "hash", Path("p0a"), Path("p0b"), True, True,
+        phase0c.RealPrimaryMetrics(175.0, 125.0, 90.0, 0.56, 2),
+        null_summary(), month, null_summary(), 1.0, True,
+        {"survivorship_status": "SURVIVORSHIP_AMBIGUITY"},
+    )
+    assert summary["secondary_placebo_status"] == phase0c.STATUS_MONTH_NULL_NOT_APPLICABLE
+    assert summary["secondary_placebo_required_events"] == 2
+    assert summary["secondary_placebo_events_with_candidate"] == 1
+    assert summary["secondary_placebo_missing_candidate_count"] == 1
+    assert summary["secondary_placebo_missing_candidate_examples"] == [{"symbol": "ONDO", "month": "2024-01"}]
+    assert summary["final_verdict"] != phase0c.STATUS_NULL_VALIDATED_PASS
 
 
 def test_direction_shuffle_all_long_emits_not_applicable():
@@ -212,11 +298,107 @@ def test_load_or_build_cache_uses_disk_without_recreate(tmp_path: Path):
     def create():
         calls["create"] += 1
         return phase0c.Phase0CLightCache({}, {}, 0.0, {})
-    first = phase0c._load_or_build_cache(cache_path, create)
-    second = phase0c._load_or_build_cache(cache_path, create)
+    first = phase0c._load_or_build_cache(cache_path, create, precommitment_sha256="precommit")
+    second = phase0c._load_or_build_cache(cache_path, create, precommitment_sha256="precommit")
     assert isinstance(first, phase0c.Phase0CLightCache)
     assert isinstance(second, phase0c.Phase0CLightCache)
     assert calls["create"] == 1
+
+
+def test_incomplete_tmp_cache_is_ignored_and_not_consumed(tmp_path: Path):
+    calls = {"create": 0}
+    cache_path = tmp_path / "cache.pkl"
+    tmp_cache = cache_path.with_suffix(cache_path.suffix + ".tmp")
+    tmp_cache.write_bytes(b"not-a-complete-pickle")
+
+    def create():
+        calls["create"] += 1
+        return phase0c.Phase0CLightCache({}, {}, 0.0, {"created": True})
+
+    cache = phase0c._load_or_build_cache(cache_path, create, precommitment_sha256="precommit")
+
+    assert isinstance(cache, phase0c.Phase0CLightCache)
+    assert cache.diagnostics["created"] is True
+    assert calls["create"] == 1
+    assert cache_path.exists()
+    assert tmp_cache.exists() is False
+
+
+def test_complete_cache_requires_metadata_sidecar(tmp_path: Path):
+    cache_path = tmp_path / "cache.pkl"
+    with cache_path.open("wb") as f:
+        pickle.dump(phase0c.Phase0CLightCache({}, {}, 0.0, {}), f)
+
+    with pytest.raises(phase0c.Phase0CCacheInvalid):
+        phase0c._load_validated_cache(cache_path)
+
+
+def test_cache_atomic_write_creates_metadata_and_validates_readback(tmp_path: Path):
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    (archive / "ALT.jsonl").write_text("{}\n")
+    cache_path = tmp_path / "cache.pkl"
+    cache = phase0c.Phase0CLightCache(
+        {},
+        {"ALT": [archive_row("ALT", datetime(2024, 1, 1, tzinfo=UTC)), archive_row("ALT", datetime(2024, 1, 2, tzinfo=UTC))]},
+        1.25,
+        {"loaded_rows": 2},
+    )
+
+    metadata = phase0c._write_cache_atomic(
+        cache_path,
+        cache,
+        archive_path=archive,
+        precommitment_sha256="precommit",
+        build_started_utc="2024-01-01T00:00:00Z",
+        build_finished_utc="2024-01-01T00:00:01Z",
+    )
+
+    assert cache_path.exists()
+    assert not cache_path.with_suffix(cache_path.suffix + ".tmp").exists()
+    assert phase0c._cache_metadata_path(cache_path).exists()
+    assert metadata["row_count"] == 2
+    assert metadata["symbol_count"] == 1
+    assert metadata["cache_sha256"] == hashlib.sha256(cache_path.read_bytes()).hexdigest()
+    assert metadata["precommitment_sha256"] == "precommit"
+    assert phase0c._load_validated_cache(cache_path).diagnostics["loaded_rows"] == 2
+
+
+def test_profile_summary_does_not_claim_cold_cache_estimate_when_cache_missing():
+    summary = phase0c.build_summary(
+        phase0c.STATUS_PROFILE_RUN, "hash", Path("p0a"), Path("p0b"), True, True,
+        phase0c.RealPrimaryMetrics(175.0, 125.0, 90.0, 0.56, 10),
+        null_summary(), null_summary(), null_summary(), 1.0, True,
+        {"survivorship_status": "SURVIVORSHIP_AMBIGUITY"}, profile_only=True,
+    )
+
+    assert summary["cold_cache_estimate_available"] is False
+    assert summary["estimated_full_run_elapsed_seconds"] is None
+
+
+def test_build_cache_only_emits_usable_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def fake_build(archive_path: Path) -> phase0c.Phase0CLightCache:
+        return phase0c.Phase0CLightCache({}, {"ALT": [archive_row("ALT")]}, 0.01, {"loaded_rows": 1})
+
+    monkeypatch.setattr(phase0c, "_build_cache", fake_build)
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    (archive / "ALT.jsonl").write_text("{}\n")
+    cache_path = tmp_path / "cache.pkl"
+
+    result = phase0c.build_phase0c_cache_only(archive, cache_path, precommitment_sha256="precommit")
+
+    assert result["status"] == "PHASE0C_CACHE_READY"
+    assert cache_path.exists()
+    assert phase0c._load_validated_cache(cache_path).symbol_rows["ALT"]
+
+
+def test_full_validation_refuses_corrupt_incomplete_cache(tmp_path: Path):
+    cache_path = tmp_path / "cache.pkl"
+    cache_path.write_bytes(b"corrupt")
+
+    with pytest.raises(phase0c.Phase0CCacheInvalid):
+        phase0c._load_validated_cache(cache_path)
 
 
 def test_no_canned_stub_returns_validation_critical_values():
