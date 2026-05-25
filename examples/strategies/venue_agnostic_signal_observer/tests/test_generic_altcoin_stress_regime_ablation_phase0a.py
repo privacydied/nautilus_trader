@@ -236,9 +236,9 @@ def test_event_schema_has_required_fields():
     ]
     for field in required:
         assert field in j, f"Missing field: {field}"
-    # Phase 0B compatibility: event_direction and flush_side must exist
-    assert j["event_direction"] == "downside_liquidation_flush"
-    assert j["flush_side"] == "long_wipe"
+    # Phase 0B compatibility: event_direction must exist
+    assert j["event_direction"] == "downside_price_drop"
+    assert "detector_family" in j
 
 
 def test_accepted_event_json_rows_sorted():

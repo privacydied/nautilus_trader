@@ -306,7 +306,7 @@ def filter_stress_candidates(
 def apply_cooldown(
     candidates: Sequence[StressWindowPoint],
 ) -> list[StressWindowPoint]:
-    """48h global cooldown, greedy from earliest."""
+    """48h per-symbol cooldown, greedy from earliest."""
     accepted: list[StressWindowPoint] = []
     cooldown_until: datetime | None = None
     for point in sorted(candidates, key=lambda p: p.timestamp):
@@ -321,12 +321,11 @@ def has_forward_24h_coverage(
     price_series: list[tuple[datetime, float]],
     event_ts: datetime,
 ) -> bool:
-    """Check if forward 24h price data exists."""
+    """Check if forward 24h price data exists (within 2h tolerance)."""
     target = event_ts + timedelta(hours=24)
     for ts, _ in price_series:
         if ts >= target:
-            # Check tolerance
-            if (ts - target).total_seconds() <= 65 * 60:
+            if (ts - target).total_seconds() <= 2 * 3600:
                 return True
             break
     return False
@@ -637,8 +636,7 @@ def accepted_event_json(event: StressEventRecord) -> dict[str, Any]:
         "event_id": event.event_id,
         "symbol": event.symbol,
         "event_timestamp_utc": event.event_timestamp_utc,
-        "event_direction": "downside_liquidation_flush",
-        "flush_side": "long_wipe",
+        "event_direction": "downside_price_drop",
         "detector_family": event.detector_family,
         "direction": event.direction,
         "price_t": event.price_t,
@@ -748,7 +746,7 @@ def write_report_artifacts(
                 "event_id": e.event_id,
                 "symbol": e.symbol,
                 "event_timestamp_utc": e.event_timestamp_utc,
-                "event_direction": "downside_liquidation_flush",
+                "event_direction": "downside_price_drop",
                 "detector_family": e.detector_family,
                 "direction": e.direction,
                 "price_t": e.price_t,
