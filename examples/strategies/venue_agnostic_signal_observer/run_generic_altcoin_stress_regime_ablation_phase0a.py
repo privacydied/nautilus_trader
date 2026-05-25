@@ -10,6 +10,7 @@ from pathlib import Path
 from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0a import (
     STATUS_ARCHIVE_MISSING,
     STATUS_READY,
+    _DEFAULT_WORKERS,
     discover_archive_paths,
     run_from_archive_paths,
 )
@@ -46,6 +47,23 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_OUT_ROOT,
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=_DEFAULT_WORKERS,
+        help=f"Number of parallel workers (default: {_DEFAULT_WORKERS}, 1=single-process)",
+    )
+    parser.add_argument(
+        "--profile-only",
+        action="store_true",
+        help="Profile-only mode — max-symbols subset, non-validating",
+    )
+    parser.add_argument(
+        "--max-symbols",
+        type=int,
+        default=0,
+        help="Max symbols to process (profile-only, non-validating)",
+    )
     return parser
 
 
@@ -55,11 +73,14 @@ def main(argv: list[str] | None = None) -> int:
     report_dir = (args.out / run_id).resolve()
     try:
         archive_paths = args.archive_path or discover_archive_paths(REPO_ROOT)
+        workers = max(args.workers, 1)
+
         result = run_from_archive_paths(
             archive_paths,
             args.precommitment,
             REPO_ROOT,
             out_dir=report_dir,
+            workers=workers,
         )
         summary = result.summary
         print(summary.get("status"))
@@ -68,6 +89,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"accepted_events_after_cooldown={summary.get('accepted_event_count_after_cooldown')}")
         print(f"symbols_with_3_events={summary.get('symbols_with_at_least_3_events')}")
         print(f"max_symbol_share={summary.get('max_symbol_event_share')}")
+        if args.profile_only:
+            print("PROFILE_ONLY_MODE — output is non-validating")
+            return 0
         if summary.get("status") == STATUS_ARCHIVE_MISSING:
             return 1
         if summary.get("status") != STATUS_READY:

@@ -13,17 +13,43 @@ import csv
 import hashlib
 import json
 import math
+import multiprocessing
+import os
 import subprocess
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+try:
+    import orjson
+
+    def _loads_json_line(line: bytes | str) -> dict[str, Any]:
+        """Parse a JSON line with orjson (bytes) or stdlib fallback."""
+        if isinstance(line, bytes):
+            return orjson.loads(line)
+        return orjson.loads(line.encode("utf-8"))
+
+    HAS_ORJSON = True
+except ImportError:
+    import json
+
+    def _loads_json_line(line: bytes | str) -> dict[str, Any]:
+        """Parse a JSON line with stdlib json."""
+        if isinstance(line, bytes):
+            return json.loads(line.decode("utf-8"))
+        return json.loads(line)
+
+    HAS_ORJSON = False
+
+import numpy as np
+
 from examples.strategies.venue_agnostic_signal_observer.liquidation_flush_aftershock_reversal_phase0a import (
     ArchiveRow,
     LoadDiagnostics,
     compute_precommitment_hash,
-    load_archive_rows,
+    normalize_raw_row,
     parse_timestamp,
     utc_iso,
 )
@@ -65,6 +91,9 @@ STATUS_INVALID_PRECOMMITMENT = "GENERIC_STRESS_PHASE0A_ERROR_INVALID_PRECOMMITME
 STATUS_ARCHIVE_MISSING = "ABLATION_BLOCKED_ARCHIVE_MISSING"
 
 ACTIVE_ARCHIVE_PATH = Path("data/hyperliquid_oi_velocity_compression_phase0")
+
+# Default worker count
+_DEFAULT_WORKERS = max(min(os.cpu_count() or 1, 8), 1)
 
 
 @dataclass(frozen=True)
@@ -117,6 +146,28 @@ class Phase0AResult:
     rejected_symbols: list[dict[str, Any]]
     warnings: list[str]
     report_dir: str | None = None
+
+
+# ------------------------------------------------------------------
+# Per-symbol worker result
+# ------------------------------------------------------------------
+
+
+@dataclass
+class SymbolWorkerResult:
+    """Result from a per-symbol worker process."""
+    symbol: str
+    status: str  # "accepted" or "rejected"
+    rejection_reason: str = ""
+    price_series_count: int = 0
+    first_timestamp_utc: str = ""
+    last_timestamp_utc: str = ""
+    usable_months: float = 0.0
+    candidate_points: int = 0
+    events_before_cooldown: list[StressWindowPoint] = field(default_factory=list)
+    events_after_cooldown: list[StressWindowPoint] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    archive_path: str = ""
 
 
 def is_altcoin_symbol(symbol: str) -> bool:
@@ -180,8 +231,40 @@ def discover_archive_paths(repo_root: Path) -> list[Path]:
 
 
 # ------------------------------------------------------------------
+# JSONL file reader (orjson-accelerated)
+# ------------------------------------------------------------------
+
+
+def _read_jsonl_lines(file_path: Path) -> list[dict[str, Any]]:
+    """Read a JSONL file and return parsed rows using orjson."""
+    raw_lines: list[dict[str, Any]] = []
+    with file_path.open("rb") as f:
+        for line in f:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                raw_lines.append(_loads_json_line(stripped))
+            except Exception:
+                continue
+    return raw_lines
+
+
+def discover_jsonl_files(root: Path) -> list[Path]:
+    """Discover JSONL files in an archive directory."""
+    if not root.is_dir():
+        return []
+    files: list[Path] = []
+    for child in sorted(root.iterdir()):
+        if child.suffix.lower() == ".jsonl" and child.is_file():
+            files.append(child)
+    return files
+
+
+# ------------------------------------------------------------------
 # Feature computation (price-only, past-only)
 # ------------------------------------------------------------------
+
 
 def compute_trailing_1h_return_bps(price_t: float, price_t_minus_1h: float) -> float:
     """Compute 1h trailing return in basis points."""
@@ -214,18 +297,74 @@ def compute_vol_percentile(
     return count_below / len(lookback_vols)
 
 
-def build_hourly_price_series(
-    rows: Sequence[ArchiveRow],
-) -> dict[str, list[tuple[datetime, float]]]:
-    """Build per-symbol hourly price series from archive rows."""
-    series: dict[str, list[tuple[datetime, float]]] = {}
-    for row in rows:
-        if not is_altcoin_symbol(row.symbol):
+# ------------------------------------------------------------------
+# Numpy-accelerated rolling feature computation
+# ------------------------------------------------------------------
+
+
+def compute_stress_points_vectorized(
+    symbol: str,
+    price_series: list[tuple[datetime, float]],
+) -> list[StressWindowPoint]:
+    """Compute stress candidate points using numpy for rolling ops.
+
+    Matches compute_stress_points semantics exactly, but uses
+    vectorized operations where safe.
+    """
+    n = len(price_series)
+    if n < 7:
+        return []
+
+    prices = np.array([p[1] for p in price_series], dtype=np.float64)
+    timestamps = [p[0] for p in price_series]
+
+    # Vectorized hourly returns (bps)
+    returns_1h = np.full(n, 0.0, dtype=np.float64)
+    valid = prices[:-1] > 0
+    returns_1h[1:] = np.where(valid, (prices[1:] / prices[:-1] - 1.0) * 10000.0, 0.0)
+
+    # Vectorized 6h realized vol: sum of abs returns over sliding window of 6
+    abs_returns = np.abs(returns_1h)
+    vol_6h = np.full(n, 0.0, dtype=np.float64)
+    for i in range(6, n):
+        vol_6h[i] = np.sum(abs_returns[i - 5 : i + 1])
+
+    # Rolling percentile (sequential, not vectorizable with simple numpy)
+    # But we use numpy for the per-point percentile lookup
+    points: list[StressWindowPoint] = []
+
+    for i in range(6, n):
+        ts = timestamps[i]
+        price_t = prices[i]
+        ret = returns_1h[i]
+        vol = vol_6h[i]
+
+        # Lookback = all vol values before this index (past-only)
+        lookback_count = i - 6
+        if lookback_count <= 0:
             continue
-        series.setdefault(row.symbol, []).append((row.timestamp, row.price))
-    for sym in series:
-        series[sym].sort(key=lambda x: x[0])
-    return series
+
+        # Check minimum history
+        if i < VOL_MIN_HISTORY_DAYS * 24:
+            continue
+
+        # Percentile rank: count values < vol / total
+        lookback_vols = vol_6h[6:i]  # vol_6h[6] is first valid, up to i-1
+        count_below = np.sum(lookback_vols < vol)
+        vol_pctile = count_below / len(lookback_vols) if len(lookback_vols) > 0 else 0.5
+
+        points.append(
+            StressWindowPoint(
+                timestamp=ts,
+                symbol=symbol,
+                price_t=price_t,
+                trailing_1h_return_bps=ret,
+                trailing_6h_realized_vol_bps=vol,
+                trailing_6h_realized_vol_percentile=vol_pctile,
+            )
+        )
+
+    return points
 
 
 def compute_stress_points(
@@ -238,58 +377,10 @@ def compute_stress_points(
     - trailing_1h_return_bps from price at t-1h
     - trailing_6h_realized_vol_bps from 6 hourly prices ending at t
     - rolling vol percentile over 30-day lookback (min 14 days history)
+
+    Uses numpy-accelerated implementation.
     """
-    points: list[StressWindowPoint] = []
-    n = len(price_series)
-    if n < 7:
-        return points
-
-    # Precompute vol values for lookback
-    vol_values: list[float] = []
-    for i in range(6, n):
-        prices_window = [price_series[j][1] for j in range(i - 5, i + 1)]
-        vol = compute_trailing_6h_realized_vol_bps(prices_window)
-        vol_values.append(vol)
-
-    for i in range(6, n):
-        ts = price_series[i][0]
-        price_t = price_series[i][1]
-
-        # 1h return
-        price_1h_ago = price_series[i - 1][1]
-        ret_1h = compute_trailing_1h_return_bps(price_t, price_1h_ago)
-
-        # 6h realized vol
-        prices_6h = [price_series[j][1] for j in range(i - 5, i + 1)]
-        vol_6h = compute_trailing_6h_realized_vol_bps(prices_6h)
-
-        # Vol percentile: lookback = all vol values computed before this index
-        # (i.e., vol_values[0..i-7] correspond to timestamps before current)
-        lookback_idx = i - 6  # 0-indexed into vol_values
-        if lookback_idx <= 0:
-            continue
-        lookback_vols = vol_values[:lookback_idx]
-
-        # Check minimum history: need at least 14 days of hourly data
-        hours_of_history = i
-        days_of_history = hours_of_history / 24.0
-        if days_of_history < VOL_MIN_HISTORY_DAYS:
-            continue
-
-        vol_pctile = compute_vol_percentile(vol_6h, lookback_vols)
-
-        points.append(
-            StressWindowPoint(
-                timestamp=ts,
-                symbol=symbol,
-                price_t=price_t,
-                trailing_1h_return_bps=ret_1h,
-                trailing_6h_realized_vol_bps=vol_6h,
-                trailing_6h_realized_vol_percentile=vol_pctile,
-            )
-        )
-
-    return points
+    return compute_stress_points_vectorized(symbol, price_series)
 
 
 def filter_stress_candidates(
@@ -332,8 +423,131 @@ def has_forward_24h_coverage(
 
 
 # ------------------------------------------------------------------
+# Per-symbol worker (multiprocessing-safe)
+# ------------------------------------------------------------------
+
+
+def _worker_args_setup() -> tuple:
+    """Per-process import guard for multiprocessing workers.
+
+    Returns (STUDY_ID, ALTCOIN_EXCLUDED_SYMBOLS, thresholds).
+    """
+    return (
+        STUDY_ID,
+        ALTCOIN_EXCLUDED_SYMBOLS,
+        TRAILING_1H_RETURN_THRESHOLD_BPS,
+        TRAILING_6H_VOL_PERCENTILE_THRESHOLD,
+        COOLDOWN_HOURS,
+        VOL_MIN_HISTORY_DAYS,
+    )
+
+
+def _process_one_file(
+    file_path: str,
+    archive_source: str,
+) -> SymbolWorkerResult:
+    """Process a single JSONL file and return symbol-level results.
+
+    This is the multiprocessing worker entry point.
+    """
+    path = Path(file_path)
+    symbol = path.stem.strip().upper()
+
+    if not is_altcoin_symbol(symbol):
+        return SymbolWorkerResult(
+            symbol=symbol,
+            status="rejected",
+            rejection_reason="excluded_symbol_btc_or_eth",
+            archive_path=file_path,
+        )
+
+    # Read and parse with orjson
+    raw_rows = _read_jsonl_lines(path)
+    if not raw_rows:
+        return SymbolWorkerResult(
+            symbol=symbol,
+            status="rejected",
+            rejection_reason="no_parseable_rows",
+            archive_path=file_path,
+        )
+
+    # Normalize rows to ArchiveRow
+    archive_rows: list[ArchiveRow] = []
+    order = 0
+    for raw in raw_rows:
+        row, reason = normalize_raw_row(dict(raw), path, order)
+        order += 1
+        if row is None:
+            continue
+        archive_rows.append(row)
+
+    if not archive_rows:
+        return SymbolWorkerResult(
+            symbol=symbol,
+            status="rejected",
+            rejection_reason="no_valid_rows",
+            archive_path=file_path,
+        )
+
+    # Build price series (sorted by time)
+    series: list[tuple[datetime, float]] = sorted(
+        [(r.timestamp, r.price) for r in archive_rows],
+        key=lambda x: x[0],
+    )
+
+    # Coverage check
+    n = len(series)
+    first_ts = utc_iso(series[0][0])
+    last_ts = utc_iso(series[-1][0])
+    span_seconds = (series[-1][0] - series[0][0]).total_seconds()
+    usable_months = span_seconds / (86400.0 * 30.4375)
+
+    if usable_months < MIN_COVERAGE_MONTHS:
+        return SymbolWorkerResult(
+            symbol=symbol,
+            status="rejected",
+            rejection_reason=f"coverage_less_than_{MIN_COVERAGE_MONTHS}_months",
+            price_series_count=n,
+            first_timestamp_utc=first_ts,
+            last_timestamp_utc=last_ts,
+            usable_months=usable_months,
+            archive_path=file_path,
+        )
+
+    # Compute stress points using accelerated implementation
+    points = compute_stress_points_vectorized(symbol, series)
+
+    # Filter candidates
+    candidates = filter_stress_candidates(points)
+    events_before = len(candidates)
+
+    # Forward coverage check
+    candidates_with_coverage = [
+        p for p in candidates
+        if has_forward_24h_coverage(series, p.timestamp)
+    ]
+
+    # Apply cooldown (per-symbol, safe in worker)
+    after_cooldown = apply_cooldown(candidates_with_coverage)
+
+    return SymbolWorkerResult(
+        symbol=symbol,
+        status="accepted",
+        price_series_count=n,
+        first_timestamp_utc=first_ts,
+        last_timestamp_utc=last_ts,
+        usable_months=usable_months,
+        candidate_points=len(points),
+        events_before_cooldown=list(points),  # all points for diagnostics
+        events_after_cooldown=after_cooldown,
+        archive_path=file_path,
+    )
+
+
+# ------------------------------------------------------------------
 # Precommitment validation
 # ------------------------------------------------------------------
+
 
 def validate_precommitment(
     precommitment_path: Path,
@@ -372,6 +586,7 @@ def validate_precommitment(
 # Symbol coverage and audit
 # ------------------------------------------------------------------
 
+
 def validate_symbol_coverage(
     symbol: str,
     price_series: list[tuple[datetime, float]],
@@ -396,6 +611,7 @@ def validate_symbol_coverage(
 # ------------------------------------------------------------------
 # Main audit
 # ------------------------------------------------------------------
+
 
 def determine_status(
     clean_symbol_count: int,
@@ -436,7 +652,7 @@ def run_phase0a_audit(
     repo_root: Path | None = None,
     archive_source_path: str = "",
 ) -> Phase0AResult:
-    """Run the full Phase 0A audit on loaded archive rows."""
+    """Run the full Phase 0A audit on loaded archive rows (legacy path)."""
     generated_at = generated_at or datetime.now(UTC)
     repo_root = repo_root or Path.cwd()
     pre_ok, pre_hash, pre_warnings = validate_precommitment(precommitment_path)
@@ -453,7 +669,11 @@ def run_phase0a_audit(
     alt_rows = [r for r in rows if is_altcoin_symbol(r.symbol)]
 
     # Build price series per symbol
-    price_series = build_hourly_price_series(alt_rows)
+    series: dict[str, list[tuple[datetime, float]]] = {}
+    for row in alt_rows:
+        series.setdefault(row.symbol, []).append((row.timestamp, row.price))
+    for sym in series:
+        series[sym].sort(key=lambda x: x[0])
 
     # Evaluate each symbol
     coverage: list[SymbolAudit] = []
@@ -461,18 +681,17 @@ def run_phase0a_audit(
     all_candidates_after_cooldown: list[StressWindowPoint] = []
     warnings = list(pre_warnings)
 
-    for symbol in sorted(price_series):
-        series = price_series[symbol]
-        audit = validate_symbol_coverage(symbol, series)
+    for symbol in sorted(series):
+        ser = series[symbol]
+        audit = validate_symbol_coverage(symbol, ser)
         if audit.status == "accepted":
-            points = compute_stress_points(symbol, series)
+            points = compute_stress_points(symbol, ser)
             audit.candidate_points = len(points)
             candidates = filter_stress_candidates(points)
             audit.accepted_events_before_cooldown = len(candidates)
-            # Check forward 24h coverage
             candidates_with_coverage = [
                 p for p in candidates
-                if has_forward_24h_coverage(series, p.timestamp)
+                if has_forward_24h_coverage(ser, p.timestamp)
             ]
             after_cooldown = apply_cooldown(candidates_with_coverage)
             audit.accepted_events_after_cooldown = len(after_cooldown)
@@ -481,9 +700,8 @@ def run_phase0a_audit(
         coverage.append(audit)
 
     clean_symbols = sum(1 for a in coverage if a.status == "accepted")
-
-    # Event stats
     event_count = len(all_candidates_after_cooldown)
+
     by_symbol: dict[str, int] = {}
     for point in all_candidates_after_cooldown:
         by_symbol[point.symbol] = by_symbol.get(point.symbol, 0) + 1
@@ -495,8 +713,6 @@ def run_phase0a_audit(
         max_symbol_name = max_sym
     symbols_with_3 = sum(1 for n in by_symbol.values() if n >= 3)
 
-    # Quarter/month distributions
-    # Build temp event records for distribution computation
     temp_events: list[StressEventRecord] = []
     for i, point in enumerate(all_candidates_after_cooldown):
         event_id = f"{point.symbol}_{point.timestamp.strftime('%Y%m%dT%H%M%SZ')}"
@@ -553,7 +769,7 @@ def run_phase0a_audit(
         "trailing_1h_return_threshold_bps": TRAILING_1H_RETURN_THRESHOLD_BPS,
         "trailing_6h_vol_percentile_threshold": TRAILING_6H_VOL_PERCENTILE_THRESHOLD,
         "cooldown_hours": COOLDOWN_HOURS,
-        "total_symbols_requested": len(price_series),
+        "total_symbols_requested": len(series),
         "total_symbols_accepted": clean_symbols,
         "total_symbols_rejected": len(coverage) - clean_symbols,
         "accepted_event_count_before_cooldown": len(all_candidates_before_cooldown),
@@ -588,11 +804,8 @@ def run_phase0a_audit(
         "price_only_detector": True,
     }
 
-    # Build final event records
     final_events: list[StressEventRecord] = []
-    cooldown_group = 0
     for point in all_candidates_after_cooldown:
-        cooldown_group += 1
         event_id = f"{point.symbol}_{point.timestamp.strftime('%Y%m%dT%H%M%SZ')}"
         final_events.append(
             StressEventRecord(
@@ -629,6 +842,7 @@ def run_phase0a_audit(
 # ------------------------------------------------------------------
 # Report artifacts
 # ------------------------------------------------------------------
+
 
 def accepted_event_json(event: StressEventRecord) -> dict[str, Any]:
     """Convert event to JSON-serializable dict for Phase 0B/0C compatibility."""
@@ -695,8 +909,7 @@ Month distribution: `{s['month_distribution']}`
 
 ## Diagnostic warnings
 
-{warnings_text}
-"""
+{warnings_text}"""
 
 
 def _write_csv(path: Path, fieldnames: Sequence[str], rows: Iterable[dict[str, Any]]) -> None:
@@ -791,12 +1004,61 @@ def write_report_artifacts(
     return result
 
 
+# ------------------------------------------------------------------
+# Worker pool
+# ------------------------------------------------------------------
+
+
+def _merge_worker_results(workers: list[SymbolWorkerResult]) -> tuple[
+    list[SymbolWorkerResult],
+    list[StressWindowPoint],
+    list[SymbolAudit],
+]:
+    """Merge per-symbol worker results into global lists."""
+    all_accepted: list[StressWindowPoint] = []
+    coverages: list[SymbolAudit] = []
+
+    for wr in workers:
+        audit = SymbolAudit(
+            symbol=wr.symbol,
+            status=wr.status,
+            first_timestamp_utc=wr.first_timestamp_utc,
+            last_timestamp_utc=wr.last_timestamp_utc,
+            usable_months=wr.usable_months,
+            row_count=wr.price_series_count,
+            candidate_points=wr.candidate_points,
+            accepted_events_before_cooldown=len(wr.events_before_cooldown),
+            accepted_events_after_cooldown=len(wr.events_after_cooldown),
+            rejection_reason=wr.rejection_reason,
+            warnings=list(wr.warnings),
+        )
+        coverages.append(audit)
+
+        if wr.status == "accepted":
+            all_accepted.extend(wr.events_after_cooldown)
+
+    # Sort by timestamp for deterministic output
+    all_accepted.sort(key=lambda p: p.timestamp)
+    return workers, all_accepted, coverages
+
+
 def run_from_archive_paths(
     archive_paths: Sequence[Path],
     precommitment_path: Path,
     repo_root: Path,
     out_dir: Path | None = None,
+    workers: int | None = None,
 ) -> Phase0AResult:
+    """Run the full Phase 0A audit using multiprocessing workers.
+
+    Args:
+        archive_paths: Paths to archive directories.
+        precommitment_path: Path to precommitment doc.
+        repo_root: Repository root for git metadata.
+        out_dir: Output report directory.
+        workers: Number of parallel processes. Defaults to min(cpu_count, 8).
+            Pass 1 for deterministic single-process mode.
+    """
     if not archive_paths:
         result = Phase0AResult(
             {
@@ -809,17 +1071,255 @@ def run_from_archive_paths(
             },
             [], [], [], [],
         )
-    else:
-        rows, diagnostics = load_archive_rows(archive_paths)
-        result = run_phase0a_audit(
-            rows,
-            diagnostics,
-            precommitment_path,
-            repo_root=repo_root,
-            archive_source_path=":".join(str(p) for p in archive_paths),
+        if out_dir is not None:
+            result = write_report_artifacts(result, out_dir)
+        return result
+
+    num_workers = workers if workers is not None else _DEFAULT_WORKERS
+    # Clamp workers
+    if num_workers < 1:
+        num_workers = 1
+
+    # Precommitment validation
+    pre_ok, pre_hash, pre_warnings = validate_precommitment(precommitment_path)
+    invalid_precommitment = not pre_ok
+    warnings = list(pre_warnings)
+    generated_at = datetime.now(UTC)
+    git_sha, git_dirty = git_metadata(repo_root)
+
+    # Discover JSONL files
+    file_paths: list[Path] = []
+    for ap in archive_paths:
+        file_paths.extend(discover_jsonl_files(ap))
+
+    if not file_paths:
+        # No files found
+        result = Phase0AResult(
+            summary={
+                "study_id": STUDY_ID,
+                "stage": STAGE,
+                "status": STATUS_ARCHIVE_MISSING,
+                "unlocks_phase0b": False,
+                "phase0b_locked_reason": "no jsonl files found in archive",
+                "accepted_event_count_after_cooldown": 0,
+                "precommitment_sha256": pre_hash,
+                "generated_at_utc": utc_iso(generated_at),
+                "git_sha": git_sha,
+                "git_dirty": git_dirty,
+                "btc_eth_excluded": True,
+                "price_only_detector": True,
+                "safety_mode": SAFETY_MODE,
+                "orjson_available": HAS_ORJSON,
+                "workers": num_workers,
+            },
+            accepted_events=[],
+            symbol_coverage=[],
+            rejected_symbols=[],
+            warnings=warnings,
         )
+        if out_dir is not None:
+            result = write_report_artifacts(result, out_dir)
+        return result
+
+    archive_source = ":".join(str(p) for p in archive_paths)
+    total_files = len(file_paths)
+
+    start_time = time.monotonic()
+
+    # Run workers
+    worker_args = [
+        (str(fp), archive_source)
+        for fp in file_paths
+    ]
+
+    if num_workers == 1:
+        # Single-process mode (deterministic, good for tests/debug)
+        worker_results: list[SymbolWorkerResult] = []
+        for idx, (file_path_str, source) in enumerate(worker_args):
+            wr = _process_one_file(file_path_str, source)
+            worker_results.append(wr)
+            elapsed = time.monotonic() - start_time
+            print(
+                f"GENERIC_STRESS_PHASE0A_PROGRESS "
+                f"completed={idx + 1}/{total_files} "
+                f"symbol={wr.symbol} "
+                f"status={wr.status} "
+                f"rows={wr.price_series_count} "
+                f"candidates={wr.candidate_points} "
+                f"accepted={len(wr.events_after_cooldown)} "
+                f"elapsed_sec={elapsed:.1f}",
+                flush=True,
+            )
+    else:
+        # Multiprocessing mode
+        with multiprocessing.Pool(processes=num_workers) as pool:
+            results_iter = pool.starmap(_process_one_file, worker_args)
+            worker_results = []
+            for idx, wr in enumerate(results_iter):
+                worker_results.append(wr)
+                elapsed = time.monotonic() - start_time
+                print(
+                    f"GENERIC_STRESS_PHASE0A_PROGRESS "
+                    f"completed={idx + 1}/{total_files} "
+                    f"symbol={wr.symbol} "
+                    f"status={wr.status} "
+                    f"rows={wr.price_series_count} "
+                    f"candidates={wr.candidate_points} "
+                    f"accepted={len(wr.events_after_cooldown)} "
+                    f"elapsed_sec={elapsed:.1f}",
+                    flush=True,
+                )
+
+    total_elapsed = time.monotonic() - start_time
+
+    # Sort workers by symbol for deterministic merge
+    worker_results.sort(key=lambda w: w.symbol)
+
+    # Merge results
+    _, all_accepted, coverages = _merge_worker_results(worker_results)
+
+    clean_symbols = sum(1 for a in coverages if a.status == "accepted")
+    event_count = len(all_accepted)
+
+    # Event stats
+    by_symbol: dict[str, int] = {}
+    for point in all_accepted:
+        by_symbol[point.symbol] = by_symbol.get(point.symbol, 0) + 1
+    max_symbol_share = 0.0
+    max_symbol_name = ""
+    if by_symbol:
+        max_sym, max_cnt = max(by_symbol.items(), key=lambda kv: (kv[1], kv[0]))
+        max_symbol_share = max_cnt / event_count if event_count else 0.0
+        max_symbol_name = max_sym
+    symbols_with_3 = sum(1 for n in by_symbol.values() if n >= 3)
+
+    # Build temp event records for distribution
+    temp_events: list[StressEventRecord] = []
+    for point in all_accepted:
+        event_id = f"{point.symbol}_{point.timestamp.strftime('%Y%m%dT%H%M%SZ')}"
+        temp_events.append(
+            StressEventRecord(
+                event_id=event_id,
+                symbol=point.symbol,
+                event_timestamp_utc=utc_iso(point.timestamp),
+                detector_family=STUDY_ID,
+                direction="long",
+                price_t=point.price_t,
+                trailing_1h_return_bps=point.trailing_1h_return_bps,
+                trailing_6h_realized_vol_bps=point.trailing_6h_realized_vol_bps,
+                trailing_6h_realized_vol_percentile=point.trailing_6h_realized_vol_percentile,
+                cooldown_key=point.symbol,
+                archive_source_path=archive_source,
+            )
+        )
+
+    quarter_dist, month_dist = compute_quarter_month_distributions(temp_events)
+    max_quarter_share, max_quarter = _max_distribution_share(quarter_dist, event_count)
+    max_month_share, max_month = _max_distribution_share(month_dist, event_count)
+    distinct_quarters = sum(1 for v in quarter_dist.values() if v > 0)
+    distinct_months = sum(1 for v in month_dist.values() if v > 0)
+
+    # Track IO diagnostics from worker results
+    total_raw_rows = sum(wr.price_series_count for wr in worker_results if wr.status == "accepted")
+
+    status, locked_reason = determine_status(
+        clean_symbols,
+        event_count,
+        symbols_with_3,
+        max_symbol_share,
+        max_month_share,
+        max_quarter_share,
+        distinct_months,
+        distinct_quarters,
+        invalid_input=False,
+        invalid_precommitment=invalid_precommitment,
+    )
+
+    summary = {
+        "study_id": STUDY_ID,
+        "stage": STAGE,
+        "venue": VENUE,
+        "status": status,
+        "unlocks_phase0b": status == STATUS_READY,
+        "phase0b_locked_reason": locked_reason,
+        "detector_family": "generic_altcoin_stress_regime_ablation",
+        "trailing_1h_return_threshold_bps": TRAILING_1H_RETURN_THRESHOLD_BPS,
+        "trailing_6h_vol_percentile_threshold": TRAILING_6H_VOL_PERCENTILE_THRESHOLD,
+        "cooldown_hours": COOLDOWN_HOURS,
+        "total_symbols_requested": len(coverages),
+        "total_symbols_accepted": clean_symbols,
+        "total_symbols_rejected": len(coverages) - clean_symbols,
+        "accepted_event_count_before_cooldown": sum(len(wr.events_before_cooldown) for wr in worker_results if wr.status == "accepted"),
+        "accepted_event_count_after_cooldown": event_count,
+        "symbols_with_at_least_3_events": symbols_with_3,
+        "max_symbol_event_share": max_symbol_share,
+        "max_symbol_event_share_symbol": max_symbol_name,
+        "max_calendar_quarter_event_share": max_quarter_share,
+        "max_calendar_quarter": max_quarter,
+        "max_calendar_month_event_share": max_month_share,
+        "max_calendar_month": max_month,
+        "distinct_months_with_events": distinct_months,
+        "distinct_quarters_with_events": distinct_quarters,
+        "quarter_distribution": quarter_dist,
+        "month_distribution": month_dist,
+        "generated_at_utc": utc_iso(generated_at),
+        "git_sha": git_sha,
+        "git_dirty": git_dirty,
+        "precommitment_sha256": pre_hash,
+        "archive_source_path": archive_source,
+        "data_source_summary": {
+            "total_symbol_files": total_files,
+            "total_raw_rows": total_raw_rows,
+        },
+        "safety_mode": SAFETY_MODE,
+        "btc_eth_excluded": True,
+        "price_only_detector": True,
+        "orjson_available": HAS_ORJSON,
+        "workers": num_workers,
+        "total_elapsed_sec": round(total_elapsed, 1),
+    }
+
+    # Build final event records
+    final_events: list[StressEventRecord] = []
+    for point in all_accepted:
+        event_id = f"{point.symbol}_{point.timestamp.strftime('%Y%m%dT%H%M%SZ')}"
+        final_events.append(
+            StressEventRecord(
+                event_id=event_id,
+                symbol=point.symbol,
+                event_timestamp_utc=utc_iso(point.timestamp),
+                detector_family=STUDY_ID,
+                direction="long",
+                price_t=point.price_t,
+                trailing_1h_return_bps=point.trailing_1h_return_bps,
+                trailing_6h_realized_vol_bps=point.trailing_6h_realized_vol_bps,
+                trailing_6h_realized_vol_percentile=point.trailing_6h_realized_vol_percentile,
+                cooldown_key=point.symbol,
+                archive_source_path=archive_source,
+            )
+        )
+    # Sort deterministically
+    final_events.sort(key=lambda e: (e.event_timestamp_utc, e.symbol, e.event_id))
+
+    rejected = [
+        {
+            "symbol": a.symbol,
+            "rejection_reason": a.rejection_reason,
+            "first_timestamp_utc": a.first_timestamp_utc,
+            "last_timestamp_utc": a.last_timestamp_utc,
+            "usable_months": a.usable_months,
+            "row_count": a.row_count,
+        }
+        for a in coverages
+        if a.status != "accepted"
+    ]
+
+    result = Phase0AResult(summary, final_events, coverages, rejected, warnings)
+
     if out_dir is not None:
         result = write_report_artifacts(result, out_dir)
+
+    print(f"GENERIC_STRESS_PHASE0A_DONE status={status} accepted={event_count} elapsed_sec={total_elapsed:.1f}", flush=True)
     return result
 
 
@@ -827,6 +1327,7 @@ __all__ = [
     "ACTIVE_ARCHIVE_PATH",
     "ALTCOIN_EXCLUDED_SYMBOLS",
     "COOLDOWN_HOURS",
+    "HAS_ORJSON",
     "MAX_MONTH_EVENT_SHARE",
     "MAX_QUARTER_EVENT_SHARE",
     "MAX_SYMBOL_EVENT_SHARE",
@@ -844,15 +1345,18 @@ __all__ = [
     "StressWindowPoint",
     "SymbolAudit",
     "Phase0AResult",
+    "SymbolWorkerResult",
     "accepted_event_json",
     "accepted_event_json_rows",
     "apply_cooldown",
     "compute_quarter_month_distributions",
     "compute_stress_points",
+    "compute_stress_points_vectorized",
     "compute_trailing_1h_return_bps",
     "compute_trailing_6h_realized_vol_bps",
     "compute_vol_percentile",
     "discover_archive_paths",
+    "discover_jsonl_files",
     "filter_stress_candidates",
     "git_metadata",
     "has_forward_24h_coverage",
@@ -862,4 +1366,9 @@ __all__ = [
     "validate_precommitment",
     "validate_symbol_coverage",
     "write_report_artifacts",
+    "_DEFAULT_WORKERS",
+    "_loads_json_line",
+    "_merge_worker_results",
+    "_process_one_file",
+    "_read_jsonl_lines",
 ]

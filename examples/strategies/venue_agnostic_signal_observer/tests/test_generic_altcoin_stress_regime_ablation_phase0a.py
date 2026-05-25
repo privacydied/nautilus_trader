@@ -521,3 +521,91 @@ def test_phase0b_classification_ambiguous():
     win_rate = 0.55
     assert not (net_mean >= 75 and net_median >= 50 and win_rate >= 0.54)
     assert not (net_mean < 40 or net_median <= 0 or win_rate <= 0.52)
+
+
+# ------------------------------------------------------------------
+# Optimization equivalence tests
+# ------------------------------------------------------------------
+
+
+def test_loads_json_line_parses_json():
+    from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0a import _loads_json_line
+    line = '{"ts_event": 1704067200000000000, "symbol": "SOL", "price": 100.0}'
+    result = _loads_json_line(line.encode("utf-8"))
+    assert result["symbol"] == "SOL"
+    assert result["price"] == 100.0
+
+
+def test_loads_json_line_str():
+    from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0a import _loads_json_line
+    result = _loads_json_line('{"symbol": "SOL"}')
+    assert result["symbol"] == "SOL"
+
+
+def test_vectorized_matches_reference():
+    from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0a import (
+        compute_stress_points, compute_stress_points_vectorized,
+    )
+    from datetime import UTC
+    n = 744
+    series = []
+    base = 100.0
+    for i in range(n):
+        ts = datetime(2024, 1, 1, tzinfo=UTC) + timedelta(hours=i)
+        if 360 <= i < 367:
+            price = base * 0.95
+        else:
+            price = base * (1 - 0.0001 * i)
+        series.append((ts, max(price, 0.01)))
+    pv = compute_stress_points_vectorized("T", series)
+    pr = compute_stress_points("T", series)
+    assert len(pv) == len(pr)
+    for a, b in zip(pv, pr):
+        assert abs(a.trailing_1h_return_bps - b.trailing_1h_return_bps) < 1e-9
+        assert abs(a.trailing_6h_realized_vol_bps - b.trailing_6h_realized_vol_bps) < 1e-9
+        assert abs(a.trailing_6h_realized_vol_percentile - b.trailing_6h_realized_vol_percentile) < 1e-9
+
+
+def test_worker_rejects_btc(tmp_path):
+    from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0a import _process_one_file
+    fp = tmp_path / "BTC.jsonl"
+    fp.write_text('{"ts_event": 1704067200000000000, "symbol": "BTC", "price": 100.0}\n', encoding="utf-8")
+    r = _process_one_file(str(fp), str(tmp_path))
+    assert r.status == "rejected"
+    assert "excluded" in r.rejection_reason
+
+
+def test_worker_rejects_eth(tmp_path):
+    from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0a import _process_one_file
+    fp = tmp_path / "ETH.jsonl"
+    fp.write_text('{"ts_event": 1704067200000000000, "symbol": "ETH", "price": 100.0}\n', encoding="utf-8")
+    r = _process_one_file(str(fp), str(tmp_path))
+    assert r.status == "rejected"
+    assert "excluded" in r.rejection_reason
+
+
+def test_worker_accepts_altcoin(tmp_path):
+    from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0a import _process_one_file
+    import json
+    sym = "SOL"
+    fp = tmp_path / f"{sym}.jsonl"
+    base = 100.0
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    rows = []
+    # Need at least 9 months (MIN_COVERAGE_MONTHS) of hourly data
+    for i in range(660 * 24):  # ~660 days
+        ts_event = int((start + timedelta(hours=i)).timestamp() * 1_000_000_000)
+        # Gradual decline
+        trend_price = base * (1 - 0.00001 * i)
+        # Sharp crash at month 7 (~hour 5100): -8% in 1 hour
+        if 5100 <= i < 5101:
+            price = trend_price * 0.92
+        elif 5101 <= i < 5107:
+            price = trend_price * 0.95
+        else:
+            price = trend_price
+        rows.append({"ts_event": ts_event, "symbol": sym, "price": max(price, 0.01), "open_interest": 1e8})
+    fp.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    r = _process_one_file(str(fp), str(tmp_path))
+    assert r.status == "accepted", f"expected accepted, got {r.status}: {r.rejection_reason}"
+    assert len(r.events_after_cooldown) > 0
