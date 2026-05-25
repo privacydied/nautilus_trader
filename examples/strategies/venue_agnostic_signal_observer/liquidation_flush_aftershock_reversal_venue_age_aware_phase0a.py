@@ -9,6 +9,8 @@ quarter/month diversification gates.
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
+import json
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -514,10 +516,47 @@ def _write_csv(path: Path, fieldnames: Sequence[str], rows: Iterable[dict[str, A
     tmp.replace(path)
 
 
+def accepted_event_json(event: EventRecord) -> dict[str, Any]:
+    return {
+        "event_id": event.event_id,
+        "symbol": event.symbol,
+        "event_timestamp_utc": event.event_timestamp_utc,
+        "event_direction": "downside_liquidation_flush",
+        "flush_side": "long_wipe",
+        "price_t": event.price_t,
+        "price_t_minus_8h": event.price_t_minus_8h,
+        "oi_t": event.oi_t,
+        "oi_t_minus_8h": event.oi_t_minus_8h,
+        "price_return_8h_pct": event.price_return_8h_pct,
+        "oi_change_8h_pct": event.oi_change_8h_pct,
+        "cooldown_group_index": event.cooldown_group_index,
+        "calendar_year": event.calendar_year,
+    }
+
+
+def accepted_event_json_rows(events: Sequence[EventRecord]) -> list[dict[str, Any]]:
+    return [accepted_event_json(event) for event in sorted(events, key=lambda e: (e.event_timestamp_utc, e.symbol, e.event_id))]
+
+
+def _write_jsonl_with_hash(path: Path, rows: Sequence[dict[str, Any]]) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows]
+    payload = "".join(lines).encode("utf-8")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_bytes(payload)
+    tmp.replace(path)
+    return hashlib.sha256(payload).hexdigest()
+
+
 def write_report_artifacts(result: Phase0AResult, report_dir: Path) -> Phase0AResult:
     from examples.strategies.venue_agnostic_signal_observer.run_artifacts import atomic_write_json, atomic_write_text
 
     report_dir.mkdir(parents=True, exist_ok=True)
+    event_rows = accepted_event_json_rows(result.accepted_events)
+    event_hash = _write_jsonl_with_hash(report_dir / "accepted_events.jsonl", event_rows)
+    result.summary["accepted_events_jsonl_path"] = "accepted_events.jsonl"
+    result.summary["accepted_events_jsonl_sha256"] = event_hash
+    result.summary["accepted_events_jsonl_count"] = len(event_rows)
     atomic_write_json(report_dir / "summary.json", result.summary)
     atomic_write_text(report_dir / "summary.md", summary_markdown(result))
     _write_csv(report_dir / "accepted_events.csv", ["event_id", "symbol", "event_timestamp_utc", "price_t", "price_t_minus_8h", "oi_t", "oi_t_minus_8h", "price_return_8h_pct", "oi_change_8h_pct", "cooldown_group_index", "calendar_year"], [asdict(e) for e in result.accepted_events])
@@ -544,6 +583,8 @@ __all__ = [
     "STATUS_MONTH_CONCENTRATION",
     "STATUS_QUARTER_CONCENTRATION",
     "STATUS_TEMPORAL_COVERAGE",
+    "accepted_event_json",
+    "accepted_event_json_rows",
     "compute_quarter_month_distributions",
     "discover_archive_paths",
     "load_archive_rows",
