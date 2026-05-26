@@ -519,6 +519,14 @@ def _dict_to_lock(data: dict[str, Any]) -> DiscoveryCandidateLock:
     )
 
 
+def candidate_locks_are_semantically_identical(
+    lock_a: DiscoveryCandidateLock,
+    lock_b: DiscoveryCandidateLock,
+) -> bool:
+    """Compare two candidate locks by their candidate_hash."""
+    return lock_a.candidate_hash == lock_b.candidate_hash
+
+
 def load_candidate_lock(path: str | Path) -> DiscoveryCandidateLock:
     """Load a DiscoveryCandidateLock from a JSON file."""
     path = Path(path)

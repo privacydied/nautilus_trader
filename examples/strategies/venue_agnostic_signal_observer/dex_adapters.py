@@ -159,7 +159,7 @@ def fetch_dexscreener_pairs_by_address(
     snaps: list[DexPoolSnapshot] = []
     errs: list[str] = []
     for addr in addresses:
-        snap, err = fetch_dexscreener_pair(addr, addr, client=client)
+        snap, err = fetch_dexscreener_pair(addr, "multiple", client=client)
         # For address-first fetch, chain defaults to 'multiple'
         if snap is not None:
             snaps.append(snap)
