@@ -21,12 +21,13 @@ from pathlib import Path
 
 from .candidate_lock import (
     CANDIDATE_SCHEMA_VERSION,
+    candidate_locks_are_semantically_identical,
     create_candidate_lock,
     load_candidate_lock,
     save_candidate_lock,
-    candidate_lock_file_is_semantically_identical,
 )
-from .grid_lock import DiscoveryGridLock, load_grid_lock, validate_grid_lock
+from .capture_fingerprint import build_capture_manifest_ref
+from .grid_lock import DiscoveryGridLock, load_grid_lock, validate_grid_spec_against_lock
 from .search_space import load_grid_spec, validate_grid_spec
 
 
@@ -83,15 +84,13 @@ def main() -> int:
 
     # Load grid lock
     try:
-        with open(args.grid_lock) as f:
-            lock_data = json.load(f)
-        grid_lock = DiscoveryGridLock(**lock_data)
+        grid_lock = load_grid_lock(args.grid_lock)
     except (FileNotFoundError, json.JSONDecodeError, Exception) as exc:
         print(f"Error loading grid lock: {exc}", file=sys.stderr)
         return 1
 
     try:
-        validate_grid_lock(spec, grid_lock)
+        validate_grid_spec_against_lock(spec, grid_lock)
     except Exception as exc:
         print(f"Grid lock validation error: {exc}", file=sys.stderr)
         return 1
@@ -118,22 +117,30 @@ def main() -> int:
             print(f"Error loading cluster summary: {exc}", file=sys.stderr)
             return 1
 
-    # Capture manifest paths
+    # Capture manifest paths -> CaptureManifestRef objects
     if not args.capture_paths:
         print("Error: At least one --capture manifest path is required",
               file=sys.stderr)
         return 1
 
+    try:
+        discovery_capture_refs = tuple(
+            build_capture_manifest_ref(p) for p in args.capture_paths
+        )
+    except Exception as exc:
+        print(f"Error building capture manifest refs: {exc}", file=sys.stderr)
+        return 1
+
     # Create candidate lock
     try:
         lock = create_candidate_lock(
-            candidate_id=args.candidate_id,
             grid_spec=spec,
             grid_lock=grid_lock,
-            selected_cells=selected_cells,
+            candidate_id=args.candidate_id,
+            selected_cells=tuple(selected_cells),
             cluster_summary=cluster_summary,
             selection_reason=args.selection_reason,
-            capture_paths=args.capture_paths,
+            discovery_capture_refs=discovery_capture_refs,
         )
     except Exception as exc:
         print(f"Error creating candidate lock: {exc}", file=sys.stderr)
@@ -142,10 +149,14 @@ def main() -> int:
     # Write candidate lock
     output_path = Path(args.output)
     if output_path.exists():
-        if candidate_lock_file_is_semantically_identical(lock, output_path):
-            print(f"Already locked (semantically identical): {args.output}")
-            print(f"  candidate_hash: {lock.candidate_hash}")
-            return 0
+        try:
+            existing = load_candidate_lock(output_path)
+            if candidate_locks_are_semantically_identical(lock, existing):
+                print(f"Already locked (semantically identical): {args.output}")
+                print(f"  candidate_hash: {lock.candidate_hash}")
+                return 0
+        except Exception:
+            pass
         print(
             f"ERROR: Candidate lock file already exists with different "
             f"content: {args.output}",

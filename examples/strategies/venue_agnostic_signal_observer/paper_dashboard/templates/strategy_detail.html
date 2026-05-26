@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Strategy Detail — {{ strategy.strategy_id }}</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; background: #f5f5f5; }
+        h1, h2 { color: #333; }
+        .back { margin-bottom: 1em; }
+        .detail-box { background: #fff; border: 1px solid #ccc; padding: 1em; margin-bottom: 1em; }
+        .detail-box dt { font-weight: bold; margin-top: 0.5em; }
+        .detail-box dd { margin-left: 1em; }
+        .ENABLED { color: #090; font-weight: bold; }
+        .DISABLED { color: #c00; font-weight: bold; }
+        .KILLED { color: #a00; }
+        .EXPIRED { color: #888; }
+        .PENDING { color: #880; }
+    </style>
+</head>
+<body>
+    <div class="back"><a href="/">&larr; Back to dashboard</a></div>
+    <h1>Strategy: {{ strategy.strategy_id }}</h1>
+    <div class="detail-box">
+        <dl>
+            <dt>State</dt>
+            <dd class="{{ strategy.state.name }}">{{ strategy.state.name }}</dd>
+
+            <dt>Signal Family</dt>
+            <dd>{{ strategy.signal_family }}</dd>
+
+            <dt>Study ID</dt>
+            <dd>{{ strategy.study_id }}</dd>
+
+            <dt>Group ID</dt>
+            <dd>{{ strategy.group_id }}</dd>
+
+            <dt>Precommitment Hash</dt>
+            <dd><code>{{ strategy.precommitment_hash }}</code></dd>
+
+            <dt>Execution Mode</dt>
+            <dd>{{ strategy.execution_mode.name }}</dd>
+
+            <dt>Mean Net BPS</dt>
+            <dd>{{ "%.4f"|format(strategy.mean_net_bps) }}</dd>
+
+            <dt>Valid Count</dt>
+            <dd>{{ strategy.valid_count }}</dd>
+
+            <dt>Win Rate</dt>
+            <dd>{{ "%.4f"|format(strategy.win_rate) if strategy.win_rate is not none else 'N/A' }}</dd>
+
+            <dt>Cost Floor BPS</dt>
+            <dd>{{ strategy.cost_floor_bps }}</dd>
+
+            <dt>Min Events</dt>
+            <dd>{{ strategy.min_events }}</dd>
+
+            <dt>Promoted At</dt>
+            <dd>{{ strategy.promoted_at_utc or 'N/A' }}</dd>
+
+            <dt>Promoter Verdict</dt>
+            <dd>{{ strategy.promoter_verdict }}</dd>
+
+            <dt>Last Refalsified</dt>
+            <dd>{{ strategy.last_refalsified_utc or 'Never' }}</dd>
+
+            <dt>Refalsification Status</dt>
+            <dd>{{ strategy.refalsification_status or 'Not yet refalsified' }}</dd>
+
+            {% if strategy.source_venue %}
+            <dt>Source Venue</dt>
+            <dd>{{ strategy.source_venue }}</dd>
+            {% endif %}
+
+            {% if strategy.target_venue %}
+            <dt>Target Venue</dt>
+            <dd>{{ strategy.target_venue }}</dd>
+            {% endif %}
+
+            {% if strategy.source_symbol %}
+            <dt>Source Symbol</dt>
+            <dd>{{ strategy.source_symbol }}</dd>
+            {% endif %}
+
+            {% if strategy.target_symbol %}
+            <dt>Target Symbol</dt>
+            <dd>{{ strategy.target_symbol }}</dd>
+            {% endif %}
+
+            <dt>Artifacts Dir</dt>
+            <dd><code>{{ strategy.artifacts_dir }}</code></dd>
+
+            <dt>Output Dir</dt>
+            <dd><code>{{ strategy.output_dir }}</code></dd>
+        </dl>
+    </div>
+
+    <h2>Refalsification Information</h2>
+    <div class="detail-box">
+        {% if strategy.refalsification_status %}
+            <p>Latest refalsification status: <strong>{{ strategy.refalsification_status }}</strong></p>
+        {% else %}
+            <p>Not yet refalsified.</p>
+        {% endif %}
+        <p>Gate freshness: Pending latest artifact scan.</p>
+        <p>Latest null/FDR/holdout/cross-capture status: See artifacts under <code>{{ strategy.artifacts_dir }}</code>.</p>
+        <p><em>Dashboard is read-only. Disabled-by-refalsification strategies cannot be re-enabled from this dashboard in v0.</em></p>
+    </div>
+</body>
+</html>

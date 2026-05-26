@@ -401,7 +401,7 @@ def apply_cooldown(
     accepted: list[StressWindowPoint] = []
     cooldown_until: datetime | None = None
     for point in sorted(candidates, key=lambda p: p.timestamp):
-        if cooldown_until is not None and point.timestamp <= cooldown_until:
+        if cooldown_until is not None and point.timestamp < cooldown_until:
             continue
         accepted.append(point)
         cooldown_until = point.timestamp + timedelta(hours=COOLDOWN_HOURS)

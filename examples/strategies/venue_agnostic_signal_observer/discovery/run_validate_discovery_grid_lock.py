@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import sys
 
-from .grid_lock import DiscoveryGridLock, validate_grid_lock
+from .grid_lock import load_grid_lock, validate_grid_spec_against_lock
 from .search_space import load_grid_spec
 
 
@@ -39,16 +39,14 @@ def main() -> int:
 
     # Load grid lock
     try:
-        with open(lock_path) as f:
-            lock_data = json.load(f)
-        lock = DiscoveryGridLock(**lock_data)
+        lock = load_grid_lock(lock_path)
     except (FileNotFoundError, json.JSONDecodeError, Exception) as exc:
         print(f"Error loading grid lock: {exc}", file=sys.stderr)
         return 1
 
     # Validate
     try:
-        validate_grid_lock(spec, lock)
+        validate_grid_spec_against_lock(spec, lock)
     except Exception as exc:
         print(f"Validation FAILED: {exc}", file=sys.stderr)
         return 1

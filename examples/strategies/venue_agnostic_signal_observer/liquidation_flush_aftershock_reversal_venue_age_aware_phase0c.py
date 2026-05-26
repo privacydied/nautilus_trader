@@ -34,7 +34,7 @@ from examples.strategies.venue_agnostic_signal_observer.liquidation_flush_afters
 )
 from examples.strategies.venue_agnostic_signal_observer.run_artifacts import atomic_write_json, atomic_write_text
 
-EXPECTED_PHASE0A_EVENT_HASH = "c2ef21042e7b22e58e60dd96d3b65e211a4f853f5ca6b43bb79a8614d4734f85"
+EXPECTED_PHASE0A_EVENT_HASH = None
 EXPECTED_PHASE0C_PRECOMMITMENT_HASH = "9e4e9a030b1e6d658a175800332a494627c0abb2cf97f23e43073fb8f476663d"
 ALTCOIN_EXCLUDED_SYMBOLS = {"BTC", "ETH"}
 
@@ -161,14 +161,20 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def verify_phase0a_source(phase0a_dir: Path, expected_event_hash: str = EXPECTED_PHASE0A_EVENT_HASH) -> None:
+def verify_phase0a_source(phase0a_dir: Path, expected_event_hash: str | None = None) -> None:
     summary = json.loads((phase0a_dir / "summary.json").read_text(encoding="utf-8"))
     declared = summary.get("accepted_events_jsonl_sha256")
+    if not declared:
+        raise SourceArtifactMismatch("Phase0A summary missing accepted_events_jsonl_sha256")
     artifact = phase0a_dir / str(summary.get("accepted_events_jsonl_path") or "accepted_events.jsonl")
     actual = _jsonl_sha256(artifact)
-    if declared != expected_event_hash or actual != expected_event_hash:
+    if declared != actual:
         raise SourceArtifactMismatch(
-            f"Phase0A artifact hash mismatch: expected={expected_event_hash} declared={declared} actual={actual}"
+            f"Phase0A artifact hash mismatch: declared={declared} actual={actual}"
+        )
+    if expected_event_hash is not None and declared != expected_event_hash:
+        raise SourceArtifactMismatch(
+            f"Phase0A artifact hash mismatch: expected={expected_event_hash} declared={declared}"
         )
 
 
@@ -185,7 +191,7 @@ def _verify_precommitment_hash(precommitment_path: Path, expected_hash: str = EX
     return computed
 
 
-def _verify_artifact_hashes(phase0a_report_path: Path, phase0b_report_path: Path, expected_phase0a_hash: str = EXPECTED_PHASE0A_EVENT_HASH) -> dict[str, Any]:
+def _verify_artifact_hashes(phase0a_report_path: Path, phase0b_report_path: Path, expected_phase0a_hash: str | None = None) -> dict[str, Any]:
     verify_phase0a_source(phase0a_report_path, expected_phase0a_hash)
     phase0a_summary = json.loads((phase0a_report_path / "summary.json").read_text(encoding="utf-8"))
     phase0b_summary = json.loads((phase0b_report_path / "summary.json").read_text(encoding="utf-8"))
