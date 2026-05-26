@@ -270,6 +270,29 @@ def main():
     ext_start = PRIOR_END + timedelta(hours=1)
     ext_end = datetime(2026, 4, 28, 23, 59, 0, tzinfo=UTC)
     
+    # Load prior accepted events for full-window union computation
+    prior_accepted_path = Path(
+        "reports/generic_altcoin_stress_regime_ablation_phase0a/"
+        "generic_altcoin_stress_regime_ablation_phase0a_20260525T235410_666100_010d14/"
+        "accepted_events.jsonl"
+    )
+    prior_events_list = []
+    if prior_accepted_path.exists():
+        prior_raw = read_jsonl_fast(prior_accepted_path)
+        for ev in prior_raw:
+            sym = str(ev.get("symbol","")).upper()
+            if sym in EXCLUDED: continue
+            direction = str(ev.get("event_direction") or ev.get("direction", "downside_price_drop"))
+            prior_events_list.append({
+                "symbol": sym,
+                "event_timestamp_utc": str(ev.get("event_timestamp_utc", "")),
+                "price_t": float(ev.get("price_t", 0)),
+                "direction": direction,
+            })
+        print(f"Loaded {len(prior_events_list)} prior accepted events for full-union computation", flush=True)
+    else:
+        print("WARNING: prior accepted events not found, full union will omit prior events", flush=True)
+    
     sym_args = []
     for sym in sorted(FROZEN):
         if sym in EXCLUDED: continue
@@ -293,25 +316,73 @@ def main():
     
     print(f"\nTotal candidates before cooldown: {len(all_accepted)}", flush=True)
     
+    # Load full archive price series for return computation (not truncated to 45-day lookback)
+    # The worker's series only has the last 45 days of main data; we need the full archive
+    # to compute returns for prior accepted events (2024-2025)
+    print("Loading full archive for return computation...", flush=True)
+    for sym in sorted(set(FROZEN) - EXCLUDED):
+        # Force reload full archive when prior events exist (need 2024-2025 data)
+        main_f = ACTIVE_ARCHIVE / f"{sym}.jsonl"
+        ext_f = STAGING / f"{sym}.jsonl"
+        full_series = []
+        if main_f.exists():
+            raw = read_jsonl_fast(main_f)
+            for r in raw:
+                try:
+                    ts = datetime.fromisoformat(r.get("ts_event","").replace("Z","+00:00"))
+                    px = float(r.get("price", r.get("mark_px", 0)))
+                    if px > 0:
+                        full_series.append((ts, px))
+                except: pass
+        if ext_f.exists():
+            raw = read_jsonl_fast(ext_f)
+            for r in raw:
+                try:
+                    ts = datetime.fromisoformat(r.get("ts_event","").replace("Z","+00:00"))
+                    px = float(r.get("price", r.get("mark_px", 0)))
+                    if px > 0:
+                        full_series.append((ts, px))
+                except: pass
+        if full_series:
+            full_series.sort(key=lambda x: x[0])
+            seen = set()
+            dedup = []
+            for ts, px in full_series:
+                if ts not in seen:
+                    seen.add(ts)
+                    dedup.append((ts, px))
+            all_series[sym] = dedup
+    print(f"Full archive loaded for {len(all_series)} symbols", flush=True)
+    
     # Separate cohorts
     ext_only = [e for e in all_accepted 
                 if PRIOR_END < datetime.fromisoformat(e["event_timestamp_utc"].replace("Z","+00:00")) <= ext_end]
-    full_window = [e for e in all_accepted
-                   if datetime.fromisoformat(e["event_timestamp_utc"].replace("Z","+00:00")) <= ext_end]
+    # Diagnostic cohort: all events from lookback+extension detector (45-day lookback through 2026-04-28)
+    lookback_extension = [e for e in all_accepted
+                          if datetime.fromisoformat(e["event_timestamp_utc"].replace("Z","+00:00")) <= ext_end]
+    
+    # True full-extended window = prior accepted events UNION extension-only events
+    ext_only_keys = set((e["symbol"], e["event_timestamp_utc"]) for e in ext_only)
+    filtered_prior = [e for e in prior_events_list 
+                      if (e["symbol"], e["event_timestamp_utc"]) not in ext_only_keys]
+    full_union = filtered_prior + ext_only
     
     print(f"Extension-only events: {len(ext_only)}", flush=True)
-    print(f"Full-window events: {len(full_window)}", flush=True)
+    print(f"Lookback+extension events (diagnostic): {len(lookback_extension)}", flush=True)
+    print(f"Prior events for union: {len(filtered_prior)}", flush=True)
+    print(f"True full-extended-union events: {len(full_union)}", flush=True)
     
     # Compute metrics
     ext_metrics = compute_metrics(ext_only, all_series)
-    full_metrics = compute_metrics(full_window, all_series)
+    lookback_metrics = compute_metrics(lookback_extension, all_series)
+    full_union_metrics = compute_metrics(full_union, all_series)
     
     print(f"Extension 24h net50: mean={ext_metrics.get('mean_bps'):.2f}, n={ext_metrics.get('n')}, win={ext_metrics.get('win_rate'):.4f}", flush=True)
-    print(f"Full 24h net50: mean={full_metrics.get('mean_bps'):.2f}, n={full_metrics.get('n')}", flush=True)
+    print(f"Full union 24h net50: mean={full_union_metrics.get('mean_bps'):.2f}, n={full_union_metrics.get('n')}", flush=True)
     
     # Temporals
     ext_years = Counter(datetime.fromisoformat(e["event_timestamp_utc"].replace("Z","+00:00")).year for e in ext_only)
-    full_years = Counter(datetime.fromisoformat(e["event_timestamp_utc"].replace("Z","+00:00")).year for e in full_window)
+    full_years = Counter(datetime.fromisoformat(e["event_timestamp_utc"].replace("Z","+00:00")).year for e in full_union)
     ext_total = sum(ext_years.values())
     full_total = sum(full_years.values())
     
@@ -324,7 +395,7 @@ def main():
     yr2024_share = full_years.get(2024, 0) / full_total if full_total > 0 else 0.0
     if yr2024_share > 0.50:
         warnings.append("FULL_WINDOW_TEMPORAL_CONCENTRATION_STILL_FAILED")
-    print(f"Full window 2024 share: {yr2024_share:.4f}", flush=True)
+    print(f"Full-union 2024 share: {yr2024_share:.4f}", flush=True)
     
     # Weekly clustering
     ext_weeks = Counter()
@@ -456,10 +527,18 @@ def main():
             "missing_forward": ext_metrics.get("missing"),
         },
         "full_extended_window_metrics": {
-            "event_count": len(full_window),
-            "evaluated_count": full_metrics.get("n"),
-            "net50_mean_bps": full_metrics.get("mean_bps"),
+            "event_count": len(full_union),
+            "evaluated_count": full_union_metrics.get("n"),
+            "net50_mean_bps": full_union_metrics.get("mean_bps"),
             "2024_share": yr2024_share,
+            "prior_events_merged": len(filtered_prior),
+            "extension_events_in_union": len(ext_only),
+        },
+        "diagnostic_lookback_extension_metrics": {
+            "event_count": len(lookback_extension),
+            "evaluated_count": lookback_metrics.get("n"),
+            "net50_mean_bps": lookback_metrics.get("mean_bps"),
+            "note": "Events detected from 45-day lookback + extension data only. Excludes prior accepted events."
         },
         "negative_control_metrics": control_result,
         "survivorship_status": surv_status,
@@ -494,8 +573,12 @@ The generic price-only altcoin stress detector (unchanged from prior study) was 
 ## Extension-only result
 Events: {n_ext} | Net50 mean: {ext_metrics.get('mean_bps'):.2f} bps | Win rate: {ext_metrics.get('win_rate'):.4f} | Net75: {ext_metrics.get('net75'):.2f} | Net100: {ext_metrics.get('net100'):.2f}
 
-## Full-window concentration
-2024 share: {yr2024_share:.4f}
+## Full-extended-union result (prior accepted events + extension-only)
+Events: {len(full_union)} | Net50 mean: {full_union_metrics.get('mean_bps'):.2f} bps | 2024 share: {yr2024_share:.4f}
+Prior events merged: {len(filtered_prior)} | Extension-only events in union: {len(ext_only)}
+
+## Diagnostic lookback+extension (45-day lookback only, excludes prior events)
+Events: {len(lookback_extension)} | Net50 mean: {lookback_metrics.get('mean_bps'):.2f} bps
 
 ## Controls
 Passed: {control_passed}
