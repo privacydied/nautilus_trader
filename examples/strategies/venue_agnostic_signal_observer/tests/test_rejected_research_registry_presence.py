@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-REGISTRY_MIN_LINES = 744
+REGISTRY_MIN_LINES = 1080
 
 
 def test_rejected_research_registry_presence() -> None:

@@ -18,8 +18,8 @@ changing something structural.
 
 ## Mined Status
 
-The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 49 study groups:
-- **37 REJECTED**
+The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 50 study groups:
+- **38 REJECTED**
 - **11 NEEDS_MORE_DATA** (insufficient events / zero signals / no tail / market availability blocked)
 - **1 MARKET_MODERATE_DIAGNOSTIC** (quiet/moderate capture, below volatility gate)
 - **1 PHASE0_CLOSED_INDICATOR_FAMILY_DIAGNOSTIC** (scoped Phase 0 diagnostic family closure; not counted as a broad venue or strategy-family rejection)
@@ -1075,3 +1075,85 @@ Safety: public-data observer/research only. No orders, auth, private keys, live 
 
 **Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, bot path, or Phase 0C execution were used.
 
+
+
+### HLP Backstop Absorption Reversal — ARCHIVE_INFEASIBLE / BACKSTOP_INSEPARABLE
+
+**Tag:** `hlp-backstop-absorption-reversal-archive-infeasible-backstop-inseparable`
+
+**Verdict:** `HLP_BACKSTOP_ABSORPTION_ARCHIVE_INFEASIBLE_BACKSTOP_INSEPARABLE`
+
+**Date closed:** 2026-05-26
+
+**Phase 0A* diagnostic branch:** `feat/hlp-backstop-absorption-phase0a-star-coverage`
+**Starting SHA:** `30c5693e9bc058c80198e5af068ff3c70107df87`
+**Final SHA:** `1c12eeb0cfd802e39e4fe68e4c24ebc00e9d82f8`
+**Phase 0C/v1 unlocked:** No
+**Paper/shadow/live promoted:** No
+
+**Hypothesis:** Hyperliquid HLP/liquidator-vault backstop inventory shocks might identify forced-flow absorption after liquidation events and predict slower multi-hour reversal. The archive-only prerequisite was that HLP/liquidator-vault backstop inventory changes must be reconstructable historically at hourly-or-better cadence and separable from MM/Earn vault activity.
+
+**Frozen kill question:** Can Hyperliquid HLP / liquidator-vault per-symbol backstop inventory changes be reconstructed historically, at hourly-or-better cadence, from public archive data, with the backstop component separable from market-making / Earn vault activity, without lookahead, live recording, auth, or private endpoints?
+
+**Full probe sequence:**
+
+| Probe | Source | Date/Hour | Key Finding |
+|---|---|---|---|
+| 1. Initial local archive run | NAS data-root | — | Local archive lacked node_fills_by_block, vault metadata, Artemis balances. Initial verdict: ARCHIVE_INFEASIBLE |
+| 2. S3 archive availability probe | node_fills_by_block/hourly/ | 2026-05-24, hour 0 | 304 dates available, 24 hourly LZ4 files, real schema is pair/event based. Schema verdict: SCHEMA_READY |
+| 3. Real schema integration | node_fills_by_block adapter | — | Per-address signed inventory deltas parsable. 321,347 fills sampled, 99.33% pairable, side mapping stable |
+| 4. Misc events probe | misc_events_by_block/hourly/ | 2026-05-24, hour 0 | No liquidation/backstop markers. Only funding, deposits, withdrawals, staking |
+| 5. Explorer blocks source probe | explorer_blocks/ | Block range ~1,008,112,033 | NetChildVaultPositionsAction discovered 2 vault-like addresses. No BACKSTOP role labels. vaultDetails returned HTTP 422 |
+| 6. Child vault role classification | node_fills_by_block hours 0,14 | 2026-05-24 | Both addresses classified as MM_PARENT (inferred_high). 180 coins each, net delta ratio ~0.004-0.032. No backstop behavior |
+| 7. Stress-window attribution probe | node_fills_by_block/hourly/20251010/ hours 15-20 | 2025-10-10 | 2.4x normal volume (1,420 MiB). 4.9M fills. MM addresses stayed balanced (ndr 0.02-0.05). 139 one-sided addresses but none distinct from vaults. Verdict: MM_ONLY |
+
+**Key findings:**
+
+1. Archive schema: Node_fills_by_block is parseable. Real schema is pair/event based with [address, fill_detail] per block. Per-address signed inventory delta mapping: side == "B" -> +sz, side == "A" -> -sz. Pairability high (99.33%).
+
+2. No liquidation/backstop marker: No explicit liquidation, backstop, clearinghouse, deleverage, ADL, forced-close, or vault-takeover marker was found in any sampled public archive source:
+   - node_fills_by_block: no liquidation field in fill detail keys
+   - misc_events_by_block: only funding, deposits, withdrawals, staking
+   - explorer_blocks: NetChildVaultPositionsAction exposes addresses but not role labels
+
+3. MM-dominated vault addresses: Two vault-like addresses discovered via NetChildVaultPositionsAction in explorer_blocks. Both classified as broad continuous MM (180 coins each, net delta ratio < 0.04, high pairability > 0.9). Neither showed backstop-like one-sided behavior even during a verified stress window (2025-10-10, 2.4x normal volume).
+
+4. Parent vault unresolved: vaultDetails API returned HTTP 422 for both discovered addresses, regardless of field name (user or vaultAddress). Parent HLP vault address not discoverable from public archive/API path.
+
+5. Stress window confirms MM-only: During the largest sampled volume day (2025-10-10, 1,420 MiB vs ~600 MiB baseline), both known MM addresses maintained balanced inventory (net delta ratio 0.051 and 0.019). 139 other one-sided addresses appeared but were random market participants closing/absorbing positions — not vault addresses.
+
+**Final verdict:** HLP_BACKSTOP_ABSORPTION_ARCHIVE_INFEASIBLE_BACKSTOP_INSEPARABLE
+
+**Why this is not a profitability rejection:** The economic mechanism (backstop absorption after liquidations producing a reversal) was never evaluated because the prerequisite data-layer condition — separable HLP backstop child-vault inventory at hourly cadence — could not be satisfied from public archive data. The rejection is data-layer / attribution / separability based, not a test of the economic hypothesis under a documented backstop address or labelled dataset.
+
+**Boundary statement:** The result blocks the archive-only HLP backstop absorption formulation because public archive data did not provide a separable BACKSTOP child-vault role or explicit liquidation/backstop attribution. It does not reject the underlying economic mechanism if a future documented backstop child address or labelled liquidation/backstop dataset becomes available.
+
+**What this closes:**
+- The archive-only HLP backstop absorption formulation that requires reconstructing HLP/liquidator-vault backstop inventory at hourly-or-better cadence with separable BACKSTOP attribution, using only public S3 archive data (node_fills_by_block, misc_events_by_block, explorer_blocks, replica_cmds) and the Hyperliquid public info API.
+- The specific Phase 0A* coverage/mechanism diagnostic on feat/hlp-backstop-absorption-phase0a-star-coverage.
+
+**What this does NOT close:**
+- HLP/vault ideas using a documented external backstop child address.
+- A future labelled liquidation/backstop dataset (public or private).
+- A future live-recorded backstop dataset, separately precommitted before collection.
+- A private/documented API endpoint that exposes liquidation/backstop attribution.
+- Non-backstop HLP/MM inventory hypotheses.
+- A different parent vault source that exposes documented child roles including BACKSTOP/MM/EARN.
+- Heuristic-only liquidation absorption studies if separately precommitted as lower-confidence and not called HLP BACKSTOP.
+
+**Reopen conditions:**
+This closure may be revisited only if at least one of the following becomes available:
+1. A documented HLP backstop child address from an official or high-confidence external source.
+2. A public archive field that explicitly marks liquidation/backstop fills.
+3. A public archive source that maps HLP parent vault to child roles including BACKSTOP/MM/EARN.
+4. A live-recorded dataset, separately precommitted before collection, that captures backstop attribution without lookahead.
+5. A different formulation that explicitly studies MM inventory rather than backstop absorption.
+
+**Artifact paths:**
+- reports/hlp_backstop_absorption_phase0a_star_coverage/20260526_192344_6b0de8af/ (initial local archive run)
+- reports/hlp_backstop_archive_availability_probe/20260526_194643_1aeaecc3/ (S3 availability)
+- reports/hlp_backstop_archive_availability_probe/20260526_203913_2374474e/ (explorer_blocks probe)
+- reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/ (child vault role classification)
+- reports/hlp_backstop_stress_window_attribution_probe/20260526_215948_b41aa859/ (stress-window probe)
+
+**Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, bot path, systemd, registry mutation, precommitment unlock, conductor promotion, or REJECTED_RESEARCH.md mutation prior to this entry. No userFillsByTime was used. All S3 reads were bounded requester-pays behind --allow-s3-archive-read. All API calls were behind --allow-public-metadata-api. Total S3 data downloaded across all probes: ~476 MiB (node_fills_by_block), ~21 MiB (misc_events), ~2.7 MiB (explorer_blocks), all well under 5 GB hard cap.
