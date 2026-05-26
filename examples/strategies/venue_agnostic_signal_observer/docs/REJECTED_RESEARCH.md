@@ -1026,3 +1026,52 @@ Safety: public-data observer/research only. No orders, auth, private keys, live 
 
 ---
 
+### Generic Altcoin Price-Stress Reversion Extension — REJECTED / TEMPORAL_CONCENTRATION_FAILED
+
+**Tag:** `generic-altcoin-stress-extension-present-day-concentration-failed`
+
+**Verdict:** `GENERIC_STRESS_EXTENSION_TEMPORAL_CONCENTRATION_FAILED`
+
+**Phase 0C unlocked:** No
+**Phase 0D/v1 unlocked:** No
+
+**Hypothesis:** Generic price-only altcoin downside stress (trailing 1h return ≤ −300 bps, trailing 6h realized vol percentile ≥ 0.80), followed by 24h long mean reversion, using Hyperliquid public asset_ctxs archive data. No OI, liquidation, funding, or flush-side conditioning is used in this generic variant.
+
+**Prior motivation:** The liquidation/OI venue-age-aware detector failed its Phase 0C circular-shift clustering null (p≈0.974) and was closed with survivorship ambiguity. Diagnostic ablation (generic stress comparison audit) suggested the price-only stress variant recovered comparable or larger returns without OI/liquidation inputs — but that comparison was Phase 0B diagnostic only, not a validated edge claim. This extension test was triggered by the prior generic stress ablation's temporal concentration gate and does not address the OI-conditioning question, which remains separately closed/unresolved by its own registry entry.
+
+**Prior bug:** A previous "full extended window" field was mislabeled — it only represented a limited 45-day lookback + extension diagnostic subset (69 events from late 2025 + 2026), not a true full-window union that includes the 558 prior accepted events from 2024–2025. This was fixed in commit `86b5f2d501` by loading prior accepted events and merging them into the full-union cohort, and by reloading the complete price series for return computation.
+
+**Corrected evidence:**
+
+| Metric | Value |
+|---|---|
+| Full-union evaluated events | 616 |
+| Full-union net50 mean | +362.56 bps |
+| Year distribution | 2024: 419, 2025: 139, 2026: 58 |
+| 2024 share | 68.0% (419/616) |
+| Extension-only events | 58 |
+| Extension-only net50 mean | +552 bps |
+| Extension-only win rate | 0.776 |
+| Prior reproduction | Passed (558 events, net50 mean +342.86 bps, reproduced within 5 bps tolerance) |
+
+**Negative controls:** Boring non-stress control (mean −63.74 bps) and random timestamp control (mean −53.53 bps) were directionally supportive — both were clearly negative. Controls cannot override temporal concentration gates.
+
+**Final blocker:** 2024 share (68.0%) remains above the precommitted 50% concentration gate. Extension-only events (58) are below the 100-event minimum and entirely contained in a single year (2026), independently triggering `GENERIC_STRESS_EXTENSION_TEMPORAL_CONCENTRATION_FAILED` and `GENERIC_STRESS_EXTENSION_UNDERPOWERED`. Full-window 2024 share (68.0%) independently triggers `FULL_WINDOW_TEMPORAL_CONCENTRATION_STILL_FAILED`.
+
+**Secondary finding (OI conditioning):** The prior liquidation/OI-conditioned detector did not demonstrate validated incremental value over the generic price-only stress variant in the audited ablation under this archive and these frozen gates. This is a narrow finding: in this archive and under these frozen precommitted gates, OI/liquidation conditioning did not add validated incremental value over price-only stress. It is not a universal proof that OI can never matter in any formulation.
+
+**Registry interpretation:** The effect may be a real regime-dependent altcoin mean-reversion phenomenon, but under this precommitment it is not a validated durable edge. The 2024 concentration prevents generalization. The price-only stress signal remains economically large (including in the 2026 extension), but the experiment fails the precommitted temporal concentration gate and cannot be treated as validated.
+
+**Boundary — what this closes:**
+- Generic price-only altcoin stress mean reversion on the Hyperliquid public archive under the frozen 50 bps cost, trailing-return thresholds, 48h cooldown, and primary 24h horizon.
+- The specific precommitted temporal concentration gates (50% max year share, 100 minimum events).
+
+**Boundary — what this does NOT close:**
+- A future "non-2024 alt mean reversion" study with a new precommitment and materially different design (e.g., out-of-2024-only validation, alternative universe, modified vol threshold). Any such future attempt requires a new precommitment and cannot reuse this failed gate by tweaking thresholds post hoc.
+- The broader question of whether altcoin mean reversion can be traded under any conditions.
+- Whether OI or other signals could incrementally add value in a differently formulated detector (e.g., different venue, threshold set, or cost model).
+- Different cost tiers (maker/rebate below 50 bps) — not tested.
+- Non-Hyperliquid venues — not tested.
+
+**Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, bot path, or Phase 0C execution were used.
+
