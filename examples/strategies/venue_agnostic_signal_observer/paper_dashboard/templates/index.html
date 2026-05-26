@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Paper Strategy Dashboard</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; background: #f5f5f5; }
+        h1 { color: #333; }
+        table { border-collapse: collapse; width: 100%; background: #fff; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+        th { background: #e0e0e0; }
+        .ENABLED { color: #090; font-weight: bold; }
+        .DISABLED { color: #c00; font-weight: bold; }
+        .KILLED { color: #a00; }
+        .EXPIRED { color: #888; }
+        .PENDING { color: #880; }
+        tr:hover { background: #f0f0f0; }
+        a { color: #3366cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Paper Strategy Dashboard</h1>
+    <p>Read-only. Disabled-by-refalsification strategies cannot be re-enabled from this dashboard.</p>
+    <table>
+        <thead>
+            <tr>
+                <th>strategy_id</th>
+                <th>signal_family</th>
+                <th>state</th>
+                <th>promoted_at_utc</th>
+                <th>mean_net_bps</th>
+                <th>win_rate</th>
+                <th>valid_count</th>
+                <th>last_refalsified_utc</th>
+                <th>refalsification_status</th>
+                <th>disable_reason</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in strategies %}
+            <tr>
+                <td><a href="/strategy/{{ s.strategy_id }}">{{ s.strategy_id }}</a></td>
+                <td>{{ s.signal_family }}</td>
+                <td class="{{ s.state.name }}">{{ s.state.name }}</td>
+                <td>{{ s.promoted_at_utc or '' }}</td>
+                <td>{{ "%.2f"|format(s.mean_net_bps) }}</td>
+                <td>{{ "%.3f"|format(s.win_rate) if s.win_rate is not none else '' }}</td>
+                <td>{{ s.valid_count }}</td>
+                <td>{{ s.last_refalsified_utc or '' }}</td>
+                <td>{{ s.refalsification_status or '' }}</td>
+                <td>
+                    {%- if s.state.name == "DISABLED" and s.refalsification_status and "REFALSIFICATION" in (s.refalsification_status or "").upper() -%}
+                        Refalsification disabled
+                    {%- elif s.state.name == "DISABLED" -%}
+                        Disabled
+                    {%- else -%}
+                    {%- endif -%}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if not strategies %}
+        <p>No paper strategies registered.</p>
+    {% endif %}
+</body>
+</html>
