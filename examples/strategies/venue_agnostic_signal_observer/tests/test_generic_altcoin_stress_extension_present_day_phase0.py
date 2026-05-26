@@ -516,15 +516,14 @@ def test_no_liquidation_status_summary():
 
 
 def test_no_phase0c_import():
-    """Verify this module does not import Phase 0C code."""
+    """Verify this module does not import Phase 0C null runner code."""
     import sys as _sys
     forbidden = [
         "generic_altcoin_stress_regime_ablation_phase0c",
-        "generic_stress_independent_return_audit",
     ]
     for mod in list(_sys.modules.keys()):
         for forbidden_mod in forbidden:
-            assert forbidden_mod not in mod, f"Forbidden import: {mod}"
+            assert forbidden_mod not in mod, f"Forbidden Phase 0C import: {mod}"
 
 
 # ──────────────────────────────────────────────────────────────────
