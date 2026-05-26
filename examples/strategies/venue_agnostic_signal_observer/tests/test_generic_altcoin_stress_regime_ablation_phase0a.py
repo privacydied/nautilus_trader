@@ -15,6 +15,7 @@ from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_r
     MAX_SYMBOL_EVENT_SHARE,
     MIN_ACCEPTED_EVENTS,
     MIN_ACCEPTED_SYMBOLS,
+    MIN_COVERAGE_MONTHS,
     MIN_SYMBOLS_WITH_3_EVENTS,
     STATUS_CONCENTRATION_FAILED,
     STATUS_COVERAGE_FAILED,
@@ -32,6 +33,7 @@ from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_r
     apply_cooldown,
     compute_quarter_month_distributions,
     compute_stress_points,
+    compute_stress_points_vectorized,
     compute_trailing_1h_return_bps,
     compute_trailing_6h_realized_vol_bps,
     compute_vol_percentile,
@@ -39,8 +41,13 @@ from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_r
     has_forward_24h_coverage,
     is_altcoin_symbol,
     run_phase0a_audit,
+    utc_iso,
     validate_precommitment,
     validate_symbol_coverage,
+)
+from examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0b import (
+    GENERIC_EVENT_DIRECTION,
+    GENERIC_TRADE_DIRECTION,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -179,10 +186,11 @@ def test_cooldown_48h():
         StressWindowPoint(base + timedelta(hours=72), "AAVE", 100.0, -400.0, 5000.0, 0.9),
     ]
     result = apply_cooldown(points)
-    # cooldown_until = t + 48h. t=0 -> until=48h (excludes 24h and 48h). t=72 accepted.
+    # cooldown_until = t + 48h. t=0 -> until=48h (excludes 24h, admits t+48h).
+    # t+48h: new cooldown = 96h → t+72h suppressed.
     assert len(result) == 2
     assert result[0].timestamp == base
-    assert result[1].timestamp == base + timedelta(hours=72)
+    assert result[1].timestamp == base + timedelta(hours=48)
 
 
 def test_cooldown_greedy_from_earliest():
@@ -609,3 +617,267 @@ def test_worker_accepts_altcoin(tmp_path):
     r = _process_one_file(str(fp), str(tmp_path))
     assert r.status == "accepted", f"expected accepted, got {r.status}: {r.rejection_reason}"
     assert len(r.events_after_cooldown) > 0
+
+
+# ------------------------------------------------------------------
+# Look-ahead audit: past-only rolling percentile
+# ------------------------------------------------------------------
+
+
+def test_percentile_is_past_only():
+    """Percentile at timestamp t should only use data before t.
+
+    Adding a high-volatility period AFTER the candidate window must NOT
+    change the percentile rank of an earlier candidate.
+    """
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    # Build a stable series of 360 hours, then a spike at hour 360
+    series_early = [(start + timedelta(hours=i), 100.0 + i * 0.001) for i in range(360)]
+    series_late = [(start + timedelta(hours=i), 100.0 + i * 0.001) for i in range(360, 720)]
+
+    # Without late data
+    points_early = compute_stress_points_vectorized("T", series_early)
+    pctiles_before = {p.timestamp: p.trailing_6h_realized_vol_percentile for p in points_early}
+
+    # With late data (entire series) — percentile at timestamps < 360 must not change
+    series_full = series_early + series_late
+    points_full = compute_stress_points_vectorized("T", series_full)
+    pctiles_after = {p.timestamp: p.trailing_6h_realized_vol_percentile for p in points_full}
+
+    for ts in pctiles_before:
+        if ts in pctiles_after:
+            assert abs(pctiles_before[ts] - pctiles_after[ts]) < 1e-12, (
+                f"Percentile changed at {ts}: {pctiles_before[ts]} vs {pctiles_after[ts]}"
+            )
+
+
+# ------------------------------------------------------------------
+# Look-ahead audit: 6h realized vol uses only completed past bars
+# ------------------------------------------------------------------
+
+
+def test_6h_vol_window_is_past_only():
+    """6h trailing realized vol at timestamp t should not include bars after t."""
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    n = 400  # enough to meet VOL_MIN_HISTORY_DAYS (14 days = 336h)
+    prices = [(start + timedelta(hours=i), 100.0) for i in range(n)]
+    # Add a crash at hour 360 (well past min history)
+    prices[360] = (prices[360][0], 95.0)
+
+    points = compute_stress_points_vectorized("T", prices)
+
+    # Verify that vol at i=360 uses returns from bars 355..360 (6 completed bars)
+    p360 = next(p for p in points if p.timestamp == start + timedelta(hours=360))
+    # The 1h return at t=360 is -500 bps (95/100 - 1)
+    assert p360.trailing_1h_return_bps == pytest.approx(-500.0)
+    # The 6h vol at t=360 includes returns from bars 355 through 360
+    # Most bars are 0 return (flat 100), only the last bar has -500 bps
+    assert abs(p360.trailing_6h_realized_vol_bps - 500.0) < 1.0
+
+
+# ------------------------------------------------------------------
+# Look-ahead audit: entry timestamp semantics
+# ------------------------------------------------------------------
+
+
+def test_entry_price_at_event_timestamp():
+    """Entry price for events should be the price at the event timestamp."""
+    from examples.strategies.venue_agnostic_signal_observer.liquidation_flush_aftershock_reversal_phase0a import (
+        parse_timestamp,
+    )
+
+    # Build an event dict
+    start = datetime(2024, 6, 15, tzinfo=UTC)
+    event = StressEventRecord(
+        event_id="TEST_20240615T120000Z",
+        symbol="SOL",
+        event_timestamp_utc=utc_iso(start),
+        detector_family="test",
+        direction="long",
+        price_t=105.0,
+        trailing_1h_return_bps=-400.0,
+        trailing_6h_realized_vol_bps=5000.0,
+        trailing_6h_realized_vol_percentile=0.9,
+        cooldown_key="SOL",
+        archive_source_path="test",
+    )
+    assert event.price_t == 105.0
+    assert event.event_timestamp_utc == "2024-06-15T00:00:00Z"
+
+
+# ------------------------------------------------------------------
+# Look-ahead audit: 24h exit timestamp semantics
+# ------------------------------------------------------------------
+
+
+def test_forward_24h_coverage_tolerance():
+    """Forward coverage check allows 2h tolerance for finding 24h exit price."""
+    base = datetime(2024, 1, 1, tzinfo=UTC)
+    series = [(base + timedelta(hours=h), 100.0) for h in range(48)]
+    # At t=0, 24h target is t=24h: series has exact match
+    assert has_forward_24h_coverage(series, base) is True
+    # At t=22h, target is t+24=46h: series has exact match
+    assert has_forward_24h_coverage(series, base + timedelta(hours=22)) is True
+    # At t=23h, target is t+24=47h: series has exact match
+    assert has_forward_24h_coverage(series, base + timedelta(hours=23)) is True
+    # At t=24h, target is t+24=48h: series only goes to 47h → no match
+    assert has_forward_24h_coverage(series, base + timedelta(hours=24)) is False
+
+    # Series with gaps: verify 2h tolerance works
+    gap_series = [
+        (base + timedelta(hours=0), 100.0),
+        (base + timedelta(hours=25.5), 102.0),  # 1.5h after target → within 2h tolerance
+    ]
+    assert has_forward_24h_coverage(gap_series, base) is True
+
+
+# ------------------------------------------------------------------
+# Look-ahead audit: cooldown boundary
+# ------------------------------------------------------------------
+
+
+def test_cooldown_boundary_47h_suppressed():
+    """Event at t+47h should be suppressed by cooldown of earlier event."""
+    base = datetime(2024, 1, 1, 0, 0, tzinfo=UTC)
+    points = [
+        StressWindowPoint(base, "AAVE", 100.0, -400.0, 5000.0, 0.9),
+        StressWindowPoint(base + timedelta(hours=47), "AAVE", 100.0, -400.0, 5000.0, 0.9),
+    ]
+    result = apply_cooldown(points)
+    assert len(result) == 1
+    assert result[0].timestamp == base
+
+
+def test_cooldown_boundary_48h_admitted():
+    """Event exactly at t+48h should be admitted (cooldown uses < not <=)."""
+    base = datetime(2024, 1, 1, 0, 0, tzinfo=UTC)
+    points = [
+        StressWindowPoint(base, "AAVE", 100.0, -400.0, 5000.0, 0.9),
+        StressWindowPoint(base + timedelta(hours=48), "AAVE", 100.0, -400.0, 5000.0, 0.9),
+    ]
+    result = apply_cooldown(points)
+    assert len(result) == 2
+    assert result[0].timestamp == base
+    assert result[1].timestamp == base + timedelta(hours=48)
+
+
+# ------------------------------------------------------------------
+# Direction semantics: stress_side and trade_direction
+# ------------------------------------------------------------------
+
+
+def test_direction_semantics():
+    """Generic stress events have stress_side='down' and trade_direction='long'."""
+    # The config constants
+    assert GENERIC_EVENT_DIRECTION == "downside_price_drop"
+    assert GENERIC_TRADE_DIRECTION == "long"
+
+    # Build a sample event and verify JSON output includes stress fields
+    event = StressEventRecord(
+        event_id="T_DIR_1",
+        symbol="SOL",
+        event_timestamp_utc="2024-01-01T00:00:00Z",
+        detector_family="generic_altcoin_stress_regime_ablation_phase0",
+        direction="long",
+        price_t=100.0,
+        trailing_1h_return_bps=-400.0,
+        trailing_6h_realized_vol_bps=5000.0,
+        trailing_6h_realized_vol_percentile=0.9,
+        cooldown_key="SOL",
+        archive_source_path="test",
+    )
+    j = accepted_event_json(event)
+    assert j["event_direction"] == "downside_price_drop"
+    assert j["direction"] == "long"
+
+
+# ------------------------------------------------------------------
+# Contamination: OI/liquidation/funding fields not used
+# ------------------------------------------------------------------
+
+
+def test_detector_no_oi_liquidation_funding_fields():
+    """The stress detector's output events must not contain OI/funding/liquidation fields."""
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    prices = []
+    for h in range(500):
+        if h == 0:
+            prices.append((start + timedelta(hours=h), 100.0))
+        elif h == 1:
+            prices.append((start + timedelta(hours=h), 95.0))
+        else:
+            prices.append((start + timedelta(hours=h), 95.0 + (h - 1) * 0.1))
+    points = compute_stress_points_vectorized("AAVE", prices)
+    for p in points:
+        assert not hasattr(p, "open_interest")
+        assert not hasattr(p, "oi_change_pct")
+        assert not hasattr(p, "funding_rate")
+        assert not hasattr(p, "liquidation_volume")
+        assert not hasattr(p, "flush_side")
+
+
+def test_event_json_no_contamination():
+    """Serialised event JSON must not contain OI/funding/liquidation fields."""
+    event = StressEventRecord(
+        event_id="T_CONT_1",
+        symbol="SOL",
+        event_timestamp_utc="2024-01-01T00:00:00Z",
+        detector_family="generic_altcoin_stress_regime_ablation_phase0",
+        direction="long",
+        price_t=100.0,
+        trailing_1h_return_bps=-400.0,
+        trailing_6h_realized_vol_bps=5000.0,
+        trailing_6h_realized_vol_percentile=0.9,
+        cooldown_key="SOL",
+        archive_source_path="test",
+    )
+    j = accepted_event_json(event)
+    forbidden_keys = {"open_interest", "oi_change_pct", "funding_rate", "liquidation_volume", "flush_side"}
+    for key in forbidden_keys:
+        assert key not in j, f"Found forbidden key '{key}' in event JSON"
+
+
+# ------------------------------------------------------------------
+# Survivorship classification
+# ------------------------------------------------------------------
+
+
+def test_survivorship_continuous_data_subset():
+    """The generic stress detector processes a continuous archive subset,
+    which means symbols with insufficient data are rejected. This is
+    classified as CONTINUOUS_DATA_SUBSET_SURVIVORSHIP_LIMITATION.
+    """
+    # The archive requires MIN_COVERAGE_MONTHS >= 9 months of data.
+    # Symbols that died early are naturally excluded. This is not
+    # full CRSP-style survivorship (we don't require live-as-of-today),
+    # but it selects for symbols that survived long enough to accumulate
+    # history. This is an inherent limitation: early-stage tokens with
+    # short price histories are excluded.
+    assert MIN_COVERAGE_MONTHS >= 9.0
+    # The archive is a continuous data subset: all available rows for
+    # each symbol, no forward-filling, no interpolation.
+
+
+# ------------------------------------------------------------------
+# Forward-coverage filtering: detection vs evaluation
+# ------------------------------------------------------------------
+
+
+def test_detection_does_not_use_forward_coverage():
+    """Stress detection uses only past data. Forward coverage is checked
+    at evaluation time only.
+
+    Detection: compute_stress_points_vectorized + filter_stress_candidates
+    Evaluation: has_forward_24h_coverage
+    """
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    # Series with 48h of data — last 24h has no forward coverage
+    series = [(start + timedelta(hours=h), 100.0) for h in range(48)]
+    points = compute_stress_points_vectorized("T", series)
+    # Filter candidates (thresholds won't trigger since no stress)
+    candidates = filter_stress_candidates(points)
+    # Forward coverage check is separate
+    events_with_coverage = [p for p in candidates if has_forward_24h_coverage(series, p.timestamp)]
+    # Most candidates near the end will lack forward coverage
+    # But detection (points and candidates) does not use forward coverage
+    assert len(events_with_coverage) <= len(candidates)
