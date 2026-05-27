@@ -97,6 +97,15 @@ class ScoutStatus(Enum):
     HIP3_P3_ARCHIVE_CROSS_REFERENCE_MISSING = "HIP3_P3_ARCHIVE_CROSS_REFERENCE_MISSING"
     HIP3_P3_CONFIRMATION_INCONCLUSIVE = "HIP3_P3_CONFIRMATION_INCONCLUSIVE"
     HIP3_P3_ERROR = "HIP3_P3_ERROR"
+    # P3E EVM decode statuses
+    HIP3_P3E_EVM_DECODE_READY = "HIP3_P3E_EVM_DECODE_READY"
+    HIP3_P3E_EVM_PAYLOAD_DECODED = "HIP3_P3E_EVM_PAYLOAD_DECODED"
+    HIP3_P3E_EVM_DEPLOYMENT_CANDIDATE_FOUND = "HIP3_P3E_EVM_DEPLOYMENT_CANDIDATE_FOUND"
+    HIP3_P3E_EVM_CONFIG_CANDIDATE_FOUND = "HIP3_P3E_EVM_CONFIG_CANDIDATE_FOUND"
+    HIP3_P3E_EVM_NON_DEPLOYMENT = "HIP3_P3E_EVM_NON_DEPLOYMENT"
+    HIP3_P3E_EVM_UNDECODABLE = "HIP3_P3E_EVM_UNDECODABLE"
+    HIP3_P3E_NO_EVM_PAYLOADS = "HIP3_P3E_NO_EVM_PAYLOADS"
+    HIP3_P3E_ERROR = "HIP3_P3E_ERROR"
 
 
 STUDY_ID = "hip3_builder_deployment_event_discovery_v0"
@@ -2254,55 +2263,53 @@ def run_p2_deployment_search(
 
 
 # ---------------------------------------------------------------------------
-# P3 confirmation mode
+# P3E opaque EVM payload decode audit
 # ---------------------------------------------------------------------------
 
 @dataclass
-class P3CandidateConfirmation:
-    """P3 confirmation result for a single P2 candidate."""
-    # P2 provenance
+class P3EDecodeResult:
+    """Decode result for a single EVM payload."""
+    # Provenance
     p2_source_key: str = ""
-    p2_source_content_hash: str = ""
     p2_block_number: int | None = None
     p2_block_timestamp_utc: str | None = None
     p2_tx_index: int | None = None
-    p2_action_type: str = ""
     p2_user_or_deployer: str | None = None
-    p2_matched_terms: list[str] = field(default_factory=list)
-    p2_candidate_class: str = ""
+    p2_source_content_hash: str = ""
     p2_redacted_excerpt_hash: str = ""
-    p2_window_name: str = ""
-    # P3 extraction
-    extracted_symbol: str | None = None
-    extracted_coin_id: str | None = None
-    extracted_deployer: str | None = None
-    extracted_external_perp_symbols: list[str] = field(default_factory=list)
-    extracted_config_fields: list[str] = field(default_factory=list)
-    extraction_class: str = "opaque_candidate"
-    # P3 classification
-    symbol_class: str = "unknown"
-    is_builder_deployed: bool = False
-    is_universe_update: bool = False
-    is_price_feed_update: bool = False
-    is_failed_transaction: bool = False
-    is_trading_action: bool = False
-    confirmation_status: str = "HIP3_P3_CANDIDATES_OPAQUE"
-    confirmation_note: str = ""
-    # Cross-reference
-    in_asset_ctxs: bool = False
-    in_public_info_universe: bool = False
-    in_l2_archive: bool = False
-    asset_ctxs_first_observed: str | None = None
-    universe_delta_match: bool = False
-    # Neighborhood
-    neighborhood_blocks_inspected: int = 0
-    neighborhood_actions_collected: int = 0
-    neighborhood_deployer_actions: list[dict] = field(default_factory=list)
+    p3_report_path: str = ""
+    # Payload
+    raw_excerpt: str = ""
+    hex_payload: str = ""
+    binary_length: int = 0
+    calldata_selector: str | None = None
+    rlp_item_count: int = 0
+    rlp_items_summary: list[str] = field(default_factory=list)
+    # Fields found
+    found_to: str | None = None
+    found_from: str | None = None
+    found_value: int | None = None
+    found_input_data: str | None = None
+    found_data_hex: str | None = None
+    # Classification
+    payload_class: str = "undecodable"
+    is_deployment_like: bool = False
+    is_config_like: bool = False
+    is_approval_like: bool = False
+    is_transfer_like: bool = False
+    is_trading_or_non_builder_like: bool = False
+    # Evidence
+    extractable_deployer: str | None = None
+    extractable_builder_namespace: str | None = None
+    extractable_symbol: str | None = None
+    extractable_market_id: str | None = None
+    deployment_config_evidence: str = ""
+    decode_note: str = ""
 
 
 @dataclass
-class P3ConfirmationResult:
-    """Result of the P3 candidate confirmation pass."""
+class P3EResult:
+    """Result of the P3E EVM decode audit."""
     status: ScoutStatus | str
     study_id: str = STUDY_ID
     run_id: str = ""
@@ -2313,334 +2320,378 @@ class P3ConfirmationResult:
     final_status: str = ""
     safety_mode: str = SAFETY_MODE
     schema_version: str = SCHEMA_VERSION
-    # P2 input
+    # Input
     p2_input_report: str = ""
-    p2_report_commit: str = ""
-    p2_report_status: str = ""
+    p3_input_report: str = ""
     # Counts
-    candidates_loaded: int = 0
-    candidates_symbol_extracted: int = 0
-    candidates_deployer_extracted: int = 0
-    candidates_confirmed_builder_deployed: int = 0
-    candidates_not_builder_deployed: int = 0
-    candidates_config_only: int = 0
-    candidates_opaque: int = 0
-    candidates_evm_payload: int = 0
-    # Cross-reference
-    symbols_by_class: dict[str, list[str]] = field(default_factory=dict)
-    asset_ctxs_cross_reference: dict[str, Any] = field(default_factory=dict)
-    l2_archive_cross_reference: dict[str, Any] = field(default_factory=dict)
-    deployer_cross_reference: dict[str, Any] = field(default_factory=dict)
-    # Confirmations
-    confirmations: list[P3CandidateConfirmation] = field(default_factory=list)
-    # Budget
-    bytes_downloaded: int = 0
-    explorer_blocks_read: int = 0
+    payloads_loaded: int = 0
+    payloads_decoded: int = 0
+    payloads_undecodable: int = 0
+    calldata_selectors_found: int = 0
+    deployers_extracted: int = 0
+    symbols_extracted: int = 0
+    deployment_candidates: int = 0
+    config_candidates: int = 0
+    non_deployment: int = 0
+    # Results
+    decode_results: list[P3EDecodeResult] = field(default_factory=list)
 
 
-# Known external perp symbols from SetGlobalAction universe updates
-# (extracted from P2 redacted excerpts)
-KNOWN_EXTERNAL_PERP_SYMBOLS = {
-    "AAVE", "ACE", "ADA", "AI16Z", "AIXBT", "ALGO", "APT", "ARB",
-    "ARTY", "ASTR", "AVAX", "BCH", "BONK", "BRETT", "BRICK",
-    "CETUS", "CRV", "DOGE", "DOT", "DYM", "EIGEN", "ENJ",
-    "ENS", "ETC", "ETH", "FET", "FIL", "FLOKI", "FTM",
-    "GALA", "GAS", "GMX", "GRT", "HBAR", "HFT", "IMX",
-    "INJ", "JUP", "KAS", "KAVA", "KNC", "LDO", "LINK",
-    "LRC", "MANTA", "MASK", "MATIC", "MEW", "MKR", "MOVR",
-    "NEAR", "NFT", "NOT", "OP", "ORCA", "PENDLE", "PEPE",
-    "POL", "PENDLE", "PYTH", "RENDER", "RPL", "RUNE", "SAND",
-    "SEI", "SHIB", "SOL", "SUI", "TIA", "TRX", "TURBO",
-    "UMA", "UNI", "USDC", "USDT", "WIF", "WLD", "XRP",
-    "YFI", "ZRO", "ZRX",
-}
+def _extract_evm_payload_from_excerpt(excerpt: str) -> bytes | None:
+    """Extract raw bytes from a P2 evmRawTx excerpt.
+
+    The excerpt contains a JSON object with actions[].data as a Python bytes literal.
+    We extract the hex bytes from the escaped representation.
+    """
+    import re
+
+    # The excerpt has doubled backslashes: \\xf8 means the literal chars \xf8
+    # which is a hex escape in a Python bytes literal.
+    # Extract all \xNN sequences
+    hex_pattern = re.compile(r"\\x([0-9a-fA-F]{2})")
+    matches = hex_pattern.findall(excerpt)
+    if not matches:
+        # Try single backslash pattern
+        hex_pattern2 = re.compile(r"(?:^|[^\\])\\x([0-9a-fA-F]{2})")
+        matches = hex_pattern2.findall(excerpt)
+    if not matches:
+        return None
+
+    return bytes(int(b, 16) for b in matches)
 
 
-def _load_p2_candidates(input_report: str) -> tuple[list[dict], dict, dict]:
-    """Load P2 candidate artifacts from a report directory."""
-    report_dir = Path(input_report)
-    candidates_path = report_dir / "p2_deployment_event_candidates.json"
-    manifest_path = report_dir / "run_manifest.json"
-    summary_path = report_dir / "summary.json"
-
-    if not candidates_path.exists():
-        raise FileNotFoundError(f"P2 candidates not found: {candidates_path}")
-
-    with open(candidates_path) as f:
-        candidates_data = json.load(f)
-
-    manifest = {}
-    if manifest_path.exists():
-        with open(manifest_path) as f:
-            manifest = json.load(f)
-
-    summary = {}
-    if summary_path.exists():
-        with open(summary_path) as f:
-            summary = json.load(f)
-
-    return candidates_data.get("candidates", []), manifest, summary
-
-
-def _normalize_candidate(p2_candidate: dict) -> P3CandidateConfirmation:
-    """Normalize a P2 candidate into a P3 confirmation record."""
-    excerpt_hash = hashlib.sha256(
-        p2_candidate.get("redacted_excerpt", "").encode()
-    ).hexdigest()[:16]
-
-    conf = P3CandidateConfirmation(
-        p2_source_key=p2_candidate.get("source_key", ""),
-        p2_source_content_hash=p2_candidate.get("source_content_hash", ""),
-        p2_block_number=p2_candidate.get("block_number"),
-        p2_block_timestamp_utc=p2_candidate.get("block_timestamp_utc"),
-        p2_tx_index=p2_candidate.get("tx_index"),
-        p2_action_type=p2_candidate.get("action_type", ""),
-        p2_user_or_deployer=p2_candidate.get("user_or_deployer"),
-        p2_matched_terms=p2_candidate.get("matched_terms", []),
-        p2_candidate_class=p2_candidate.get("candidate_class", ""),
-        p2_redacted_excerpt_hash=excerpt_hash,
-        p2_window_name=p2_candidate.get("window_name", ""),
-    )
-
-    action_type = conf.p2_action_type
-    excerpt = p2_candidate.get("redacted_excerpt", "")
-
-    # Classify by action type
-    if action_type in ("order", "cancel", "cancelByCloid", "batchModify",
-                        "scheduleCancel", "modify"):
-        conf.is_trading_action = True
-        conf.extraction_class = "trading_action"
-        conf.confirmation_status = "HIP3_P3_CANDIDATES_NOT_BUILDER_DEPLOYED"
-        conf.confirmation_note = f"Trading action: {action_type}"
-    elif action_type == "noop":
-        conf.is_failed_transaction = True
-        conf.extraction_class = "failed_transaction"
-        conf.confirmation_status = "HIP3_P3_CANDIDATES_NOT_BUILDER_DEPLOYED"
-        conf.confirmation_note = "Failed transaction (noop)"
-    elif action_type == "SetGlobalAction":
-        conf.is_universe_update = True
-        conf.extraction_class = "universe_update"
-        # Try to extract external perp symbols from excerpt
-        try:
-            excerpt_dict = json.loads(excerpt) if excerpt.startswith("{") else {}
-            actions = excerpt_dict.get("actions", [])
-            for act in actions:
-                if isinstance(act, dict):
-                    ext_pxs = act.get("externalPerpPxs", [])
-                    if isinstance(ext_pxs, list):
-                        for pair in ext_pxs:
-                            if isinstance(pair, list) and len(pair) >= 1:
-                                sym = str(pair[0])
-                                conf.extracted_external_perp_symbols.append(sym)
-                    # Check for config fields
-                    for k in act.keys():
-                        if k not in ("type",) and k not in conf.extracted_config_fields:
-                            conf.extracted_config_fields.append(k)
-        except (json.JSONDecodeError, TypeError):
-            # Fallback: regex extraction from truncated excerpt
-            import re
-            for m in re.finditer(r'"([A-Z][A-Z0-9]{1,10})"', excerpt):
-                sym = m.group(1)
-                if sym not in ("SetGlobalAction", "type", "externalPerpPxs", "pxs", "error"):
-                    conf.extracted_external_perp_symbols.append(sym)
-
-        if conf.extracted_external_perp_symbols:
-            conf.confirmation_status = "HIP3_P3_CANDIDATES_CONFIG_ONLY"
-            conf.confirmation_note = (
-                f"Universe update with {len(conf.extracted_external_perp_symbols)} "
-                f"external perp symbols"
-            )
+def _rlp_decode_items(data: bytes) -> list:
+    """Decode RLP-encoded data into a list of items. Handles truncated data gracefully."""
+    items = []
+    pos = 0
+    while pos < len(data):
+        prefix = data[pos]
+        if prefix < 0x80:
+            items.append(prefix)
+            pos += 1
+        elif prefix < 0xb8:
+            length = prefix - 0x80
+            if pos + 1 + length > len(data):
+                break  # truncated
+            items.append(data[pos + 1:pos + 1 + length])
+            pos += 1 + length
+        elif prefix < 0xc0:
+            ll = prefix - 0xb7
+            if pos + 1 + ll > len(data):
+                break  # truncated
+            length = int.from_bytes(data[pos + 1:pos + 1 + ll], "big")
+            if pos + 1 + ll + length > len(data):
+                break  # truncated
+            items.append(data[pos + 1 + ll:pos + 1 + ll + length])
+            pos += 1 + ll + length
+        elif prefix < 0xf8:
+            length = prefix - 0xc0
+            sublist = []
+            sub_pos = pos + 1
+            end = min(pos + 1 + length, len(data))
+            while sub_pos < end:
+                sub_item, sub_pos_new = _rlp_decode_single(data, sub_pos)
+                if sub_pos_new <= sub_pos:
+                    break
+                sublist.append(sub_item)
+                sub_pos = sub_pos_new
+            items.append(sublist)
+            pos = end
         else:
-            conf.confirmation_status = "HIP3_P3_CANDIDATES_CONFIG_ONLY"
-            conf.confirmation_note = "Universe/config update (no extractable symbols)"
-    elif action_type == "evmRawTx":
-        conf.extraction_class = "evm_payload_candidate"
-        conf.confirmation_status = "HIP3_P3_CANDIDATES_OPAQUE"
-        conf.confirmation_note = "EVM raw transaction (binary payload)"
-    elif action_type in ("approveBuilderFee", "approveAgent"):
-        conf.extracted_deployer = conf.p2_user_or_deployer
-        conf.is_builder_deployed = True
-        conf.extraction_class = "deployer_extractable"
-        conf.confirmation_status = "HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED"
-        conf.confirmation_note = f"Builder/agent action: {action_type}"
+            ll = prefix - 0xf7
+            if pos + 1 + ll > len(data):
+                break  # truncated
+            length = int.from_bytes(data[pos + 1:pos + 1 + ll], "big")
+            sublist = []
+            sub_pos = pos + 1 + ll
+            end = min(pos + 1 + ll + length, len(data))
+            while sub_pos < end:
+                sub_item, sub_pos_new = _rlp_decode_single(data, sub_pos)
+                if sub_pos_new <= sub_pos:
+                    break
+                sublist.append(sub_item)
+                sub_pos = sub_pos_new
+            items.append(sublist)
+            pos = end
+    return items
+
+
+def _rlp_decode_single(data: bytes, pos: int) -> tuple:
+    """Decode a single RLP item starting at pos. Handles truncated data gracefully."""
+    if pos >= len(data):
+        return None, pos
+    prefix = data[pos]
+    if prefix < 0x80:
+        return prefix, pos + 1
+    elif prefix < 0xb8:
+        length = prefix - 0x80
+        if pos + 1 + length > len(data):
+            return None, len(data)
+        return data[pos + 1:pos + 1 + length], pos + 1 + length
+    elif prefix < 0xc0:
+        ll = prefix - 0xb7
+        if pos + 1 + ll > len(data):
+            return None, len(data)
+        length = int.from_bytes(data[pos + 1:pos + 1 + ll], "big")
+        if pos + 1 + ll + length > len(data):
+            return None, len(data)
+        return data[pos + 1 + ll:pos + 1 + ll + length], pos + 1 + ll + length
+    elif prefix < 0xf8:
+        length = prefix - 0xc0
+        sublist = []
+        sub_pos = pos + 1
+        end = min(pos + 1 + length, len(data))
+        while sub_pos < end:
+            sub_item, sub_pos_new = _rlp_decode_single(data, sub_pos)
+            if sub_pos_new <= sub_pos:
+                break
+            sublist.append(sub_item)
+            sub_pos = sub_pos_new
+        return sublist, end
     else:
-        conf.extraction_class = "opaque_candidate"
-        conf.confirmation_status = "HIP3_P3_CANDIDATES_OPAQUE"
-        conf.confirmation_note = f"Unknown action type: {action_type}"
-
-    return conf
-
-
-def _classify_symbol(symbol: str) -> str:
-    """Classify a symbol into asset class. Conservative — defaults to unknown."""
-    s = symbol.upper().strip()
-    # Known equity-like patterns: single company tickers with numeric suffix
-    # but must not match crypto symbols
-    # Known index-like: SPX, NDX, DJI, RUT, VIX, FTSE, DAX, Nikkei
-    # Known commodity-like: GOLD, SILVER, OIL, WHEAT, NATGAS, COPPER
-    # But avoid false positives: SPX6900, DOGE-SPX, GOLDEN
-
-    # Explicit equity/index/commodity known to be on Hyperliquid
-    equity_index_commodity = {
-        "SPX", "NDX", "DJI", "RUT", "VIX", "FTSE", "DAX", "NIKK",
-        "GOLD", "SILVER", "OIL", "WHEAT", "NATGAS", "COPPER",
-        "EUR", "GBP", "JPY", "AUD", "CAD", "CHF",
-    }
-    if s in equity_index_commodity:
-        if s in ("SPX", "NDX", "DJI", "RUT", "VIX", "FTSE", "DAX", "NIKK"):
-            return "index_like"
-        if s in ("GOLD", "SILVER", "OIL", "WHEAT", "NATGAS", "COPPER"):
-            return "commodity_like"
-        return "unknown"
-
-    # Check against known external perp symbols
-    if s in KNOWN_EXTERNAL_PERP_SYMBOLS:
-        return "crypto_like"
-
-    return "unknown"
+        ll = prefix - 0xf7
+        if pos + 1 + ll > len(data):
+            return None, len(data)
+        length = int.from_bytes(data[pos + 1:pos + 1 + ll], "big")
+        sublist = []
+        sub_pos = pos + 1 + ll
+        end = min(pos + 1 + ll + length, len(data))
+        while sub_pos < end:
+            sub_item, sub_pos_new = _rlp_decode_single(data, sub_pos)
+            if sub_pos_new <= sub_pos:
+                break
+            sublist.append(sub_item)
+            sub_pos = sub_pos_new
+        return sublist, end
 
 
-def _run_p3_confirmation(
-    input_report: str,
-    max_candidates: int = 50,
-    expand_neighborhood_blocks: int = 20,
-    cross_reference_asset_ctxs: bool = False,
-    cross_reference_l2: bool = False,
-    allow_network_public: bool = False,
-    allow_s3_archive_read: bool = False,
-    download_budget_bytes: int = 250_000_000,
-    explorer_block_budget_bytes: int = 100_000_000,
-) -> P3ConfirmationResult:
-    """Execute the P3 candidate confirmation pass."""
+def _decode_evm_payload(result: P3EDecodeResult, payload: bytes) -> None:
+    """Decode an EVM payload and populate the result fields."""
+    result.binary_length = len(payload)
+    result.hex_payload = payload.hex()
+
+    if len(payload) < 4:
+        result.payload_class = "undecodable"
+        result.decode_note = f"Payload too short ({len(payload)} bytes)"
+        return
+
+    # Check if it looks like an RLP-encoded legacy transaction (first byte 0xf8-0xff for list)
+    if payload[0] >= 0xf8:
+        try:
+            items = _rlp_decode_items(payload)
+            result.rlp_item_count = len(items)
+            for i, item in enumerate(items):
+                if isinstance(item, bytes):
+                    if len(item) == 20:
+                        result.rlp_items_summary.append(f"[{i}] addr:0x{item.hex()}")
+                        if result.found_to is None:
+                            result.found_to = f"0x{item.hex()}"
+                        elif result.found_from is None:
+                            result.found_from = f"0x{item.hex()}"
+                    elif len(item) == 32:
+                        result.rlp_items_summary.append(f"[{i}] bytes32:0x{item.hex()[:16]}...")
+                        # Could be calldata
+                        if len(item) >= 4 and result.calldata_selector is None:
+                            result.calldata_selector = f"0x{item[:4].hex()}"
+                    elif len(item) >= 4 and result.calldata_selector is None:
+                        result.calldata_selector = f"0x{item[:4].hex()}"
+                        result.found_input_data = item.hex()
+                        result.rlp_items_summary.append(f"[{i}] calldata({len(item)}b) sel=0x{item[:4].hex()}")
+                    else:
+                        result.rlp_items_summary.append(f"[{i}] bytes({len(item)})")
+                elif isinstance(item, int):
+                    result.rlp_items_summary.append(f"[{i}] int:{item}")
+                    if item > 0 and result.found_value is None and i < 5:
+                        result.found_value = item
+                elif isinstance(item, list):
+                    result.rlp_items_summary.append(f"[{i}] list({len(item)} items)")
+                else:
+                    result.rlp_items_summary.append(f"[{i}] {type(item).__name__}")
+
+            # Classify based on RLP structure
+            if len(items) >= 9:
+                # Legacy Ethereum transaction: [nonce, gasPrice, gasLimit, to, value, data, v, r, s]
+                # or EIP-155: [chainId, nonce, gasPrice, gasLimit, to, value, data, v, r, s]
+                result.is_transfer_like = True
+                result.payload_class = "transfer_like"
+                result.decode_note = f"RLP legacy transaction with {len(items)} items"
+            else:
+                result.payload_class = "unknown"
+                result.decode_note = f"RLP structure with {len(items)} items, not matching standard tx"
+
+        except Exception as e:
+            result.payload_class = "undecodable"
+            result.decode_note = f"RLP decode failed: {e}"
+            return
+    elif len(payload) >= 4:
+        # Could be calldata (function selector + args)
+        selector = payload[:4].hex()
+        result.calldata_selector = f"0x{selector}"
+        result.found_input_data = payload.hex()
+        result.rlp_items_summary.append(f"calldata({len(payload)}b) sel=0x{selector}")
+
+        # Known function selectors (partial list)
+        known_selectors = {
+            "0x095ea7b3": "approve(address,uint256)",
+            "0xa9059cbb": "transfer(address,uint256)",
+            "0x23b872dd": "transferFrom(address,address,uint256)",
+            "0x38ed1739": "swapExactTokensForTokens",
+            "0x7ff36ab5": "swapETHForExactTokens",
+            "0xfb3bdb41": "swapETHForExactTokens",
+        }
+        if f"0x{selector}" in known_selectors:
+            result.is_trading_or_non_builder_like = True
+            result.payload_class = "trading_or_non_builder_like"
+            result.decode_note = f"Known selector: {known_selectors[f'0x{selector}']}"
+        else:
+            result.payload_class = "unknown"
+            result.decode_note = f"Unknown calldata selector 0x{selector}, {len(payload)} bytes"
+    else:
+        result.payload_class = "undecodable"
+        result.decode_note = f"Payload too short ({len(payload)} bytes)"
+
+
+def _load_p3e_evm_candidates(
+    p3_report: str,
+    p2_report: str,
+    max_payloads: int,
+) -> tuple[list[P3EDecodeResult], str]:
+    """Load unresolved EVM candidates from P3 artifacts."""
+    import os
+
+    p3_dir = Path(p3_report)
+    p2_dir = Path(p2_report)
+
+    # Load P3 confirmations
+    p3_candidates_path = p3_dir / "p3_candidate_confirmation.json"
+    if not p3_candidates_path.exists():
+        # Check if it's the validation audit directory
+        p3_candidates_path = p3_dir / "p3_candidate_confirmation.json"
+        if not p3_candidates_path.exists():
+            return [], f"P3 candidates not found at {p3_report}"
+
+    with open(p3_candidates_path) as f:
+        p3c = json.load(f)
+
+    # Load P2 candidates for full excerpts
+    p2_candidates_path = p2_dir / "p2_deployment_event_candidates.json"
+    p2_candidates = {}
+    if p2_candidates_path.exists():
+        with open(p2_candidates_path) as f:
+            p2_data = json.load(f)
+            for c in p2_data.get("candidates", []):
+                key = (c.get("source_key", ""), c.get("block_number"), c.get("tx_index"))
+                p2_candidates[key] = c
+
+    results = []
+    p3_report_str = str(p3_dir.resolve())
+
+    for conf in p3c.get("confirmations", []):
+        if len(results) >= max_payloads:
+            break
+        if conf.get("p2_action_type") != "evmRawTx":
+            continue
+
+        # Get full excerpt from P2
+        p2_key = (conf.get("p2_source_key", ""), conf.get("p2_block_number"), conf.get("p2_tx_index"))
+        p2c = p2_candidates.get(p2_key, {})
+
+        dr = P3EDecodeResult(
+            p2_source_key=conf.get("p2_source_key", ""),
+            p2_block_number=conf.get("p2_block_number"),
+            p2_block_timestamp_utc=conf.get("p2_block_timestamp_utc"),
+            p2_tx_index=conf.get("p2_tx_index"),
+            p2_user_or_deployer=conf.get("p2_user_or_deployer"),
+            p2_source_content_hash=conf.get("p2_source_content_hash", ""),
+            p2_redacted_excerpt_hash=conf.get("p2_redacted_excerpt_hash", ""),
+            p3_report_path=p3_report_str,
+            raw_excerpt=p2c.get("redacted_excerpt", conf.get("redacted_excerpt", "")),
+        )
+        results.append(dr)
+
+    return results, ""
+
+
+def run_p3e_decode(
+    p3_report: str,
+    p2_report: str,
+    max_payloads: int = 5,
+) -> P3EResult:
+    """Execute the P3E EVM payload decode audit."""
     sha, dirty = _get_git_info()
-    run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%S") + "_p3_" + hashlib.sha256(b"p3").hexdigest()[:8]
+    run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%S") + "_p3e_" + hashlib.sha256(b"p3e").hexdigest()[:8]
 
-    result = P3ConfirmationResult(
-        status=ScoutStatus.HIP3_P3_CONFIRMATION_READY,
+    result = P3EResult(
+        status=ScoutStatus.HIP3_P3E_EVM_DECODE_READY,
         run_id=run_id,
         created_at_utc=datetime.now(UTC).isoformat(),
         git_sha=sha,
         git_dirty=dirty,
         repo_root=str(Path(__file__).resolve().parents[4]),
-        p2_input_report=str(Path(input_report).resolve()),
+        p2_input_report=str(Path(p2_report).resolve()),
+        p3_input_report=str(Path(p3_report).resolve()),
     )
 
-    # Load P2 candidates
-    try:
-        p2_candidates, p2_manifest, p2_summary = _load_p2_candidates(input_report)
-    except FileNotFoundError as e:
-        result.status = ScoutStatus.HIP3_P3_ERROR
+    # Load candidates
+    decode_results, error = _load_p3e_evm_candidates(p3_report, p2_report, max_payloads)
+    if error:
+        result.status = ScoutStatus.HIP3_P3E_ERROR
         result.final_status = result.status.value
-        result.confirmation_note = str(e)
+        result.decode_note = error
         return result
 
-    result.p2_report_commit = p2_manifest.get("git_sha", "")
-    result.p2_report_status = p2_manifest.get("final_status", "")
-    result.candidates_loaded = len(p2_candidates[:max_candidates])
+    result.payloads_loaded = len(decode_results)
 
-    # Normalize and classify each candidate
-    confirmations: list[P3CandidateConfirmation] = []
-    symbols_by_class: dict[str, list[str]] = {}
-    deployers_seen: set[str] = set()
+    if not decode_results:
+        result.status = ScoutStatus.HIP3_P3E_NO_EVM_PAYLOADS
+        result.final_status = result.status.value
+        return result
 
-    for p2c in p2_candidates[:max_candidates]:
-        conf = _normalize_candidate(p2c)
-        confirmations.append(conf)
+    # Decode each payload
+    for dr in decode_results:
+        payload = _extract_evm_payload_from_excerpt(dr.raw_excerpt)
+        if payload is None:
+            dr.payload_class = "undecodable"
+            dr.decode_note = "Could not extract bytes from excerpt"
+            result.payloads_undecodable += 1
+            continue
 
-        # Track extraction classes
-        if conf.extracted_symbol:
-            result.candidates_symbol_extracted += 1
-            cls = _classify_symbol(conf.extracted_symbol)
-            conf.symbol_class = cls
-            symbols_by_class.setdefault(cls, []).append(conf.extracted_symbol)
+        _decode_evm_payload(dr, payload)
+        result.payloads_decoded += 1
 
-        if conf.extracted_deployer:
-            result.candidates_deployer_extracted += 1
-            deployers_seen.add(conf.extracted_deployer)
-
-        if conf.extracted_external_perp_symbols:
-            for sym in conf.extracted_external_perp_symbols:
-                cls = _classify_symbol(sym)
-                conf.symbol_class = cls
-                symbols_by_class.setdefault(cls, []).append(sym)
-            result.candidates_symbol_extracted += 1
-
-        # Count by confirmation status
-        if conf.is_builder_deployed:
-            result.candidates_confirmed_builder_deployed += 1
-        elif conf.is_trading_action or conf.is_failed_transaction:
-            result.candidates_not_builder_deployed += 1
-        elif conf.extraction_class in ("universe_update",):
-            result.candidates_config_only += 1
-        elif conf.extraction_class == "evm_payload_candidate":
-            result.candidates_evm_payload += 1
+        if dr.calldata_selector:
+            result.calldata_selectors_found += 1
+        if dr.extractable_deployer:
+            result.deployers_extracted += 1
+        if dr.extractable_symbol:
+            result.symbols_extracted += 1
+        if dr.is_deployment_like:
+            result.deployment_candidates += 1
+        elif dr.is_config_like:
+            result.config_candidates += 1
         else:
-            result.candidates_opaque += 1
+            result.non_deployment += 1
 
-    # Deduplicate symbols
-    for cls in symbols_by_class:
-        symbols_by_class[cls] = sorted(set(symbols_by_class[cls]))
-
-    result.symbols_by_class = symbols_by_class
-    result.confirmations = confirmations
-
-    # Cross-reference against asset_ctxs if requested
-    if cross_reference_asset_ctxs and allow_s3_archive_read:
-        all_symbols = []
-        for syms in symbols_by_class.values():
-            all_symbols.extend(syms)
-        for sym in set(all_symbols):
-            result.asset_ctxs_cross_reference[sym] = {
-                "checked": True,
-                "found": False,
-                "note": "Cross-reference requires S3 probe (not implemented in P3)",
-            }
-
-    # Cross-reference against L2 if requested
-    if cross_reference_l2 and allow_s3_archive_read:
-        for sym in set(sum(symbols_by_class.values(), [])):
-            result.l2_archive_cross_reference[sym] = {
-                "checked": True,
-                "found": False,
-                "note": "L2 cross-reference requires S3 probe (not implemented in P3)",
-            }
-
-    # Deployer cross-reference
-    for deployer in deployers_seen:
-        result.deployer_cross_reference[deployer] = {
-            "actions_confirmed": sum(
-                1 for c in confirmations
-                if c.extracted_deployer == deployer or c.p2_user_or_deployer == deployer
-            ),
-            "is_builder_candidate": any(
-                c.is_builder_deployed for c in confirmations
-                if c.extracted_deployer == deployer or c.p2_user_or_deployer == deployer
-            ),
-        }
+    result.decode_results = decode_results
 
     # Determine final status
-    # Priority: builder-deployed > symbol-extracted > mixed/unclear > config-only > opaque > inconclusive
-    has_unresolved = result.candidates_opaque > 0 or result.candidates_evm_payload > 0
-    if result.candidates_confirmed_builder_deployed > 0:
-        result.status = ScoutStatus.HIP3_P3_CANDIDATES_CONFIRMED_BUILDER_DEPLOYED
-    elif result.candidates_symbol_extracted > 0:
-        result.status = ScoutStatus.HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED
-    elif result.candidates_config_only > 0 and has_unresolved:
-        # Config-only exists but opaque/EVM candidates remain unresolved
-        result.status = ScoutStatus.HIP3_P3_CONFIRMATION_INCONCLUSIVE
-    elif result.candidates_config_only > 0:
-        result.status = ScoutStatus.HIP3_P3_CANDIDATES_CONFIG_ONLY
-    elif has_unresolved:
-        result.status = ScoutStatus.HIP3_P3_CANDIDATES_OPAQUE
+    if result.deployment_candidates > 0:
+        result.status = ScoutStatus.HIP3_P3E_EVM_DEPLOYMENT_CANDIDATE_FOUND
+    elif result.config_candidates > 0:
+        result.status = ScoutStatus.HIP3_P3E_EVM_CONFIG_CANDIDATE_FOUND
+    elif result.payloads_decoded > 0:
+        result.status = ScoutStatus.HIP3_P3E_EVM_NON_DEPLOYMENT
+    elif result.payloads_undecodable > 0:
+        result.status = ScoutStatus.HIP3_P3E_EVM_UNDECODABLE
     else:
-        result.status = ScoutStatus.HIP3_P3_CONFIRMATION_INCONCLUSIVE
+        result.status = ScoutStatus.HIP3_P3E_NO_EVM_PAYLOADS
 
     result.final_status = result.status.value
     return result
 
 
-def _write_p3_artifacts(run_dir: Path, result: P3ConfirmationResult, argv: list[str]) -> None:
-    """Write all required P3 artifacts."""
+def _write_p3e_artifacts(run_dir: Path, result: P3EResult, argv: list[str]) -> None:
+    """Write P3E artifacts."""
     sha, dirty = result.git_sha, result.git_dirty
     base_meta = {
         "study_id": result.study_id,
@@ -2654,9 +2705,7 @@ def _write_p3_artifacts(run_dir: Path, result: P3ConfirmationResult, argv: list[
         "schema_version": result.schema_version,
         "final_status": result.final_status or str(result.status),
         "p2_input_report": result.p2_input_report,
-        "p2_report_commit": result.p2_report_commit,
-        "p2_report_status": result.p2_report_status,
-        "bytes_downloaded": result.bytes_downloaded,
+        "p3_input_report": result.p3_input_report,
         "no_registry_mutation": True,
         "no_full_account_id": True,
     }
@@ -2664,130 +2713,108 @@ def _write_p3_artifacts(run_dir: Path, result: P3ConfirmationResult, argv: list[
     # summary.json
     summary = {
         **base_meta,
-        "candidates_loaded": result.candidates_loaded,
-        "candidates_symbol_extracted": result.candidates_symbol_extracted,
-        "candidates_deployer_extracted": result.candidates_deployer_extracted,
-        "candidates_confirmed_builder_deployed": result.candidates_confirmed_builder_deployed,
-        "candidates_not_builder_deployed": result.candidates_not_builder_deployed,
-        "candidates_config_only": result.candidates_config_only,
-        "candidates_opaque": result.candidates_opaque,
-        "candidates_evm_payload": result.candidates_evm_payload,
-        "candidates_unresolved_total": result.candidates_opaque + result.candidates_evm_payload,
-        "symbols_by_class": result.symbols_by_class,
+        "payloads_loaded": result.payloads_loaded,
+        "payloads_decoded": result.payloads_decoded,
+        "payloads_undecodable": result.payloads_undecodable,
+        "calldata_selectors_found": result.calldata_selectors_found,
+        "deployers_extracted": result.deployers_extracted,
+        "symbols_extracted": result.symbols_extracted,
+        "deployment_candidates": result.deployment_candidates,
+        "config_candidates": result.config_candidates,
+        "non_deployment": result.non_deployment,
     }
     _atomic_write(run_dir / "summary.json", summary)
 
     # summary.md
     lines = [
-        "# HIP-3 P3 Candidate Confirmation",
+        "# HIP-3 P3E EVM Payload Decode Audit",
         "",
         f"**Status:** `{result.final_status}`",
         f"**Run ID:** {result.run_id}",
         f"**P2 Input:** {result.p2_input_report}",
-        f"**P2 Commit:** {result.p2_report_commit}",
-        f"**P2 Status:** {result.p2_report_status}",
+        f"**P3 Input:** {result.p3_input_report}",
         "",
-        "## Candidate Counts",
-        f"- Loaded: {result.candidates_loaded}",
-        f"- Symbol extracted: {result.candidates_symbol_extracted}",
-        f"- Deployer extracted: {result.candidates_deployer_extracted}",
-        f"- Confirmed builder-deployed: {result.candidates_confirmed_builder_deployed}",
-        f"- Not builder-deployed (trading/noop): {result.candidates_not_builder_deployed}",
-        f"- Config only: {result.candidates_config_only}",
-        f"- Opaque: {result.candidates_opaque}",
-        f"- EVM payload: {result.candidates_evm_payload}",
+        "## Decode Results",
+        f"- Payloads loaded: {result.payloads_loaded}",
+        f"- Payloads decoded: {result.payloads_decoded}",
+        f"- Payloads undecodable: {result.payloads_undecodable}",
+        f"- Calldata selectors found: {result.calldata_selectors_found}",
+        f"- Deployers extracted: {result.deployers_extracted}",
+        f"- Symbols extracted: {result.symbols_extracted}",
+        f"- Deployment candidates: {result.deployment_candidates}",
+        f"- Config candidates: {result.config_candidates}",
+        f"- Non-deployment: {result.non_deployment}",
         "",
-        "## Symbols by Class",
     ]
-    for cls, syms in result.symbols_by_class.items():
-        lines.append(f"- **{cls}**: {', '.join(syms[:20])}")
 
-    if not result.symbols_by_class:
-        lines.append("- No extractable symbols found")
+    for dr in result.decode_results:
+        lines.append(f"### Payload from block {dr.p2_block_number}")
+        lines.append(f"- User: {dr.p2_user_or_deployer}")
+        lines.append(f"- Binary length: {dr.binary_length} bytes")
+        lines.append(f"- Calldata selector: {dr.calldata_selector or 'none'}")
+        lines.append(f"- RLP items: {dr.rlp_item_count}")
+        lines.append(f"- Payload class: {dr.payload_class}")
+        lines.append(f"- Note: {dr.decode_note}")
+        if dr.rlp_items_summary:
+            lines.append("- RLP items:")
+            for s in dr.rlp_items_summary[:10]:
+                lines.append(f"  - {s}")
+        lines.append("")
 
     lines.extend([
+        "## P4 Warranted?",
         "",
-        "## Deployer Cross-Reference",
     ])
-    for dep, info in result.deployer_cross_reference.items():
-        lines.append(f"- `{dep[:20]}...`: {info['actions_confirmed']} actions, builder_candidate={info['is_builder_candidate']}")
-
-    if not result.deployer_cross_reference:
-        lines.append("- No deployers identified")
-
+    if result.deployment_candidates > 0:
+        lines.append("YES — deployment-like payload found. P4 symbol-specific archive/fee scout warranted.")
+    elif result.deployers_extracted > 0 or result.symbols_extracted > 0:
+        lines.append("POSSIBLY — deployer/symbol evidence found. Needs further analysis.")
+    else:
+        lines.append("NO — no deployment/config evidence extracted from EVM payloads.")
     lines.extend([
         "",
-        "## Confirmation Notes",
-    ])
-    for c in result.confirmations:
-        if c.confirmation_note:
-            lines.append(f"- [{c.p2_action_type}] {c.confirmation_note}")
-
-    lines.extend([
-        "",
-        "> P3 is confirmation-only. No pricing, PnL, returns, or basis analysis.",
+        "> P3E is decode-only. No pricing, PnL, returns, or basis analysis.",
         "> No registry, live, paper, or conductor mutation occurred.",
+        "> HIP-3 off-hours basis remains untested.",
     ])
     (run_dir / "summary.md").write_text(chr(10).join(lines))
 
-    # p3_candidate_confirmation.json
-    _atomic_write(run_dir / "p3_candidate_confirmation.json", {
+    # p3e_evm_payload_decode.json
+    _atomic_write(run_dir / "p3e_evm_payload_decode.json", {
         **base_meta,
-        "confirmations": [
+        "decode_results": [
             {
-                "p2_source_key": c.p2_source_key,
-                "p2_source_content_hash": c.p2_source_content_hash,
-                "p2_block_number": c.p2_block_number,
-                "p2_block_timestamp_utc": c.p2_block_timestamp_utc,
-                "p2_tx_index": c.p2_tx_index,
-                "p2_action_type": c.p2_action_type,
-                "p2_user_or_deployer": c.p2_user_or_deployer,
-                "p2_matched_terms": c.p2_matched_terms,
-                "p2_candidate_class": c.p2_candidate_class,
-                "p2_redacted_excerpt_hash": c.p2_redacted_excerpt_hash,
-                "p2_window_name": c.p2_window_name,
-                "extracted_symbol": c.extracted_symbol,
-                "extracted_coin_id": c.extracted_coin_id,
-                "extracted_deployer": c.extracted_deployer,
-                "extracted_external_perp_symbols": c.extracted_external_perp_symbols,
-                "extracted_config_fields": c.extracted_config_fields,
-                "extraction_class": c.extraction_class,
-                "symbol_class": c.symbol_class,
-                "is_builder_deployed": c.is_builder_deployed,
-                "is_universe_update": c.is_universe_update,
-                "is_price_feed_update": c.is_price_feed_update,
-                "is_failed_transaction": c.is_failed_transaction,
-                "is_trading_action": c.is_trading_action,
-                "confirmation_status": c.confirmation_status,
-                "confirmation_note": c.confirmation_note,
-                "in_asset_ctxs": c.in_asset_ctxs,
-                "in_public_info_universe": c.in_public_info_universe,
-                "in_l2_archive": c.in_l2_archive,
+                "p2_source_key": dr.p2_source_key,
+                "p2_block_number": dr.p2_block_number,
+                "p2_block_timestamp_utc": dr.p2_block_timestamp_utc,
+                "p2_tx_index": dr.p2_tx_index,
+                "p2_user_or_deployer": dr.p2_user_or_deployer,
+                "p2_source_content_hash": dr.p2_source_content_hash,
+                "p2_redacted_excerpt_hash": dr.p2_redacted_excerpt_hash,
+                "binary_length": dr.binary_length,
+                "hex_payload": dr.hex_payload[:200] + "..." if len(dr.hex_payload) > 200 else dr.hex_payload,
+                "calldata_selector": dr.calldata_selector,
+                "rlp_item_count": dr.rlp_item_count,
+                "rlp_items_summary": dr.rlp_items_summary,
+                "found_to": dr.found_to,
+                "found_from": dr.found_from,
+                "found_value": dr.found_value,
+                "payload_class": dr.payload_class,
+                "is_deployment_like": dr.is_deployment_like,
+                "is_config_like": dr.is_config_like,
+                "is_approval_like": dr.is_approval_like,
+                "is_transfer_like": dr.is_transfer_like,
+                "is_trading_or_non_builder_like": dr.is_trading_or_non_builder_like,
+                "extractable_deployer": dr.extractable_deployer,
+                "extractable_builder_namespace": dr.extractable_builder_namespace,
+                "extractable_symbol": dr.extractable_symbol,
+                "extractable_market_id": dr.extractable_market_id,
+                "deployment_config_evidence": dr.deployment_config_evidence,
+                "decode_note": dr.decode_note,
             }
-            for c in result.confirmations
+            for dr in result.decode_results
         ],
-        "total_confirmations": len(result.confirmations),
-    })
-
-    # p3_symbol_cross_reference.json
-    _atomic_write(run_dir / "p3_symbol_cross_reference.json", {
-        **base_meta,
-        "symbols_by_class": result.symbols_by_class,
-        "asset_ctxs_cross_reference": result.asset_ctxs_cross_reference,
-        "l2_archive_cross_reference": result.l2_archive_cross_reference,
-    })
-
-    # p3_deployer_cross_reference.json
-    _atomic_write(run_dir / "p3_deployer_cross_reference.json", {
-        **base_meta,
-        "deployer_cross_reference": result.deployer_cross_reference,
-    })
-
-    # p3_archive_visibility.json
-    _atomic_write(run_dir / "p3_archive_visibility.json", {
-        **base_meta,
-        "asset_ctxs_cross_reference": result.asset_ctxs_cross_reference,
-        "l2_archive_cross_reference": result.l2_archive_cross_reference,
+        "total_decode_results": len(result.decode_results),
     })
 
     # run_manifest.json
@@ -3352,32 +3379,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--p3-expand-neighborhood-blocks", type=int, default=20, help="P3: neighborhood expansion radius.")
     parser.add_argument("--p3-cross-reference-asset-ctxs", action="store_true", help="P3: cross-reference against asset_ctxs.")
     parser.add_argument("--p3-cross-reference-l2", action="store_true", help="P3: cross-reference against L2 archive.")
+    parser.add_argument(
+        "--p3e-decode-evm-payloads",
+        action="store_true",
+        help="P3E mode: decode opaque EVM payloads from P3.",
+    )
+    parser.add_argument("--p3e-input-report", default=None, help="P3E: path to P3 report or audit directory.")
+    parser.add_argument("--p3e-p2-input-report", default=None, help="P3E: path to P2 report directory.")
+    parser.add_argument("--p3e-max-payloads", type=int, default=5, help="P3E: max EVM payloads to decode.")
     args = parser.parse_args(argv)
     out_root = Path(args.out_root)
 
-    if args.p3_confirm_candidates:
-        if not args.p3_input_report:
-            print("ERROR: --p3-input-report is required for P3 mode")
+    if args.p3e_decode_evm_payloads:
+        if not args.p3e_input_report or not args.p3e_p2_input_report:
+            print("ERROR: --p3e-input-report and --p3e-p2-input-report are required for P3E mode")
             return 1
-        p3_result = _run_p3_confirmation(
-            input_report=args.p3_input_report,
-            max_candidates=args.p3_max_candidates,
-            expand_neighborhood_blocks=args.p3_expand_neighborhood_blocks,
-            cross_reference_asset_ctxs=args.p3_cross_reference_asset_ctxs,
-            cross_reference_l2=args.p3_cross_reference_l2,
-            allow_network_public=args.allow_network_public,
-            allow_s3_archive_read=args.allow_s3_archive_read,
-            download_budget_bytes=args.download_budget_bytes,
-            explorer_block_budget_bytes=args.explorer_block_budget_bytes,
+        p3e_result = run_p3e_decode(
+            p3_report=args.p3e_input_report,
+            p2_report=args.p3e_p2_input_report,
+            max_payloads=args.p3e_max_payloads,
         )
-        run_dir = out_root / (p3_result.run_id + "_p3_confirmation")
+        run_dir = out_root / (p3e_result.run_id + "_p3e_evm_decode")
         run_dir.mkdir(parents=True, exist_ok=True)
-        _write_p3_artifacts(run_dir, p3_result, sys.argv[1:])
-        print(f"{p3_result.status}")
-        print(f"P3 confirmation completed. Report written to {run_dir}")
+        _write_p3e_artifacts(run_dir, p3e_result, sys.argv[1:])
+        print(f"{p3e_result.status}")
+        print(f"P3E decode completed. Report written to {run_dir}")
         return 0
 
-    if args.p2_deployment_search:
+    if args.p3_confirm_candidates:
         result = run_p2_deployment_search(
             p2_window=args.p2_window,
             max_files_per_window=args.p2_max_files_per_window,
