@@ -76,6 +76,10 @@ class ScoutStatus(Enum):
     HIP3_EXPLORER_BLOCK_TIMESTAMP_PARSE_FAILED = "HIP3_EXPLORER_BLOCK_TIMESTAMP_PARSE_FAILED"
     HIP3_EXPLORER_BLOCK_DATE_OUT_OF_RANGE = "HIP3_EXPLORER_BLOCK_DATE_OUT_OF_RANGE"
     HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID = "HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID"
+    # Action-type inventory mode statuses (P1 explorer-block action-type enumeration)
+    HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY = "HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY"
+    HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_EMPTY = "HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_EMPTY"
+    HIP3_EXPLORER_BLOCK_ACTION_SCHEMA_OPAQUE = "HIP3_EXPLORER_BLOCK_ACTION_SCHEMA_OPAQUE"
 
 
 STUDY_ID = "hip3_builder_deployment_event_discovery_v0"
@@ -858,6 +862,390 @@ def _map_date_to_block_range(
 
 
 # ---------------------------------------------------------------------------
+# Action-type inventory helpers (P1 explorer-block action-type enumeration)
+# ---------------------------------------------------------------------------
+
+def _redact_value(v: Any, max_len: int = 80) -> Any:
+    """Truncate string values for sample records; leave numeric/bool types intact."""
+    if isinstance(v, str):
+        return v[:max_len] if len(v) > max_len else v
+    if isinstance(v, dict):
+        return {k: _redact_value(val, max_len) for k, val in list(v.items())[:10]}
+    if isinstance(v, list):
+        return [_redact_value(item, max_len) for item in v[:5]]
+    return v
+
+
+def _extract_field_paths(obj: Any, prefix: str = "", max_depth: int = 6) -> list[str]:
+    """Recursively extract dotted field paths from a JSON object."""
+    paths: list[str] = []
+    if max_depth <= 0:
+        return paths
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            full = f"{prefix}.{k}" if prefix else k
+            paths.append(full)
+            paths.extend(_extract_field_paths(v, full, max_depth - 1))
+    elif isinstance(obj, list):
+        for item in obj[:3]:
+            paths.extend(_extract_field_paths(item, prefix, max_depth - 1))
+    return paths
+
+
+def _inventory_action_types_from_decoded(
+    decoded: Any,
+    inventory: dict[str, int],
+    schema_shapes: list[frozenset],
+    nested_paths: set[str],
+    sample_records: list[dict],
+    opaque_count_holder: list[int],
+    hip3_candidate_holder: list[int],
+    hip3_terms: list[str],
+    max_samples: int = 5,
+) -> None:
+    """Walk decoded block data and tally action types, schema shapes, and nested paths.
+
+    Modifies inventory, schema_shapes, nested_paths, sample_records in place.
+    opaque_count_holder[0] and hip3_candidate_holder[0] are incremented counters.
+    """
+    # decoded may be a list of blocks or a single block dict
+    blocks: list[Any] = []
+    if isinstance(decoded, list):
+        blocks = decoded
+    elif isinstance(decoded, dict):
+        blocks = [decoded]
+    else:
+        opaque_count_holder[0] += 1
+        return
+
+    for block in blocks:
+        if not isinstance(block, dict):
+            opaque_count_holder[0] += 1
+            continue
+
+        # Collect top-level schema shape
+        top_fields = frozenset(block.keys())
+        if top_fields not in schema_shapes:
+            schema_shapes.append(top_fields)
+
+        # Collect nested field paths
+        for p in _extract_field_paths(block):
+            nested_paths.add(p)
+
+        # Walk transactions/actions within the block
+        txs: list[Any] = []
+        for tx_key in ("txs", "actions", "transactions"):
+            candidate = block.get(tx_key)
+            if isinstance(candidate, list):
+                txs = candidate
+                break
+
+        if not txs:
+            opaque_count_holder[0] += 1
+            continue
+
+        for tx in txs:
+            if not isinstance(tx, dict):
+                opaque_count_holder[0] += 1
+                continue
+
+            # Extract action type — handle multiple schema layouts:
+            #   1. tx["type"] = "SomeAction"
+            #   2. tx["action"]["type"] = "SomeAction"
+            #   3. tx["actions"][0]["type"] = "SomeAction"   (actual HL format)
+            action_type: str = "unknown"
+            for ak in ("type", "actionType", "action_type", "kind"):
+                av = tx.get(ak)
+                if isinstance(av, str) and av:
+                    action_type = av
+                    break
+            if action_type == "unknown":
+                for ak in ("action",):
+                    av = tx.get(ak)
+                    if isinstance(av, dict):
+                        inner_type = av.get("type", av.get("actionType", av.get("kind", "")))
+                        if isinstance(inner_type, str) and inner_type:
+                            action_type = inner_type
+                        break
+            if action_type == "unknown":
+                # Try tx["actions"] list (actual Hyperliquid explorer block format)
+                nested_actions = tx.get("actions")
+                if isinstance(nested_actions, list):
+                    for na in nested_actions:
+                        if isinstance(na, dict):
+                            t = na.get("type", na.get("actionType", na.get("kind", "")))
+                            if isinstance(t, str) and t:
+                                action_type = t
+                                break
+
+            # If nested actions list has multiple entries, count each action type separately
+            nested_actions_list = tx.get("actions")
+            if isinstance(nested_actions_list, list) and len(nested_actions_list) > 1:
+                for na in nested_actions_list:
+                    if isinstance(na, dict):
+                        t = na.get("type", na.get("actionType", na.get("kind", "")))
+                        counted = t if (isinstance(t, str) and t) else action_type
+                        inventory[counted] = inventory.get(counted, 0) + 1
+                    else:
+                        inventory[action_type] = inventory.get(action_type, 0) + 1
+            else:
+                inventory[action_type] = inventory.get(action_type, 0) + 1
+
+            # Passively check for HIP-3 candidate terms
+            tx_str = json.dumps(tx, default=str).lower()
+            if any(t in tx_str for t in hip3_terms):
+                hip3_candidate_holder[0] += 1
+
+            # Collect sample records (hash-stable by redacting values)
+            if len(sample_records) < max_samples:
+                sample_records.append(_redact_value(tx))
+
+
+@dataclass
+class ActionInventoryResult:
+    """Result of the action-type inventory probe (--inventory-action-types-only)."""
+    status: ScoutStatus | str
+    study_id: str = STUDY_ID
+    run_id: str = ""
+    created_at_utc: str = ""
+    git_sha: str = ""
+    git_dirty: bool = False
+    repo_root: str = ""
+    command_args: list[str] = field(default_factory=list)
+    safety_mode: str = SAFETY_MODE
+    schema_version: str = SCHEMA_VERSION
+    final_status: str = ""
+    # Inventory counters
+    files_listed: int = 0
+    files_read: int = 0
+    bytes_downloaded: int = 0
+    inferred_layout: str = ""
+    action_type_counts: dict[str, int] = field(default_factory=dict)
+    top_level_schema_shapes: list[list[str]] = field(default_factory=list)
+    nested_field_paths: list[str] = field(default_factory=list)
+    sample_redacted_records: list[Any] = field(default_factory=list)
+    decode_method_used: str = "unknown"
+    decode_failures_count: int = 0
+    opaque_records_count: int = 0
+    hip3_candidate_passive_count: int = 0
+    # Access/credential metadata
+    aws_identity_available: bool = False
+    aws_account_suffix: str = ""
+    # Budget limits used
+    max_block_files: int = 20
+    explorer_block_budget_bytes: int = 50_000_000
+    # Explorer block source
+    explorer_block_bucket: str = EXPLORER_BLOCK_BUCKET
+    explorer_block_root_prefix: str = EXPLORER_BLOCK_PREFIX
+    # Root listing metadata
+    explorer_root_prefixes: list[str] = field(default_factory=list)
+    explorer_root_keys: list[str] = field(default_factory=list)
+    explorer_root_listing_status: str = ""
+
+
+def run_inventory_probe(
+    max_block_files: int = 20,
+    explorer_block_budget_bytes: int = 50_000_000,
+    download_budget_bytes: int = 50_000_000,
+    allow_network_public: bool = False,
+    allow_s3_archive_read: bool = False,
+    command_args: list[str] | None = None,
+) -> ActionInventoryResult:
+    """Execute the P1 action-type inventory probe (--inventory-action-types-only).
+
+    Inventories real explorer-block action types without searching for deployment events.
+    Does NOT emit HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS.
+    """
+    sha, dirty = _get_git_info()
+    run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%S") + "_inventory_" + hashlib.sha256(b"inventory").hexdigest()[:8]
+
+    inv = ActionInventoryResult(
+        status=ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_READY,
+        run_id=run_id,
+        created_at_utc=datetime.now(UTC).isoformat(),
+        git_sha=sha,
+        git_dirty=dirty,
+        repo_root=str(Path(__file__).resolve().parents[4]),
+        command_args=command_args or [],
+        max_block_files=max_block_files,
+        explorer_block_budget_bytes=explorer_block_budget_bytes,
+    )
+
+    chokepoint = NetworkChokepoint(allow_network_public, allow_s3_archive_read)
+
+    # Guard: S3 access requires --allow-s3-archive-read
+    if not allow_s3_archive_read:
+        # Without S3 access we can't read anything; return credentials-required analog
+        inv.status = ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED
+        inv.final_status = inv.status.value
+        return inv
+
+    # AWS identity preflight
+    avail, suffix = _aws_identity_preflight(chokepoint)
+    inv.aws_identity_available = avail
+    inv.aws_account_suffix = suffix
+
+    # Step 1: discover layout
+    layout_info = _discover_explorer_block_layout(chokepoint)
+    inv.explorer_root_listing_status = layout_info["status"].value
+    inv.inferred_layout = layout_info["layout"]
+    inv.explorer_root_prefixes = layout_info["prefixes"]
+    inv.explorer_root_keys = layout_info["keys"]
+
+    # Handle access/credential failures
+    if layout_info["status"] in (
+        ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED,
+        ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED,
+        ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED,
+    ):
+        inv.status = layout_info["status"]
+        inv.final_status = inv.status.value
+        return inv
+
+    if layout_info["status"] == ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY:
+        inv.status = ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY
+        inv.final_status = inv.status.value
+        return inv
+
+    # Stop if layout unknown
+    if layout_info["layout"] == "unknown" or layout_info["layout"] == "":
+        inv.status = ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN
+        inv.final_status = inv.status.value
+        return inv
+
+    # Step 2: collect a bounded sample of files to read
+    prefixes = layout_info["prefixes"]
+    keys_to_read: list[str] = []
+
+    if layout_info["layout"] == "flat_block_files":
+        keys_to_read = layout_info["keys"][:max_block_files]
+    elif layout_info["layout"] in ("block_range_partitioned", "date_partitioned"):
+        # For block-range layout: list the first few range prefixes to get actual file keys
+        files_needed = max_block_files
+        for rp in prefixes[:5]:  # Sample up to first 5 range prefixes
+            if len(keys_to_read) >= files_needed:
+                break
+            sub_listing = chokepoint.s3_list_prefix(
+                EXPLORER_BLOCK_BUCKET,
+                rp,
+                requester_pays=True,
+                max_keys=files_needed,
+                include_subdirs=False,
+            )
+            if sub_listing.get("error_code"):
+                continue
+            sub_keys = sub_listing.get("keys", [])
+            keys_to_read.extend(sub_keys[: files_needed - len(keys_to_read)])
+    else:
+        # fallback
+        keys_to_read = layout_info["keys"][:max_block_files]
+
+    inv.files_listed = len(keys_to_read)
+
+    # Step 3: decode files and build inventory
+    inventory: dict[str, int] = {}
+    schema_shapes: list[frozenset] = []
+    nested_paths: set[str] = set()
+    sample_records: list[Any] = []
+    opaque_count_holder = [0]
+    hip3_count_holder = [0]
+    decode_method = "unknown"
+    decode_failures = 0
+    bytes_consumed = 0
+    hip3_lower_terms = [t.lower() for t in DEPLOYMENT_SEARCH_TERMS]
+
+    for key in keys_to_read:
+        if bytes_consumed >= min(explorer_block_budget_bytes, download_budget_bytes):
+            break
+
+        try:
+            data = chokepoint.s3_read_object(EXPLORER_BLOCK_BUCKET, key, requester_pays=True)
+        except Exception:
+            decode_failures += 1
+            continue
+
+        bytes_consumed += len(data)
+
+        # Decompress
+        try:
+            decompressed = lz4.frame.decompress(data)
+        except Exception:
+            decompressed = data
+
+        # Try decode: MessagePack first, then JSON
+        decoded: Any = None
+        used_method = "unknown"
+        if _MSGPACK_AVAILABLE:
+            try:
+                decoded = msgpack.unpackb(decompressed, raw=False)
+                used_method = "msgpack"
+            except Exception:
+                pass
+
+        if decoded is None:
+            # Try JSON lines or single JSON
+            try:
+                # Try as single JSON
+                decoded = json.loads(decompressed)
+                used_method = "json"
+            except Exception:
+                # Try JSONL
+                lines = decompressed.splitlines()
+                decoded_lines = []
+                for line in lines:
+                    if not line:
+                        continue
+                    try:
+                        decoded_lines.append(json.loads(line))
+                        used_method = "json"
+                    except Exception:
+                        pass
+                if decoded_lines:
+                    decoded = decoded_lines
+
+        if decoded is None:
+            decode_failures += 1
+            opaque_count_holder[0] += 1
+            continue
+
+        if decode_method == "unknown":
+            decode_method = used_method
+
+        _inventory_action_types_from_decoded(
+            decoded,
+            inventory,
+            schema_shapes,
+            nested_paths,
+            sample_records,
+            opaque_count_holder,
+            hip3_count_holder,
+            hip3_lower_terms,
+        )
+        inv.files_read += 1
+
+    inv.bytes_downloaded = chokepoint.bytes_downloaded
+    inv.action_type_counts = inventory
+    inv.top_level_schema_shapes = [sorted(s) for s in schema_shapes]
+    inv.nested_field_paths = sorted(nested_paths)
+    inv.sample_redacted_records = sample_records
+    inv.decode_method_used = decode_method
+    inv.decode_failures_count = decode_failures
+    inv.opaque_records_count = opaque_count_holder[0]
+    inv.hip3_candidate_passive_count = hip3_count_holder[0]
+
+    # Determine final status
+    if not inventory and opaque_count_holder[0] > 0:
+        inv.status = ScoutStatus.HIP3_EXPLORER_BLOCK_ACTION_SCHEMA_OPAQUE
+    elif not inventory:
+        inv.status = ScoutStatus.HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_EMPTY
+    else:
+        inv.status = ScoutStatus.HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY
+
+    inv.final_status = inv.status.value
+    return inv
+
+
+# ---------------------------------------------------------------------------
 # Core probe workflow
 # ---------------------------------------------------------------------------
 
@@ -1410,6 +1798,109 @@ def _serialize_timestamp_samples(samples: list[BlockTimestampSample]) -> list[di
     ]
 
 
+def _write_inventory_artifacts(run_dir: Path, inv: ActionInventoryResult, argv: list[str]) -> None:
+    """Write all required artifacts for an inventory-mode run."""
+    sha, dirty = inv.git_sha, inv.git_dirty
+    base_meta = {
+        "study_id": inv.study_id,
+        "run_id": inv.run_id,
+        "created_at_utc": inv.created_at_utc,
+        "git_sha": sha,
+        "git_dirty": dirty,
+        "repo_root": inv.repo_root,
+        "command_args": argv,
+        "safety_mode": inv.safety_mode,
+        "schema_version": inv.schema_version,
+        "final_status": inv.final_status or str(inv.status),
+    }
+
+    # summary.json
+    summary = {
+        **base_meta,
+        "files_listed": inv.files_listed,
+        "files_read": inv.files_read,
+        "bytes_downloaded": inv.bytes_downloaded,
+        "inferred_layout": inv.inferred_layout,
+        "action_type_counts": inv.action_type_counts,
+        "top_level_schema_shapes": inv.top_level_schema_shapes,
+        "nested_field_paths": inv.nested_field_paths,
+        "decode_method_used": inv.decode_method_used,
+        "decode_failures_count": inv.decode_failures_count,
+        "opaque_records_count": inv.opaque_records_count,
+        "hip3_candidate_passive_count": inv.hip3_candidate_passive_count,
+        "aws_identity_available": inv.aws_identity_available,
+        "aws_account_suffix": inv.aws_account_suffix,
+        "explorer_root_listing_status": inv.explorer_root_listing_status,
+    }
+    _atomic_write(run_dir / "summary.json", summary)
+
+    # summary.md
+    action_lines = "\n".join(
+        f"- `{k}`: {v}" for k, v in sorted(inv.action_type_counts.items(), key=lambda x: -x[1])
+    ) or "(none)"
+    md_lines = [
+        "# HIP-3 Explorer Block Action-Type Inventory",
+        "",
+        f"**Status:** `{inv.final_status}`",
+        f"**Run ID:** {inv.run_id}",
+        f"**Layout:** {inv.inferred_layout}",
+        f"**Files listed:** {inv.files_listed}  |  **Files read:** {inv.files_read}",
+        f"**Bytes downloaded:** {inv.bytes_downloaded:,}",
+        f"**Decode method:** {inv.decode_method_used}",
+        f"**Decode failures:** {inv.decode_failures_count}",
+        f"**Opaque records:** {inv.opaque_records_count}",
+        f"**HIP-3 candidate passive count:** {inv.hip3_candidate_passive_count}",
+        "",
+        "## Action Type Counts",
+        action_lines,
+        "",
+        "> NOTE: Universe-delta probe (c9056978aa) found 13 post-launch symbol additions",
+        "> (all crypto_like or unknown). That result does NOT prove absence of HIP-3",
+        "> deployment events — this inventory independently enumerates action types.",
+    ]
+    (run_dir / "summary.md").write_text("\n".join(md_lines))
+
+    # action_type_inventory.json
+    _atomic_write(run_dir / "action_type_inventory.json", {
+        **base_meta,
+        "action_type_counts": inv.action_type_counts,
+        "total_actions_seen": sum(inv.action_type_counts.values()),
+        "unique_action_types": len(inv.action_type_counts),
+        "hip3_candidate_passive_count": inv.hip3_candidate_passive_count,
+        "decode_method_used": inv.decode_method_used,
+        "decode_failures_count": inv.decode_failures_count,
+        "opaque_records_count": inv.opaque_records_count,
+    })
+
+    # schema_shape_samples.json
+    _atomic_write(run_dir / "schema_shape_samples.json", {
+        **base_meta,
+        "top_level_schema_shapes": inv.top_level_schema_shapes,
+        "nested_field_paths": inv.nested_field_paths,
+        "sample_redacted_records": inv.sample_redacted_records,
+    })
+
+    # run_manifest.json
+    _atomic_write(run_dir / "run_manifest.json", {
+        **base_meta,
+        "archive_bucket": inv.explorer_block_bucket,
+        "archive_prefix": inv.explorer_block_root_prefix,
+        "aws_identity_available": inv.aws_identity_available,
+        "aws_account_suffix": inv.aws_account_suffix,
+        "no_registry_mutation": True,
+        "no_full_account_id": True,
+        "files_listed": inv.files_listed,
+        "files_read": inv.files_read,
+        "bytes_downloaded": inv.bytes_downloaded,
+        "inferred_layout": inv.inferred_layout,
+        "decode_method_used": inv.decode_method_used,
+        "max_block_files": inv.max_block_files,
+        "explorer_block_budget_bytes": inv.explorer_block_budget_bytes,
+        "explorer_root_prefixes": inv.explorer_root_prefixes,
+        "explorer_root_listing_status": inv.explorer_root_listing_status,
+    })
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
     parser = argparse.ArgumentParser(description="HIP‑3 Builder Deployment Event Discovery Probe")
@@ -1426,7 +1917,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-layout-prefixes", type=int, default=11)
     parser.add_argument("--max-timestamp-sample-files", type=int, default=50)
     parser.add_argument("--max-timestamp-sample-bytes", type=int, default=200_000_000)
+    parser.add_argument(
+        "--inventory-action-types-only",
+        action="store_true",
+        help="P1 mode: enumerate explorer-block action types without searching for deployment events.",
+    )
     args = parser.parse_args(argv)
+    out_root = Path(args.out_root)
+
+    if args.inventory_action_types_only:
+        inv = run_inventory_probe(
+            max_block_files=args.max_block_files if args.max_block_files != 5000 else 20,
+            explorer_block_budget_bytes=args.explorer_block_budget_bytes if args.explorer_block_budget_bytes != 1_000_000_000 else 50_000_000,
+            download_budget_bytes=args.download_budget_bytes if args.download_budget_bytes != 5_000_000_000 else 50_000_000,
+            allow_network_public=args.allow_network_public,
+            allow_s3_archive_read=args.allow_s3_archive_read,
+            command_args=sys.argv[1:],
+        )
+        run_dir = out_root / inv.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        _write_inventory_artifacts(run_dir, inv, sys.argv[1:])
+        print(f"{inv.status}")
+        print(f"Inventory probe completed. Report written to {run_dir}")
+        return 0
+
     result = run_probe(
         start_date=args.start_date,
         end_date=args.end_date,
@@ -1441,7 +1955,6 @@ def main(argv: list[str] | None = None) -> int:
         max_timestamp_sample_files=args.max_timestamp_sample_files,
         max_timestamp_sample_bytes=args.max_timestamp_sample_bytes,
     )
-    out_root = Path(args.out_root)
     run_dir = out_root / result.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     # Serialize result for JSON output

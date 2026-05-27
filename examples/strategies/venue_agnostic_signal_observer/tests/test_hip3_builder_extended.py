@@ -4,6 +4,7 @@
 import sys
 from pathlib import Path
 import json
+import tempfile
 import pytest
 
 # Ensure repo root on path for imports
@@ -113,7 +114,8 @@ def test_probe_status_no_block_files():
         allow_s3_archive_read=True,
         dry_run=False,
     )
-    # Expect precise status: empty listing, credential failure, or access denied.
+    # Expect precise status: empty listing, credential failure, access denied,
+    # date out-of-range, or no events found (probe ran but year 2100 has no data).
     assert result.status in (
         ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY,
         ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED,
@@ -123,6 +125,8 @@ def test_probe_status_no_block_files():
         ScoutStatus.HIP3_EXPLORER_BLOCK_DATE_MAPPING_INSUFFICIENT_SAMPLES,
         ScoutStatus.HIP3_EXPLORER_BLOCK_TIMESTAMP_PARSE_FAILED,
         ScoutStatus.HIP3_EXPLORER_BLOCK_DATE_OUT_OF_RANGE,
+        # Probe may successfully run and find no events for year 2100
+        ScoutStatus.HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS,
     )
     # No bytes should have been downloaded.
     assert result.bytes_downloaded_total == 0
@@ -400,6 +404,271 @@ def test_no_registry_or_live_artifacts():
 import unittest.mock
 
 # ---------------------------------------------------------------------------
+# P1 action-type inventory tests
+# ---------------------------------------------------------------------------
+
+_MOD_PATH = "examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0"
+
+
+def test_inventory_mode_does_not_emit_no_deployment_events():
+    """--inventory-action-types-only must NOT emit HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_inventory_probe,
+        ScoutStatus,
+    )
+    inv = run_inventory_probe(
+        max_block_files=5,
+        explorer_block_budget_bytes=50_000_000,
+        allow_network_public=False,
+        allow_s3_archive_read=False,
+    )
+    assert inv.status != ScoutStatus.HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS, (
+        f"Inventory mode emitted forbidden status: {inv.status}"
+    )
+
+
+def test_inventory_mode_counts_synthetic_action_types():
+    """Action inventory correctly counts synthetic action types from mock data."""
+    import lz4.frame
+    import msgpack
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_inventory_probe,
+        ScoutStatus,
+        NetworkChokepoint,
+        EXPLORER_BLOCK_BUCKET,
+    )
+
+    blocks = [
+        {
+            "header": {"height": 100, "block_time": "2025-10-13T00:00:00"},
+            "txs": [
+                {"action": {"type": "DeployPerp"}, "user": "0xabc"},
+                {"action": {"type": "RegisterAsset"}, "user": "0xdef"},
+                {"action": {"type": "DeployPerp"}, "user": "0xghi"},
+            ],
+        }
+    ]
+    packed = msgpack.packb(blocks)
+    compressed = lz4.frame.compress(packed)
+
+    with unittest.mock.patch(
+        f"{_MOD_PATH}.NetworkChokepoint.s3_list_prefix",
+        return_value={
+            "prefixes": ["explorer_blocks/100000000/"],
+            "keys": [],
+            "objects": [],
+            "error_code": None,
+        },
+    ):
+        # We need to patch the sub-listing call for the range prefix too
+        pass
+
+    # Use direct chokepoint patching
+    cp_patch_layout = {
+        "prefixes": ["explorer_blocks/100000000/"],
+        "keys": [],
+        "objects": [],
+        "error_code": None,
+    }
+    cp_patch_sublisting = {
+        "prefixes": [],
+        "keys": ["explorer_blocks/100000000/block_100.rmp.lz4"],
+        "objects": [],
+        "error_code": None,
+    }
+
+    original_run = run_inventory_probe
+
+    def _patched_run(**kwargs):
+        from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+            NetworkChokepoint,
+        )
+        import unittest.mock as m
+        call_count = [0]
+
+        def fake_list_prefix(self_inner, bucket, prefix, **kw):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return cp_patch_layout
+            return cp_patch_sublisting
+
+        with m.patch.object(NetworkChokepoint, "s3_list_prefix", fake_list_prefix):
+            with m.patch.object(NetworkChokepoint, "s3_read_object", return_value=compressed):
+                return original_run(**kwargs)
+
+    inv = _patched_run(
+        max_block_files=5,
+        explorer_block_budget_bytes=50_000_000,
+        allow_network_public=False,
+        allow_s3_archive_read=True,
+    )
+
+    assert inv.status == ScoutStatus.HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY, (
+        f"Expected INVENTORY_READY, got {inv.status}"
+    )
+    assert inv.action_type_counts.get("DeployPerp", 0) == 2
+    assert inv.action_type_counts.get("RegisterAsset", 0) == 1
+    assert inv.files_read == 1
+
+
+def test_inventory_mode_opaque_records_counted():
+    """Opaque/unknown records are counted and not silently dropped."""
+    import lz4.frame
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_inventory_probe,
+        ScoutStatus,
+        NetworkChokepoint,
+    )
+
+    # Provide a block that has no txs/actions — triggers opaque counting
+    import json
+    blocks = [
+        {"header": {"height": 200}, "data": "no_txs_here"},
+    ]
+    compressed = lz4.frame.compress(json.dumps(blocks).encode())
+    call_count = [0]
+    cp_patch_layout = {
+        "prefixes": ["explorer_blocks/100000000/"],
+        "keys": [],
+        "objects": [],
+        "error_code": None,
+    }
+    cp_patch_sublisting = {
+        "prefixes": [],
+        "keys": ["explorer_blocks/100000000/block_200.json.lz4"],
+        "objects": [],
+        "error_code": None,
+    }
+
+    def fake_list_prefix(self, bucket, prefix, **kw):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return cp_patch_layout
+        return cp_patch_sublisting
+
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", fake_list_prefix):
+        with unittest.mock.patch.object(NetworkChokepoint, "s3_read_object", return_value=compressed):
+            inv = run_inventory_probe(
+                max_block_files=5,
+                explorer_block_budget_bytes=50_000_000,
+                allow_network_public=False,
+                allow_s3_archive_read=True,
+            )
+
+    # opaque_records_count must be > 0 since we had a block without txs
+    assert inv.opaque_records_count > 0, "Expected opaque records to be counted"
+    assert inv.files_read == 1
+
+
+def test_inventory_mode_unknown_layout_stops():
+    """Unknown layout must stop before reading any files."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_inventory_probe,
+        ScoutStatus,
+        NetworkChokepoint,
+    )
+
+    # Provide prefixes that don't match any known layout pattern
+    mystery_listing = {
+        "prefixes": ["explorer_blocks/some_unknown_prefix/"],
+        "keys": [],
+        "objects": [],
+        "error_code": None,
+    }
+
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", return_value=mystery_listing):
+        with unittest.mock.patch.object(NetworkChokepoint, "s3_read_object", side_effect=AssertionError("Must not read files for unknown layout")) as mock_read:
+            inv = run_inventory_probe(
+                max_block_files=5,
+                explorer_block_budget_bytes=50_000_000,
+                allow_network_public=False,
+                allow_s3_archive_read=True,
+            )
+
+    assert inv.status == ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN
+    assert inv.files_read == 0
+
+
+def test_inventory_credentials_required_status():
+    """No AWS credentials → CREDENTIALS_REQUIRED."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_inventory_probe,
+        ScoutStatus,
+        NetworkChokepoint,
+    )
+
+    creds_missing = {"prefixes": [], "keys": [], "objects": [], "error_code": "NO_CREDENTIALS"}
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", return_value=creds_missing):
+        inv = run_inventory_probe(allow_s3_archive_read=True)
+    assert inv.status == ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED
+
+
+def test_inventory_access_denied_status():
+    """AccessDenied S3 error → ACCESS_DENIED."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_inventory_probe,
+        ScoutStatus,
+        NetworkChokepoint,
+    )
+
+    denied = {"prefixes": [], "keys": [], "objects": [], "error_code": "AccessDenied"}
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", return_value=denied):
+        inv = run_inventory_probe(allow_s3_archive_read=True)
+    assert inv.status == ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED
+
+
+def test_no_subprocess_eval_ossystem_in_module():
+    """Production module must not contain subprocess, os.system, or eval."""
+    src_path = Path(__file__).resolve().parents[1] / "hip3_builder_deployment_event_discovery_v0.py"
+    src = src_path.read_text()
+    assert "import subprocess" not in src
+    assert "subprocess.run" not in src
+    assert "os.system(" not in src
+    assert "eval(" not in src
+
+
+def test_inventory_artifacts_no_pnl_fields():
+    """Inventory artifacts must not contain PnL/basis/residual/strategy/return fields."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        ActionInventoryResult,
+        ScoutStatus,
+    )
+    inv = ActionInventoryResult(
+        status=ScoutStatus.HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY,
+        run_id="test",
+    )
+    inv_dict = inv.__dict__
+    forbidden = {"pnl", "basis", "residual", "strategy_return", "alpha", "sharpe", "returns"}
+    overlap = forbidden & set(inv_dict.keys())
+    assert not overlap, f"ActionInventoryResult has forbidden fields: {overlap}"
+
+
+def test_universe_delta_is_note_not_proof():
+    """Summary.md must reference universe-delta as note, not proof."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _write_inventory_artifacts,
+        ActionInventoryResult,
+        ScoutStatus,
+    )
+    import tempfile, os
+    inv = ActionInventoryResult(
+        status=ScoutStatus.HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_EMPTY,
+        run_id="test_ud",
+        final_status="HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_EMPTY",
+        git_sha="abc",
+        git_dirty=False,
+        repo_root="/tmp",
+    )
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = Path(td)
+        _write_inventory_artifacts(run_dir, inv, [])
+        md = (run_dir / "summary.md").read_text()
+    # Must reference universe-delta context as a note
+    assert "Universe-delta" in md or "universe-delta" in md
+    assert "does NOT prove absence" in md or "NOT prove" in md
+
+
+# ---------------------------------------------------------------------------
 # Timestamp samples from synthetic explorer block objects
 # ---------------------------------------------------------------------------
 
@@ -556,3 +825,251 @@ def test_no_registry_mutation():
     # No registry keys
     assert len(result.action_types_inventoried) == 0
     assert len(result.candidate_events) == 0
+
+
+# ---------------------------------------------------------------------------
+# Additional acceptance-criteria tests for P1 action-type inventory
+# ---------------------------------------------------------------------------
+
+def test_inventory_mode_root_layout_must_be_known_before_reading():
+    """Inventory mode must discover layout before reading any block files."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_inventory_probe,
+        ScoutStatus,
+        NetworkChokepoint,
+    )
+
+    # Unknown layout: stop without reading files
+    unknown_layout = {
+        "prefixes": ["explorer_blocks/mystery/"],
+        "keys": [],
+        "objects": [],
+        "error_code": None,
+    }
+
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", return_value=unknown_layout):
+        with unittest.mock.patch.object(NetworkChokepoint, "s3_read_object", side_effect=AssertionError("Must not read for unknown layout")):
+            inv = run_inventory_probe(
+                max_block_files=5,
+                explorer_block_budget_bytes=50_000_000,
+                allow_network_public=False,
+                allow_s3_archive_read=True,
+            )
+
+    assert inv.status == ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN
+    assert inv.files_read == 0
+    assert inv.files_listed == 0
+
+
+def test_inventory_mode_summary_md_references_universe_delta_as_note():
+    """Summary.md must reference universe-delta (c9056978aa) as context note, not proof."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _write_inventory_artifacts,
+        ActionInventoryResult,
+        ScoutStatus,
+    )
+
+    inv = ActionInventoryResult(
+        status=ScoutStatus.HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY,
+        run_id="test_note",
+        final_status="HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY",
+        git_sha="abc",
+        git_dirty=False,
+        repo_root="/tmp",
+        inferred_layout="block_range_partitioned",
+        files_listed=10,
+        files_read=5,
+        bytes_downloaded=12345,
+        action_type_counts={"DeployPerp": 3, "RegisterAsset": 1},
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = Path(td)
+        _write_inventory_artifacts(run_dir, inv, ["--inventory-action-types-only"])
+        md = (run_dir / "summary.md").read_text()
+
+    # Must reference universe-delta context
+    assert "Universe-delta" in md or "universe-delta" in md
+    # Must say it does NOT prove absence
+    assert "does NOT prove absence" in md or "NOT prove" in md
+    # Must NOT claim the inventory result proves deployment events
+    assert "confirmed" not in md.lower() or "universe-delta" not in md.lower()
+
+
+def test_inventory_mode_no_deployment_status_in_artifacts():
+    """Inventory artifacts must never contain HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _write_inventory_artifacts,
+        ActionInventoryResult,
+        ScoutStatus,
+    )
+
+    inv = ActionInventoryResult(
+        status=ScoutStatus.HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_EMPTY,
+        run_id="test_no_deploy",
+        final_status="HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_EMPTY",
+        git_sha="abc",
+        git_dirty=False,
+        repo_root="/tmp",
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = Path(td)
+        _write_inventory_artifacts(run_dir, inv, ["--inventory-action-types-only"])
+        summary = json.loads((run_dir / "summary.json").read_text())
+        manifest = json.loads((run_dir / "run_manifest.json").read_text())
+
+    # Neither summary nor manifest should contain the no-deployment status
+    assert summary["final_status"] != "HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS"
+    assert manifest["final_status"] != "HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS"
+
+
+def test_inventory_artifacts_no_pnl_basis_strategy_fields():
+    """Inventory artifacts must not contain PnL/basis/residual/strategy/return fields."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _write_inventory_artifacts,
+        ActionInventoryResult,
+        ScoutStatus,
+    )
+
+    inv = ActionInventoryResult(
+        status=ScoutStatus.HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY,
+        run_id="test_fields",
+        final_status="HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY",
+        git_sha="abc",
+        git_dirty=False,
+        repo_root="/tmp",
+        action_type_counts={"DeployPerp": 1},
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = Path(td)
+        _write_inventory_artifacts(run_dir, inv, [])
+        for fname in ("summary.json", "action_type_inventory.json", "schema_shape_samples.json", "run_manifest.json"):
+            content = (run_dir / fname).read_text().lower()
+            for forbidden in ("pnl", "basis", "residual", "strategy_return", "alpha", "sharpe", "returns"):
+                assert forbidden not in content, f"Found forbidden field '{forbidden}' in {fname}"
+
+
+def test_inventory_opaque_msgpack_not_silently_dropped():
+    """Opaque MessagePack records must be counted, not silently dropped."""
+    import lz4.frame
+    import msgpack
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_inventory_probe,
+        ScoutStatus,
+        NetworkChokepoint,
+    )
+
+    # Build a MessagePack block with no txs/actions list — triggers opaque count
+    blocks = [
+        {
+            "header": {"height": 500, "block_time": "2025-10-13T00:00:00"},
+            "metadata": "no_actions",
+        },
+    ]
+    packed = msgpack.packb(blocks)
+    compressed = lz4.frame.compress(packed)
+
+    call_count = [0]
+    layout_patch = {
+        "prefixes": ["explorer_blocks/100000000/"],
+        "keys": [],
+        "objects": [],
+        "error_code": None,
+    }
+    sublisting_patch = {
+        "prefixes": [],
+        "keys": ["explorer_blocks/100000000/block_500.rmp.lz4"],
+        "objects": [],
+        "error_code": None,
+    }
+
+    def fake_list_prefix(self, bucket, prefix, **kw):
+        call_count[0] += 1
+        return layout_patch if call_count[0] == 1 else sublisting_patch
+
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", fake_list_prefix):
+        with unittest.mock.patch.object(NetworkChokepoint, "s3_read_object", return_value=compressed):
+            inv = run_inventory_probe(
+                max_block_files=5,
+                explorer_block_budget_bytes=50_000_000,
+                allow_network_public=False,
+                allow_s3_archive_read=True,
+            )
+
+    assert inv.files_read == 1
+    assert inv.opaque_records_count > 0, "Opaque records must be counted, not silently dropped"
+
+
+def test_inventory_no_production_subprocess_os_system_eval():
+    """Production module must not use subprocess, os.system, or eval."""
+    src_path = Path(__file__).resolve().parents[1] / "hip3_builder_deployment_event_discovery_v0.py"
+    src = src_path.read_text()
+    assert "import subprocess" not in src, "Must not import subprocess"
+    assert "subprocess.run" not in src, "Must not call subprocess.run"
+    assert "subprocess.Popen" not in src, "Must not call subprocess.Popen"
+    assert "os.system(" not in src, "Must not call os.system"
+    assert "eval(" not in src, "Must not call eval"
+
+
+def test_inventory_mode_explorer_block_budget_enforced():
+    """Inventory mode must respect download budget and stop when exceeded."""
+    import lz4.frame
+    import msgpack
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_inventory_probe,
+        ScoutStatus,
+        NetworkChokepoint,
+    )
+
+    # Create a small block
+    blocks = [
+        {
+            "header": {"height": 100, "block_time": "2025-10-13T00:00:00"},
+            "txs": [{"action": {"type": "DeployPerp"}}],
+        }
+    ]
+    packed = msgpack.packb(blocks)
+    compressed = lz4.frame.compress(packed)
+    compressed_size = len(compressed)
+
+    call_count = [0]
+    layout_patch = {
+        "prefixes": ["explorer_blocks/100000000/"],
+        "keys": [],
+        "objects": [],
+        "error_code": None,
+    }
+    sublisting_patch = {
+        "prefixes": [],
+        "keys": [
+            "explorer_blocks/100000000/block_1.rmp.lz4",
+            "explorer_blocks/100000000/block_2.rmp.lz4",
+        ],
+        "objects": [],
+        "error_code": None,
+    }
+
+    def fake_list_prefix(self, bucket, prefix, **kw):
+        call_count[0] += 1
+        return layout_patch if call_count[0] == 1 else sublisting_patch
+
+    # Use a real s3_read_object wrapper that tracks bytes
+    def fake_read_object(self, bucket, key, requester_pays=True):
+        self._track_bytes(compressed_size, f"s3:{bucket}")
+        return compressed
+
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", fake_list_prefix):
+        with unittest.mock.patch.object(NetworkChokepoint, "s3_read_object", fake_read_object):
+            inv = run_inventory_probe(
+                max_block_files=20,
+                explorer_block_budget_bytes=100,  # tiny budget — will stop after first file
+                download_budget_bytes=100,
+                allow_network_public=False,
+                allow_s3_archive_read=True,
+            )
+
+    # Should have read at least 1 file but budget should have stopped further reads
+    assert inv.files_read >= 1
+    assert inv.bytes_downloaded >= compressed_size
