@@ -212,7 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         "min_tail_events": args.min_tail_events,
         "download_budget_bytes": args.download_budget_bytes,
         "per_symbol_l2_budget_bytes": args.per_symbol_l2_budget_bytes,
-        "repo_root": Path(__file__).resolve().parent.parent.parent.parent.parent,
+        "repo_root": str(Path(__file__).resolve().parent.parent.parent.parent),
     }
 
     # Run the scout
