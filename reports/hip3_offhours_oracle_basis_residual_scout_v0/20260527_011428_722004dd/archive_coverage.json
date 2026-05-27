@@ -1,0 +1,19 @@
+{
+  "coverage": [
+    {
+      "asset_ctxs_available": true,
+      "asset_ctxs_required_fields_present": true,
+      "delisting_date_utc": null,
+      "first_date_utc": "20230520",
+      "insufficient_post_listing_history": false,
+      "l2_samples_available": true,
+      "l2_sufficient_levels": true,
+      "last_date_utc": "20260430",
+      "listing_date_utc": "2023-05-20",
+      "missing_days": 0,
+      "post_listing_days": 200,
+      "symbol": "SPX",
+      "total_days": 1077
+    }
+  ]
+}

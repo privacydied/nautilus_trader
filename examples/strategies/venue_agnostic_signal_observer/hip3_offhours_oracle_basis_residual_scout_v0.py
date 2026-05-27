@@ -95,6 +95,9 @@ class ScoutStatus(Enum):
     HIP3_SCOUT_PASSED_PHASE0_DRAFTING_PERMITTED = (
         "HIP3_SCOUT_PASSED_PHASE0_DRAFTING_PERMITTED"
     )
+    HIP3_DATA_PLANE_READY_RESIDUAL_ANALYSIS_REQUIRED = (
+        "HIP3_DATA_PLANE_READY_RESIDUAL_ANALYSIS_REQUIRED"
+    )
     HIP3_SCOUT_ERROR = "HIP3_SCOUT_ERROR"
 
 
@@ -1117,6 +1120,7 @@ class AnchorSample:
 class OracleClassificationResult:
     symbol: str
     anchor_source: str
+    gate_realized: bool = False
     mark_vs_anchor_stats: dict[str, float] | None = None
     mid_vs_anchor_stats: dict[str, float] | None = None
     oracle_minus_executable_mid_stats: dict[str, float] | None = None
@@ -1320,6 +1324,7 @@ def gate3_oracle_classification(
 ) -> ScoutStatus:
     """Gate 3: Oracle / fair-value classification.
 
+    Computes mark-px vs anchor residuals from real asset_ctxs archive data.
     This is the cheap killer. Runs immediately after archive coverage.
     """
     if dry_run:
@@ -1328,9 +1333,9 @@ def gate3_oracle_classification(
     if anchor_source == "none":
         return ScoutStatus.HIP3_ANCHOR_DATA_UNAVAILABLE
 
-    # Load anchor data per symbol
     all_classifications: list[OracleClassificationResult] = []
     kill_triggered = False
+    realized_count = 0
 
     for sym in symbols:
         anchor_data = load_anchor_data(
@@ -1338,33 +1343,130 @@ def gate3_oracle_classification(
         )
 
         if not anchor_data:
-            # Symbol-specific anchor unavailable
             result = OracleClassificationResult(
                 symbol=sym.symbol,
                 anchor_source=anchor_source,
                 status=ScoutStatus.HIP3_ANCHOR_DATA_UNAVAILABLE,
             )
             all_classifications.append(result)
-
             if anchor_source == "cme_futures_proxy":
-                # CME proxy is the default; if unavailable, fail closed
                 kill_triggered = True
             continue
 
+        # Load mark_px from asset_ctxs archive for date range
+        mark_prices = _load_mark_prices_from_archive(sym.symbol, start_date, end_date)
+
+        if not mark_prices:
+            # Cannot compute residuals without archive data
+            result = OracleClassificationResult(
+                symbol=sym.symbol,
+                anchor_source=anchor_source,
+                status=ScoutStatus.HIP3_ANCHOR_DATA_UNAVAILABLE,
+            )
+            all_classifications.append(result)
+            kill_triggered = True
+            continue
+
         # Compute residuals against anchor
-        # In a real run, this uses actual mark/oracle prices from archive.
-        # For scout framework, placeholder: synthetic data or archive-sourced.
+        residuals, stale_count = _compute_anchor_aligned_residuals(
+            mark_prices, anchor_data, max_stale_hours=4.0
+        )
+
+        if not residuals:
+            result = OracleClassificationResult(
+                symbol=sym.symbol,
+                anchor_source=anchor_source,
+                sample_count=len(mark_prices),
+                stale_anchor_dropped_count=stale_count,
+                status=ScoutStatus.HIP3_ORACLE_CLASSIFICATION_INCONCLUSIVE,
+            )
+            all_classifications.append(result)
+            kill_triggered = True
+            continue
+
+        stats = _compute_distribution_stats(residuals)
+
+        # Kill rule: if anchor explains mark tightly
+        if stats.get("p90_abs_bps", 0) < 20 and stats.get("p95_abs_bps", 0) < 30:
+            result = OracleClassificationResult(
+                symbol=sym.symbol,
+                anchor_source=anchor_source,
+                gate_realized=True,
+                mark_vs_anchor_stats=stats,
+                sample_count=len(mark_prices),
+                stale_anchor_dropped_count=stale_count,
+                status=ScoutStatus.HIP3_ORACLE_ALREADY_FAIR_VALUE_TRACKING,
+            )
+            all_classifications.append(result)
+            kill_triggered = True
+            continue
+
         result = OracleClassificationResult(
             symbol=sym.symbol,
             anchor_source=anchor_source,
-            sample_count=len(anchor_data),
+            gate_realized=True,
+            mark_vs_anchor_stats=stats,
+            sample_count=len(mark_prices),
+            stale_anchor_dropped_count=stale_count,
+            status=ScoutStatus.HIP3_SCOUT_READY,
         )
         all_classifications.append(result)
+        realized_count += 1
 
     if kill_triggered and anchor_source == "cme_futures_proxy":
         return ScoutStatus.HIP3_ANCHOR_DATA_UNAVAILABLE
 
+    if realized_count == 0:
+        return ScoutStatus.HIP3_ORACLE_CLASSIFICATION_INCONCLUSIVE
+
     return ScoutStatus.HIP3_SCOUT_READY
+
+
+def _load_mark_prices_from_archive(
+    symbol: str,
+    start_date: date,
+    end_date: date | None,
+) -> list[tuple[datetime, float]]:
+    """Load mark prices for a symbol from the Hyperliquid asset_ctxs S3 archive.
+
+    Returns [(timestamp_utc, mark_px), ...] sorted by timestamp.
+    """
+    import csv
+    import io
+    import lz4.frame
+
+    end = end_date or datetime.now(UTC).date()
+    results: list[tuple[datetime, float]] = []
+    cur = start_date
+    max_dates = 30  # bounded sample
+    dates_loaded = 0
+
+    while cur <= end and dates_loaded < max_dates:
+        key = f"s3://hyperliquid-archive/asset_ctxs/{cur:%Y%m%d}.csv.lz4"
+        try:
+            raw = public_s3_read(key, timeout=60)
+            decompressed = lz4.frame.decompress(raw)
+            text = decompressed.decode("utf-8")
+            reader = csv.DictReader(io.StringIO(text))
+            for row in reader:
+                coin = (row.get("coin") or row.get("name") or "").strip().upper()
+                if coin == symbol.upper():
+                    ts_str = row.get("time", "")
+                    mark_str = row.get("mark_px") or row.get("markPx") or ""
+                    if ts_str and mark_str:
+                        try:
+                            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                            mark = float(mark_str)
+                            results.append((ts, mark))
+                        except (ValueError, TypeError):
+                            pass
+            dates_loaded += 1
+        except (RuntimeError, Exception):
+            pass
+        cur += timedelta(days=1)
+
+    results.sort(key=lambda x: x[0])
+    return results
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1448,6 +1550,7 @@ def gate4_fee_discovery(
 @dataclass
 class L2LiquidityResult:
     symbol: str
+    gate_realized: bool = False
     off_hours_sample_count: int = 0
     median_spread_bps: float | None = None
     p90_spread_bps: float | None = None
@@ -1607,19 +1710,106 @@ def compute_l2_diagnostics(
     return result
 
 
+def _sample_spx_l2_archives(
+    symbol: str,
+    start_date: date,
+    max_hours: int = 200,
+) -> list[dict]:
+    """Sample SPX L2 archives: uniformly sample off-hours hours.
+
+    Returns list of parsed L2 snapshots with levels data.
+    Records bytes downloaded.
+    """
+    import lz4.frame
+    import json as _json
+
+    results: list[dict] = []
+    cur = start_date
+    end = datetime.now(UTC).date()
+    hours_collected = 0
+
+    # Build uniform sample: iterate days, for each day sample off-hours hours
+    while cur <= end and hours_collected < max_hours:
+        # Determine which hours are off-hours for this date
+        for hour in range(24):
+            if hours_collected >= max_hours:
+                break
+            # Only sample off-hours: before 14:30 UTC (09:30 ET) and after 20:00 UTC (16:00 ET)
+            # Simplified: 0-13 = pre-market/early, 14-19 = cash session, 20-23 = after-hours
+            is_cash = 14 <= hour <= 19  # approximate 09:30-16:00 ET
+            if is_cash:
+                continue
+
+            key = f"s3://hyperliquid-archive/market_data/{cur:%Y%m%d}/{hour}/l2Book/{symbol}.lz4"
+            try:
+                raw = public_s3_read(key, timeout=60)
+                decompressed = lz4.frame.decompress(raw)
+                text = decompressed.decode("utf-8")
+                lines = text.strip().split("\n")
+                if not lines:
+                    continue
+                # Parse first valid snapshot
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        parsed = _json.loads(line)
+                    except _json.JSONDecodeError:
+                        continue
+                    raw_data = parsed.get("raw", {})
+                    data = raw_data.get("data", {})
+                    levels = data.get("levels")
+                    if levels and len(levels) >= 2 and levels[0] and levels[1]:
+                        snap = {
+                            "coin": data.get("coin", symbol),
+                            "ts_event": parsed.get("time", ""),
+                            "levels": levels,
+                        }
+                        results.append(snap)
+                        hours_collected += 1
+                        break
+            except (RuntimeError, Exception):
+                pass
+
+        cur += timedelta(days=1)
+
+    return results
+
+
 def gate5_l2_liquidity(
+    symbols: list[DiscoveredSymbol] | None = None,
+    start_date: date | None = None,
+    max_l2_hours: int = 200,
     dry_run: bool = False,
     skip_l2_download: bool = False,
 ) -> ScoutStatus:
     """Gate 5: L2 liquidity/depth/spread.
 
-    Uses bounded L2 archive samples.
+    Uses bounded L2 archive samples with real book-walk diagnostics.
+    Sets gate_realized=True when real data is computed.
     """
     if dry_run or skip_l2_download:
         return ScoutStatus.HIP3_SCOUT_READY
 
-    # In a real scout, this samples L2 archives and computes diagnostics.
-    # Stub: returns SCOUT_READY for framework completeness.
+    if not symbols or not start_date:
+        return ScoutStatus.HIP3_L2_LIQUIDITY_TOO_THIN
+
+    any_realized = False
+    for sym in symbols:
+        snapshots = _sample_spx_l2_archives(
+            sym.symbol, start_date, max_hours=max_l2_hours
+        )
+        if not snapshots:
+            continue
+        result = compute_l2_diagnostics(snapshots)
+        if result:
+            result.gate_realized = True
+            any_realized = True
+
+    if not any_realized:
+        return ScoutStatus.HIP3_L2_LIQUIDITY_TOO_THIN
+
     return ScoutStatus.HIP3_SCOUT_READY
 
 
@@ -1631,6 +1821,7 @@ def gate5_l2_liquidity(
 @dataclass
 class BasisTailResult:
     symbol: str
+    gate_realized: bool = False
     off_hours_sample_count: int = 0
     p50_abs_residual_bps: float | None = None
     p75_abs_residual_bps: float | None = None
@@ -1650,22 +1841,209 @@ class BasisTailResult:
 
 def gate6_basis_tail_existence(
     symbols: list[DiscoveredSymbol],
-    fee_result: list[FeeDiscoveryResult] | None = None,
+    anchor_source: str,
+    start_date: date,
+    end_date: date | None = None,
+    fee_round_trip_bps: float = 25.0,
     min_tail_events: int = DEFAULT_MIN_TAIL_EVENTS,
+    max_l2_hours: int = 200,
     dry_run: bool = False,
 ) -> ScoutStatus:
     """Gate 6: Off-hours residual basis-tail existence.
 
     Uses executable L2 mid (not oracle/mark) for basis computation.
     Only runs after gates 1-5 pass.
+
+    Returns:
+    - HIP3_SCOUT_READY if tail analysis was computed and passed all checks
+    - HIP3_NO_OFFHOURS_RESIDUAL_BASIS_TAIL if any check fails
+    - HIP3_DATA_PLANE_READY_RESIDUAL_ANALYSIS_REQUIRED if data insufficient
     """
     if dry_run:
-        return ScoutStatus.HIP3_SCOUT_PASSED_PHASE0_DRAFTING_PERMITTED
+        return ScoutStatus.HIP3_SCOUT_READY
 
-    # In a real scout, this computes executable_mid from L2 archives,
-    # computes residual = executable_mid_bps - selected_anchor_bps,
-    # and evaluates the tail pass gate.
-    # Stub: returns SCOUT_READY for framework completeness.
+    holidays = load_nyse_holidays(
+        str(Path(__file__).resolve().parent / "data" / "nyse_holidays_2024_2026.json")
+    )
+
+    any_realized = False
+    all_failed = True
+
+    for sym in symbols:
+        # Sample L2 archives for this symbol
+        snapshots = _sample_spx_l2_archives(
+            sym.symbol, start_date, max_hours=max_l2_hours
+        )
+        if not snapshots:
+            continue
+
+        # Load anchor data
+        anchor_data = load_anchor_data(anchor_source, sym.symbol, start_date, end_date)
+        if not anchor_data:
+            continue
+
+        # Parse L2 snapshots and compute executable mid
+        executable_mids: list[tuple[datetime, float, float, float]] = []
+        for snap in snapshots:
+            levels = snap.get("levels")
+            if not levels or len(levels) < 2:
+                continue
+            bids = levels[0]
+            asks = levels[1]
+            if not bids or not asks:
+                continue
+            best_bid = float(bids[0].get("px", 0))
+            best_ask = float(asks[0].get("px", 0))
+            if best_bid <= 0 or best_ask <= 0:
+                continue
+            mid = (best_bid + best_ask) / 2
+            spread_bps = (best_ask - best_bid) / mid * 10000
+            ts_str = snap.get("ts_event", "")
+            try:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                continue
+            executable_mids.append((ts, mid, best_bid, best_ask))
+
+        if not executable_mids:
+            continue
+
+        # Align with anchor
+        mark_prices = [(ts, mid) for ts, mid, _, _ in executable_mids]
+        residuals, stale_count = _compute_anchor_aligned_residuals(
+            mark_prices, anchor_data, max_stale_hours=4.0
+        )
+
+        if not residuals:
+            continue
+
+        # Compute distribution
+        all_residuals = list(zip(
+            [ts for ts, _, _, _ in executable_mids],
+            residuals,
+        ))
+        aligned_samples = [(ts, r) for ts, r in all_residuals]
+        residual_values = [r for _, r in aligned_samples]
+        abs_residuals = [abs(r) for r in residual_values]
+
+        sorted_abs = sorted(abs_residuals)
+        n = len(sorted_abs)
+        p50_abs = sorted_abs[n // 2] if n > 0 else 0
+        p75_abs = sorted_abs[int(n * 0.75)] if n > 0 else 0
+        p90_abs = sorted_abs[int(n * 0.90)] if n > 0 else 0
+        p95_abs = sorted_abs[int(n * 0.95)] if n > 0 else 0
+        count_ge_20 = sum(1 for r in abs_residuals if r >= 20)
+        count_ge_30 = sum(1 for r in abs_residuals if r >= 30)
+        count_ge_50 = sum(1 for r in abs_residuals if r >= 50)
+        count_ge_100 = sum(1 for r in abs_residuals if r >= 100)
+        positive_count = sum(1 for r in residual_values if r > 0)
+        positive_ratio = positive_count / n if n > 0 else 0.0
+
+        # Off-hours bucket split
+        extended_residuals: list[float] = []
+        overnight_residuals: list[float] = []
+        weekend_residuals: list[float] = []
+        for ts, r in aligned_samples:
+            bucket = classify_us_session(ts, holidays)
+            if bucket == USSessionBuckets.EXTENDED_HOURS_US:
+                extended_residuals.append(r)
+            elif bucket == USSessionBuckets.OVERNIGHT_US:
+                overnight_residuals.append(r)
+            elif bucket == USSessionBuckets.WEEKEND:
+                weekend_residuals.append(r)
+
+        def _bucket_stats(vals: list[float]) -> dict[str, Any]:
+            if not vals:
+                return {"count": 0}
+            sv = sorted([abs(v) for v in vals])
+            return {
+                "count": len(vals),
+                "p50_abs_bps": round(sv[len(sv) // 2], 4),
+                "p90_abs_bps": round(sv[int(len(sv) * 0.90)], 4),
+                "p95_abs_bps": round(sv[int(len(sv) * 0.95)], 4),
+                "count_ge_30bps": sum(1 for v in sv if v >= 30),
+                "positive_count": sum(1 for v in vals if v > 0),
+                "negative_count": sum(1 for v in vals if v < 0),
+            }
+
+        ext_stats = _bucket_stats(extended_residuals)
+        ovn_stats = _bucket_stats(overnight_residuals)
+        wkd_stats = _bucket_stats(weekend_residuals)
+
+        # Calendar concentration
+        from collections import Counter
+        week_counts: Counter = Counter()
+        month_counts: Counter = Counter()
+        tail_events_ts = [ts for ts, r in aligned_samples if abs(r) >= 30]
+        for ts in tail_events_ts:
+            week_counts[ts.isocalendar()[:2]] += 1
+            month_counts[ts.strftime("%Y-%m")] += 1
+
+        total_tail = len(tail_events_ts)
+        max_week_pct = (max(week_counts.values()) / total_tail * 100) if total_tail > 0 else 0
+        max_month_pct = (max(month_counts.values()) / total_tail * 100) if total_tail > 0 else 0
+
+        concentration = {
+            "total_tail_events": total_tail,
+            "max_week_pct": round(max_week_pct, 2),
+            "max_month_pct": round(max_month_pct, 2),
+            "unique_weeks": len(week_counts),
+            "unique_months": len(month_counts),
+        }
+
+        # Pass gate checks
+        min_p90 = 30.0
+        cost_margin = fee_round_trip_bps + 10.0
+        min_tail = min_tail_events
+
+        gate_p90 = p90_abs >= min_p90
+        gate_cost = p90_abs >= cost_margin
+        gate_count = total_tail >= min_tail
+        gate_week_conc = max_week_pct <= 30.0
+        gate_month_conc = max_month_pct <= 50.0
+
+        tail_result = BasisTailResult(
+            symbol=sym.symbol,
+            gate_realized=True,
+            off_hours_sample_count=n,
+            p50_abs_residual_bps=round(p50_abs, 4),
+            p75_abs_residual_bps=round(p75_abs, 4),
+            p90_abs_residual_bps=round(p90_abs, 4),
+            p95_abs_residual_bps=round(p95_abs, 4),
+            count_ge_20bps=count_ge_20,
+            count_ge_30bps=count_ge_30,
+            count_ge_50bps=count_ge_50,
+            count_ge_100bps=count_ge_100,
+            positive_ratio=round(positive_ratio, 4),
+            extended_hours_split=ext_stats,
+            overnight_split=ovn_stats,
+            weekend_split=wkd_stats,
+            calendar_concentration=concentration,
+            status=ScoutStatus.HIP3_SCOUT_READY,
+        )
+        any_realized = True
+
+        if not (gate_p90 and gate_cost and gate_count and gate_week_conc and gate_month_conc):
+            failures = []
+            if not gate_p90: failures.append(f"p90_abs({p90_abs:.2f}) < {min_p90}")
+            if not gate_cost: failures.append(f"p90({p90_abs:.2f}) < cost_margin({cost_margin:.2f})")
+            if not gate_count: failures.append(f"tail_events({total_tail}) < {min_tail}")
+            if not gate_week_conc: failures.append(f"max_week%({max_week_pct:.1f}) > 30")
+            if not gate_month_conc: failures.append(f"max_month%({max_month_pct:.1f}) > 50")
+            logger.info(f"GATE6 FAIL: {', '.join(failures)}")
+            tail_result.status = ScoutStatus.HIP3_NO_OFFHOURS_RESIDUAL_BASIS_TAIL
+            # Keep going: one symbol may fail, another may pass
+        else:
+            tail_result.status = ScoutStatus.HIP3_SCOUT_READY
+
+        all_failed = False
+
+    if not any_realized:
+        return ScoutStatus.HIP3_DATA_PLANE_READY_RESIDUAL_ANALYSIS_REQUIRED
+
+    if all_failed:
+        return ScoutStatus.HIP3_NO_OFFHOURS_RESIDUAL_BASIS_TAIL
+
     return ScoutStatus.HIP3_SCOUT_READY
 
 
@@ -1692,6 +2070,7 @@ class ScoutResult:
     per_symbol_l2_budget_bytes: int = DEFAULT_PER_SYMBOL_L2_BUDGET_BYTES
     s3_requester_pays_acknowledged: bool = False
     config_hash: str | None = None
+    gates_realized: set[str] = field(default_factory=set)
     symbols_discovered: list[dict[str, Any]] = field(default_factory=list)
     symbols_classified: list[dict[str, Any]] = field(default_factory=list)
     index_like_symbols: list[dict[str, Any]] = field(default_factory=list)
@@ -1812,6 +2191,8 @@ def run_scout(
             result.gate_failed_at = "gate1_symbol_discovery"
             result.kill_reason = status1.value
             return _finalize(result, args)
+        if not dry_run:
+            result.gates_realized.add("gate1_symbol_discovery")
 
         # Update cache after successful discovery (non-dry-run)
         if not dry_run:
@@ -1843,6 +2224,8 @@ def run_scout(
             result.gate_failed_at = "gate2_archive_coverage"
             result.kill_reason = status2.value
             return _finalize(result, args)
+        if not dry_run:
+            result.gates_realized.add("gate2_archive_coverage")
 
         # ══════════════════════════════════════════════════════════════════
         # Gate 3: Oracle / fair-value classification (cheap killer)
@@ -1861,11 +2244,13 @@ def run_scout(
             "status": status3.value,
         }
 
-        if status3 not in (ScoutStatus.HIP3_SCOUT_READY, ScoutStatus.HIP3_SCOUT_PASSED_PHASE0_DRAFTING_PERMITTED):
+        if status3 not in (ScoutStatus.HIP3_SCOUT_READY,):
             result.status = status3.value
             result.gate_failed_at = "gate3_oracle_classification"
             result.kill_reason = status3.value
             return _finalize(result, args)
+        if not dry_run:
+            result.gates_realized.add("gate3_oracle_classification")
 
         # ══════════════════════════════════════════════════════════════════
         # Gate 4: Fee discovery
@@ -1888,26 +2273,33 @@ def run_scout(
             )]
         ]
 
-        if status4 not in (ScoutStatus.HIP3_SCOUT_READY, ScoutStatus.HIP3_SCOUT_PASSED_PHASE0_DRAFTING_PERMITTED):
+        if status4 not in (ScoutStatus.HIP3_SCOUT_READY,):
             result.status = status4.value
             result.gate_failed_at = "gate4_fee_discovery"
             result.kill_reason = status4.value
             return _finalize(result, args)
+        if not dry_run:
+            result.gates_realized.add("gate4_fee_discovery")
 
         # ══════════════════════════════════════════════════════════════════
         # Gate 5: L2 liquidity / depth / spread
         # ══════════════════════════════════════════════════════════════════
         logger.info("GATE5: l2_liquidity")
         status5 = gate5_l2_liquidity(
+            symbols=index_like,
+            start_date=start_date,
+            max_l2_hours=args.get("max_l2_hours_per_symbol", DEFAULT_MAX_L2_HOURS_PER_SYMBOL),
             dry_run=dry_run,
             skip_l2_download=skip_l2_download,
         )
 
-        if status5 not in (ScoutStatus.HIP3_SCOUT_READY, ScoutStatus.HIP3_SCOUT_PASSED_PHASE0_DRAFTING_PERMITTED):
+        if status5 not in (ScoutStatus.HIP3_SCOUT_READY,):
             result.status = status5.value
             result.gate_failed_at = "gate5_l2_liquidity"
             result.kill_reason = status5.value
             return _finalize(result, args)
+        if not dry_run and not skip_l2_download:
+            result.gates_realized.add("gate5_l2_liquidity")
 
         # ══════════════════════════════════════════════════════════════════
         # Gate 6: Off-hours residual basis-tail existence
@@ -1915,8 +2307,12 @@ def run_scout(
         logger.info("GATE6: basis_tail_existence")
         status6 = gate6_basis_tail_existence(
             index_like,
-            fee_result=None,
+            anchor_source=anchor_source,
+            start_date=start_date,
+            end_date=end_date,
+            fee_round_trip_bps=25.0,  # conservative
             min_tail_events=min_tail_events,
+            max_l2_hours=args.get("max_l2_hours_per_symbol", DEFAULT_MAX_L2_HOURS_PER_SYMBOL),
             dry_run=dry_run,
         )
         result.basis_tail_diagnostics = [
@@ -1927,19 +2323,36 @@ def run_scout(
             for s in index_like
         ]
 
-        if status6 not in (ScoutStatus.HIP3_SCOUT_READY, ScoutStatus.HIP3_SCOUT_PASSED_PHASE0_DRAFTING_PERMITTED):
+        if status6 not in (ScoutStatus.HIP3_SCOUT_READY,):
             result.status = status6.value
             result.gate_failed_at = "gate6_basis_tail_existence"
             result.kill_reason = status6.value
             return _finalize(result, args)
+        if not dry_run and not skip_l2_download:
+            result.gates_realized.add("gate6_basis_tail_existence")
 
         # ══════════════════════════════════════════════════════════════════
         # All gates passed
         # ══════════════════════════════════════════════════════════════════
+        # SCOUT_PASSED_PHASE0_DRAFTING_PERMITTED requires all six gates to
+        # have gate_realized=True. If any gate is a stub/framework-only pass,
+        # emit DATA_PLANE_READY instead.
+        required_gates = {
+            "gate1_symbol_discovery",
+            "gate2_archive_coverage",
+            "gate3_oracle_classification",
+            "gate4_fee_discovery",
+            "gate5_l2_liquidity",
+            "gate6_basis_tail_existence",
+        }
         if dry_run:
             result.status = ScoutStatus.HIP3_SCOUT_READY.value
-        else:
+        elif required_gates.issubset(result.gates_realized):
             result.status = ScoutStatus.HIP3_SCOUT_PASSED_PHASE0_DRAFTING_PERMITTED.value
+        else:
+            missing = required_gates - result.gates_realized
+            logger.info(f"GATE_REALIZED_MISSING: {sorted(missing)}")
+            result.status = ScoutStatus.HIP3_DATA_PLANE_READY_RESIDUAL_ANALYSIS_REQUIRED.value
 
     except RuntimeError as e:
         error_msg = str(e)

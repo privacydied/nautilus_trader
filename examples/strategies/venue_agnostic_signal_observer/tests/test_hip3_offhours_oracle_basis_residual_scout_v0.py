@@ -396,10 +396,16 @@ def test_gate4_fee_discovery_dry_run():
 
 
 def test_gate6_basis_tail_dry_run():
-    """Dry-run basis tail returns SCOUT_PASSED."""
+    """Dry-run basis tail returns SCOUT_READY (not PASSED) for stub safety."""
     symbols = [DiscoveredSymbol(symbol="SPX")]
-    status = gate6_basis_tail_existence(symbols, dry_run=True)
-    assert status == ScoutStatus.HIP3_SCOUT_PASSED_PHASE0_DRAFTING_PERMITTED
+    from datetime import date
+    status = gate6_basis_tail_existence(
+        symbols,
+        anchor_source="cme_futures_proxy",
+        start_date=date(2025, 10, 13),
+        dry_run=True,
+    )
+    assert status == ScoutStatus.HIP3_SCOUT_READY
 
 
 # ===========================================================================
