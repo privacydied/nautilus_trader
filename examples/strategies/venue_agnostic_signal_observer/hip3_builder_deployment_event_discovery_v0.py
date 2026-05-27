@@ -40,6 +40,11 @@ class ScoutStatus(Enum):
     HIP3_ACTION_SCHEMA_UNKNOWN = "HIP3_ACTION_SCHEMA_UNKNOWN"
     HIP3_ARCHIVE_HELPER_RECONCILIATION_REQUIRED = "HIP3_ARCHIVE_HELPER_RECONCILIATION_REQUIRED"
     HIP3_DEPLOYMENT_DISCOVERY_ERROR = "HIP3_DEPLOYMENT_DISCOVERY_ERROR"
+    # New granular statuses
+    HIP3_EXPLORER_BLOCK_PREFIX_EMPTY = "HIP3_EXPLORER_BLOCK_PREFIX_EMPTY"
+    HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID = "HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID"
+    HIP3_EXPLORER_BLOCK_LISTING_FAILED = "HIP3_EXPLORER_BLOCK_LISTING_FAILED"
+    HIP3_EXPLORER_BLOCK_FILES_NOT_FOUND_IN_WINDOW = "HIP3_EXPLORER_BLOCK_FILES_NOT_FOUND_IN_WINDOW"
 
 
 STUDY_ID = "hip3_builder_deployment_event_discovery_v0"
@@ -474,8 +479,13 @@ def run_probe(
     if dry_run:
         result.status = ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_READY
         return result
+
+
     try:
         block_files = _list_explorer_block_files(start_date, end_date, max_days, max_block_files, chokepoint)
+        if not block_files:
+            result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_FILES_NOT_FOUND_IN_WINDOW
+            return result
         total_explorer = sum(sz for _, sz in block_files)
         if total_explorer > explorer_block_budget_bytes:
             raise BudgetExceededError("Explorer block download budget exceeded")
