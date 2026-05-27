@@ -1724,22 +1724,19 @@ def _sample_spx_l2_archives(
     import json as _json
 
     results: list[dict] = []
-    cur = start_date
     end = datetime.now(UTC).date()
     hours_collected = 0
+    days_checked = 0
+    max_days_to_check = 60  # bounded days to check
 
-    # Build uniform sample: iterate days, for each day sample off-hours hours
-    while cur <= end and hours_collected < max_hours:
-        # Determine which hours are off-hours for this date
-        for hour in range(24):
+    # Optimized: iterate days, for each day try off-hours hours
+    cur = start_date
+    while cur <= end and hours_collected < max_hours and days_checked < max_days_to_check:
+        days_checked += 1
+        off_hour_candidates = list(range(0, 14)) + list(range(20, 24))  # 0-13, 20-23
+        for hour in off_hour_candidates:
             if hours_collected >= max_hours:
                 break
-            # Only sample off-hours: before 14:30 UTC (09:30 ET) and after 20:00 UTC (16:00 ET)
-            # Simplified: 0-13 = pre-market/early, 14-19 = cash session, 20-23 = after-hours
-            is_cash = 14 <= hour <= 19  # approximate 09:30-16:00 ET
-            if is_cash:
-                continue
-
             key = f"s3://hyperliquid-archive/market_data/{cur:%Y%m%d}/{hour}/l2Book/{symbol}.lz4"
             try:
                 raw = public_s3_read(key, timeout=60)
@@ -1900,7 +1897,12 @@ def gate6_basis_tail_existence(
             spread_bps = (best_ask - best_bid) / mid * 10000
             ts_str = snap.get("ts_event", "")
             try:
-                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                if ts_str.endswith("Z"):
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                elif "+" not in ts_str and "Z" not in ts_str:
+                    ts = datetime.fromisoformat(ts_str).replace(tzinfo=UTC)
+                else:
+                    ts = datetime.fromisoformat(ts_str)
             except (ValueError, TypeError):
                 continue
             executable_mids.append((ts, mid, best_bid, best_ask))
@@ -2032,11 +2034,9 @@ def gate6_basis_tail_existence(
             if not gate_month_conc: failures.append(f"max_month%({max_month_pct:.1f}) > 50")
             logger.info(f"GATE6 FAIL: {', '.join(failures)}")
             tail_result.status = ScoutStatus.HIP3_NO_OFFHOURS_RESIDUAL_BASIS_TAIL
-            # Keep going: one symbol may fail, another may pass
         else:
             tail_result.status = ScoutStatus.HIP3_SCOUT_READY
-
-        all_failed = False
+            all_failed = False
 
     if not any_realized:
         return ScoutStatus.HIP3_DATA_PLANE_READY_RESIDUAL_ANALYSIS_REQUIRED
@@ -2495,6 +2495,7 @@ def _build_summary(result: ScoutResult) -> dict[str, Any]:
         "config_hash": result.config_hash or "",
         "gate_failed_at": result.gate_failed_at or "",
         "kill_reason": result.kill_reason or "",
+        "gates_realized": sorted(result.gates_realized),
         "symbols_found_total": result.symbols_found_total,
         "deployers_observed": result.deployers_observed,
         "anchor_used": result.anchor_used,
