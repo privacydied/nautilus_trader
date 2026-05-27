@@ -1178,6 +1178,118 @@ def write_inputs_md(inputs: List[Dict[str, Any]], path: Path):
     path.write_text("\n".join(lines) + "\n")
 
 
+def write_model_bundle(
+    output_dir: Path,
+    cfg: MlAtrConfig,
+    coef: np.ndarray,
+    intercept: float,
+    scaler_mean: np.ndarray,
+    scaler_scale: np.ndarray,
+    platt_a: Optional[float],
+    platt_b: Optional[float],
+    summary: RunSummary,
+    bars_path: Path,
+    funding_path: Optional[Path],
+    feature_cols: List[str],
+    backend: str,
+    timestamp_dtype: str,
+    splits: Dict[str, pd.DataFrame],
+) -> Path:
+    """Export deterministic model bundle for paper runner consumption."""
+    import sys
+
+    summary_path = output_dir / "summary.json"
+    config_path = output_dir / "config.json"
+
+    summary_sha256 = _file_hash(summary_path) if summary_path.exists() else ""
+    config_sha256 = _file_hash(config_path) if config_path.exists() else ""
+
+    # Latest training input timestamp per symbol
+    latest_ts = {}
+    if "train" in splits and len(splits["train"]) > 0:
+        for sym in splits["train"]["symbol"].unique():
+            sub = splits["train"][splits["train"]["symbol"] == sym]
+            latest_ts[str(sym)] = str(sub["timestamp"].max())
+
+    bundle = {
+        "spec_version": "v0",
+        "study_id": STUDY_ID,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "source_run_id": summary.run_id,
+        "source_summary_sha256": summary_sha256,
+        "source_config_sha256": config_sha256,
+        "source_precommitment_path": "docs/HYPERLIQUID_BTC_ETH_ML_ATR_V0_PRECOMMITMENT.md",
+        "source_precommitment_sha256": "",
+        "source_summary_status": summary.status,
+        "source_test_split_status": "completed" if summary.test_rows > 0 else "pending",
+        "source_test_split_boundary_timestamps": {
+            "train_start": None,
+            "train_end": cfg.split.train_end,
+            "validation_start": cfg.split.validation_start,
+            "validation_end": cfg.split.validation_end,
+            "test_start": cfg.split.test_start,
+            "test_end": None,
+        },
+        "symbols": list(cfg.symbols),
+        "feature_names": feature_cols,
+        "scaler_mean": scaler_mean.tolist(),
+        "scaler_scale": scaler_scale.tolist(),
+        "model_backend": backend,
+        "logistic_intercept": float(intercept),
+        "logistic_coefficients": coef.tolist(),
+        "regularization_C": cfg.model.C,
+        "calibrator": cfg.model.calibrator,
+        "platt_params": {"a": platt_a, "b": platt_b},
+        "thresholds": {
+            "long_threshold": cfg.model.long_threshold,
+            "short_threshold": cfg.model.short_threshold,
+        },
+        "feature_config": {
+            "label_horizon_bars": cfg.feature.label_horizon_bars,
+            "atr_lookback": cfg.feature.atr_lookback,
+        },
+        "exit_config": {
+            "stop_atr_mult": cfg.exit.stop_atr_mult,
+            "trailing_atr_mult": cfg.exit.trailing_atr_mult,
+        },
+        "cost_config": {
+            "fee_bps_per_side": cfg.cost.fee_bps_per_side,
+            "slippage_bps_per_side": cfg.cost.slippage_bps_per_side,
+            "funding_interval_hours": cfg.cost.funding_interval_hours,
+            "max_abs_funding_rate": cfg.cost.max_abs_funding_rate,
+            "allow_zero_volume_bars": cfg.cost.allow_zero_volume_bars,
+        },
+        "label_horizon_bars": cfg.feature.label_horizon_bars,
+        "train_window": {"start": None, "end": cfg.split.train_end},
+        "validation_window": {"start": cfg.split.validation_start, "end": cfg.split.validation_end},
+        "test_window": {"start": cfg.split.test_start, "end": None},
+        "latest_training_input_timestamp_by_symbol": latest_ts,
+        "eligibility_status_from_source_summary": summary.status,
+        "package_versions": {
+            "python_version": sys.version,
+            "numpy_version": np.__version__,
+            "pandas_version": pd.__version__,
+            "sklearn_version": getattr(sys.modules.get("sklearn", None), "__version__", "unavailable"),
+        },
+        "bundle_sha256_self": None,
+        "safety": {
+            "observer_only": True,
+            "no_orders": True,
+            "no_auth": True,
+            "no_live_execution": True,
+        },
+    }
+
+    # Compute self-hash
+    bundle_for_hash = {k: v for k, v in bundle.items() if k != "bundle_sha256_self"}
+    raw = json.dumps(bundle_for_hash, sort_keys=True, indent=2, default=str)
+    bundle["bundle_sha256_self"] = hashlib.sha256(raw.encode()).hexdigest()
+
+    bundle_path = output_dir / "model_bundle.json"
+    bundle_path.write_text(json.dumps(bundle, sort_keys=True, indent=2, default=str) + "\n")
+    return bundle_path
+
+
 def write_manifest(
     manifest: Dict[str, Any],
     path: Path,
@@ -1592,5 +1704,29 @@ def run_pipeline(
         if funding_path and funding_path.exists():
             input_files.append({"name": "funding", "path": str(funding_path), "sha256": _file_hash(funding_path), "rows": len(funding_df) if funding_df is not None else 0})
         write_inputs_md(input_files, output_dir / "INPUTS.md")
+
+        # model_bundle.json
+        platt_a = None
+        platt_b = None
+        if cal_summary.method == "platt":
+            platt_a = cal_summary.a
+            platt_b = cal_summary.b
+        write_model_bundle(
+            output_dir=output_dir,
+            cfg=cfg,
+            coef=coef,
+            intercept=intercept,
+            scaler_mean=scaler_mean,
+            scaler_scale=scaler_scale,
+            platt_a=platt_a,
+            platt_b=platt_b,
+            summary=summary,
+            bars_path=bars_path,
+            funding_path=funding_path,
+            feature_cols=feature_cols,
+            backend=backend,
+            timestamp_dtype=timestamp_dtype,
+            splits=splits,
+        )
 
     return summary
