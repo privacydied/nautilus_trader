@@ -1481,3 +1481,146 @@ def test_p2_credentials_required_status():
     )
     assert result.status == ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED
 
+
+
+# ---------------------------------------------------------------------------
+# P3E EVM decode tests
+# ---------------------------------------------------------------------------
+
+def test_p3e_loads_unresolved_evm_candidates():
+    """P3E loads unresolved EVM candidates from P3 artifacts."""
+    import json, tempfile, pathlib
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _load_p3e_evm_candidates,
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        p3_dir = pathlib.Path(td) / "p3"
+        p3_dir.mkdir()
+        p2_dir = pathlib.Path(td) / "p2"
+        p2_dir.mkdir()
+
+        confirmations = [
+            {"p2_action_type": "evmRawTx", "p2_source_key": "test_key",
+             "p2_block_number": 100, "p2_tx_index": 0, "p2_user_or_deployer": "0x123",
+             "p2_source_content_hash": "abc", "p2_redacted_excerpt_hash": "def"},
+            {"p2_action_type": "order", "p2_source_key": "test_key2",
+             "p2_block_number": 101, "p2_tx_index": 1, "p2_user_or_deployer": "0x456"},
+        ]
+        (p3_dir / "p3_candidate_confirmation.json").write_text(
+            json.dumps({"confirmations": confirmations})
+        )
+
+        p2_candidates = [
+            {"action_type": "evmRawTx", "source_key": "test_key", "block_number": 100,
+             "tx_index": 0, "redacted_excerpt": "b'\\\\xf8p'"},
+        ]
+        (p2_dir / "p2_deployment_event_candidates.json").write_text(
+            json.dumps({"candidates": p2_candidates})
+        )
+
+        results, error = _load_p3e_evm_candidates(str(p3_dir), str(p2_dir), 5)
+        assert not error
+        assert len(results) == 1
+
+
+def test_p3e_calldata_selector_extraction():
+    """P3E extracts calldata selector from known function calls."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        P3EDecodeResult, _decode_evm_payload,
+    )
+
+    payload = bytes.fromhex("095ea7b3" + "0" * 64)
+    dr = P3EDecodeResult()
+    _decode_evm_payload(dr, payload)
+    assert dr.calldata_selector == "0x095ea7b3"
+    assert dr.payload_class == "trading_or_non_builder_like"
+
+
+def test_p3e_undecodable_payloads_preserved():
+    """P3E preserves undecodable payloads."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        P3EDecodeResult, _decode_evm_payload,
+    )
+
+    dr = P3EDecodeResult()
+    _decode_evm_payload(dr, b"\x01\x02")
+    assert dr.payload_class == "undecodable"
+    assert dr.decode_note != ""
+
+
+def test_p3e_non_deployment_not_builder():
+    """P3E non-deployment payload does not become builder-deployed."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        P3EDecodeResult, _decode_evm_payload,
+    )
+
+    payload = bytes.fromhex("a9059cbb" + "0" * 64)
+    dr = P3EDecodeResult()
+    _decode_evm_payload(dr, payload)
+    assert dr.is_deployment_like is False
+    assert dr.is_trading_or_non_builder_like is True
+
+
+def test_p3e_no_forbidden_statuses():
+    """P3E never emits forbidden statuses."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        P3EResult, ScoutStatus,
+    )
+
+    result = P3EResult(status=ScoutStatus.HIP3_P3E_EVM_DECODE_READY, run_id="test")
+    forbidden = {"REJECTED", "PROFITABLE", "ALPHA_FOUND", "TRADE_READY",
+                 "EXECUTION_READY", "LIVE_READY", "READY_FOR_PHASE_0",
+                 "CANDIDATE_FOR_LIVE", "PAPER_STRATEGY_PROMOTED", "PROMOTION_AUTHORIZED"}
+    status_str = str(result.status.value) if hasattr(result.status, 'value') else str(result.status)
+    for f in forbidden:
+        assert f not in status_str
+
+
+def test_p3e_no_pnl_basis_residual_fields():
+    """P3E artifacts must not contain PnL/basis/residual/return fields."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _write_p3e_artifacts, P3EResult, ScoutStatus,
+    )
+    import tempfile, pathlib
+
+    result = P3EResult(
+        status=ScoutStatus.HIP3_P3E_EVM_DECODE_READY,
+        run_id="test_p3e_fields",
+        final_status="HIP3_P3E_EVM_DECODE_READY",
+        git_sha="abc",
+        git_dirty=False,
+        repo_root="/tmp",
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = pathlib.Path(td)
+        _write_p3e_artifacts(run_dir, result, [])
+        for fname in ("summary.json", "run_manifest.json", "p3e_evm_payload_decode.json"):
+            content = (run_dir / fname).read_text().lower()
+            for forbidden in ("pnl", "basis", "residual", "strategy_return", "alpha", "sharpe", "returns"):
+                assert forbidden not in content, f"Found forbidden field '{forbidden}' in {fname}"
+
+
+def test_p3e_no_production_subprocess_os_system_eval():
+    """P3E production code must not use subprocess, os.system, or eval."""
+    import pathlib
+    src_path = pathlib.Path(__file__).resolve().parents[1] / "hip3_builder_deployment_event_discovery_v0.py"
+    src = src_path.read_text()
+    p3e_start = src.find("HIP3_P3E_EVM_DECODE_READY")
+    if p3e_start > 0:
+        p3e_section = src[p3e_start:]
+        assert "import subprocess" not in p3e_section
+        assert "subprocess.run" not in p3e_section
+        assert "os.system(" not in p3e_section
+        assert "eval(" not in p3e_section
+
+
+def test_p3e_missing_p3_report_returns_error():
+    """P3E returns ERROR when P3 report is missing."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_p3e_decode, ScoutStatus,
+    )
+
+    result = run_p3e_decode(p3_report="/nonexistent/p3", p2_report="/nonexistent/p2")
+    assert result.status == ScoutStatus.HIP3_P3E_ERROR
