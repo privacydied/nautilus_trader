@@ -487,6 +487,34 @@ def get_download_stats() -> dict[str, Any]:
     }
 
 
+def public_http_post(url: str, data: dict[str, Any] | None = None, timeout: int = 30) -> str:
+    """Public HTTP POST through the scout network chokepoint (JSON body).
+
+    Required for Hyperliquid info endpoint POST requests.
+    """
+    if not _allow_network_public:
+        raise RuntimeError(
+            "NETWORK_PUBLIC_BLOCKED: --allow-network-public required"
+        )
+    import urllib.request
+    import json as _json
+
+    body = _json.dumps(data or {}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "User-Agent": "hip3-scout-v0/1.0",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        response_data = resp.read()
+    _record_download(symbol=None, byte_count=len(response_data))
+    return response_data.decode("utf-8")
+
+
 def public_http_get(url: str, timeout: int = 30) -> str:
     """Public HTTP GET through the scout network chokepoint."""
     if not _allow_network_public:
@@ -809,8 +837,12 @@ def discover_public_metadata(
                 ))
         return result
 
-    # Public Hyperliquid info endpoint
-    raw = public_http_get("https://api.hyperliquid.xyz/info", timeout=30)
+    # Public Hyperliquid info endpoint (requires POST, JSON body)
+    raw = public_http_post(
+        "https://api.hyperliquid.xyz/info",
+        data={"type": "meta"},
+        timeout=30,
+    )
     data = json.loads(raw)
     perps = data.get("universe", data)
 
@@ -953,23 +985,29 @@ def probe_archive_coverage(
     for sym in symbols:
         result = ArchiveCoverageResult(symbol=sym.symbol)
 
-        # Probe asset_ctxs dates
+        # Probe asset_ctxs dates (files: YYYYMMDD.csv.lz4, not subdirectories)
         try:
             dates = public_s3_ls(
                 f"s3://hyperliquid-archive/asset_ctxs/", timeout=30
             )
-            date_names = [
-                d["name"].rstrip("/") for d in dates
-                if "csv" not in d["name"] and not d.get("is_prefix", True) is False
-            ]
-            # Re-filter: actually get sub-prefixes
-            ctxs_prefixes = [
-                d["name"].rstrip("/") for d in dates
-                if d.get("is_prefix", False)
-            ]
-            if ctxs_prefixes:
-                result.first_date_utc = min(ctxs_prefixes)
-                result.last_date_utc = max(ctxs_prefixes)
+            date_stamps: list[str] = []
+            for d in dates:
+                name = d["name"].rstrip("/")
+                # Extract YYYYMMDD from filename like "20251013.csv.lz4"
+                if ".csv" in name:
+                    parts = name.split(".")[0]
+                    if parts.isdigit() and len(parts) == 8:
+                        date_stamps.append(parts)
+            if date_stamps:
+                date_stamps = sorted(set(date_stamps))
+                result.first_date_utc = min(date_stamps)
+                result.last_date_utc = max(date_stamps)
+                try:
+                    first_dt = datetime.strptime(str(result.first_date_utc), "%Y%m%d").date()
+                    last_dt = datetime.strptime(str(result.last_date_utc), "%Y%m%d").date()
+                    result.total_days = (last_dt - first_dt).days + 1
+                except (ValueError, TypeError):
+                    pass
         except RuntimeError:
             pass
 
