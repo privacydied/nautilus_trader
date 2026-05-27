@@ -40,7 +40,7 @@ FORBIDDEN_STATUSES = frozenset({
     "CANDIDATE_FOR_LIVE", "PAPER_STRATEGY_PROMOTED",
     "PROMOTION_AUTHORIZED", "EDGE_CONFIRMED",
 })
-ALLOWED_INFO_TYPES = frozenset({"perpDexs", "meta", "metaAndAssetCtxs"})
+ALLOWED_INFO_TYPES = frozenset({"perpDexs", "meta", "metaAndAssetCtxs", "candleSnapshot"})
 FORBIDDEN_INFO_TYPES = frozenset({"clearinghouseState", "userState", "openOrders"})
 HL_INFO_URL = "https://api.hyperliquid.xyz/info"
 HL_FRONTEND_BASE = "https://app.hyperliquid.xyz/trade"
@@ -100,6 +100,7 @@ class FinalGateStatus(str, Enum):
     BUILDER_SURFACE = "BUILDER_DEX_TRADFI_SURFACE_CONFIRMED"
     FRONTEND_DESYNC = "FRONTEND_API_DESYNC"
     ARCHIVE_BLOCKED = "ARCHIVE_VISIBILITY_BLOCKED"
+    ARCHIVE_BLOCKED_WITH_CANDLES = "ARCHIVE_VISIBILITY_BLOCKED_WITH_OFFICIAL_CANDLES_AVAILABLE"
     ANCHOR_BLOCKED = "ANCHOR_BLOCKED"
     LIQUIDITY_BLOCKED = "LIQUIDITY_BLOCKED"
     NO_TAIL = "NO_OFFHOURS_BASIS_TAIL"
@@ -126,6 +127,7 @@ class ScoutConfig:
     require_sanity_seeds: bool = True
     allow_network_public: bool = False
     allow_s3_archive_read: bool = False
+    enable_official_candle_snapshot_probe: bool = False
     dry_run: bool = False
     run_id: str = ""
     study_id: str = STUDY_ID
@@ -718,6 +720,363 @@ def phase_b_resolution(config, builder_meta_results, builder_ctxs_results, run_d
                       computed_from_real_data=True,
                       measurements={"total": len(all_res), "tradfi": len(tradfi), "seeds": len(resolved_seeds) - len(missing_seeds)},
                       blocked=blocked), {"resolution": res_art, "classification": cls_art, "all_res": all_res, "tradfi": tradfi}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase C3 — Official Hyperliquid candleSnapshot probe
+# ═══════════════════════════════════════════════════════════════════
+
+from datetime import datetime as _dt, timezone as _tz
+import math as _math
+
+CANDLE_INTERVALS = ["1h", "4h", "1d", "15m", "1m"]
+CANDLE_MAX_PER_INTERVAL = 5000
+# Theoretical max coverage per candle:
+# 1m = 1 min, 15m = 15 min, 1h = 1h, 4h = 4h, 1d = 1 day
+_INTERVAL_COVERAGE_DAYS = {
+    "1m": 1 / (24 * 60),
+    "15m": 15 / (24 * 60),
+    "1h": 1 / 24,
+    "4h": 4 / 24,
+    "1d": 1,
+}
+
+def _epoch_ms(date_str):
+    """Convert YYYY-MM-DD to epoch milliseconds."""
+    from datetime import datetime
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=_tz.utc)
+        return int(dt.timestamp() * 1000)
+    except ValueError:
+        return None
+
+def _now_epoch_ms():
+    return int(_dt.now(_tz.utc).timestamp() * 1000)
+
+def _classify_et_time(hour, minute, day_of_week):
+    """Classify a UTC timestamp into ET market session categories."""
+    # Approximate: ET = UTC-5 (EST) or UTC-4 (EDT)
+    # Use UTC-4 as average for daylight saving
+    et_hour = hour - 4
+    if et_hour < 0:
+        et_hour += 24
+        day_of_week = (day_of_week - 1) % 7
+    # Regular session: 09:30-16:00 ET weekdays (Mon-Fri = 0-4)
+    if 0 <= day_of_week <= 4:
+        if 9 <= et_hour < 16:
+            if et_hour == 9 and minute < 30:
+                return "premarket"
+            if et_hour == 16:
+                return "after-hours"
+            return "regular_hours"
+        elif et_hour < 9:
+            return "premarket"
+        elif et_hour >= 16:
+            return "after_hours"
+    return "off_hours"
+
+def _parse_candle_snapshot_response(resp):
+    """Parse a candleSnapshot API response into structured bars.
+    
+    The API returns a list of candle dicts directly (not nested under data.candles).
+    Schema: {t, T, s, i, o, c, h, l, v, n}
+    """
+    bars = []
+    if not isinstance(resp, list):
+        return bars
+    for c in resp:
+        if not isinstance(c, dict):
+            continue
+        try:
+            bar = {
+                "timestamp_ms": int(c["t"]),
+                "open": float(c["o"]),
+                "high": float(c["h"]),
+                "low": float(c["l"]),
+                "close": float(c["c"]),
+                "volume": float(c["v"]),
+                "vwap": None,
+                "count": int(c.get("n", 0)),
+            }
+            bars.append(bar)
+        except (ValueError, KeyError, IndexError):
+            continue
+    return bars
+
+def _check_ohlc_validity(bars):
+    """Check OHLC logical consistency."""
+    violations = []
+    for i, b in enumerate(bars):
+        issues = []
+        if b["high"] < b["open"]:
+            issues.append("high < open")
+        if b["high"] < b["close"]:
+            issues.append("high < close")
+        if b["high"] < b["low"]:
+            issues.append("high < low")
+        if b["low"] > b["open"]:
+            issues.append("low > open")
+        if b["low"] > b["close"]:
+            issues.append("low > close")
+        if b["low"] > b["high"]:
+            issues.append("low > high")
+        if issues:
+            violations.append({"index": i, "timestamp_ms": b["timestamp_ms"], "issues": issues})
+    return violations
+
+def _compute_gap_diagnostics(bars):
+    """Detect gaps in timestamp sequence."""
+    if len(bars) < 2:
+        return {"gap_count": 0, "total_gap_intervals": 0}
+    gaps = 0
+    total_missing = 0
+    for i in range(1, len(bars)):
+        diff_ms = bars[i]["timestamp_ms"] - bars[i - 1]["timestamp_ms"]
+        if diff_ms > 0:
+            gaps += 1
+            total_missing += int(diff_ms / (bars[i - 1].get("_interval_ms", 60000))) - 1
+    return {"gap_count": gaps, "total_gap_intervals": total_missing}
+
+def _compute_flat_price_runs(bars, max_run=5):
+    """Detect runs of identical price (flat = no movement)."""
+    runs = []
+    current_run = 1
+    for i in range(1, len(bars)):
+        if bars[i]["close"] == bars[i - 1]["close"]:
+            current_run += 1
+        else:
+            if current_run >= max_run:
+                runs.append({"start_index": i - current_run, "length": current_run, "price": bars[i - 1]["close"]})
+            current_run = 1
+    if current_run >= max_run:
+        runs.append({"start_index": len(bars) - current_run, "length": current_run, "price": bars[-1]["close"]})
+    return runs
+
+def _compute_extreme_jumps(bars, thresholds=[0.10, 0.25, 0.50]):
+    """Detect price jumps > threshold% between consecutive bars."""
+    jumps = {}
+    for t in thresholds:
+        count = 0
+        for i in range(1, len(bars)):
+            prev = bars[i - 1]["close"]
+            curr = bars[i]["close"]
+            if prev > 0:
+                pct_change = abs(curr - prev) / prev
+                if pct_change > t:
+                    count += 1
+        jumps[f"jump_gt_{int(t*100)}pct"] = count
+    return jumps
+
+def _compute_zero_volume_share(bars):
+    """Fraction of bars with zero volume."""
+    if not bars:
+        return 0.0
+    zero_count = sum(1 for b in bars if b["volume"] == 0)
+    return zero_count / len(bars)
+
+def _compute_duplicate_timestamps(bars):
+    """Count duplicate timestamps."""
+    if not bars:
+        return 0
+    seen = set()
+    dupes = 0
+    for b in bars:
+        ts = b["timestamp_ms"]
+        if ts in seen:
+            dupes += 1
+        seen.add(ts)
+    return dupes
+
+def phase_c3_candle_snapshot(config, info_cp, tradfi_symbols, run_dir, git_sha, git_dirty, branch):
+    """Phase C3: probe official Hyperliquid candleSnapshot for builder DEX symbols."""
+    if not config.enable_official_candle_snapshot_probe:
+        return GateResult(phase="C3", status="SKIPPED", reason="--enable-official-candle-snapshot-probe not set",
+                          computed_from_real_data=False, blocked=False), {}
+
+    base = _make_artifact_base(config.run_id, config, git_sha, git_dirty, branch, "CANDLE_SNAPSHOT_READY")
+
+    # Build symbol map: display symbol -> (dex, api_symbol)
+    symbol_map = {}
+    for sym in tradfi_symbols:
+        coin = sym.get("coin", "")
+        dex = sym.get("dex_name", "")
+        if coin.upper() in [s.upper() for s in SANITY_SEEDS_PRIMARY] or coin.upper() in [s.upper() for s in ["AMZN", "GOOG", "GOOGL", "META", "SPX", "NDX", "QQQ", "GOLD", "XAU", "WTI", "OIL"]]:
+            api_symbol = f"{dex}:{coin}" if dex else coin
+            symbol_map[coin.upper()] = {"coin": coin, "dex": dex, "api_symbol": api_symbol}
+
+    intervals_attempted = []
+    requests_made = []
+    bars_by_symbol_interval = {}
+    earliest_by_symbol_interval = {}
+    latest_by_symbol_interval = {}
+    coverage_days_by_symbol_interval = {}
+    missing_or_empty = []
+    ohlcv_schema = None
+    zero_volume_share_by_symbol_interval = {}
+    flat_price_diagnostics = {}
+    gap_diagnostics = {}
+    duplicate_timestamp_count = 0
+    ohlc_violations = []
+    offhours_bar_count = {}
+    regular_hours_bar_count = {}
+    max_candles_observed = 0
+    pagination_attempted = False
+    pagination_results = []
+    all_api_symbols = set()
+    official_candle_history_available = False
+
+    # Time window: from start_date to now
+    start_ms = _epoch_ms(config.start_date) or _epoch_ms("2025-01-01")
+    end_ms = _now_epoch_ms()
+
+    for seed, sym_info in symbol_map.items():
+        api_symbol = sym_info["api_symbol"]
+        all_api_symbols.add(api_symbol)
+
+        for interval in CANDLE_INTERVALS:
+            intervals_attempted.append(interval)
+            key = f"{seed}|{interval}"
+            bars = []
+
+            # Initial request
+            try:
+                resp = info_cp.post_info({
+                    "type": "candleSnapshot",
+                    "req": {"coin": api_symbol, "interval": interval,
+                            "startTime": start_ms, "endTime": end_ms}
+                })
+                requests_made.append({"symbol": api_symbol, "interval": interval,
+                                      "startTime": start_ms, "endTime": end_ms, "status": "ok"})
+                bars = _parse_candle_snapshot_response(resp)
+                ohlcv_schema = list(bars[0].keys()) if bars else None
+                max_candles_observed = max(max_candles_observed, len(bars))
+            except Exception as e:
+                requests_made.append({"symbol": api_symbol, "interval": interval,
+                                      "startTime": start_ms, "endTime": end_ms,
+                                      "status": "error", "error": str(e)[:200]})
+
+            bars_by_symbol_interval[key] = len(bars)
+
+            if bars:
+                bars[0]["_interval_ms"] = {"1m": 60000, "15m": 900000, "1h": 3600000,
+                                           "4h": 14400000, "1d": 86400000}.get(interval, 3600000)
+                bars[-1]["_interval_ms"] = bars[0]["_interval_ms"]
+
+                earliest_by_symbol_interval[key] = bars[0]["timestamp_ms"]
+                latest_by_symbol_interval[key] = bars[-1]["timestamp_ms"]
+
+                # Coverage days
+                span_days = (bars[-1]["timestamp_ms"] - bars[0]["timestamp_ms"]) / (1000 * 60 * 60 * 24)
+                coverage_days_by_symbol_interval[key] = round(span_days, 2)
+
+                # Data quality
+                zero_vol = _compute_zero_volume_share(bars)
+                zero_volume_share_by_symbol_interval[key] = round(zero_vol, 4)
+                dupes = _compute_duplicate_timestamps(bars)
+                duplicate_timestamp_count += dupes
+                violations = _check_ohlc_validity(bars)
+                ohlc_violations.extend(violations)
+                flat_runs = _compute_flat_price_runs(bars)
+                flat_price_diagnostics[key] = {"runs": len(flat_runs), "max_run": max((r["length"] for r in flat_runs), default=0)}
+                gaps = _compute_gap_diagnostics(bars)
+                gap_diagnostics[key] = gaps
+                jumps = _compute_extreme_jumps(bars)
+
+                # Off-hours vs regular hours classification
+                oh_count = 0
+                rh_count = 0
+                for b in bars:
+                    ts = b["timestamp_ms"]
+                    dt = _dt.fromtimestamp(ts / 1000, _tz.utc)
+                    et_class = _classify_et_time(dt.hour, dt.minute, dt.weekday())
+                    if et_class in ("regular_hours", "premarket", "after_hours"):
+                        rh_count += 1
+                    else:
+                        oh_count += 1
+                offhours_bar_count[key] = oh_count
+                regular_hours_bar_count[key] = rh_count
+
+                # 5000 cap check + pagination
+                if len(bars) == CANDLE_MAX_PER_INTERVAL:
+                    pagination_attempted = True
+                    earliest_ts = bars[0]["timestamp_ms"]
+                    interval_ms = bars[0]["_interval_ms"]
+                    # Try one older window
+                    try:
+                        old_resp = info_cp.post_info({
+                            "type": "candleSnapshot",
+                            "req": {"coin": api_symbol, "interval": interval,
+                                    "startTime": start_ms, "endTime": earliest_ts - interval_ms}
+                        })
+                        old_bars = _parse_candle_snapshot_response(old_resp)
+                        pagination_results.append({"symbol": api_symbol, "interval": interval,
+                                                   "direction": "older", "status": "ok",
+                                                   "bars_returned": len(old_bars)})
+                        if len(old_bars) > 0:
+                            pagination_results[-1]["pagination_possible"] = True
+                        else:
+                            pagination_results[-1]["pagination_possible"] = False
+                    except Exception as e:
+                        pagination_results.append({"symbol": api_symbol, "interval": interval,
+                                                   "direction": "older", "status": "error",
+                                                   "error": str(e)[:200], "pagination_possible": False})
+            else:
+                missing_or_empty.append({"symbol": seed, "interval": interval, "api_symbol": api_symbol})
+
+    # Determine final candle status
+    symbols_with_bars = {k: v for k, v in bars_by_symbol_interval.items() if v > 0}
+    if symbols_with_bars:
+        official_candle_history_available = True
+        if len(symbols_with_bars) == len(symbol_map) * len(CANDLE_INTERVALS):
+            final_candle_status = "HIP3_CANDLE_SNAPSHOT_AVAILABLE"
+        elif len(symbols_with_bars) >= len(SANITY_SEEDS_PRIMARY):
+            final_candle_status = "HIP3_CANDLE_SNAPSHOT_PARTIAL"
+        else:
+            final_candle_status = "HIP3_CANDLE_SNAPSHOT_EMPTY"
+    else:
+        final_candle_status = "HIP3_CANDLE_SNAPSHOT_EMPTY"
+
+    # Build probe artifact
+    probe = {**base, "safety_mode": "public_data_observer_only",
+             "source_name": "hyperliquid_info_candleSnapshot",
+             "official_hyperliquid_api": True, "official_hyperliquid_s3": False,
+             "executable_l2_data": False, "can_satisfy_phase0_alone": False,
+             "symbols_attempted": list(symbol_map.keys()),
+             "api_symbols_attempted": sorted(all_api_symbols),
+             "dex_name_by_symbol": {k: v["dex"] for k, v in symbol_map.items()},
+             "intervals_attempted": CANDLE_INTERVALS,
+             "start_time_requested": start_ms, "end_time_requested": end_ms,
+             "requests_made": requests_made,
+             "pagination_attempted": pagination_attempted,
+             "pagination_results": pagination_results,
+             "max_candles_per_response_observed": max_candles_observed,
+             "bars_returned_by_symbol_interval": bars_by_symbol_interval,
+             "earliest_bar_by_symbol_interval": {k: v for k, v in earliest_by_symbol_interval.items()},
+             "latest_bar_by_symbol_interval": {k: v for k, v in latest_by_symbol_interval.items()},
+             "coverage_days_by_symbol_interval": coverage_days_by_symbol_interval,
+             "missing_or_empty_symbols": missing_or_empty,
+             "ohlcv_schema_detected": ohlcv_schema,
+             "zero_volume_share_by_symbol_interval": zero_volume_share_by_symbol_interval,
+             "flat_price_run_diagnostics": flat_price_diagnostics,
+             "gap_diagnostics": gap_diagnostics,
+             "duplicate_timestamp_count": duplicate_timestamp_count,
+             "ohlc_validity_violations": ohlc_violations[:20],
+             "offhours_bar_count_by_symbol_interval": offhours_bar_count,
+             "regular_hours_bar_count_by_symbol_interval": regular_hours_bar_count,
+             "official_candle_history_available": official_candle_history_available,
+             "final_status": final_candle_status}
+
+    _write_json(run_dir / "official_candle_snapshot_probe.json", probe)
+
+    return GateResult(phase="C3", status=final_candle_status,
+                      reason=f"Official candleSnapshot: {len(symbols_with_bars)}/{len(symbol_map)*len(CANDLE_INTERVALS)} symbol/interval combos returned bars",
+                      computed_from_real_data=True,
+                      measurements={"symbols_with_bars": len(symbols_with_bars),
+                                    "total_requested": len(symbol_map) * len(CANDLE_INTERVALS),
+                                    "requests_made": len(requests_made),
+                                    "pagination_attempted": pagination_attempted,
+                                    "official_candle_history_available": official_candle_history_available},
+                      blocked=False), probe
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1571,6 +1930,13 @@ def _determine_final_gate(gate_results):
             if g.phase == "B":
                 return FinalGateStatus.BUILDER_SURFACE.value
             if g.phase == "C":
+                # Check if candles are available to refine the status
+                candle_available = any(
+                    gr.phase == "C3" and gr.status in ("HIP3_CANDLE_SNAPSHOT_AVAILABLE", "HIP3_CANDLE_SNAPSHOT_PARTIAL")
+                    for gr in gate_results
+                )
+                if candle_available:
+                    return FinalGateStatus.ARCHIVE_BLOCKED_WITH_CANDLES.value
                 return FinalGateStatus.ARCHIVE_BLOCKED.value
             if g.phase == "E":
                 return FinalGateStatus.ANCHOR_BLOCKED.value
@@ -1709,6 +2075,14 @@ def run_scout(config):
     gate_c, art_c = phase_c_archive(config, archive_cp, tradfi, run_dir, git_sha, git_dirty, branch)
     gate_results.append(gate_c)
     all_artifacts["phase_c"] = art_c
+
+    # Phase C3 — Official candleSnapshot probe (non-blocking, runs even if Phase C blocked)
+    if config.enable_official_candle_snapshot_probe:
+        gate_c3, art_c3 = phase_c3_candle_snapshot(config, PublicInfoChokepoint(config.allow_network_public),
+                                                     tradfi, run_dir, git_sha, git_dirty, branch)
+        gate_results.append(gate_c3)
+        all_artifacts["phase_c3"] = art_c3
+
     if gate_c.blocked:
         _finish_run(config, gate_results, all_artifacts, run_dir, git_sha, git_dirty, branch, tradfi)
         return {"status": gate_c.status, "blocked_at": "C", "run_dir": str(run_dir)}
@@ -1811,6 +2185,7 @@ def main():
     parser.add_argument("--require-sanity-seeds", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--allow-network-public", action="store_true")
     parser.add_argument("--allow-s3-archive-read", action="store_true")
+    parser.add_argument("--enable-official-candle-snapshot-probe", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -1827,6 +2202,7 @@ def main():
         require_sanity_seeds=args.require_sanity_seeds,
         allow_network_public=args.allow_network_public,
         allow_s3_archive_read=args.allow_s3_archive_read,
+        enable_official_candle_snapshot_probe=args.enable_official_candle_snapshot_probe,
         dry_run=args.dry_run,
     )
 

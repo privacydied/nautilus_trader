@@ -36,6 +36,7 @@ def main():
     parser.add_argument("--require-sanity-seeds", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--allow-network-public", action="store_true")
     parser.add_argument("--allow-s3-archive-read", action="store_true")
+    parser.add_argument("--enable-official-candle-snapshot-probe", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -52,6 +53,7 @@ def main():
         require_sanity_seeds=args.require_sanity_seeds,
         allow_network_public=args.allow_network_public,
         allow_s3_archive_read=args.allow_s3_archive_read,
+        enable_official_candle_snapshot_probe=args.enable_official_candle_snapshot_probe,
         dry_run=args.dry_run,
     )
 
