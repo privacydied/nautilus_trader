@@ -56,6 +56,8 @@ class ScoutStatus(Enum):
     HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN = "HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN"
     HIP3_EXPLORER_BLOCK_ROOT_EMPTY = "HIP3_EXPLORER_BLOCK_ROOT_EMPTY"
     HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED = "HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED"
+    HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED = "HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED"
+    HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED = "HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED"
     HIP3_EXPLORER_BLOCK_DATE_MAPPING_UNAVAILABLE = "HIP3_EXPLORER_BLOCK_DATE_MAPPING_UNAVAILABLE"
     HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID = "HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID"
 
@@ -121,6 +123,8 @@ class ProbeResult:
     download_budget_bytes: int = 5_000_000_000
     explorer_block_budget_bytes: int = 1_000_000_000
     s3_requester_pays_acknowledged: bool = False
+    aws_identity_available: bool = False
+    aws_account_suffix: str = ""
     helpers_reused: list[dict[str, str]] = field(default_factory=list)
 
 
@@ -206,6 +210,23 @@ class NetworkChokepoint:
 class BudgetExceededError(Exception):
     """Raised when download budget is exceeded."""
     pass
+
+# AWS identity preflight helper
+def _aws_identity_preflight(chokepoint: NetworkChokepoint) -> tuple[bool, str]:
+    """Attempt AWS STS get-caller-identity to verify credentials.
+    Returns (available, suffix) where suffix is last 4 digits of account ID.
+    """
+    cmd = ["aws", "sts", "get-caller-identity", "--output", "json"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            return False, ""
+        data = json.loads(result.stdout)
+        account = data.get("Account", "")
+        suffix = account[-4:] if account else ""
+        return True, suffix
+    except Exception:
+        return False, ""
 
 
 def _get_git_info() -> tuple[str, bool]:
@@ -341,7 +362,14 @@ def _discover_explorer_block_layout(chokepoint: NetworkChokepoint) -> dict:
     except subprocess.TimeoutExpired:
         return {"status": ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED, "layout": "", "prefixes": [], "keys": []}
     if result.returncode != 0:
-        return {"status": ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED, "layout": "", "prefixes": [], "keys": []}
+        stderr = result.stderr.lower()
+        if "unable to locate credentials" in stderr:
+            status = ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED
+        elif "accessdenied" in stderr or "requester pays" in stderr:
+            status = ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED
+        else:
+            status = ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED
+        return {"status": status, "layout": "", "prefixes": [], "keys": []}
 
     prefixes: list[str] = []
     keys: list[str] = []
@@ -575,6 +603,11 @@ def run_probe(
         s3_requester_pays_acknowledged=allow_s3_archive_read,
     )
     chokepoint = NetworkChokepoint(allow_network_public, allow_s3_archive_read)
+    # AWS identity preflight if S3 read is allowed
+    if allow_s3_archive_read:
+        avail, suffix = _aws_identity_preflight(chokepoint)
+        result.aws_identity_available = avail
+        result.aws_account_suffix = suffix
     if dry_run:
         result.status = ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_READY
         return result
