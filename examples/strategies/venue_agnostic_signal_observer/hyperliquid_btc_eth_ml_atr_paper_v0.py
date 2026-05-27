@@ -475,7 +475,8 @@ def score_features_with_bundle(
     if bundle.calibrator == "platt":
         a = bundle.platt_params.get("a")
         b = bundle.platt_params.get("b")
-        if a is not None and b is not None:
+        # Skip calibration when Platt params are identity (a=0, b=0)
+        if a is not None and b is not None and (a != 0.0 or b != 0.0):
             cal_z = a * probs + b
             cal_z = np.clip(cal_z, -500, 500)
             probs = 1.0 / (1.0 + np.exp(cal_z))

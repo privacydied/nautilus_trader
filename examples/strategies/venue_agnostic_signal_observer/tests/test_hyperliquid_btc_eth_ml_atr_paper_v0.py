@@ -571,9 +571,9 @@ def test_paper_runner_equivalent_to_v0_batch_on_synthetic_fixture(tmp_path):
     # ---- 3. Deterministic model bundle ----
     feature_names = ["ret_1h", "ret_4h", "ret_24h", "realized_vol_24h",
                      "atr_norm_14h", "funding_current", "funding_mean_24h", "rsi_14h"]
-    # Use small known coefficients that will trigger both long and short signals
-    coefs = [0.3, 0.15, 0.08, 0.12, -0.05, 0.10, 0.06, 0.03]
-    intercept = -0.02
+    # Use coefficients that trigger both long and short signals on synthetic data
+    coefs = [2.0, 1.0, 0.5, 0.8, -0.3, 0.6, 0.4, 0.2]
+    intercept = -0.5
     scaler_mean = [0.0] * 8
     scaler_scale = [1.0] * 8
 
