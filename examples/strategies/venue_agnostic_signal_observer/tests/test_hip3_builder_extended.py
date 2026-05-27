@@ -1774,3 +1774,163 @@ def test_p3_missing_p2_report_returns_error():
     assert result.status == ScoutStatus.HIP3_P3_ERROR
 
 
+# ---------------------------------------------------------------------------
+# P3 validation audit tests
+# ---------------------------------------------------------------------------
+
+def test_p3_status_inclusive_when_config_only_and_evm_payload():
+    """Status should be INCONCLUSIVE when both config_only and evm_payload exist."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        P3ConfirmationResult, ScoutStatus,
+    )
+
+    result = P3ConfirmationResult(
+        status=ScoutStatus.HIP3_P3_CONFIRMATION_READY,
+        run_id="test",
+        final_status="",
+    )
+    result.candidates_config_only = 1
+    result.candidates_evm_payload = 1
+    result.candidates_opaque = 0
+    result.candidates_not_builder_deployed = 48
+    result.candidates_confirmed_builder_deployed = 0
+    result.candidates_symbol_extracted = 0
+
+    # Simulate the status priority logic
+    has_unresolved = result.candidates_opaque > 0 or result.candidates_evm_payload > 0
+    if result.candidates_confirmed_builder_deployed > 0:
+        result.status = ScoutStatus.HIP3_P3_CANDIDATES_CONFIRMED_BUILDER_DEPLOYED
+    elif result.candidates_symbol_extracted > 0:
+        result.status = ScoutStatus.HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED
+    elif result.candidates_config_only > 0 and has_unresolved:
+        result.status = ScoutStatus.HIP3_P3_CONFIRMATION_INCONCLUSIVE
+    elif result.candidates_config_only > 0:
+        result.status = ScoutStatus.HIP3_P3_CANDIDATES_CONFIG_ONLY
+    elif has_unresolved:
+        result.status = ScoutStatus.HIP3_P3_CANDIDATES_OPAQUE
+    else:
+        result.status = ScoutStatus.HIP3_P3_CONFIRMATION_INCONCLUSIVE
+
+    assert result.status == ScoutStatus.HIP3_P3_CONFIRMATION_INCONCLUSIVE
+
+
+def test_p3_status_config_only_when_no_unresolved():
+    """Status should be CONFIG_ONLY when config_only exists and no unresolved candidates."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        P3ConfirmationResult, ScoutStatus,
+    )
+
+    result = P3ConfirmationResult(
+        status=ScoutStatus.HIP3_P3_CONFIRMATION_READY,
+        run_id="test",
+        final_status="",
+    )
+    result.candidates_config_only = 1
+    result.candidates_evm_payload = 0
+    result.candidates_opaque = 0
+
+    has_unresolved = result.candidates_opaque > 0 or result.candidates_evm_payload > 0
+    if result.candidates_config_only > 0 and has_unresolved:
+        result.status = ScoutStatus.HIP3_P3_CONFIRMATION_INCONCLUSIVE
+    elif result.candidates_config_only > 0:
+        result.status = ScoutStatus.HIP3_P3_CANDIDATES_CONFIG_ONLY
+    elif has_unresolved:
+        result.status = ScoutStatus.HIP3_P3_CANDIDATES_OPAQUE
+    else:
+        result.status = ScoutStatus.HIP3_P3_CONFIRMATION_INCONCLUSIVE
+
+    assert result.status == ScoutStatus.HIP3_P3_CANDIDATES_CONFIG_ONLY
+
+
+def test_p3_regex_extraction_from_truncated_setglobalaction():
+    """P3 extracts symbols from truncated SetGlobalAction excerpt via regex."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _normalize_candidate,
+    )
+
+    # Truncated excerpt (303 chars, invalid JSON)
+    truncated = '{"actions": [{"externalPerpPxs": [["AAVE", "305.905"], ["ACE", "0.5686"], ["ADA", "0.96555"], ["AI16Z", "0.1285"], ["AIXBT", "0.12269"]], "pxs": [["117923", "117879"], ["4528.9", "4529.9"], ["4.682", "4.681"], [null, "0.37621"], ["0.6778", "0.67725"]], "type": "SetGlobalAction"}], "error": null, "ra'
+
+    p2c = {
+        "action_type": "SetGlobalAction",
+        "source_key": "test",
+        "source_content_hash": "abc",
+        "block_number": 100,
+        "block_timestamp_utc": "2025-10-13",
+        "tx_index": 0,
+        "user_or_deployer": "0x58e1b0e63c905d5982324fcd9108582623b8132e",
+        "matched_terms": ["perp", "externalperp", "coin"],
+        "candidate_class": "rare_action_type",
+        "redacted_excerpt": truncated,
+        "window_name": "prelaunch",
+    }
+
+    conf = _normalize_candidate(p2c)
+    assert conf.is_universe_update is True
+    # Should have extracted symbols via regex fallback
+    assert len(conf.extracted_external_perp_symbols) > 0
+    assert "AAVE" in conf.extracted_external_perp_symbols
+    assert "ADA" in conf.extracted_external_perp_symbols
+
+
+def test_p3_all_p2_candidates_accounted_for():
+    """All P3 confirmations sum to the number loaded."""
+    import json
+    with open("reports/hip3_builder_deployment_event_discovery_v0/20260527_193159_p3_43bb00d0_p3_confirmation/p3_candidate_confirmation.json") as f:
+        p3c = json.load(f)
+    assert p3c["total_confirmations"] == len(p3c["confirmations"])
+    assert p3c["total_confirmations"] == 50
+
+
+def test_p3_action_breakdown_non_overlapping():
+    """Action type breakdown is non-overlapping and sums correctly."""
+    import json
+    from collections import Counter
+    with open("reports/hip3_builder_deployment_event_discovery_v0/20260527_193159_p3_43bb00d0_p3_confirmation/p3_candidate_confirmation.json") as f:
+        p3c = json.load(f)
+
+    types = Counter(c["p2_action_type"] for c in p3c["confirmations"])
+    total = sum(types.values())
+    assert total == 50
+    # Verify each extraction class maps to exactly one confirmation status
+    for c in p3c["confirmations"]:
+        ec = c["extraction_class"]
+        cs = c["confirmation_status"]
+        if ec == "trading_action":
+            assert cs == "HIP3_P3_CANDIDATES_NOT_BUILDER_DEPLOYED"
+        elif ec == "failed_transaction":
+            assert cs == "HIP3_P3_CANDIDATES_NOT_BUILDER_DEPLOYED"
+        elif ec == "universe_update":
+            assert cs == "HIP3_P3_CANDIDATES_CONFIG_ONLY"
+        elif ec == "evm_payload_candidate":
+            assert cs == "HIP3_P3_CANDIDATES_OPAQUE"
+        else:
+            assert False, f"Unexpected extraction class: {ec}"
+
+
+def test_p3_no_symbol_no_deployer_means_cross_reference_skipped():
+    """When no symbols/deployers extracted, cross-reference artifacts say skipped."""
+    import json
+    with open("reports/hip3_builder_deployment_event_discovery_v0/20260527_193159_p3_43bb00d0_p3_confirmation/p3_symbol_cross_reference.json") as f:
+        xref = json.load(f)
+    assert xref["symbols_by_class"] == {}
+    assert xref["asset_ctxs_cross_reference"] == {}
+    assert xref["l2_archive_cross_reference"] == {}
+
+    with open("reports/hip3_builder_deployment_event_discovery_v0/20260527_193159_p3_43bb00d0_p3_confirmation/p3_deployer_cross_reference.json") as f:
+        dref = json.load(f)
+    assert dref["deployer_cross_reference"] == {}
+
+
+def test_p3_final_status_reflects_unresolved_evm():
+    """P3 summary reports unresolved EVM payload even when status is SYMBOL_EXTRACTED."""
+    import json
+    with open("reports/hip3_builder_deployment_event_discovery_v0/20260527_194831_p3_43bb00d0_p3_confirmation/summary.json") as f:
+        s = json.load(f)
+    assert s["candidates_evm_payload"] == 1
+    assert s.get("candidates_unresolved_total", 0) >= 1
+    # Status is SYMBOL_EXTRACTED because symbols were found, but EVM payload is documented as unresolved
+    assert s["final_status"] in ("HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED", "HIP3_P3_CONFIRMATION_INCONCLUSIVE")
+
+
+

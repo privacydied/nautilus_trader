@@ -2437,7 +2437,12 @@ def _normalize_candidate(p2_candidate: dict) -> P3CandidateConfirmation:
                         if k not in ("type",) and k not in conf.extracted_config_fields:
                             conf.extracted_config_fields.append(k)
         except (json.JSONDecodeError, TypeError):
-            pass
+            # Fallback: regex extraction from truncated excerpt
+            import re
+            for m in re.finditer(r'"([A-Z][A-Z0-9]{1,10})"', excerpt):
+                sym = m.group(1)
+                if sym not in ("SetGlobalAction", "type", "externalPerpPxs", "pxs", "error"):
+                    conf.extracted_external_perp_symbols.append(sym)
 
         if conf.extracted_external_perp_symbols:
             conf.confirmation_status = "HIP3_P3_CANDIDATES_CONFIG_ONLY"
@@ -2614,13 +2619,18 @@ def _run_p3_confirmation(
         }
 
     # Determine final status
+    # Priority: builder-deployed > symbol-extracted > mixed/unclear > config-only > opaque > inconclusive
+    has_unresolved = result.candidates_opaque > 0 or result.candidates_evm_payload > 0
     if result.candidates_confirmed_builder_deployed > 0:
         result.status = ScoutStatus.HIP3_P3_CANDIDATES_CONFIRMED_BUILDER_DEPLOYED
     elif result.candidates_symbol_extracted > 0:
         result.status = ScoutStatus.HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED
+    elif result.candidates_config_only > 0 and has_unresolved:
+        # Config-only exists but opaque/EVM candidates remain unresolved
+        result.status = ScoutStatus.HIP3_P3_CONFIRMATION_INCONCLUSIVE
     elif result.candidates_config_only > 0:
         result.status = ScoutStatus.HIP3_P3_CANDIDATES_CONFIG_ONLY
-    elif result.candidates_opaque > 0 or result.candidates_evm_payload > 0:
+    elif has_unresolved:
         result.status = ScoutStatus.HIP3_P3_CANDIDATES_OPAQUE
     else:
         result.status = ScoutStatus.HIP3_P3_CONFIRMATION_INCONCLUSIVE
@@ -2662,6 +2672,7 @@ def _write_p3_artifacts(run_dir: Path, result: P3ConfirmationResult, argv: list[
         "candidates_config_only": result.candidates_config_only,
         "candidates_opaque": result.candidates_opaque,
         "candidates_evm_payload": result.candidates_evm_payload,
+        "candidates_unresolved_total": result.candidates_opaque + result.candidates_evm_payload,
         "symbols_by_class": result.symbols_by_class,
     }
     _atomic_write(run_dir / "summary.json", summary)
