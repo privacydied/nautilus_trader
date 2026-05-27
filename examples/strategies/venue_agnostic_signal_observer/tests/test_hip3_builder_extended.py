@@ -119,6 +119,7 @@ def test_probe_status_no_block_files():
         ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED,
         ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED,
         ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED,
+        ScoutStatus.HIP3_EXPLORER_BLOCK_DATE_MAPPING_UNAVAILABLE,
     )
     # No bytes should have been downloaded.
     assert result.bytes_downloaded_total == 0
