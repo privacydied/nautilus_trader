@@ -1,0 +1,21 @@
+{
+  "first_range": "0",
+  "last_range": "1000000000",
+  "layout_stride": 100000000,
+  "layout_type": "block_range_partitioned",
+  "root_keys": [],
+  "root_listing_status": "HIP3_EXPLORER_BLOCK_LAYOUT_DISCOVERED",
+  "root_prefixes": [
+    "explorer_blocks/0/",
+    "explorer_blocks/100000000/",
+    "explorer_blocks/1000000000/",
+    "explorer_blocks/200000000/",
+    "explorer_blocks/300000000/",
+    "explorer_blocks/400000000/",
+    "explorer_blocks/500000000/",
+    "explorer_blocks/600000000/",
+    "explorer_blocks/700000000/",
+    "explorer_blocks/800000000/",
+    "explorer_blocks/900000000/"
+  ]
+}

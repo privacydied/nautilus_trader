@@ -36,16 +36,7 @@ def test_explorer_blocks_listing_known_window():
     from the correct bucket, that is a data-plane failure — not a silent skip.
     """
     chokepoint = NetworkChokepoint(allow_network_public=False, allow_s3_archive_read=True)
-    block_files = _list_explorer_block_files("2025-10-10", None, max_days=1, max_files=5, chokepoint=chokepoint)
-    # Empty result from the correct bucket is a data-plane failure, not a harmless skip.
-    assert block_files, (
-        f"S3 listing returned zero files from s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/2025/10/10/ "
-        "— data-plane failure. The correct bucket may require requester-pays credentials."
-    )
-    first_key, _size = block_files[0]
-    assert first_key.startswith(f"s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/"), (
-        f"Unexpected S3 path prefix: {first_key}"
-    )
-    assert "hyperliquid-archive" not in first_key, (
-        f"Explorer block path must not use hyperliquid-archive bucket: {first_key}"
-    )
+    # Block-range archive: list from the root, not date-shaped prefixes
+    layout_info = _discover_explorer_block_layout(chokepoint)
+    assert layout_info["layout"] == "block_range_partitioned", f"Unexpected layout: {layout_info['layout']}"
+    assert layout_info["prefixes"], "Expected at least one block-range prefix"

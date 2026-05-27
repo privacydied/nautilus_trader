@@ -1,0 +1,313 @@
+{
+  "action_types_inventoried": [],
+  "archive_visibility": {},
+  "aws_account_suffix": "3961",
+  "aws_identity_available": true,
+  "bytes_downloaded_by_source": {},
+  "bytes_downloaded_total": 0,
+  "candidate_events": [],
+  "candidate_symbols": [],
+  "created_at_utc": "2026-05-27T09:14:20.718312+00:00",
+  "date_block_mapping": {
+    "date_range": "",
+    "end_block": null,
+    "mapped_ranges": [],
+    "sample_count": 25,
+    "start_block": null,
+    "status": "HIP3_EXPLORER_BLOCK_TIMESTAMP_PARSE_FAILED"
+  },
+  "download_budget_bytes": 5000000000,
+  "explorer_block_bucket": "hl-mainnet-node-data",
+  "explorer_block_budget_bytes": 1000000000,
+  "explorer_block_date_range": [
+    "2025-10-13",
+    ""
+  ],
+  "explorer_block_layout": "block_range_partitioned",
+  "explorer_block_root_prefix": "explorer_blocks",
+  "explorer_root_keys": [],
+  "explorer_root_listing_status": "HIP3_EXPLORER_BLOCK_LAYOUT_DISCOVERED",
+  "explorer_root_prefixes": [
+    "explorer_blocks/0/",
+    "explorer_blocks/100000000/",
+    "explorer_blocks/1000000000/",
+    "explorer_blocks/200000000/",
+    "explorer_blocks/300000000/",
+    "explorer_blocks/400000000/",
+    "explorer_blocks/500000000/",
+    "explorer_blocks/600000000/",
+    "explorer_blocks/700000000/",
+    "explorer_blocks/800000000/",
+    "explorer_blocks/900000000/"
+  ],
+  "git_dirty": false,
+  "git_sha": "unknown",
+  "helpers_reused": [],
+  "layout_first_range": "0",
+  "layout_last_range": "1000000000",
+  "layout_stride": 100000000,
+  "layout_type": "block_range_partitioned",
+  "max_layout_prefixes": 11,
+  "max_timestamp_sample_bytes": 200000000,
+  "max_timestamp_sample_files": 50,
+  "public_info_cross_reference": {},
+  "repo_root": "/mnt/nasirjones/py",
+  "run_id": "20260527_091420_ef08b996",
+  "s3_requester_pays_acknowledged": true,
+  "safety_mode": "public_data_observer_only",
+  "schema_version": "1.0.0",
+  "status": "ScoutStatus.HIP3_EXPLORER_BLOCK_TIMESTAMP_PARSE_FAILED",
+  "study_id": "hip3_builder_deployment_event_discovery_v0",
+  "timestamp_samples": [
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 18227,
+      "content_hash": "20bf219424a37fc9961c53af4cb87b11040677fc03e25f7d6d7a9a3135e9f8c6",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/0/0/1000.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/0/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 35666,
+      "content_hash": "d3eaab38644f2f1069e97cde6ab24acd04f45ba07894ef0f9378df8ebf6393ab",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/0/0/12100.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/0/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 49731,
+      "content_hash": "f53babbb684c6febda14c552e459f9b3ee66a96688cf697bae05fb383846d9d3",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/0/0/14400.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/0/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 26640,
+      "content_hash": "e605b14729e5e43b95cfbad1f66829a60060134c625707346bca88b4e8dbe21b",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/0/0/16700.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/0/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 27160,
+      "content_hash": "9f69ad74ef28c55b5487673a5c435cea4d2149dcf5426ee7b6eaecaad3d97374",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/0/0/18900.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/0/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 621239,
+      "content_hash": "eff840d6ec565ce63eab1891945dba0fe916655030262c867ee7e6fa7ac9bc45",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/100000000/100000000/100000100.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/100000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 1084661,
+      "content_hash": "22c81a5edae49f39b6ffd31a77d4cb7d455dda99bff8ac8af57a429b876e4142",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/100000000/100000000/100002600.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/100000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 571989,
+      "content_hash": "d881af013e97c3d8cccd8f61bf892d15ddadb8f4eb90644536728c5722d234f5",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/100000000/100000000/100005100.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/100000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 923439,
+      "content_hash": "4b8ee96247d0dce86f1dca2c99efe3d33b147ec780c5f7d95487dc4c9acf8513",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/100000000/100000000/100007600.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/100000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 967206,
+      "content_hash": "c99039e180e292c352e137cd0dfa89434afed6961516364b46c7ebc36504bb31",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/100000000/100000000/100010000.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/100000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 724818,
+      "content_hash": "86aad6848e986de820a4f4789c998707cbc7c36bbddcae9316c1ec5e375be246",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/400000000/400000000/400000100.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/400000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 1106309,
+      "content_hash": "ce1a32346c48fbddf5d6a4d7b14aa337a317f5bccd3ea2e67755826b9922ea01",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/400000000/400000000/400002600.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/400000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 1012516,
+      "content_hash": "3cebee7b2efa3ea4e4a057c33978c85e76714dcdc210b9ae5dac4e71f85c62e0",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/400000000/400000000/400005100.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/400000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 984463,
+      "content_hash": "f9224f53627f14e98ba6ddb03367b71521d4a9aae98ac6c08cea8a7dfe19abff",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/400000000/400000000/400007600.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/400000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 1391756,
+      "content_hash": "bb4df1b300cb587d9ff08b07ff13a8c701a5ff4ac9a43ae682344d5b413b8b74",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/400000000/400000000/400010000.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/400000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 4442484,
+      "content_hash": "a1a7c62b9d5153d329f890e4217606dfdd1f1f64ba07efd43e916e0389a02bed",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/700000000/700000000/700000100.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/700000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 3044688,
+      "content_hash": "9393d3e51918d8823bbf74df98fe41ca97e58faed42a2bb849682ee28588bcb8",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/700000000/700000000/700002600.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/700000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 3074438,
+      "content_hash": "1284c28d9a166c73737e3d97ea27aab22c732251ac6e25b2d0b8e6fa0e5c9379",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/700000000/700000000/700005100.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/700000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 3713296,
+      "content_hash": "198ada13c2162b74c5a53dcf6717f6aff7cd0e93e40da0c22300d675e2c142df",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/700000000/700000000/700007600.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/700000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 3632876,
+      "content_hash": "0de4596085832689e508a91eafe6e93466623ee41af8e76ce27fb667895ff62a",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/700000000/700000000/700010000.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/700000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 2300355,
+      "content_hash": "99b3fedc68207798aa414afa32d60c08a9374a07c34e051eadfe7a9b01940b30",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/1000000000/1000000000/1000000100.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/1000000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 2635686,
+      "content_hash": "9dcb1a19f3a8571cf496d20f24e053d804704777671d0a61cbdab57dd67455ec",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/1000000000/1000000000/1000002600.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/1000000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 1388923,
+      "content_hash": "6be70b81a06b8504808128f6e38ea40f33535332eb2078e87ac4bb318caf5a2f",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/1000000000/1000000000/1000005100.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/1000000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 2041812,
+      "content_hash": "3feab93f8ea7da92851a3a348b52f68f0382a05a3123393eb0b9cafc737af5da",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/1000000000/1000000000/1000007600.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/1000000000/"
+    },
+    {
+      "action_type_count": 0,
+      "block_number": null,
+      "block_timestamp_utc": null,
+      "byte_count": 4741167,
+      "content_hash": "e97c5a3b661cf511205a7a49538821c9d41b0dc91bb2261ddb836fa3deba2514",
+      "parse_status": "ok",
+      "source_key": "explorer_blocks/1000000000/1000000000/1000010000.rmp.lz4",
+      "top_level_range_prefix": "explorer_blocks/1000000000/"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "date_range": "2023-02-26 to 2024-11-27",
+  "end_block": 400009901,
+  "mapped_ranges": [
+    "explorer_blocks/400000000/"
+  ],
+  "sample_count": 15,
+  "start_block": 400009901,
+  "status": "HIP3_EXPLORER_BLOCK_DATE_MAPPING_READY"
+}

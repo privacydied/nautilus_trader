@@ -26,6 +26,12 @@ from typing import Any
 from urllib.request import urlopen, Request
 
 try:
+    import msgpack
+    _MSGPACK_AVAILABLE = True
+except ImportError:
+    _MSGPACK_AVAILABLE = False
+
+try:
     import boto3
     from botocore.exceptions import ClientError, NoCredentialsError, MissingDependencyException as _BotocoreMissingDepError
     _BOTO3_AVAILABLE = True
@@ -65,6 +71,10 @@ class ScoutStatus(Enum):
     HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED = "HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED"
     HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED = "HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED"
     HIP3_EXPLORER_BLOCK_DATE_MAPPING_UNAVAILABLE = "HIP3_EXPLORER_BLOCK_DATE_MAPPING_UNAVAILABLE"
+    HIP3_EXPLORER_BLOCK_DATE_MAPPING_READY = "HIP3_EXPLORER_BLOCK_DATE_MAPPING_READY"
+    HIP3_EXPLORER_BLOCK_DATE_MAPPING_INSUFFICIENT_SAMPLES = "HIP3_EXPLORER_BLOCK_DATE_MAPPING_INSUFFICIENT_SAMPLES"
+    HIP3_EXPLORER_BLOCK_TIMESTAMP_PARSE_FAILED = "HIP3_EXPLORER_BLOCK_TIMESTAMP_PARSE_FAILED"
+    HIP3_EXPLORER_BLOCK_DATE_OUT_OF_RANGE = "HIP3_EXPLORER_BLOCK_DATE_OUT_OF_RANGE"
     HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID = "HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID"
 
 
@@ -101,6 +111,19 @@ class DeploymentCandidate:
 
 
 @dataclass
+class BlockTimestampSample:
+    """A single timestamp sample from an explorer block file."""
+    source_key: str
+    top_level_range_prefix: str
+    block_number: int | None
+    block_timestamp_utc: str | None
+    parse_status: str
+    byte_count: int
+    content_hash: str
+    action_type_count: int = 0
+
+
+@dataclass
 class ProbeResult:
     """Result of the deployment discovery probe."""
     status: ScoutStatus | str
@@ -132,6 +155,19 @@ class ProbeResult:
     aws_identity_available: bool = False
     aws_account_suffix: str = ""
     helpers_reused: list[dict[str, str]] = field(default_factory=list)
+    # Block-range layout metadata
+    layout_type: str = ""
+    layout_stride: int | None = None
+    layout_first_range: str = ""
+    layout_last_range: str = ""
+    # Timestamp samples
+    timestamp_samples: list[BlockTimestampSample] = field(default_factory=list)
+    # Date-to-block mapping
+    date_block_mapping: dict[str, Any] = field(default_factory=dict)
+    # Budget args for timestamp sampling
+    max_layout_prefixes: int = 11
+    max_timestamp_sample_files: int = 50
+    max_timestamp_sample_bytes: int = 200_000_000
 
 
 class NetworkChokepoint:
@@ -175,30 +211,46 @@ class NetworkChokepoint:
             self._track_bytes(len(data), f"http:{url.split('/')[2]}")
             return json.loads(data)
     
-    def s3_list_prefix(self, bucket: str, prefix: str, requester_pays: bool = True) -> dict:
-        """List S3 objects under prefix via boto3. Returns dict with keys prefixes/keys/error_code."""
+    def s3_list_prefix(self, bucket: str, prefix: str, requester_pays: bool = True, max_keys: int = 1000, include_subdirs: bool = True) -> dict:
+        """List S3 objects under prefix via boto3.
+
+        When include_subdirs=True (default), uses Delimiter='/' so both
+        CommonPrefixes (subdirectories) and Contents (objects in this level)
+        are returned.  When include_subdirs=False, lists flat (no delimiter)
+        so all matching objects are returned regardless of nesting.
+
+        Returns dict with keys:
+            - prefixes: list of common prefix strings
+            - keys: list of object key strings
+            - objects: list of {key, size} dicts (when Contents present)
+            - error_code: None on success
+        """
         if not self.allow_s3_archive_read:
             raise PermissionError(
                 f"S3 access to s3://{bucket}/{prefix} blocked. Pass --allow-s3-archive-read to enable."
             )
         if not _BOTO3_AVAILABLE:
-            return {"prefixes": [], "keys": [], "error_code": "BOTO3_UNAVAILABLE"}
-        kwargs: dict = {"Bucket": bucket, "Prefix": prefix, "Delimiter": "/"}
+            return {"prefixes": [], "keys": [], "objects": [], "error_code": "BOTO3_UNAVAILABLE"}
+        kwargs: dict = {"Bucket": bucket, "Prefix": prefix, "MaxKeys": max_keys}
+        if include_subdirs:
+            kwargs["Delimiter"] = "/"
         if requester_pays:
             kwargs["RequestPayer"] = "requester"
         try:
             s3 = boto3.client("s3")
             resp = s3.list_objects_v2(**kwargs)
             prefixes = [cp["Prefix"] for cp in resp.get("CommonPrefixes") or []]
-            keys = [obj["Key"] for obj in resp.get("Contents") or []]
-            return {"prefixes": prefixes, "keys": keys, "error_code": None}
+            contents = resp.get("Contents") or []
+            keys = [obj["Key"] for obj in contents]
+            objects = [{"key": obj["Key"], "size": obj.get("Size", 0)} for obj in contents]
+            return {"prefixes": prefixes, "keys": keys, "objects": objects, "error_code": None}
         except (NoCredentialsError, _BotocoreMissingDepError):
-            return {"prefixes": [], "keys": [], "error_code": "NO_CREDENTIALS"}
+            return {"prefixes": [], "keys": [], "objects": [], "error_code": "NO_CREDENTIALS"}
         except ClientError as exc:
             code = exc.response.get("Error", {}).get("Code", "")
-            return {"prefixes": [], "keys": [], "error_code": code}
+            return {"prefixes": [], "keys": [], "objects": [], "error_code": code}
         except Exception as exc:
-            return {"prefixes": [], "keys": [], "error_code": str(exc)}
+            return {"prefixes": [], "keys": [], "objects": [], "error_code": str(exc)}
 
     def s3_read_object(self, bucket: str, key: str, requester_pays: bool = True) -> bytes:
         """Read an S3 object body via boto3."""
@@ -351,7 +403,7 @@ def _extract_candidate_from_match(match: dict, block_data: dict, source_path: st
             fee_fields[key] = val
     
     block_time = block_data.get("block_time", block_data.get("timestamp", ""))
-    block_height = block_data.get("block_number", block_data.get("height"))
+    block_height = block_data.get("height", block_data.get("block_number", block_data.get("number")))
     tx_hash = None
     if isinstance(value, dict):
         tx_hash = value.get("tx_hash", value.get("hash", value.get("actionHash")))
@@ -373,6 +425,438 @@ def _extract_candidate_from_match(match: dict, block_data: dict, source_path: st
         tx_hash_or_index=tx_hash
     )
 
+
+# ---------------------------------------------------------------------------
+# Block-range layout detection and metadata
+# ---------------------------------------------------------------------------
+
+def _parse_range_prefixes(prefixes: list[str]) -> list[int]:
+    """Extract block-range numbers from root prefixes like 'explorer_blocks/100000000/'."""
+    pattern = re.compile(rf"^{EXPLORER_BLOCK_PREFIX}/(\d+)/$")
+    ranges: list[int] = []
+    for p in prefixes:
+        m = pattern.match(p)
+        if m:
+            ranges.append(int(m.group(1)))
+    return sorted(ranges)
+
+
+def _infer_stride(ranges: list[int]) -> int | None:
+    """Infer the stride between consecutive block-range prefixes."""
+    if len(ranges) < 2:
+        return None
+    diffs = [ranges[i+1] - ranges[i] for i in range(len(ranges)-1)]
+    if not diffs:
+        return None
+    # Return the most common diff (mode)
+    from collections import Counter
+    counter = Counter(diffs)
+    return counter.most_common(1)[0][0]
+
+
+# ---------------------------------------------------------------------------
+# Timestamp sampling from block files
+# ---------------------------------------------------------------------------
+
+def _sample_block_timestamps(
+    chokepoint: NetworkChokepoint,
+    range_prefixes: list[str],
+    max_sample_files: int,
+    max_sample_bytes: int,
+    target_start_date: str | None = None,
+) -> list[BlockTimestampSample]:
+    """Sample a bounded number of block files from each range prefix to extract timestamps.
+
+    When target_start_date is provided, sampling prioritises range prefixes whose
+    block-number start is closest to the estimated block for that date, so the
+    resulting timestamp anchors actually bracket the target window.
+
+    Returns a list of BlockTimestampSample entries.
+    Raises BudgetExceededError when cumulative bytes exceed max_sample_bytes.
+    """
+    samples: list[BlockTimestampSample] = []
+    files_sampled = 0
+    cumulative_bytes = 0
+
+    # -----------------------------------------------------------------------
+    # Strategy: sample evenly across the full block-range span so that we get
+    # timestamp anchors at both ends and in the middle.  If a target date is
+    # given we bias sampling toward the range most likely to contain it.
+    # -----------------------------------------------------------------------
+    range_nums = _parse_range_prefixes(range_prefixes)
+    if not range_nums:
+        return samples
+
+    # Build an ordered list of (range_num, range_prefix) pairs
+    range_pairs: list[tuple[int, str]] = []
+    for rp in range_prefixes:
+        rn = _parse_range_prefixes([rp])
+        if rn:
+            range_pairs.append((rn[0], rp))
+    range_pairs.sort(key=lambda x: x[0])
+
+    if not range_pairs:
+        return samples
+
+    # Always sample the first and last range for boundary anchors
+    # Then sample evenly in between
+    if len(range_pairs) <= 4:
+        ordered_pairs = range_pairs
+    else:
+        # Keep first, last, and evenly spaced middle ones
+        ordered_pairs = [range_pairs[0]]
+        step = max(1, (len(range_pairs) - 2) // 3)
+        for i in range(1, len(range_pairs) - 1, step):
+            ordered_pairs.append(range_pairs[i])
+        ordered_pairs.append(range_pairs[-1])
+
+    for _, range_prefix in ordered_pairs:
+        if files_sampled >= max_sample_files:
+            break
+
+        # List child keys under this range prefix (flat, no delimiter)
+        listing = chokepoint.s3_list_prefix(
+            EXPLORER_BLOCK_BUCKET,
+            range_prefix,
+            requester_pays=True,
+            max_keys=100,
+            include_subdirs=False,
+        )
+        if listing.get("error_code"):
+            continue
+
+        child_keys = listing.get("keys", [])
+        if not child_keys:
+            continue
+
+        # Sample at most 5 files per range prefix; pick first, middle, last
+        # to get temporal spread within the range
+        num_to_sample = min(5, max_sample_files - files_sampled)
+        if len(child_keys) <= num_to_sample:
+            sample_keys = child_keys
+        else:
+            indices = [0, len(child_keys) // 2, len(child_keys) - 1]
+            # Add two more evenly spaced indices
+            quarter = len(child_keys) // 4
+            indices.extend([quarter, 3 * quarter])
+            indices = sorted(set(indices))
+            sample_keys = [child_keys[i] for i in indices if i < len(child_keys)]
+
+        for key in sample_keys:
+            if files_sampled >= max_sample_files:
+                break
+
+            # Read the block file
+            try:
+                data = chokepoint.s3_read_object(EXPLORER_BLOCK_BUCKET, key, requester_pays=True)
+            except Exception:
+                continue
+
+            byte_count = len(data)
+            content_hash = hashlib.sha256(data).hexdigest()
+
+            # Check cumulative budget
+            cumulative_bytes += byte_count
+            if cumulative_bytes > max_sample_bytes:
+                raise BudgetExceededError(
+                    f"Timestamp sampling budget exceeded: {cumulative_bytes} > {max_sample_bytes}"
+                )
+            
+            # Decompress and parse
+            try:
+                decompressed = lz4.frame.decompress(data)
+            except Exception:
+                decompressed = data
+
+            # Parse to extract block number and timestamp
+            block_number = None
+            block_timestamp = None
+            action_count = 0
+            parse_status = "ok"
+
+            try:
+                # Try MessagePack first (the actual archive format: .rmp.lz4)
+                if _MSGPACK_AVAILABLE:
+                    try:
+                        blocks = msgpack.unpackb(decompressed, raw=False)
+                        if isinstance(blocks, list) and blocks:
+                            # Each block has 'header' with 'height' and 'block_time'
+                            first_block = blocks[0]
+                            if isinstance(first_block, dict):
+                                hdr = first_block.get("header", {})
+                                if isinstance(hdr, dict):
+                                    bn = hdr.get("height", hdr.get("block_number"))
+                                    if bn is not None:
+                                        try:
+                                            block_number = int(bn)
+                                        except (ValueError, TypeError):
+                                            pass
+                                    ts = hdr.get("block_time", hdr.get("timestamp"))
+                                    if ts is not None:
+                                        block_timestamp = str(ts)
+                                # Count actions across all blocks in the file
+                                for blk in blocks:
+                                    if isinstance(blk, dict):
+                                        txs = blk.get("txs", blk.get("actions", []))
+                                        if isinstance(txs, list):
+                                            action_count += len(txs)
+                                # If we got the first block's header, we're done
+                                if block_number is not None:
+                                    pass  # success
+                    except Exception:
+                        pass
+
+                # Fallback: try JSONL (for compatibility with older formats)
+                if block_number is None:
+                    lines = decompressed.splitlines()
+                    for line in lines[:10]:
+                        if not line:
+                            continue
+                        try:
+                            obj = json.loads(line)
+                            if isinstance(obj, dict):
+                                # Try to extract block number
+                                bn = obj.get("block_number", obj.get("height", obj.get("number")))
+                                if bn is not None:
+                                    try:
+                                        block_number = int(bn)
+                                    except (ValueError, TypeError):
+                                        pass
+                                # Try to extract block timestamp
+                                ts = obj.get("block_time", obj.get("timestamp", obj.get("time")))
+                                if ts is not None:
+                                    block_timestamp = str(ts)
+                                # Count actions
+                                actions = obj.get("actions", obj.get("events", []))
+                                if isinstance(actions, list):
+                                    action_count += len(actions)
+                        except Exception:
+                            continue
+            except Exception:
+                parse_status = "parse_error"
+            
+            samples.append(BlockTimestampSample(
+                source_key=key,
+                top_level_range_prefix=range_prefix,
+                block_number=block_number,
+                block_timestamp_utc=block_timestamp,
+                parse_status=parse_status,
+                byte_count=byte_count,
+                content_hash=content_hash,
+                action_type_count=action_count,
+            ))
+            files_sampled += 1
+    
+    return samples
+
+
+# ---------------------------------------------------------------------------
+# Date-to-block mapping
+# ---------------------------------------------------------------------------
+
+def _parse_timestamp(ts_str: str | None) -> int | None:
+    """Parse a timestamp string to epoch milliseconds. Handles ms, us, ns, and ISO formats."""
+    if not ts_str:
+        return None
+    try:
+        # Try integer (ms or us)
+        val = int(ts_str)
+        # If > 1e13 it's microseconds, convert to ms
+        if val > 10_000_000_000_000:
+            return val // 1_000
+        # If < 1e9 it's likely seconds, convert to ms
+        if val < 1_000_000_000:
+            return val * 1_000
+        return val
+    except (ValueError, TypeError):
+        pass
+    # Try ISO format — strip excess fractional digits beyond microseconds
+    # to avoid strptime overflow on nanosecond timestamps
+    s = str(ts_str)
+    # If there are more than 6 fractional digits, truncate to 6
+    if "." in s:
+        main, frac = s.split(".", 1)
+        s = main + "." + frac[:6]
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+        try:
+            dt = datetime.strptime(s, fmt).replace(tzinfo=UTC)
+            return int(dt.timestamp() * 1000)
+        except ValueError:
+            continue
+    return None
+
+
+def _estimate_block_for_timestamp(
+    ts_ms: int,
+    parsed: list[tuple[int, str | None, int]],
+) -> int | None:
+    """Estimate block number for a given timestamp using linear interpolation.
+
+    parsed must be sorted by block number.  Returns None when interpolation is
+    impossible (e.g. only one anchor or timestamps are not monotonic).
+    """
+    if len(parsed) < 2:
+        return None
+
+    # Find the bracket: the last sample whose ts <= target and the first whose ts >= target
+    lo_idx = -1
+    hi_idx = len(parsed)
+    for i, (bn, prefix, ts) in enumerate(parsed):
+        if ts <= ts_ms:
+            lo_idx = i
+        else:
+            hi_idx = i
+            break
+
+    # Perfect bracket
+    if lo_idx >= 0 and hi_idx < len(parsed):
+        lo_bn, _, lo_ts = parsed[lo_idx]
+        hi_bn, _, hi_ts = parsed[hi_idx]
+        if hi_ts != lo_ts:
+            frac = (ts_ms - lo_ts) / (hi_ts - lo_ts)
+            return lo_bn + int(frac * (hi_bn - lo_bn))
+        return lo_bn
+
+    # Before first sample — extrapolate backward cautiously
+    if lo_idx < 0 and hi_idx == 0:
+        return parsed[0][0]
+
+    # After last sample — extrapolate forward cautiously
+    if hi_idx == len(parsed):
+        return parsed[-1][0]
+
+    return parsed[lo_idx][0] if lo_idx >= 0 else parsed[0][0]
+
+
+def _map_date_to_block_range(
+    start_date: str,
+    end_date: str | None,
+    samples: list[BlockTimestampSample],
+) -> dict[str, Any]:
+    """Map a date window to block ranges using timestamp samples.
+
+    Uses linear interpolation between sampled (block_number, timestamp) anchors
+    to estimate the block range covering [start_date, end_date].
+
+    Returns a dict with:
+        - status: mapping status string
+        - mapped_ranges: list of range prefixes that cover the date window
+        - start_block: approximate start block number
+        - end_block: approximate end block number
+        - sample_count: number of samples used
+        - date_range: human-readable date coverage of samples
+    """
+    if not samples:
+        return {
+            "status": "HIP3_EXPLORER_BLOCK_DATE_MAPPING_INSUFFICIENT_SAMPLES",
+            "mapped_ranges": [],
+            "start_block": None,
+            "end_block": None,
+            "sample_count": 0,
+            "date_range": "",
+        }
+
+    # Parse all timestamps
+    parsed: list[tuple[int, str | None, int]] = []
+    for s in samples:
+        ts_ms = _parse_timestamp(s.block_timestamp_utc)
+        if ts_ms is not None and s.block_number is not None:
+            parsed.append((s.block_number, s.top_level_range_prefix, ts_ms))
+
+    if not parsed:
+        return {
+            "status": "HIP3_EXPLORER_BLOCK_TIMESTAMP_PARSE_FAILED",
+            "mapped_ranges": [],
+            "start_block": None,
+            "end_block": None,
+            "sample_count": len(samples),
+            "date_range": "",
+        }
+
+    # Sort by block number
+    parsed.sort(key=lambda x: x[0])
+
+    # Convert dates to epoch ms
+    start_dt = datetime.fromisoformat(start_date).replace(tzinfo=UTC)
+    start_ms = int(start_dt.timestamp() * 1000)
+    end_dt = datetime.now(UTC) if end_date is None else datetime.fromisoformat(end_date).replace(tzinfo=UTC)
+    end_ms = int(end_dt.timestamp() * 1000)
+
+    # Check if dates are within sample range (allow 60-day margin on each side)
+    min_ts = parsed[0][2]
+    max_ts = parsed[-1][2]
+    margin_ms = 86400_000 * 60
+    if start_ms < min_ts - margin_ms:
+        return {
+            "status": "HIP3_EXPLORER_BLOCK_DATE_OUT_OF_RANGE",
+            "mapped_ranges": [],
+            "start_block": None,
+            "end_block": None,
+            "sample_count": len(parsed),
+            "date_range": f"{datetime.fromtimestamp(min_ts/1000, UTC).strftime('%Y-%m-%d')} to {datetime.fromtimestamp(max_ts/1000, UTC).strftime('%Y-%m-%d')}",
+        }
+
+    # Estimate block numbers for start and end dates using interpolation
+    start_block = _estimate_block_for_timestamp(start_ms, parsed)
+    end_block = _estimate_block_for_timestamp(end_ms, parsed)
+
+    if start_block is None or end_block is None:
+        return {
+            "status": "HIP3_EXPLORER_BLOCK_DATE_MAPPING_INSUFFICIENT_SAMPLES",
+            "mapped_ranges": [],
+            "start_block": start_block,
+            "end_block": end_block,
+            "sample_count": len(parsed),
+            "date_range": f"{datetime.fromtimestamp(min_ts/1000, UTC).strftime('%Y-%m-%d')} to {datetime.fromtimestamp(max_ts/1000, UTC).strftime('%Y-%m-%d')}",
+        }
+
+    # Ensure start <= end
+    if start_block > end_block:
+        start_block, end_block = end_block, start_block
+
+    # Collect all range prefixes whose block-number span overlaps [start_block, end_block].
+    # Each range covers [range_num, range_num + stride).  We include it if the interval
+    # [range_num, range_num + stride) intersects [start_block, end_block].
+    # Collect unique prefixes for stride inference
+    unique_prefixes = [p for _, p, _ in parsed if p is not None]
+    stride = _infer_stride(_parse_range_prefixes(unique_prefixes)) or 100_000_000
+    mapped_ranges: list[str] = []
+    for bn, prefix, ts in parsed:
+        if prefix is None:
+            continue
+        range_num = _parse_range_prefixes([prefix])
+        if not range_num:
+            continue
+        rn = range_num[0]
+        range_end = rn + stride
+        # Overlap test: [rn, range_end) intersects [start_block, end_block]
+        if rn <= end_block and range_end >= start_block:
+            if prefix not in mapped_ranges:
+                mapped_ranges.append(prefix)
+
+    # Deduplicate and sort
+    mapped_ranges = sorted(set(mapped_ranges))
+
+    if not mapped_ranges:
+        return {
+            "status": "HIP3_EXPLORER_BLOCK_DATE_MAPPING_INSUFFICIENT_SAMPLES",
+            "mapped_ranges": [],
+            "start_block": start_block,
+            "end_block": end_block,
+            "sample_count": len(parsed),
+            "date_range": f"{datetime.fromtimestamp(min_ts/1000, UTC).strftime('%Y-%m-%d')} to {datetime.fromtimestamp(max_ts/1000, UTC).strftime('%Y-%m-%d')}",
+        }
+
+    return {
+        "status": "HIP3_EXPLORER_BLOCK_DATE_MAPPING_READY",
+        "mapped_ranges": mapped_ranges,
+        "start_block": start_block,
+        "end_block": end_block,
+        "sample_count": len(parsed),
+        "date_range": f"{datetime.fromtimestamp(min_ts/1000, UTC).strftime('%Y-%m-%d')} to {datetime.fromtimestamp(max_ts/1000, UTC).strftime('%Y-%m-%d')}",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Core probe workflow
 # ---------------------------------------------------------------------------
@@ -385,6 +869,8 @@ def _discover_explorer_block_layout(chokepoint: NetworkChokepoint) -> dict:
         - layout: one of "date_partitioned", "block_range_partitioned", "flat_block_files", "unknown", or "".
         - prefixes: list of up to 20 child prefixes.
         - keys: list of up to 20 object keys.
+        - range_numbers: list of parsed block-range numbers (if block_range_partitioned).
+        - stride: inferred stride between ranges (if possible).
     """
     if not _BOTO3_AVAILABLE:
         return {
@@ -392,7 +878,8 @@ def _discover_explorer_block_layout(chokepoint: NetworkChokepoint) -> dict:
             "layout": "",
             "prefixes": [],
             "keys": [],
-            "reason": "BOTO3_UNAVAILABLE",
+            "range_numbers": [],
+            "stride": None,
         }
     listing = chokepoint.s3_list_prefix(
         EXPLORER_BLOCK_BUCKET,
@@ -407,15 +894,15 @@ def _discover_explorer_block_layout(chokepoint: NetworkChokepoint) -> dict:
             status = ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED
         else:
             status = ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED
-        return {"status": status, "layout": "", "prefixes": [], "keys": []}
+        return {"status": status, "layout": "", "prefixes": [], "keys": [], "range_numbers": [], "stride": None}
 
     prefixes = listing["prefixes"]
     keys = listing["keys"]
     if not prefixes and not keys:
-        return {"status": ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY, "layout": "", "prefixes": [], "keys": []}
+        return {"status": ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY, "layout": "", "prefixes": [], "keys": [], "range_numbers": [], "stride": None}
 
     layout = "unknown"
-    date_pat = re.compile(r"\d{4}-\d{2}-\d{2}/$")
+    date_pat = re.compile(r"\d{4}/\d{2}/\d{2}/$")
     block_range_pat = re.compile(r"\d{10,}\.json$")
     # Strip the leading prefix before matching
     rel_prefixes = [p[len(f"{EXPLORER_BLOCK_PREFIX}/"):] for p in prefixes]
@@ -425,12 +912,25 @@ def _discover_explorer_block_layout(chokepoint: NetworkChokepoint) -> dict:
         layout = "block_range_partitioned"
     elif keys and not prefixes:
         layout = "flat_block_files"
+    elif prefixes:
+        # Check if prefixes look like block ranges (e.g., 'explorer_blocks/100000000/')
+        range_nums = _parse_range_prefixes(prefixes)
+        if range_nums:
+            layout = "block_range_partitioned"
+    stride = None
+    range_numbers: list[int] = []
+    if layout == "block_range_partitioned":
+        range_numbers = _parse_range_prefixes(prefixes)
+        stride = _infer_stride(range_numbers)
     return {
         "status": ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_DISCOVERED,
         "layout": layout,
         "prefixes": prefixes[:20],
         "keys": keys[:20],
+        "range_numbers": range_numbers,
+        "stride": stride,
     }
+
 
 def _validate_explorer_block_source(start_date: str, chokepoint: NetworkChokepoint) -> tuple[bool, list[str]]:
     """Validate that the explorer‑block S3 source exists and is reachable."""
@@ -453,7 +953,7 @@ def _list_explorer_block_files(
     if not _BOTO3_AVAILABLE:
         return []
     start_dt = datetime.fromisoformat(start_date).replace(tzinfo=UTC)
-    end_dt = datetime.utcnow().replace(tzinfo=UTC) if end_date is None else datetime.fromisoformat(end_date).replace(tzinfo=UTC)
+    end_dt = datetime.now(UTC) if end_date is None else datetime.fromisoformat(end_date).replace(tzinfo=UTC)
     if (end_dt - start_dt).days > max_days:
         end_dt = start_dt + timedelta(days=max_days)
 
@@ -486,6 +986,87 @@ def _list_explorer_block_files(
     return files
 
 
+def _extract_block_number_from_key(key: str) -> int | None:
+    """Extract a block number from an S3 object key.
+
+    Handles keys like:
+        explorer_blocks/100000000/block_100000000.json.lz4
+        explorer_blocks/100000000/100000000.json.lz4
+        explorer_blocks/100000000/block-100000000.json.lz4
+    """
+    # Try the filename stem
+    basename = key.rsplit("/", 1)[-1]
+    # Strip common suffixes
+    for suffix in (".json.lz4", ".json", ".lz4"):
+        if basename.endswith(suffix):
+            basename = basename[: -len(suffix)]
+            break
+    # Try to extract a number from the stem
+    nums = re.findall(r"\d+", basename)
+    if nums:
+        return int(nums[-1])
+    return None
+
+
+def _list_block_range_files(
+    mapped_ranges: list[str],
+    max_files: int,
+    chokepoint: NetworkChokepoint,
+    start_block: int | None = None,
+    end_block: int | None = None,
+) -> list[tuple[str, int]]:
+    """List S3 explorer block files from block-range prefixes.
+
+    When start_block and end_block are provided, only files whose block number
+    falls within [start_block, end_block] are returned.
+
+    Returns (s3_path, size_bytes) list sorted by block number.
+    """
+    files: list[tuple[str, int]] = []
+    for range_prefix in mapped_ranges:
+        listing = chokepoint.s3_list_prefix(
+            EXPLORER_BLOCK_BUCKET,
+            range_prefix,
+            requester_pays=True,
+            max_keys=10000,
+            include_subdirs=False,
+        )
+        if listing.get("error_code"):
+            continue
+        # Prefer objects (with sizes) over bare keys
+        objects = listing.get("objects", [])
+        if objects:
+            for obj in objects:
+                key = obj["key"]
+                # Filter by block range if bounds are known
+                if start_block is not None or end_block is not None:
+                    bn = _extract_block_number_from_key(key)
+                    if bn is not None:
+                        if start_block is not None and bn < start_block:
+                            continue
+                        if end_block is not None and bn > end_block:
+                            continue
+                s3_path = f"s3://{EXPLORER_BLOCK_BUCKET}/{key}"
+                files.append((s3_path, obj.get("size", 0)))
+                if len(files) >= max_files:
+                    return files
+        else:
+            for obj_key in listing.get("keys", []):
+                # Filter by block range if bounds are known
+                if start_block is not None or end_block is not None:
+                    bn = _extract_block_number_from_key(obj_key)
+                    if bn is not None:
+                        if start_block is not None and bn < start_block:
+                            continue
+                        if end_block is not None and bn > end_block:
+                            continue
+                s3_path = f"s3://{EXPLORER_BLOCK_BUCKET}/{obj_key}"
+                files.append((s3_path, 0))
+                if len(files) >= max_files:
+                    return files
+    return files
+
+
 def _download_and_process_block(
     s3_path: str,
     local_dir: Path,
@@ -514,6 +1095,26 @@ def _download_and_process_block(
         decompressed = content
 
     candidates: list[DeploymentCandidate] = []
+    # Try MessagePack first (actual archive format)
+    if _MSGPACK_AVAILABLE:
+        try:
+            blocks = msgpack.unpackb(decompressed, raw=False)
+            if isinstance(blocks, list):
+                for block_obj in blocks:
+                    matches = _search_json_nested(block_obj, DEPLOYMENT_SEARCH_TERMS)
+                    for m in matches:
+                        cand = _extract_candidate_from_match(m, block_obj.get("header", block_obj), str(local_path), content_hash)
+                        if cand:
+                            candidates.append(cand)
+                            if cand.action_type not in result.action_types_inventoried:
+                                result.action_types_inventoried.append(cand.action_type)
+                decompressed = b""  # Signal we already processed it
+        except Exception:
+            pass
+
+    if not decompressed:
+        return candidates
+
     for line in decompressed.splitlines():
         if not line:
             continue
@@ -529,6 +1130,7 @@ def _download_and_process_block(
                 if cand.action_type not in result.action_types_inventoried:
                     result.action_types_inventoried.append(cand.action_type)
     return candidates
+
 
 def _cross_reference_public_info(candidates: list[DeploymentCandidate], chokepoint: NetworkChokepoint) -> dict:
     """Cross‑reference candidate symbols against the public Hyperliquid info API.
@@ -590,7 +1192,6 @@ def _check_archive_visibility(symbols: list[str], chokepoint: NetworkChokepoint)
     return visibility
 
 
-
 def run_probe(
     start_date: str = "2025-10-13",
     end_date: str | None = None,
@@ -601,6 +1202,9 @@ def run_probe(
     allow_network_public: bool = False,
     allow_s3_archive_read: bool = False,
     dry_run: bool = False,
+    max_layout_prefixes: int = 11,
+    max_timestamp_sample_files: int = 50,
+    max_timestamp_sample_bytes: int = 200_000_000,
 ) -> ProbeResult:
     """Execute the HIP-3 builder deployment event discovery probe.
 
@@ -609,8 +1213,8 @@ def run_probe(
     sha, dirty = _get_git_info()
     result = ProbeResult(
         status=ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_READY,
-        run_id=datetime.utcnow().strftime("%Y%m%d_%H%M%S") + "_" + hashlib.sha256(start_date.encode()).hexdigest()[:8],
-        created_at_utc=datetime.utcnow().replace(tzinfo=UTC).isoformat(),
+        run_id=datetime.now(UTC).strftime("%Y%m%d_%H%M%S") + "_" + hashlib.sha256(start_date.encode()).hexdigest()[:8],
+        created_at_utc=datetime.now(UTC).isoformat(),
         git_sha=sha,
         git_dirty=dirty,
         repo_root=str(Path(__file__).resolve().parents[4]),
@@ -618,6 +1222,9 @@ def run_probe(
         download_budget_bytes=download_budget_bytes,
         explorer_block_budget_bytes=explorer_block_budget_bytes,
         s3_requester_pays_acknowledged=allow_s3_archive_read,
+        max_layout_prefixes=max_layout_prefixes,
+        max_timestamp_sample_files=max_timestamp_sample_files,
+        max_timestamp_sample_bytes=max_timestamp_sample_bytes,
     )
     chokepoint = NetworkChokepoint(allow_network_public, allow_s3_archive_read)
     # AWS identity preflight if S3 read is allowed
@@ -636,6 +1243,13 @@ def run_probe(
     result.explorer_block_layout = layout_info["layout"]
     result.explorer_root_prefixes = layout_info["prefixes"]
     result.explorer_root_keys = layout_info["keys"]
+    # Block-range layout metadata
+    result.layout_type = layout_info["layout"]
+    result.layout_stride = layout_info.get("stride")
+    range_numbers = layout_info.get("range_numbers", [])
+    if range_numbers:
+        result.layout_first_range = str(range_numbers[0])
+        result.layout_last_range = str(range_numbers[-1])
     # Handle failure or unknown layout cases.
     if layout_info["status"] in (
         ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED,
@@ -650,71 +1264,151 @@ def run_probe(
     if layout_info["status"] == ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN:
         result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN
         return result
-    if layout_info["layout"] != "date_partitioned":
+    
+    layout = layout_info["layout"]
+    
+    # Determine which prefixes to scan
+    scan_prefixes: list[str] = []
+    mapping: dict[str, Any] = {}
+
+    if layout == "date_partitioned":
+        # Original path: date-partitioned layout
+        scan_prefixes = layout_info["prefixes"]
+    elif layout == "block_range_partitioned":
+        # New path: block-range partitioned layout
+        # Step 1: Sample timestamps from block files
+        range_prefixes = layout_info["prefixes"][:max_layout_prefixes]
+        try:
+            timestamp_samples = _sample_block_timestamps(
+                chokepoint,
+                range_prefixes,
+                max_timestamp_sample_files,
+                max_timestamp_sample_bytes,
+                target_start_date=start_date,
+            )
+            result.timestamp_samples = timestamp_samples
+            
+            if not timestamp_samples:
+                result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_DATE_MAPPING_INSUFFICIENT_SAMPLES
+                return result
+            
+            # Step 2: Map date to block ranges
+            mapping = _map_date_to_block_range(
+                start_date,
+                end_date,
+                timestamp_samples,
+            )
+            result.date_block_mapping = mapping
+            
+            if mapping["status"] == "HIP3_EXPLORER_BLOCK_DATE_MAPPING_READY":
+                result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_DATE_MAPPING_READY
+                scan_prefixes = mapping["mapped_ranges"]
+            elif mapping["status"] == "HIP3_EXPLORER_BLOCK_TIMESTAMP_PARSE_FAILED":
+                result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_TIMESTAMP_PARSE_FAILED
+                return result
+            elif mapping["status"] == "HIP3_EXPLORER_BLOCK_DATE_OUT_OF_RANGE":
+                result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_DATE_OUT_OF_RANGE
+                return result
+            else:
+                result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_DATE_MAPPING_INSUFFICIENT_SAMPLES
+                return result
+        except BudgetExceededError:
+            result.status = ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_ERROR
+            result.public_info_cross_reference["error"] = "Timestamp sampling budget exceeded"
+            return result
+    else:
         result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_DATE_MAPPING_UNAVAILABLE
         return result
-    # Continue with date‑based block file listing.
-    # ---------------------------------------------------------------------
-    # Validate that the explorer‑block archive source exists before scanning.
-    # ---------------------------------------------------------------------
-    valid_prefix, sample_keys = _validate_explorer_block_source(start_date, chokepoint)
-    if not valid_prefix:
-        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID
-        result.public_info_cross_reference = {"sample_keys": sample_keys}
-        return result
- 
-    try:
-        block_files = _list_explorer_block_files(start_date, end_date, max_days, max_block_files, chokepoint)
-
-        total_explorer = sum(sz for _, sz in block_files)
-        if total_explorer > explorer_block_budget_bytes:
-            raise BudgetExceededError("Explorer block download budget exceeded")
-        tmp_dir = Path("/tmp/hip3_builder_probe")
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-        for s3_path, sz in block_files:
-            if sz > explorer_block_budget_bytes:
-                continue
-            candidates = _download_and_process_block(s3_path, tmp_dir, chokepoint, result)
-            result.candidate_events.extend(candidates)
-            result.bytes_downloaded_total = chokepoint.bytes_downloaded
-            result.bytes_downloaded_by_source = dict(chokepoint.bytes_by_source)
-            if result.bytes_downloaded_total > download_budget_bytes:
-                raise BudgetExceededError("Total download budget exceeded")
-        if not result.candidate_events:
-            result.status = ScoutStatus.HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS
+    
+    # Continue with block file listing
+    if layout == "date_partitioned":
+        # Validate that the explorer‑block archive source exists before scanning.
+        valid_prefix, sample_keys = _validate_explorer_block_source(start_date, chokepoint)
+        if not valid_prefix:
+            result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID
+            result.public_info_cross_reference = {"sample_keys": sample_keys}
             return result
-        result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENTS_FOUND
-        info_map = _cross_reference_public_info(result.candidate_events, chokepoint)
-        result.public_info_cross_reference = info_map
-        symbols = [c.symbol for c in result.candidate_events if c.symbol_extractable and c.symbol]
-        result.candidate_symbols = symbols
-        visibility = _check_archive_visibility(symbols, chokepoint)
-        result.archive_visibility = visibility
-        any_asset_missing = any(not v["asset_ctxs"] for v in visibility.values())
-        any_l2_missing = any(not v["l2"] for v in visibility.values())
-        if any_asset_missing:
-            result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENTS_FOUND_BUT_ASSET_CTXS_MISSING
-        elif any_l2_missing:
-            result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENTS_FOUND_BUT_L2_MISSING
-        else:
-            result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENTS_FOUND_AND_ARCHIVE_VISIBLE
-    except BudgetExceededError as be:
-        result.status = ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_ERROR
-        result.public_info_cross_reference["error"] = str(be)
-    except PermissionError as pe:
-        result.status = ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_ERROR
-        result.public_info_cross_reference["error"] = str(pe)
-    except Exception as exc:
-        result.status = ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_ERROR
-        result.public_info_cross_reference["error"] = str(exc)
+        
+        try:
+            block_files = _list_explorer_block_files(start_date, end_date, max_days, max_block_files, chokepoint)
+        except Exception as exc:
+            result.status = ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_ERROR
+            result.public_info_cross_reference["error"] = str(exc)
+            return result
+    else:
+        # Block-range layout: list files from mapped ranges
+        try:
+            block_files = _list_block_range_files(
+                scan_prefixes,
+                max_block_files,
+                chokepoint,
+                start_block=mapping.get("start_block"),
+                end_block=mapping.get("end_block"),
+            )
+        except Exception as exc:
+            result.status = ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_ERROR
+            result.public_info_cross_reference["error"] = str(exc)
+            return result
+
+    total_explorer = sum(sz for _, sz in block_files)
+    if total_explorer > explorer_block_budget_bytes:
+        raise BudgetExceededError("Explorer block download budget exceeded")
+    tmp_dir = Path("/tmp/hip3_builder_probe")
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    for s3_path, sz in block_files:
+        if sz > explorer_block_budget_bytes:
+            continue
+        candidates = _download_and_process_block(s3_path, tmp_dir, chokepoint, result)
+        result.candidate_events.extend(candidates)
+        result.bytes_downloaded_total = chokepoint.bytes_downloaded
+        result.bytes_downloaded_by_source = dict(chokepoint.bytes_by_source)
+        if result.bytes_downloaded_total > download_budget_bytes:
+            raise BudgetExceededError("Total download budget exceeded")
+    if not result.candidate_events:
+        result.status = ScoutStatus.HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS
+        return result
+    result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENTS_FOUND
+    info_map = _cross_reference_public_info(result.candidate_events, chokepoint)
+    result.public_info_cross_reference = info_map
+    symbols = [c.symbol for c in result.candidate_events if c.symbol_extractable and c.symbol]
+    result.candidate_symbols = symbols
+    visibility = _check_archive_visibility(symbols, chokepoint)
+    result.archive_visibility = visibility
+    any_asset_missing = any(not v["asset_ctxs"] for v in visibility.values())
+    any_l2_missing = any(not v["l2"] for v in visibility.values())
+    if any_asset_missing:
+        result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENTS_FOUND_BUT_ASSET_CTXS_MISSING
+    elif any_l2_missing:
+        result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENTS_FOUND_BUT_L2_MISSING
+    else:
+        result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENTS_FOUND_AND_ARCHIVE_VISIBLE
     result.bytes_downloaded_total = chokepoint.bytes_downloaded
     result.bytes_downloaded_by_source = dict(chokepoint.bytes_by_source)
     return result
+
 
 def _atomic_write(path: Path, data: dict) -> None:
     tmp = path.with_suffix('.tmp')
     tmp.write_text(json.dumps(data, indent=2, sort_keys=True))
     tmp.replace(path)
+
+
+def _serialize_timestamp_samples(samples: list[BlockTimestampSample]) -> list[dict]:
+    """Serialize timestamp samples to a JSON-serializable list."""
+    return [
+        {
+            "source_key": s.source_key,
+            "top_level_range_prefix": s.top_level_range_prefix,
+            "block_number": s.block_number,
+            "block_timestamp_utc": s.block_timestamp_utc,
+            "parse_status": s.parse_status,
+            "byte_count": s.byte_count,
+            "content_hash": s.content_hash,
+            "action_type_count": s.action_type_count,
+        }
+        for s in samples
+    ]
+
 
 def main(argv: list[str] | None = None) -> int:
     import argparse
@@ -729,6 +1423,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-network-public", action="store_true")
     parser.add_argument("--allow-s3-archive-read", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--max-layout-prefixes", type=int, default=11)
+    parser.add_argument("--max-timestamp-sample-files", type=int, default=50)
+    parser.add_argument("--max-timestamp-sample-bytes", type=int, default=200_000_000)
     args = parser.parse_args(argv)
     result = run_probe(
         start_date=args.start_date,
@@ -740,17 +1437,41 @@ def main(argv: list[str] | None = None) -> int:
         allow_network_public=args.allow_network_public,
         allow_s3_archive_read=args.allow_s3_archive_read,
         dry_run=args.dry_run,
+        max_layout_prefixes=args.max_layout_prefixes,
+        max_timestamp_sample_files=args.max_timestamp_sample_files,
+        max_timestamp_sample_bytes=args.max_timestamp_sample_bytes,
     )
     out_root = Path(args.out_root)
     run_dir = out_root / result.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
-    _atomic_write(run_dir / "summary.json", {**result.__dict__, "status": str(result.status)})
+    # Serialize result for JSON output
+    result_dict = result.__dict__.copy()
+    result_dict["status"] = str(result.status)
+    result_dict["timestamp_samples"] = _serialize_timestamp_samples(result.timestamp_samples)
+    _atomic_write(run_dir / "summary.json", result_dict)
     md = ["# HIP‑3 Builder Deployment Event Discovery", f"**Status:** {result.status}", "", "## Action Types", "- " + "\n- ".join(result.action_types_inventoried), "", f"## Candidate Events ({len(result.candidate_events)})"]
     (run_dir / "summary.md").write_text("\n".join(md))
     _atomic_write(run_dir / "deployment_event_candidates.json", {"candidates": [c.__dict__ for c in result.candidate_events]})
     _atomic_write(run_dir / "action_type_inventory.json", {"action_types": result.action_types_inventoried})
     _atomic_write(run_dir / "builder_symbol_cross_reference.json", result.public_info_cross_reference)
     _atomic_write(run_dir / "archive_visibility.json", result.archive_visibility)
+    # Explorer block layout artifact
+    _atomic_write(run_dir / "explorer_block_layout.json", {
+        "layout_type": result.layout_type,
+        "layout_stride": result.layout_stride,
+        "first_range": result.layout_first_range,
+        "last_range": result.layout_last_range,
+        "root_prefixes": result.explorer_root_prefixes,
+        "root_keys": result.explorer_root_keys,
+        "root_listing_status": result.explorer_root_listing_status,
+    })
+    # Timestamp samples artifact
+    _atomic_write(run_dir / "block_timestamp_samples.json", {
+        "samples": _serialize_timestamp_samples(result.timestamp_samples),
+        "sample_count": len(result.timestamp_samples),
+    })
+    # Date-to-block mapping artifact
+    _atomic_write(run_dir / "date_block_mapping.json", result.date_block_mapping)
     manifest = {
         "study_id": result.study_id,
         "run_id": result.run_id,
@@ -765,6 +1486,12 @@ def main(argv: list[str] | None = None) -> int:
         "bytes_downloaded_by_source": result.bytes_downloaded_by_source,
         "final_status": str(result.status),
         "helpers_reused": result.helpers_reused,
+        "layout_type": result.layout_type,
+        "layout_stride": result.layout_stride,
+        "first_range": result.layout_first_range,
+        "last_range": result.layout_last_range,
+        "timestamp_sample_count": len(result.timestamp_samples),
+        "date_block_mapping_status": result.date_block_mapping.get("status", "") if result.date_block_mapping else "",
     }
     _atomic_write(run_dir / "run_manifest.json", manifest)
     print(f"{result.status}")
