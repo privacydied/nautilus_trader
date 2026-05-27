@@ -21,6 +21,7 @@ changing something structural.
 The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 50 study groups:
 - **38 REJECTED**
 - **11 NEEDS_MORE_DATA** (insufficient events / zero signals / no tail / market availability blocked)
+- **1 NEEDS_MORE_DATA / PUBLIC_BUILDER_DISCOVERY_UNRESOLVED** (HIP-3 builder deployment public discovery unresolved)
 - **1 MARKET_MODERATE_DIAGNOSTIC** (quiet/moderate capture, below volatility gate)
 - **1 PHASE0_CLOSED_INDICATOR_FAMILY_DIAGNOSTIC** (scoped Phase 0 diagnostic family closure; not counted as a broad venue or strategy-family rejection)
 - **1 UNKNOWN**
@@ -1157,3 +1158,75 @@ This closure may be revisited only if at least one of the following becomes avai
 - reports/hlp_backstop_stress_window_attribution_probe/20260526_215948_b41aa859/ (stress-window probe)
 
 **Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, bot path, systemd, registry mutation, precommitment unlock, conductor promotion, or REJECTED_RESEARCH.md mutation prior to this entry. No userFillsByTime was used. All S3 reads were bounded requester-pays behind --allow-s3-archive-read. All API calls were behind --allow-public-metadata-api. Total S3 data downloaded across all probes: ~476 MiB (node_fills_by_block), ~21 MiB (misc_events), ~2.7 MiB (explorer_blocks), all well under 5 GB hard cap.
+
+---
+
+### HIP-3 Builder-Deployed Off-Hours Oracle-Basis Residual — Public Discovery Unresolved
+
+**Tag:** `hip3-builder-offhours-oracle-basis-public-discovery-unresolved-v0`
+
+**Verdict:** `NEEDS_MORE_DATA / PUBLIC_BUILDER_DISCOVERY_UNRESOLVED`
+
+**Date closed:** 2026-05-27
+
+**This is NOT a REJECTED entry.** The HIP-3 off-hours oracle-basis hypothesis remains untested because no confirmed builder-deployed equity/index/commodity symbols were discovered through the public routes tested. No Phase 0 drafting is permitted. No paper/conductor/live promotion is permitted. No PnL/basis/residual/strategy evaluation was run.
+
+**Discovery branches and results:**
+
+| Branch | Commit | Route | Result |
+|---|---|---|---|
+| `feat/hip3-universe-delta-discovery-v0` | `c9056978aa` | `asset_ctxs` universe delta | 13 post-launch additions found (DASH, ICP, XMR + 10 unknown). No equity/index/commodity-like candidates. No builder-deployed symbols confirmed. |
+| `feat/hip3-builder-deployment-event-discovery-v0` P2 | `36098aa0f6` | Explorer-block deployment-event search | 20 files, ~51.5 MB, 1,600 blocks, 623,756 actions. 50 candidates preserved. Justified P3 but did not confirm builder deployments. |
+| `feat/hip3-builder-deployment-event-discovery-v0` P3 | `010333f8be` | P3 candidate confirmation | Status: `HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED`. Extracted symbols: AAVE, ACE, ADA, AI16Z, AIXBT (all crypto_like external-perp universe updates). Confirmed builder-deployed: 0. Deployers extracted: 0. P4 not warranted. |
+| `feat/hip3-builder-deployment-event-discovery-v0` P3E | `b8c7882181` | P3E opaque EVM decode | Status: `HIP3_P3E_EVM_NON_DEPLOYMENT`. 1 payload decoded (49 bytes, truncated RLP). No deployment/config evidence. No deployers/symbols extracted. |
+
+**Core interpretation:**
+
+The HIP-3 off-hours oracle-basis hypothesis remains untested because no confirmed builder-deployed equity/index/commodity symbols were discovered through the public routes tested.
+
+The completed work narrows the public discovery route:
+- `asset_ctxs` universe delta did not surface equity/index/commodity-like post-launch candidates.
+- Explorer-block P2/P3/P3E did not confirm builder-deployed symbols or deployers.
+- P3 extracted only crypto_like external-perp universe update symbols (AAVE, ACE, ADA, AI16Z, AIXBT).
+- The one opaque EVM payload decoded as non-deployment / not useful for builder confirmation.
+
+**This does NOT prove that HIP-3 builder-deployed markets do not exist.** It only says the tested public archive/API discovery routes did not produce confirmed builder symbols suitable for the off-hours basis scout.
+
+**Registry posture:** `NEEDS_MORE_DATA / PUBLIC_BUILDER_DISCOVERY_UNRESOLVED`
+
+**Boundary — what this closes:**
+- The current public `asset_ctxs` universe-delta route as a source of equity/index/commodity candidate symbols.
+- The current P2/P3/P3E explorer-block candidate-confirmation route as a source of confirmed builder-deployed symbols.
+- P4 symbol-specific archive/fee scouting for the extracted P3 symbols (AAVE, ACE, ADA, AI16Z, AIXBT) because they were crypto_like external-perp universe/config updates, not builder-deployed equity/index/commodity perps.
+
+**Boundary — what this does NOT close:**
+- HIP-3 builder-deployed markets generally.
+- TradeXYZ or other deployer-specific markets if a reliable concrete symbol/deployer is later found.
+- Off-hours basis residual hypotheses on confirmed builder-deployed equity/index/commodity perps.
+- A future investigation using official HIP-3 metadata, deployer documentation, or a reliable no-auth public source.
+
+**Does NOT:**
+- Prove absence of builder deployments.
+- Prove lack of profitability.
+- Authorize Phase 0.
+- Permit paper/conductor/live promotion.
+
+**Reopen conditions:**
+
+Reopen only if at least one of the following is available:
+1. A concrete builder-deployed symbol and deployer/namespace from a reliable public source.
+2. Public metadata exposing builder/deployer identity for a symbol.
+3. Public archive evidence tying a symbol to a builder deployment event with extractable deployer/symbol/config fields.
+4. Confirmed archive/L2 visibility plus fee/deployer surcharge information for a builder-deployed equity/index/commodity-like symbol.
+
+If reopened, the next step must be a symbol-specific builder-confirmation/archive/fee scout, not an off-hours basis evaluator.
+
+**Artifact paths:**
+- reports/hip3_universe_delta_discovery_v0/ (universe-delta probe)
+- reports/hip3_builder_deployment_event_discovery_v0/20260527_185632_p2_3946ca64/ (P2 explorer-block search)
+- reports/hip3_builder_deployment_event_discovery_v0/20260527_194831_p3_43bb00d0_p3_confirmation/ (P3 candidate confirmation)
+- reports/hip3_builder_deployment_event_discovery_v0/20260527_194944_p3_validation_audit/ (P3 validation audit)
+- reports/hip3_builder_deployment_event_discovery_v0/20260527_200820_p3e_eb753afd_p3e_evm_decode/ (P3E EVM decode)
+
+**Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, bot path, systemd, registry mutation, precommitment unlock, conductor promotion, or paper strategy promotion were used. All S3 reads were bounded requester-pays behind --allow-s3-archive-read. No PnL, basis, residual, or strategy evaluation was performed.
+
