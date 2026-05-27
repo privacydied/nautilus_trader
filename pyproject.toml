@@ -74,6 +74,9 @@ script = "build.py"
 generate-setup-file = false
 
 [project.optional-dependencies]
+aws = [
+    "boto3>=1.34,<2.0",
+]
 betfair = ["betfair-parser==0.19.1"] # Pinned to 0.19.1 for stability
 ib = [
   "defusedxml>=0.7.1,<1.0.0",

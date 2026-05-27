@@ -27,7 +27,7 @@ from urllib.request import urlopen, Request
 
 try:
     import boto3
-    from botocore.exceptions import ClientError, NoCredentialsError
+    from botocore.exceptions import ClientError, NoCredentialsError, MissingDependencyException as _BotocoreMissingDepError
     _BOTO3_AVAILABLE = True
 except ImportError:
     _BOTO3_AVAILABLE = False
@@ -192,7 +192,7 @@ class NetworkChokepoint:
             prefixes = [cp["Prefix"] for cp in resp.get("CommonPrefixes") or []]
             keys = [obj["Key"] for obj in resp.get("Contents") or []]
             return {"prefixes": prefixes, "keys": keys, "error_code": None}
-        except NoCredentialsError:
+        except (NoCredentialsError, _BotocoreMissingDepError):
             return {"prefixes": [], "keys": [], "error_code": "NO_CREDENTIALS"}
         except ClientError as exc:
             code = exc.response.get("Error", {}).get("Code", "")
@@ -258,8 +258,11 @@ def _aws_identity_preflight(chokepoint: NetworkChokepoint) -> tuple[bool, str]:
         sts = boto3.client("sts")
         data = sts.get_caller_identity()
         account = data.get("Account", "")
+        # Never store more than last 4 digits
         suffix = account[-4:] if account else ""
         return True, suffix
+    except (_BotocoreMissingDepError, NoCredentialsError):
+        return False, ""
     except Exception:
         return False, ""
 
@@ -461,7 +464,10 @@ def _list_explorer_block_files(
         cur += timedelta(days=1)
 
     files: list[tuple[str, int]] = []
-    s3 = boto3.client("s3")
+    try:
+        s3 = boto3.client("s3")
+    except (_BotocoreMissingDepError, NoCredentialsError, Exception):
+        return []
     for prefix in day_prefixes:
         kwargs: dict = {
             "Bucket": EXPLORER_BLOCK_BUCKET,
@@ -470,7 +476,7 @@ def _list_explorer_block_files(
         }
         try:
             resp = s3.list_objects_v2(**kwargs)
-        except Exception:
+        except (_BotocoreMissingDepError, NoCredentialsError, ClientError, Exception):
             continue
         for obj in resp.get("Contents") or []:
             s3_path = f"s3://{EXPLORER_BLOCK_BUCKET}/{obj['Key']}"
