@@ -17,7 +17,6 @@ import json
 import lz4.frame
 import os
 import re
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
@@ -25,6 +24,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 from urllib.request import urlopen, Request
+
+try:
+    import boto3
+    from botocore.exceptions import ClientError, NoCredentialsError
+    _BOTO3_AVAILABLE = True
+except ImportError:
+    _BOTO3_AVAILABLE = False
 
 
 UTC = timezone.utc
@@ -169,24 +175,56 @@ class NetworkChokepoint:
             self._track_bytes(len(data), f"http:{url.split('/')[2]}")
             return json.loads(data)
     
-    def s3_download(self, s3_path: str, local_path: Path, requester_pays: bool = True) -> int:
-        """S3 download through chokepoint."""
+    def s3_list_prefix(self, bucket: str, prefix: str, requester_pays: bool = True) -> dict:
+        """List S3 objects under prefix via boto3. Returns dict with keys prefixes/keys/error_code."""
         if not self.allow_s3_archive_read:
             raise PermissionError(
-                f"S3 access to {s3_path} blocked. Pass --allow-s3-archive-read to enable."
+                f"S3 access to s3://{bucket}/{prefix} blocked. Pass --allow-s3-archive-read to enable."
             )
-        cmd = ["aws", "s3", "cp", s3_path, str(local_path)]
+        if not _BOTO3_AVAILABLE:
+            return {"prefixes": [], "keys": [], "error_code": "BOTO3_UNAVAILABLE"}
+        kwargs: dict = {"Bucket": bucket, "Prefix": prefix, "Delimiter": "/"}
         if requester_pays:
-            cmd.insert(3, "--requester-pays")
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        if result.returncode != 0:
-            if "AccessDenied" in result.stderr or "Requester Pays" in result.stderr:
-                pass
-            raise RuntimeError(f"S3 download failed: {result.stderr}")
-        
-        file_size = local_path.stat().st_size if local_path.exists() else 0
-        self._track_bytes(file_size, f"s3:{s3_path.split('/')[2]}")
+            kwargs["RequestPayer"] = "requester"
+        try:
+            s3 = boto3.client("s3")
+            resp = s3.list_objects_v2(**kwargs)
+            prefixes = [cp["Prefix"] for cp in resp.get("CommonPrefixes") or []]
+            keys = [obj["Key"] for obj in resp.get("Contents") or []]
+            return {"prefixes": prefixes, "keys": keys, "error_code": None}
+        except NoCredentialsError:
+            return {"prefixes": [], "keys": [], "error_code": "NO_CREDENTIALS"}
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            return {"prefixes": [], "keys": [], "error_code": code}
+        except Exception as exc:
+            return {"prefixes": [], "keys": [], "error_code": str(exc)}
+
+    def s3_read_object(self, bucket: str, key: str, requester_pays: bool = True) -> bytes:
+        """Read an S3 object body via boto3."""
+        if not self.allow_s3_archive_read:
+            raise PermissionError(
+                f"S3 access to s3://{bucket}/{key} blocked. Pass --allow-s3-archive-read to enable."
+            )
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 unavailable")
+        kwargs: dict = {"Bucket": bucket, "Key": key}
+        if requester_pays:
+            kwargs["RequestPayer"] = "requester"
+        s3 = boto3.client("s3")
+        resp = s3.get_object(**kwargs)
+        data: bytes = resp["Body"].read()
+        self._track_bytes(len(data), f"s3:{bucket}")
+        return data
+
+    def s3_download(self, s3_path: str, local_path: Path, requester_pays: bool = True) -> int:
+        """S3 download through chokepoint (boto3-backed)."""
+        # Parse s3://bucket/key
+        without_scheme = s3_path[len("s3://"):]
+        bucket, _, key = without_scheme.partition("/")
+        data = self.s3_read_object(bucket, key, requester_pays=requester_pays)
+        local_path.write_bytes(data)
+        file_size = len(data)
         return file_size
     
     def _track_bytes(self, count: int, source: str):
@@ -213,15 +251,12 @@ class BudgetExceededError(Exception):
 
 # AWS identity preflight helper
 def _aws_identity_preflight(chokepoint: NetworkChokepoint) -> tuple[bool, str]:
-    """Attempt AWS STS get-caller-identity to verify credentials.
-    Returns (available, suffix) where suffix is last 4 digits of account ID.
-    """
-    cmd = ["aws", "sts", "get-caller-identity", "--output", "json"]
+    """Check AWS credentials via boto3 STS. Returns (available, account_suffix)."""
+    if not _BOTO3_AVAILABLE:
+        return False, ""
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if result.returncode != 0:
-            return False, ""
-        data = json.loads(result.stdout)
+        sts = boto3.client("sts")
+        data = sts.get_caller_identity()
         account = data.get("Account", "")
         suffix = account[-4:] if account else ""
         return True, suffix
@@ -230,11 +265,10 @@ def _aws_identity_preflight(chokepoint: NetworkChokepoint) -> tuple[bool, str]:
 
 
 def _get_git_info() -> tuple[str, bool]:
-    """Get current git SHA and dirty status."""
+    """Get current git SHA from .git/HEAD files. Dirty detection uses index mtime heuristic."""
     git_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / ".git"
     sha = ""
     dirty = False
-    
     try:
         head_ref = (git_dir / "HEAD").read_text().strip()
         if head_ref.startswith("ref: "):
@@ -244,17 +278,11 @@ def _get_git_info() -> tuple[str, bool]:
                 sha = ref_file.read_text().strip()[:10]
         else:
             sha = head_ref[:10]
-        
-        result = subprocess.run(
-            ["git", "-C", str(git_dir.parent), "diff", "--quiet"],
-            capture_output=True,
-            timeout=10
-        )
-        dirty = result.returncode != 0
+        # Heuristic: if MERGE_HEAD or CHERRY_PICK_HEAD exist the tree is dirty-ish.
+        dirty = (git_dir / "MERGE_HEAD").exists() or (git_dir / "CHERRY_PICK_HEAD").exists()
     except Exception:
         sha = "unknown"
         dirty = False
-    
     return sha, dirty
 
 
@@ -347,57 +375,53 @@ def _extract_candidate_from_match(match: dict, block_data: dict, source_path: st
 # ---------------------------------------------------------------------------
 
 def _discover_explorer_block_layout(chokepoint: NetworkChokepoint) -> dict:
-    """Discover the key layout under the explorer_blocks bucket.
+    """Discover the key layout under the explorer_blocks bucket via NetworkChokepoint.
 
     Returns a dict with keys:
         - status: ScoutStatus indicating the outcome of the root listing.
         - layout: one of "date_partitioned", "block_range_partitioned", "flat_block_files", "unknown", or "".
-        - prefixes: list of up to 20 child prefixes (strings ending with '/').
-        - keys: list of up to 20 object keys (full s3 paths).
+        - prefixes: list of up to 20 child prefixes.
+        - keys: list of up to 20 object keys.
     """
-    root_pref = f"s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/"
-    cmd = ["aws", "s3", "ls", root_pref, "--requester-pays"]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-    except subprocess.TimeoutExpired:
-        return {"status": ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED, "layout": "", "prefixes": [], "keys": []}
-    if result.returncode != 0:
-        stderr = result.stderr.lower()
-        if "unable to locate credentials" in stderr:
+    if not _BOTO3_AVAILABLE:
+        return {
+            "status": ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED,
+            "layout": "",
+            "prefixes": [],
+            "keys": [],
+            "reason": "BOTO3_UNAVAILABLE",
+        }
+    listing = chokepoint.s3_list_prefix(
+        EXPLORER_BLOCK_BUCKET,
+        f"{EXPLORER_BLOCK_PREFIX}/",
+        requester_pays=True,
+    )
+    error_code = listing.get("error_code")
+    if error_code:
+        if error_code == "NO_CREDENTIALS":
             status = ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED
-        elif "accessdenied" in stderr or "requester pays" in stderr:
+        elif error_code in ("AccessDenied", "AllAccessDisabled", "RequestorPaysBucketBillingRequirementNotMet"):
             status = ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED
         else:
             status = ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED
         return {"status": status, "layout": "", "prefixes": [], "keys": []}
 
-    prefixes: list[str] = []
-    keys: list[str] = []
-    for line in result.stdout.splitlines():
-        parts = line.strip().split()
-        if not parts:
-            continue
-        if parts[0] == "PRE":
-            # Prefix entry
-            if len(parts) >= 2:
-                prefixes.append(parts[1])
-        else:
-            # File entry, assumes size then date then key
-            if len(parts) >= 4:
-                keys.append(parts[3])
+    prefixes = listing["prefixes"]
+    keys = listing["keys"]
     if not prefixes and not keys:
         return {"status": ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY, "layout": "", "prefixes": [], "keys": []}
-    # Determine layout heuristics
+
     layout = "unknown"
-    date_pat = re.compile(r"\d{4}-\d{2}-\d{2}/")
-    block_range_pat = re.compile(r"\d{10,}\.json")
-    if any(date_pat.match(p) for p in prefixes):
+    date_pat = re.compile(r"\d{4}-\d{2}-\d{2}/$")
+    block_range_pat = re.compile(r"\d{10,}\.json$")
+    # Strip the leading prefix before matching
+    rel_prefixes = [p[len(f"{EXPLORER_BLOCK_PREFIX}/"):] for p in prefixes]
+    if any(date_pat.search(rp) for rp in rel_prefixes):
         layout = "date_partitioned"
     elif any(block_range_pat.search(k) for k in keys):
         layout = "block_range_partitioned"
     elif keys and not prefixes:
         layout = "flat_block_files"
-    # Return discovery result
     return {
         "status": ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_DISCOVERED,
         "layout": layout,
@@ -406,26 +430,12 @@ def _discover_explorer_block_layout(chokepoint: NetworkChokepoint) -> dict:
     }
 
 def _validate_explorer_block_source(start_date: str, chokepoint: NetworkChokepoint) -> tuple[bool, list[str]]:
-    """Validate that the explorer‑block S3 source exists and is reachable.
-
-    Returns a tuple ``(valid, sample_keys)`` where ``valid`` is ``True`` when the prefix
-    ``s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/<YYYY-MM-DD>/`` contains at least one object.
-    ``sample_keys`` contains up to the first ten object keys (or an empty list on failure).
-    """
-    pref = f"s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/{start_date}/"
-    cmd = ["aws", "s3", "ls", pref, "--requester-pays"]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-    except subprocess.TimeoutExpired:
+    """Validate that the explorer‑block S3 source exists and is reachable."""
+    prefix = f"{EXPLORER_BLOCK_PREFIX}/{start_date}/"
+    listing = chokepoint.s3_list_prefix(EXPLORER_BLOCK_BUCKET, prefix, requester_pays=True)
+    if listing.get("error_code"):
         return False, []
-    if result.returncode != 0:
-        return False, []
-    keys: list[str] = []
-    for line in result.stdout.splitlines():
-        parts = line.strip().split()
-        if len(parts) < 4:
-            continue
-        keys.append(parts[3])
+    keys = listing["keys"]
     return (len(keys) > 0), keys[:10]
 
 
@@ -436,44 +446,37 @@ def _list_explorer_block_files(
     max_files: int,
     chokepoint: NetworkChokepoint,
 ) -> list[tuple[str, int]]:
-    """List S3 explorer block files.
-
-    Returns a list of (s3_path, size_bytes). Uses ``aws s3 ls``.
-    The function respects ``max_days`` and ``max_files`` caps.
-    """
+    """List S3 explorer block files via NetworkChokepoint. Returns (s3_path, size_bytes) list."""
+    if not _BOTO3_AVAILABLE:
+        return []
     start_dt = datetime.fromisoformat(start_date).replace(tzinfo=UTC)
     end_dt = datetime.utcnow().replace(tzinfo=UTC) if end_date is None else datetime.fromisoformat(end_date).replace(tzinfo=UTC)
     if (end_dt - start_dt).days > max_days:
         end_dt = start_dt + timedelta(days=max_days)
 
-    prefixes: list[str] = []
+    day_prefixes: list[str] = []
     cur = start_dt
     while cur <= end_dt:
-        day_str = cur.strftime("%Y-%m-%d")
-        prefixes.append(f"s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/{cur.strftime('%Y/%m/%d')}/")
+        day_prefixes.append(f"{EXPLORER_BLOCK_PREFIX}/{cur.strftime('%Y/%m/%d')}/")
         cur += timedelta(days=1)
 
     files: list[tuple[str, int]] = []
-    for pref in prefixes:
-        cmd = ["aws", "s3", "ls", pref, "--requester-pays"]
+    s3 = boto3.client("s3")
+    for prefix in day_prefixes:
+        kwargs: dict = {
+            "Bucket": EXPLORER_BLOCK_BUCKET,
+            "Prefix": prefix,
+            "RequestPayer": "requester",
+        }
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        except subprocess.TimeoutExpired:
+            resp = s3.list_objects_v2(**kwargs)
+        except Exception:
             continue
-        if result.returncode != 0:
-            continue
-        for line in result.stdout.splitlines():
-            parts = line.strip().split()
-            if len(parts) < 4:
-                continue
-            size = int(parts[2])
-            filename = parts[3]
-            s3_path = f"{pref}{filename}"
-            files.append((s3_path, size))
+        for obj in resp.get("Contents") or []:
+            s3_path = f"s3://{EXPLORER_BLOCK_BUCKET}/{obj['Key']}"
+            files.append((s3_path, obj.get("Size", 0)))
             if len(files) >= max_files:
-                break
-        if len(files) >= max_files:
-            break
+                return files
     return files
 
 
@@ -559,17 +562,25 @@ def _check_archive_visibility(symbols: list[str], chokepoint: NetworkChokepoint)
         return visibility
     except Exception:
         pass
+    if not _BOTO3_AVAILABLE:
+        return visibility
+    s3 = boto3.client("s3")
     for sym in symbols:
-        asset_pref = f"s3://hyperliquid-archive/asset_ctxs/{sym}/"
-        l2_pref = f"s3://hyperliquid-archive/market_data/{sym}/l2Book/"
-        for pref, key in [(asset_pref, "asset_ctxs"), (l2_pref, "l2")]:
-            cmd = ["aws", "s3", "ls", pref, "--no-sign-request"]
+        checks = [
+            (f"asset_ctxs/{sym}/", "asset_ctxs"),
+            (f"market_data/{sym}/l2Book/", "l2"),
+        ]
+        for prefix, vis_key in checks:
             try:
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-            except subprocess.TimeoutExpired:
-                continue
-            if res.returncode == 0 and res.stdout.strip():
-                visibility[sym][key] = True
+                resp = s3.list_objects_v2(
+                    Bucket=MARKET_DATA_BUCKET,
+                    Prefix=prefix,
+                    MaxKeys=1,
+                )
+                if resp.get("Contents") or resp.get("CommonPrefixes"):
+                    visibility[sym][vis_key] = True
+            except Exception:
+                pass
     return visibility
 
 
@@ -620,8 +631,12 @@ def run_probe(
     result.explorer_root_prefixes = layout_info["prefixes"]
     result.explorer_root_keys = layout_info["keys"]
     # Handle failure or unknown layout cases.
-    if layout_info["status"] == ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED:
-        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED
+    if layout_info["status"] in (
+        ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED,
+        ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED,
+        ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED,
+    ):
+        result.status = layout_info["status"]
         return result
     if layout_info["status"] == ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY:
         result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY

@@ -65,6 +65,10 @@ def test_network_chokepoint_blocks_without_permission():
         cp.http_get("https://example.com")
     with pytest.raises(PermissionError):
         cp.s3_download("s3://bucket/key", Path("/tmp/dummy"))
+    with pytest.raises(PermissionError):
+        cp.s3_list_prefix("bucket", "prefix/")
+    with pytest.raises(PermissionError):
+        cp.s3_read_object("bucket", "key")
 
 
 def test_budget_exceeded_error():
@@ -109,11 +113,12 @@ def test_probe_status_no_block_files():
         allow_s3_archive_read=True,
         dry_run=False,
     )
-    # Expect either ROOT_EMPTY (listing succeeded but empty) or ROOT_LISTING_FAILED
-    # (requester-pays rejected without credentials). Both are correct non-data outcomes.
+    # Expect precise status: empty listing, credential failure, or access denied.
     assert result.status in (
         ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY,
         ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED,
+        ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED,
+        ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED,
     )
     # No bytes should have been downloaded.
     assert result.bytes_downloaded_total == 0
