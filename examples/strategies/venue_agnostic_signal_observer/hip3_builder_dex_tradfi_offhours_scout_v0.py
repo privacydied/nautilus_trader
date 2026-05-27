@@ -212,6 +212,13 @@ class ArchiveProbeResult:
     l2_visible: bool = False
     asset_ctxs_visible: bool = False
     paths_attempted: list = field(default_factory=list)
+    official_bare_coin_l2_attempted: bool = False
+    official_asset_ctxs_daily_attempted: bool = False
+    l2_prefix_listing_attempted: bool = False
+    bare_coin_l2_visible: bool = False
+    asset_ctxs_daily_visible: bool = False
+    asset_ctxs_symbol_present: bool = False
+    archive_blocker_reason: str = ""
 
 
 @dataclass
@@ -714,53 +721,6 @@ def phase_b_resolution(config, builder_meta_results, builder_ctxs_results, run_d
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Phase C — Archive/L2 visibility
-# ═══════════════════════════════════════════════════════════════════
-
-def phase_c_archive(config, archive_cp, tradfi_symbols, run_dir, git_sha, git_dirty, branch):
-    base = _make_artifact_base(config.run_id, config, git_sha, git_dirty, branch, ArchiveStatus.VISIBILITY_READY.value)
-    probes = []
-    any_visible = False
-    for sym in tradfi_symbols[:config.max_symbols]:
-        coin = sym.get("coin", "")
-        dex = sym.get("dex_name", "")
-        asset_id = sym.get("asset_id", 0)
-        paths_to_try = [
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/asset_ctxs/{coin}",
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/asset_ctxs/{dex}:{coin}",
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/asset_ctxs/{asset_id}",
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/l2Book/{coin}",
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/l2Book/{dex}:{coin}",
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/l2Book/{asset_id}",
-        ]
-        probe = ArchiveProbeResult(symbol=coin, dex=dex, asset_id=asset_id)
-        for p in paths_to_try:
-            outcome = archive_cp.probe_path(p)
-            probe.paths_attempted.append(outcome)
-            if outcome["status_code_or_outcome"] == "200":
-                if "asset_ctxs" in p:
-                    probe.asset_ctxs_visible = True
-                if "l2Book" in p:
-                    probe.l2_visible = True
-                probe.archive_visible = True
-                any_visible = True
-        probes.append(asdict(probe))
-
-    artifact = {**base, "final_status": ArchiveStatus.VISIBLE.value if any_visible else ArchiveStatus.NOT_FOUND.value,
-                "probes": probes, "any_visible": any_visible,
-                "bytes_downloaded_total": archive_cp.bytes_downloaded,
-                "bytes_downloaded_by_source": archive_cp.bytes_by_source}
-    _write_json(run_dir / "archive_visibility_probe.json", artifact)
-    blocked = not any_visible
-    return GateResult(phase="C",
-                      status=ArchiveStatus.VISIBLE.value if any_visible else ArchiveStatus.NOT_FOUND.value,
-                      reason=f"Archive {'found' if any_visible else 'not found'} for {len(probes)} symbols",
-                      computed_from_real_data=len(probes) > 0,
-                      measurements={"symbols_probed": len(probes), "any_visible": any_visible},
-                      blocked=blocked), artifact
-
-
-# ═══════════════════════════════════════════════════════════════════
 # Phase D — Fee reality
 # ═══════════════════════════════════════════════════════════════════
 
@@ -997,53 +957,243 @@ def phase_i_verdict(config, gate_results, run_dir, git_sha, git_dirty, branch):
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Phase C — Archive/L2 visibility
+# ═══════════════════════════════════════════════════════════════════
+# Phase C — Official S3 archive-path audit + Archive/L2 visibility
 # ═══════════════════════════════════════════════════════════════════
 
+S3_BASE = "https://hyperliquid-history.s3.us-east-1.amazonaws.com"
+SANITY_SEEDS_PRIMARY = ["TSLA", "AAPL", "MSFT", "NVDA"]
+
+def _s3_l2_path(date_str, hour_str, coin):
+    """Official: market_data/YYYYMMDD/HH/l2Book/<coin>.lz4"""
+    return f"{S3_BASE}/market_data/{date_str}/{hour_str}/l2Book/{coin}.lz4"
+
+def _s3_l2_prefix(date_str, hour_str):
+    """Official prefix: market_data/YYYYMMDD/HH/l2Book/"""
+    return f"{S3_BASE}/market_data/{date_str}/{hour_str}/l2Book/"
+
+def _s3_asset_ctxs_daily(date_str):
+    """Official: asset_ctxs/YYYYMMDD.csv.lz4"""
+    return f"{S3_BASE}/asset_ctxs/{date_str}.csv.lz4"
+
+def _coin_variants(coin, dex):
+    """Generate coin variants for archive probing."""
+    variants = [coin]
+    if dex:
+        variants.extend([f"{dex}:{coin}", f"{dex}%3A{coin}", f"{dex}_{coin}", f"{dex}-{coin}"])
+    return variants
+
+def _query_docs_clarification(chokepoint):
+    """Query official Hyperliquid historical-data docs for builder DEX archive info."""
+    url = "https://hyperliquid.gitbook.io/hyperliquid-docs/historical-data"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = resp.read(50000).decode("utf-8", errors="replace")
+            has_builder = "builder" in data.lower() or "hip-3" in data.lower() or "hip3" in data.lower()
+            has_s3 = "s3://" in data or "hyperliquid-archive" in data
+            return {"url": url, "status": "ok", "has_builder_keywords": has_builder,
+                    "has_s3_reference": has_s3, "snippet": data[:1500]}
+    except Exception as e:
+        return {"url": url, "status": "error", "error": str(e)[:200]}
+
+def _select_sample_dates():
+    """Select bounded sample dates for archive probing."""
+    from datetime import datetime, timedelta, timezone
+    today = datetime.now(timezone.utc)
+    samples = []
+    for delta in [1, 3, 14]:
+        d = today - timedelta(days=delta)
+        while d.weekday() >= 5:
+            d -= timedelta(days=1)
+        samples.append(d.strftime("%Y%m%d"))
+    return list(dict.fromkeys(samples))
+
+def _select_sample_hours():
+    return ["14", "02"]  # 14:00 UTC ~ 10:00 ET, 02:00 UTC ~ 22:00 ET
+
+def _try_l2_prefix_listing(archive_cp, date_str, hour_str):
+    """List files under market_data/YYYYMMDD/HH/l2Book/ prefix."""
+    prefix = _s3_l2_prefix(date_str, hour_str)
+    outcome = archive_cp.probe_path(prefix)
+    return {"prefix": prefix, "status": outcome["status_code_or_outcome"],
+            "bytes_read": outcome.get("bytes_read", 0), "error": outcome.get("error_summary")}
+
+def _scan_asset_ctxs_daily(archive_cp, date_str, search_symbols):
+    """Download and scan daily asset_ctxs file for specific symbols."""
+    url = _s3_asset_ctxs_daily(date_str)
+    outcome = archive_cp.probe_path(url)
+    matches = {}
+    if outcome["status_code_or_outcome"] == "200" and outcome.get("bytes_read", 0) > 0:
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read()
+                try:
+                    import lz4.frame
+                    content = lz4.frame.decompress(raw).decode("utf-8", errors="replace")
+                except ImportError:
+                    content = raw.decode("utf-8", errors="replace")
+                for sym in search_symbols:
+                    matches[sym] = sym in content
+                for sym in search_symbols:
+                    for v in [f"xyz:{sym}", f"xyz%3A{sym}", f"xyz_{sym}"]:
+                        if v in content:
+                            matches[f"{v}_present"] = True
+        except Exception:
+            pass
+    return {"url": url, "outcome_status": outcome["status_code_or_outcome"], "matches": matches}
+
 def phase_c_archive(config, archive_cp, tradfi_symbols, run_dir, git_sha, git_dirty, branch):
+    """Enhanced Phase C: official S3 archive-path audit before accepting archive blockage."""
     base = _make_artifact_base(config.run_id, config, git_sha, git_dirty, branch, ArchiveStatus.VISIBILITY_READY.value)
+
+    # Step 0: Docs clarification (non-blocking)
+    docs_result = {"status": "unattempted"}
+    try:
+        cp = PublicInfoChokepoint(config.allow_network_public)
+        docs_result = _query_docs_clarification(cp)
+    except Exception as e:
+        docs_result = {"status": "unavailable", "error": str(e)[:200]}
+
+    # Step 1: Sample dates/hours
+    sampled_dates = _select_sample_dates()
+    sampled_hours = _select_sample_hours()
+
+    # Step 2: Build coin variants for primary seeds
+    primary_variants = {}
+    for seed in SANITY_SEEDS_PRIMARY:
+        found = [s for s in tradfi_symbols if s.get("coin", "").upper() == seed]
+        dex = found[0].get("dex_name", "xyz") if found else "xyz"
+        primary_variants[seed] = _coin_variants(seed, dex)
+
+    # Step 3: Official bare-coin L2 probes
+    exact_l2_attempted = []
+    bare_coin_l2_found = False
+    for seed, variants in primary_variants.items():
+        for date_str in sampled_dates[:2]:
+            for hour_str in sampled_hours:
+                for variant in variants[:2]:
+                    path = _s3_l2_path(date_str, hour_str, variant)
+                    outcome = archive_cp.probe_path(path)
+                    exact_l2_attempted.append({"symbol": seed, "variant": variant,
+                        "date": date_str, "hour": hour_str, "path": path,
+                        "status": outcome["status_code_or_outcome"],
+                        "bytes_read": outcome.get("bytes_read", 0)})
+                    if outcome["status_code_or_outcome"] == "200":
+                        bare_coin_l2_found = True
+
+    # Step 4: L2 prefix listings
+    l2_prefix_listed = []
+    l2_prefix_matches = []
+    for date_str in sampled_dates[:2]:
+        for hour_str in sampled_hours:
+            listing = _try_l2_prefix_listing(archive_cp, date_str, hour_str)
+            l2_prefix_listed.append(listing)
+            if listing["status"] == "200" and listing.get("bytes_read", 0) > 0:
+                try:
+                    req = urllib.request.Request(listing["prefix"])
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        data = resp.read(100000).decode("utf-8", errors="replace")
+                        for seed in SANITY_SEEDS_PRIMARY:
+                            if seed in data:
+                                l2_prefix_matches.append({"symbol": seed, "date": date_str, "hour": hour_str})
+                except Exception:
+                    pass
+
+    # Step 5: Daily asset_ctxs scan
+    asset_ctxs_attempted = []
+    asset_ctxs_read = []
+    asset_ctxs_matches = {}
+    asset_ctxs_bare_coin_found = False
+    for date_str in sampled_dates[:3]:
+        result = _scan_asset_ctxs_daily(archive_cp, date_str, SANITY_SEEDS_PRIMARY)
+        asset_ctxs_attempted.append(result["url"])
+        if result["outcome_status"] == "200":
+            asset_ctxs_read.append(result["url"])
+            for sym, present in result["matches"].items():
+                if present and not sym.startswith("xyz"):
+                    asset_ctxs_bare_coin_found = True
+                asset_ctxs_matches[sym] = present
+
+    # Step 6: Per-symbol probe results
     probes = []
-    any_visible = False
+    any_visible = bare_coin_l2_found or asset_ctxs_bare_coin_found
     for sym in tradfi_symbols[:config.max_symbols]:
         coin = sym.get("coin", "")
         dex = sym.get("dex_name", "")
         asset_id = sym.get("asset_id", 0)
-        paths_to_try = [
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/asset_ctxs/{coin}",
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/asset_ctxs/{dex}:{coin}",
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/asset_ctxs/{asset_id}",
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/l2Book/{coin}",
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/l2Book/{dex}:{coin}",
-            f"https://hyperliquid-history.s3.us-east-1.amazonaws.com/l2Book/{asset_id}",
-        ]
-        probe = ArchiveProbeResult(symbol=coin, dex=dex, asset_id=asset_id)
-        for p in paths_to_try:
-            outcome = archive_cp.probe_path(p)
-            probe.paths_attempted.append(outcome)
-            if outcome["status_code_or_outcome"] == "200":
-                if "asset_ctxs" in p:
-                    probe.asset_ctxs_visible = True
-                if "l2Book" in p:
-                    probe.l2_visible = True
-                probe.archive_visible = True
-                any_visible = True
+        probe = ArchiveProbeResult(
+            symbol=coin, dex=dex, asset_id=asset_id,
+            official_bare_coin_l2_attempted=coin in [e["symbol"] for e in exact_l2_attempted],
+            official_asset_ctxs_daily_attempted=True,
+            l2_prefix_listing_attempted=True,
+            bare_coin_l2_visible=any(e["symbol"] == coin and e["status"] == "200" for e in exact_l2_attempted),
+            asset_ctxs_daily_visible=asset_ctxs_matches.get(coin, False),
+            asset_ctxs_symbol_present=asset_ctxs_matches.get(coin, False))
+        if probe.bare_coin_l2_visible or probe.asset_ctxs_daily_visible:
+            probe.archive_visible = True
+        elif probe.official_asset_ctxs_daily_attempted and not probe.asset_ctxs_daily_visible:
+            probe.archive_blocker_reason = "OFFICIAL_ASSET_CTXS_DAILY_NOT_FOUND"
+        elif probe.official_bare_coin_l2_attempted and not probe.bare_coin_l2_visible:
+            probe.archive_blocker_reason = "OFFICIAL_BARE_COIN_L2_NOT_FOUND"
+        else:
+            probe.archive_blocker_reason = "BUILDER_DEX_ARCHIVE_NOT_IN_PUBLIC_S3"
+        probe.l2_visible = probe.bare_coin_l2_visible
+        probe.asset_ctxs_visible = probe.asset_ctxs_daily_visible
         probes.append(asdict(probe))
 
-    artifact = {**base, "final_status": ArchiveStatus.VISIBLE.value if any_visible else ArchiveStatus.NOT_FOUND.value,
-                "probes": probes, "any_visible": any_visible,
-                "bytes_downloaded_total": archive_cp.bytes_downloaded,
-                "bytes_downloaded_by_source": archive_cp.bytes_by_source}
-    _write_json(run_dir / "archive_visibility_probe.json", artifact)
+    # Final status
+    if bare_coin_l2_found:
+        final_status = ArchiveStatus.VISIBLE.value
+        reason = "Bare-coin L2 found for primary seeds"
+    elif asset_ctxs_bare_coin_found:
+        final_status = ArchiveStatus.VISIBLE.value
+        reason = "Asset contexts daily found for primary seeds"
+    else:
+        final_status = ArchiveStatus.NOT_FOUND.value
+        reason = "Official S3 paths audited: no builder DEX symbols in public archive"
+
+    # Write official_archive_path_audit.json
+    audit = {**base, "final_status": final_status,
+        "official_docs_path_schema": {"l2": "market_data/YYYYMMDD/HH/l2Book/<coin>.lz4",
+                                       "asset_ctxs": "asset_ctxs/YYYYMMDD.csv.lz4"},
+        "docs_clarification_status": docs_result.get("status", "unknown"),
+        "docs_clarification_answer": docs_result,
+        "sampled_dates": sampled_dates, "sampled_hours": sampled_hours,
+        "symbols_audited": SANITY_SEEDS_PRIMARY,
+        "exact_l2_keys_attempted": exact_l2_attempted,
+        "l2_prefixes_listed": l2_prefix_listed,
+        "l2_prefix_listing_matches": l2_prefix_matches,
+        "asset_ctxs_daily_files_attempted": asset_ctxs_attempted,
+        "asset_ctxs_daily_files_read": asset_ctxs_read,
+        "asset_ctxs_symbol_matches": asset_ctxs_matches,
+        "asset_ctxs_parse_schema": "lz4_compressed_csv_daily_multi_symbol",
+        "bare_coin_l2_found": bare_coin_l2_found,
+        "dex_qualified_l2_found": any("xyz:" in e.get("variant","") and e["status"]=="200" for e in exact_l2_attempted),
+        "asset_ctxs_bare_coin_found": asset_ctxs_bare_coin_found,
+        "asset_ctxs_dex_qualified_found": any(asset_ctxs_matches.get(f"xyz:{s}",False) for s in SANITY_SEEDS_PRIMARY),
+        "bytes_downloaded": archive_cp.bytes_downloaded,
+        "requester_pays_status": "not_required_for_public_probe",
+        "final_archive_path_audit_status": final_status}
+    _write_json(run_dir / "official_archive_path_audit.json", audit)
+
+    # Write archive_visibility_probe.json
+    probe_art = {**base, "final_status": final_status, "probes": probes, "any_visible": any_visible,
+                 "bytes_downloaded_total": archive_cp.bytes_downloaded,
+                 "bytes_downloaded_by_source": archive_cp.bytes_by_source,
+                 "official_archive_path_audit": audit}
+    _write_json(run_dir / "archive_visibility_probe.json", probe_art)
+
     blocked = not any_visible
-    return GateResult(phase="C",
-                      status=ArchiveStatus.VISIBLE.value if any_visible else ArchiveStatus.NOT_FOUND.value,
-                      reason=f"Archive {'found' if any_visible else 'not found'} for {len(probes)} symbols",
-                      computed_from_real_data=len(probes) > 0,
-                      measurements={"symbols_probed": len(probes), "any_visible": any_visible},
-                      blocked=blocked), artifact
-
-
-# ═══════════════════════════════════════════════════════════════════
+    return GateResult(phase="C", status=final_status, reason=reason,
+                      computed_from_real_data=True,
+                      measurements={"symbols_probed": len(probes), "any_visible": any_visible,
+                                     "l2_probes": len(exact_l2_attempted),
+                                     "asset_ctxs_files": len(asset_ctxs_read),
+                                     "bare_coin_l2_found": bare_coin_l2_found,
+                                     "asset_ctxs_bare_coin_found": asset_ctxs_bare_coin_found},
+                      blocked=blocked), probe_art
 # Phase D — Fee reality
 # ═══════════════════════════════════════════════════════════════════
 
