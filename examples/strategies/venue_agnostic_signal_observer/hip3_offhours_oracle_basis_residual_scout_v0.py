@@ -1034,7 +1034,7 @@ def probe_archive_coverage(
                     f"s3://hyperliquid-archive/market_data/{probe_date}/",
                     timeout=30,
                 )
-                l2_hours = [d["name"] for d in l2_dates if d.get("is_prefix")]
+                l2_hours = [d["name"].rstrip("/") for d in l2_dates if d.get("is_prefix")]
                 if l2_hours:
                     # Probe a single hour for the symbol
                     sample_hour = l2_hours[0]
