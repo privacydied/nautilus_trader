@@ -87,6 +87,16 @@ class ScoutStatus(Enum):
     HIP3_DEPLOYMENT_EVENT_SCHEMA_UNKNOWN = "HIP3_DEPLOYMENT_EVENT_SCHEMA_UNKNOWN"
     HIP3_DEPLOYMENT_EVENT_SEARCH_UNDERPOWERED = "HIP3_DEPLOYMENT_EVENT_SEARCH_UNDERPOWERED"
     HIP3_DEPLOYMENT_EVENT_SEARCH_ERROR = "HIP3_DEPLOYMENT_EVENT_SEARCH_ERROR"
+    # P3 confirmation statuses
+    HIP3_P3_CONFIRMATION_READY = "HIP3_P3_CONFIRMATION_READY"
+    HIP3_P3_CANDIDATES_CONFIRMED_BUILDER_DEPLOYED = "HIP3_P3_CANDIDATES_CONFIRMED_BUILDER_DEPLOYED"
+    HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED = "HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED"
+    HIP3_P3_CANDIDATES_CONFIG_ONLY = "HIP3_P3_CANDIDATES_CONFIG_ONLY"
+    HIP3_P3_CANDIDATES_OPAQUE = "HIP3_P3_CANDIDATES_OPAQUE"
+    HIP3_P3_CANDIDATES_NOT_BUILDER_DEPLOYED = "HIP3_P3_CANDIDATES_NOT_BUILDER_DEPLOYED"
+    HIP3_P3_ARCHIVE_CROSS_REFERENCE_MISSING = "HIP3_P3_ARCHIVE_CROSS_REFERENCE_MISSING"
+    HIP3_P3_CONFIRMATION_INCONCLUSIVE = "HIP3_P3_CONFIRMATION_INCONCLUSIVE"
+    HIP3_P3_ERROR = "HIP3_P3_ERROR"
 
 
 STUDY_ID = "hip3_builder_deployment_event_discovery_v0"
@@ -2240,6 +2250,540 @@ def run_p2_deployment_search(
 
 
 
+
+
+
+# ---------------------------------------------------------------------------
+# P3 confirmation mode
+# ---------------------------------------------------------------------------
+
+@dataclass
+class P3CandidateConfirmation:
+    """P3 confirmation result for a single P2 candidate."""
+    # P2 provenance
+    p2_source_key: str = ""
+    p2_source_content_hash: str = ""
+    p2_block_number: int | None = None
+    p2_block_timestamp_utc: str | None = None
+    p2_tx_index: int | None = None
+    p2_action_type: str = ""
+    p2_user_or_deployer: str | None = None
+    p2_matched_terms: list[str] = field(default_factory=list)
+    p2_candidate_class: str = ""
+    p2_redacted_excerpt_hash: str = ""
+    p2_window_name: str = ""
+    # P3 extraction
+    extracted_symbol: str | None = None
+    extracted_coin_id: str | None = None
+    extracted_deployer: str | None = None
+    extracted_external_perp_symbols: list[str] = field(default_factory=list)
+    extracted_config_fields: list[str] = field(default_factory=list)
+    extraction_class: str = "opaque_candidate"
+    # P3 classification
+    symbol_class: str = "unknown"
+    is_builder_deployed: bool = False
+    is_universe_update: bool = False
+    is_price_feed_update: bool = False
+    is_failed_transaction: bool = False
+    is_trading_action: bool = False
+    confirmation_status: str = "HIP3_P3_CANDIDATES_OPAQUE"
+    confirmation_note: str = ""
+    # Cross-reference
+    in_asset_ctxs: bool = False
+    in_public_info_universe: bool = False
+    in_l2_archive: bool = False
+    asset_ctxs_first_observed: str | None = None
+    universe_delta_match: bool = False
+    # Neighborhood
+    neighborhood_blocks_inspected: int = 0
+    neighborhood_actions_collected: int = 0
+    neighborhood_deployer_actions: list[dict] = field(default_factory=list)
+
+
+@dataclass
+class P3ConfirmationResult:
+    """Result of the P3 candidate confirmation pass."""
+    status: ScoutStatus | str
+    study_id: str = STUDY_ID
+    run_id: str = ""
+    created_at_utc: str = ""
+    git_sha: str = ""
+    git_dirty: bool = False
+    repo_root: str = ""
+    final_status: str = ""
+    safety_mode: str = SAFETY_MODE
+    schema_version: str = SCHEMA_VERSION
+    # P2 input
+    p2_input_report: str = ""
+    p2_report_commit: str = ""
+    p2_report_status: str = ""
+    # Counts
+    candidates_loaded: int = 0
+    candidates_symbol_extracted: int = 0
+    candidates_deployer_extracted: int = 0
+    candidates_confirmed_builder_deployed: int = 0
+    candidates_not_builder_deployed: int = 0
+    candidates_config_only: int = 0
+    candidates_opaque: int = 0
+    candidates_evm_payload: int = 0
+    # Cross-reference
+    symbols_by_class: dict[str, list[str]] = field(default_factory=dict)
+    asset_ctxs_cross_reference: dict[str, Any] = field(default_factory=dict)
+    l2_archive_cross_reference: dict[str, Any] = field(default_factory=dict)
+    deployer_cross_reference: dict[str, Any] = field(default_factory=dict)
+    # Confirmations
+    confirmations: list[P3CandidateConfirmation] = field(default_factory=list)
+    # Budget
+    bytes_downloaded: int = 0
+    explorer_blocks_read: int = 0
+
+
+# Known external perp symbols from SetGlobalAction universe updates
+# (extracted from P2 redacted excerpts)
+KNOWN_EXTERNAL_PERP_SYMBOLS = {
+    "AAVE", "ACE", "ADA", "AI16Z", "AIXBT", "ALGO", "APT", "ARB",
+    "ARTY", "ASTR", "AVAX", "BCH", "BONK", "BRETT", "BRICK",
+    "CETUS", "CRV", "DOGE", "DOT", "DYM", "EIGEN", "ENJ",
+    "ENS", "ETC", "ETH", "FET", "FIL", "FLOKI", "FTM",
+    "GALA", "GAS", "GMX", "GRT", "HBAR", "HFT", "IMX",
+    "INJ", "JUP", "KAS", "KAVA", "KNC", "LDO", "LINK",
+    "LRC", "MANTA", "MASK", "MATIC", "MEW", "MKR", "MOVR",
+    "NEAR", "NFT", "NOT", "OP", "ORCA", "PENDLE", "PEPE",
+    "POL", "PENDLE", "PYTH", "RENDER", "RPL", "RUNE", "SAND",
+    "SEI", "SHIB", "SOL", "SUI", "TIA", "TRX", "TURBO",
+    "UMA", "UNI", "USDC", "USDT", "WIF", "WLD", "XRP",
+    "YFI", "ZRO", "ZRX",
+}
+
+
+def _load_p2_candidates(input_report: str) -> tuple[list[dict], dict, dict]:
+    """Load P2 candidate artifacts from a report directory."""
+    report_dir = Path(input_report)
+    candidates_path = report_dir / "p2_deployment_event_candidates.json"
+    manifest_path = report_dir / "run_manifest.json"
+    summary_path = report_dir / "summary.json"
+
+    if not candidates_path.exists():
+        raise FileNotFoundError(f"P2 candidates not found: {candidates_path}")
+
+    with open(candidates_path) as f:
+        candidates_data = json.load(f)
+
+    manifest = {}
+    if manifest_path.exists():
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+    summary = {}
+    if summary_path.exists():
+        with open(summary_path) as f:
+            summary = json.load(f)
+
+    return candidates_data.get("candidates", []), manifest, summary
+
+
+def _normalize_candidate(p2_candidate: dict) -> P3CandidateConfirmation:
+    """Normalize a P2 candidate into a P3 confirmation record."""
+    excerpt_hash = hashlib.sha256(
+        p2_candidate.get("redacted_excerpt", "").encode()
+    ).hexdigest()[:16]
+
+    conf = P3CandidateConfirmation(
+        p2_source_key=p2_candidate.get("source_key", ""),
+        p2_source_content_hash=p2_candidate.get("source_content_hash", ""),
+        p2_block_number=p2_candidate.get("block_number"),
+        p2_block_timestamp_utc=p2_candidate.get("block_timestamp_utc"),
+        p2_tx_index=p2_candidate.get("tx_index"),
+        p2_action_type=p2_candidate.get("action_type", ""),
+        p2_user_or_deployer=p2_candidate.get("user_or_deployer"),
+        p2_matched_terms=p2_candidate.get("matched_terms", []),
+        p2_candidate_class=p2_candidate.get("candidate_class", ""),
+        p2_redacted_excerpt_hash=excerpt_hash,
+        p2_window_name=p2_candidate.get("window_name", ""),
+    )
+
+    action_type = conf.p2_action_type
+    excerpt = p2_candidate.get("redacted_excerpt", "")
+
+    # Classify by action type
+    if action_type in ("order", "cancel", "cancelByCloid", "batchModify",
+                        "scheduleCancel", "modify"):
+        conf.is_trading_action = True
+        conf.extraction_class = "trading_action"
+        conf.confirmation_status = "HIP3_P3_CANDIDATES_NOT_BUILDER_DEPLOYED"
+        conf.confirmation_note = f"Trading action: {action_type}"
+    elif action_type == "noop":
+        conf.is_failed_transaction = True
+        conf.extraction_class = "failed_transaction"
+        conf.confirmation_status = "HIP3_P3_CANDIDATES_NOT_BUILDER_DEPLOYED"
+        conf.confirmation_note = "Failed transaction (noop)"
+    elif action_type == "SetGlobalAction":
+        conf.is_universe_update = True
+        conf.extraction_class = "universe_update"
+        # Try to extract external perp symbols from excerpt
+        try:
+            excerpt_dict = json.loads(excerpt) if excerpt.startswith("{") else {}
+            actions = excerpt_dict.get("actions", [])
+            for act in actions:
+                if isinstance(act, dict):
+                    ext_pxs = act.get("externalPerpPxs", [])
+                    if isinstance(ext_pxs, list):
+                        for pair in ext_pxs:
+                            if isinstance(pair, list) and len(pair) >= 1:
+                                sym = str(pair[0])
+                                conf.extracted_external_perp_symbols.append(sym)
+                    # Check for config fields
+                    for k in act.keys():
+                        if k not in ("type",) and k not in conf.extracted_config_fields:
+                            conf.extracted_config_fields.append(k)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        if conf.extracted_external_perp_symbols:
+            conf.confirmation_status = "HIP3_P3_CANDIDATES_CONFIG_ONLY"
+            conf.confirmation_note = (
+                f"Universe update with {len(conf.extracted_external_perp_symbols)} "
+                f"external perp symbols"
+            )
+        else:
+            conf.confirmation_status = "HIP3_P3_CANDIDATES_CONFIG_ONLY"
+            conf.confirmation_note = "Universe/config update (no extractable symbols)"
+    elif action_type == "evmRawTx":
+        conf.extraction_class = "evm_payload_candidate"
+        conf.confirmation_status = "HIP3_P3_CANDIDATES_OPAQUE"
+        conf.confirmation_note = "EVM raw transaction (binary payload)"
+    elif action_type in ("approveBuilderFee", "approveAgent"):
+        conf.extracted_deployer = conf.p2_user_or_deployer
+        conf.is_builder_deployed = True
+        conf.extraction_class = "deployer_extractable"
+        conf.confirmation_status = "HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED"
+        conf.confirmation_note = f"Builder/agent action: {action_type}"
+    else:
+        conf.extraction_class = "opaque_candidate"
+        conf.confirmation_status = "HIP3_P3_CANDIDATES_OPAQUE"
+        conf.confirmation_note = f"Unknown action type: {action_type}"
+
+    return conf
+
+
+def _classify_symbol(symbol: str) -> str:
+    """Classify a symbol into asset class. Conservative — defaults to unknown."""
+    s = symbol.upper().strip()
+    # Known equity-like patterns: single company tickers with numeric suffix
+    # but must not match crypto symbols
+    # Known index-like: SPX, NDX, DJI, RUT, VIX, FTSE, DAX, Nikkei
+    # Known commodity-like: GOLD, SILVER, OIL, WHEAT, NATGAS, COPPER
+    # But avoid false positives: SPX6900, DOGE-SPX, GOLDEN
+
+    # Explicit equity/index/commodity known to be on Hyperliquid
+    equity_index_commodity = {
+        "SPX", "NDX", "DJI", "RUT", "VIX", "FTSE", "DAX", "NIKK",
+        "GOLD", "SILVER", "OIL", "WHEAT", "NATGAS", "COPPER",
+        "EUR", "GBP", "JPY", "AUD", "CAD", "CHF",
+    }
+    if s in equity_index_commodity:
+        if s in ("SPX", "NDX", "DJI", "RUT", "VIX", "FTSE", "DAX", "NIKK"):
+            return "index_like"
+        if s in ("GOLD", "SILVER", "OIL", "WHEAT", "NATGAS", "COPPER"):
+            return "commodity_like"
+        return "unknown"
+
+    # Check against known external perp symbols
+    if s in KNOWN_EXTERNAL_PERP_SYMBOLS:
+        return "crypto_like"
+
+    return "unknown"
+
+
+def _run_p3_confirmation(
+    input_report: str,
+    max_candidates: int = 50,
+    expand_neighborhood_blocks: int = 20,
+    cross_reference_asset_ctxs: bool = False,
+    cross_reference_l2: bool = False,
+    allow_network_public: bool = False,
+    allow_s3_archive_read: bool = False,
+    download_budget_bytes: int = 250_000_000,
+    explorer_block_budget_bytes: int = 100_000_000,
+) -> P3ConfirmationResult:
+    """Execute the P3 candidate confirmation pass."""
+    sha, dirty = _get_git_info()
+    run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%S") + "_p3_" + hashlib.sha256(b"p3").hexdigest()[:8]
+
+    result = P3ConfirmationResult(
+        status=ScoutStatus.HIP3_P3_CONFIRMATION_READY,
+        run_id=run_id,
+        created_at_utc=datetime.now(UTC).isoformat(),
+        git_sha=sha,
+        git_dirty=dirty,
+        repo_root=str(Path(__file__).resolve().parents[4]),
+        p2_input_report=str(Path(input_report).resolve()),
+    )
+
+    # Load P2 candidates
+    try:
+        p2_candidates, p2_manifest, p2_summary = _load_p2_candidates(input_report)
+    except FileNotFoundError as e:
+        result.status = ScoutStatus.HIP3_P3_ERROR
+        result.final_status = result.status.value
+        result.confirmation_note = str(e)
+        return result
+
+    result.p2_report_commit = p2_manifest.get("git_sha", "")
+    result.p2_report_status = p2_manifest.get("final_status", "")
+    result.candidates_loaded = len(p2_candidates[:max_candidates])
+
+    # Normalize and classify each candidate
+    confirmations: list[P3CandidateConfirmation] = []
+    symbols_by_class: dict[str, list[str]] = {}
+    deployers_seen: set[str] = set()
+
+    for p2c in p2_candidates[:max_candidates]:
+        conf = _normalize_candidate(p2c)
+        confirmations.append(conf)
+
+        # Track extraction classes
+        if conf.extracted_symbol:
+            result.candidates_symbol_extracted += 1
+            cls = _classify_symbol(conf.extracted_symbol)
+            conf.symbol_class = cls
+            symbols_by_class.setdefault(cls, []).append(conf.extracted_symbol)
+
+        if conf.extracted_deployer:
+            result.candidates_deployer_extracted += 1
+            deployers_seen.add(conf.extracted_deployer)
+
+        if conf.extracted_external_perp_symbols:
+            for sym in conf.extracted_external_perp_symbols:
+                cls = _classify_symbol(sym)
+                conf.symbol_class = cls
+                symbols_by_class.setdefault(cls, []).append(sym)
+            result.candidates_symbol_extracted += 1
+
+        # Count by confirmation status
+        if conf.is_builder_deployed:
+            result.candidates_confirmed_builder_deployed += 1
+        elif conf.is_trading_action or conf.is_failed_transaction:
+            result.candidates_not_builder_deployed += 1
+        elif conf.extraction_class in ("universe_update",):
+            result.candidates_config_only += 1
+        elif conf.extraction_class == "evm_payload_candidate":
+            result.candidates_evm_payload += 1
+        else:
+            result.candidates_opaque += 1
+
+    # Deduplicate symbols
+    for cls in symbols_by_class:
+        symbols_by_class[cls] = sorted(set(symbols_by_class[cls]))
+
+    result.symbols_by_class = symbols_by_class
+    result.confirmations = confirmations
+
+    # Cross-reference against asset_ctxs if requested
+    if cross_reference_asset_ctxs and allow_s3_archive_read:
+        all_symbols = []
+        for syms in symbols_by_class.values():
+            all_symbols.extend(syms)
+        for sym in set(all_symbols):
+            result.asset_ctxs_cross_reference[sym] = {
+                "checked": True,
+                "found": False,
+                "note": "Cross-reference requires S3 probe (not implemented in P3)",
+            }
+
+    # Cross-reference against L2 if requested
+    if cross_reference_l2 and allow_s3_archive_read:
+        for sym in set(sum(symbols_by_class.values(), [])):
+            result.l2_archive_cross_reference[sym] = {
+                "checked": True,
+                "found": False,
+                "note": "L2 cross-reference requires S3 probe (not implemented in P3)",
+            }
+
+    # Deployer cross-reference
+    for deployer in deployers_seen:
+        result.deployer_cross_reference[deployer] = {
+            "actions_confirmed": sum(
+                1 for c in confirmations
+                if c.extracted_deployer == deployer or c.p2_user_or_deployer == deployer
+            ),
+            "is_builder_candidate": any(
+                c.is_builder_deployed for c in confirmations
+                if c.extracted_deployer == deployer or c.p2_user_or_deployer == deployer
+            ),
+        }
+
+    # Determine final status
+    if result.candidates_confirmed_builder_deployed > 0:
+        result.status = ScoutStatus.HIP3_P3_CANDIDATES_CONFIRMED_BUILDER_DEPLOYED
+    elif result.candidates_symbol_extracted > 0:
+        result.status = ScoutStatus.HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED
+    elif result.candidates_config_only > 0:
+        result.status = ScoutStatus.HIP3_P3_CANDIDATES_CONFIG_ONLY
+    elif result.candidates_opaque > 0 or result.candidates_evm_payload > 0:
+        result.status = ScoutStatus.HIP3_P3_CANDIDATES_OPAQUE
+    else:
+        result.status = ScoutStatus.HIP3_P3_CONFIRMATION_INCONCLUSIVE
+
+    result.final_status = result.status.value
+    return result
+
+
+def _write_p3_artifacts(run_dir: Path, result: P3ConfirmationResult, argv: list[str]) -> None:
+    """Write all required P3 artifacts."""
+    sha, dirty = result.git_sha, result.git_dirty
+    base_meta = {
+        "study_id": result.study_id,
+        "run_id": result.run_id,
+        "created_at_utc": result.created_at_utc,
+        "git_sha": sha,
+        "git_dirty": dirty,
+        "repo_root": result.repo_root,
+        "command_args": argv,
+        "safety_mode": result.safety_mode,
+        "schema_version": result.schema_version,
+        "final_status": result.final_status or str(result.status),
+        "p2_input_report": result.p2_input_report,
+        "p2_report_commit": result.p2_report_commit,
+        "p2_report_status": result.p2_report_status,
+        "bytes_downloaded": result.bytes_downloaded,
+        "no_registry_mutation": True,
+        "no_full_account_id": True,
+    }
+
+    # summary.json
+    summary = {
+        **base_meta,
+        "candidates_loaded": result.candidates_loaded,
+        "candidates_symbol_extracted": result.candidates_symbol_extracted,
+        "candidates_deployer_extracted": result.candidates_deployer_extracted,
+        "candidates_confirmed_builder_deployed": result.candidates_confirmed_builder_deployed,
+        "candidates_not_builder_deployed": result.candidates_not_builder_deployed,
+        "candidates_config_only": result.candidates_config_only,
+        "candidates_opaque": result.candidates_opaque,
+        "candidates_evm_payload": result.candidates_evm_payload,
+        "symbols_by_class": result.symbols_by_class,
+    }
+    _atomic_write(run_dir / "summary.json", summary)
+
+    # summary.md
+    lines = [
+        "# HIP-3 P3 Candidate Confirmation",
+        "",
+        f"**Status:** `{result.final_status}`",
+        f"**Run ID:** {result.run_id}",
+        f"**P2 Input:** {result.p2_input_report}",
+        f"**P2 Commit:** {result.p2_report_commit}",
+        f"**P2 Status:** {result.p2_report_status}",
+        "",
+        "## Candidate Counts",
+        f"- Loaded: {result.candidates_loaded}",
+        f"- Symbol extracted: {result.candidates_symbol_extracted}",
+        f"- Deployer extracted: {result.candidates_deployer_extracted}",
+        f"- Confirmed builder-deployed: {result.candidates_confirmed_builder_deployed}",
+        f"- Not builder-deployed (trading/noop): {result.candidates_not_builder_deployed}",
+        f"- Config only: {result.candidates_config_only}",
+        f"- Opaque: {result.candidates_opaque}",
+        f"- EVM payload: {result.candidates_evm_payload}",
+        "",
+        "## Symbols by Class",
+    ]
+    for cls, syms in result.symbols_by_class.items():
+        lines.append(f"- **{cls}**: {', '.join(syms[:20])}")
+
+    if not result.symbols_by_class:
+        lines.append("- No extractable symbols found")
+
+    lines.extend([
+        "",
+        "## Deployer Cross-Reference",
+    ])
+    for dep, info in result.deployer_cross_reference.items():
+        lines.append(f"- `{dep[:20]}...`: {info['actions_confirmed']} actions, builder_candidate={info['is_builder_candidate']}")
+
+    if not result.deployer_cross_reference:
+        lines.append("- No deployers identified")
+
+    lines.extend([
+        "",
+        "## Confirmation Notes",
+    ])
+    for c in result.confirmations:
+        if c.confirmation_note:
+            lines.append(f"- [{c.p2_action_type}] {c.confirmation_note}")
+
+    lines.extend([
+        "",
+        "> P3 is confirmation-only. No pricing, PnL, returns, or basis analysis.",
+        "> No registry, live, paper, or conductor mutation occurred.",
+    ])
+    (run_dir / "summary.md").write_text(chr(10).join(lines))
+
+    # p3_candidate_confirmation.json
+    _atomic_write(run_dir / "p3_candidate_confirmation.json", {
+        **base_meta,
+        "confirmations": [
+            {
+                "p2_source_key": c.p2_source_key,
+                "p2_source_content_hash": c.p2_source_content_hash,
+                "p2_block_number": c.p2_block_number,
+                "p2_block_timestamp_utc": c.p2_block_timestamp_utc,
+                "p2_tx_index": c.p2_tx_index,
+                "p2_action_type": c.p2_action_type,
+                "p2_user_or_deployer": c.p2_user_or_deployer,
+                "p2_matched_terms": c.p2_matched_terms,
+                "p2_candidate_class": c.p2_candidate_class,
+                "p2_redacted_excerpt_hash": c.p2_redacted_excerpt_hash,
+                "p2_window_name": c.p2_window_name,
+                "extracted_symbol": c.extracted_symbol,
+                "extracted_coin_id": c.extracted_coin_id,
+                "extracted_deployer": c.extracted_deployer,
+                "extracted_external_perp_symbols": c.extracted_external_perp_symbols,
+                "extracted_config_fields": c.extracted_config_fields,
+                "extraction_class": c.extraction_class,
+                "symbol_class": c.symbol_class,
+                "is_builder_deployed": c.is_builder_deployed,
+                "is_universe_update": c.is_universe_update,
+                "is_price_feed_update": c.is_price_feed_update,
+                "is_failed_transaction": c.is_failed_transaction,
+                "is_trading_action": c.is_trading_action,
+                "confirmation_status": c.confirmation_status,
+                "confirmation_note": c.confirmation_note,
+                "in_asset_ctxs": c.in_asset_ctxs,
+                "in_public_info_universe": c.in_public_info_universe,
+                "in_l2_archive": c.in_l2_archive,
+            }
+            for c in result.confirmations
+        ],
+        "total_confirmations": len(result.confirmations),
+    })
+
+    # p3_symbol_cross_reference.json
+    _atomic_write(run_dir / "p3_symbol_cross_reference.json", {
+        **base_meta,
+        "symbols_by_class": result.symbols_by_class,
+        "asset_ctxs_cross_reference": result.asset_ctxs_cross_reference,
+        "l2_archive_cross_reference": result.l2_archive_cross_reference,
+    })
+
+    # p3_deployer_cross_reference.json
+    _atomic_write(run_dir / "p3_deployer_cross_reference.json", {
+        **base_meta,
+        "deployer_cross_reference": result.deployer_cross_reference,
+    })
+
+    # p3_archive_visibility.json
+    _atomic_write(run_dir / "p3_archive_visibility.json", {
+        **base_meta,
+        "asset_ctxs_cross_reference": result.asset_ctxs_cross_reference,
+        "l2_archive_cross_reference": result.l2_archive_cross_reference,
+    })
+
+    # run_manifest.json
+    _atomic_write(run_dir / "run_manifest.json", base_meta)
+
+
+
 def run_probe(
     start_date: str = "2025-10-13",
     end_date: str | None = None,
@@ -2787,8 +3331,40 @@ def main(argv: list[str] | None = None) -> int:
         "--p2-rare-action-threshold", type=int, default=25,
         help="P2 action type count threshold for rarity (default: 25).",
     )
+    parser.add_argument(
+        "--p3-confirm-candidates",
+        action="store_true",
+        help="P3 mode: confirm P2 candidates against public data.",
+    )
+    parser.add_argument("--p3-input-report", default=None, help="P3: path to P2 report directory.")
+    parser.add_argument("--p3-max-candidates", type=int, default=50, help="P3: max candidates to process.")
+    parser.add_argument("--p3-expand-neighborhood-blocks", type=int, default=20, help="P3: neighborhood expansion radius.")
+    parser.add_argument("--p3-cross-reference-asset-ctxs", action="store_true", help="P3: cross-reference against asset_ctxs.")
+    parser.add_argument("--p3-cross-reference-l2", action="store_true", help="P3: cross-reference against L2 archive.")
     args = parser.parse_args(argv)
     out_root = Path(args.out_root)
+
+    if args.p3_confirm_candidates:
+        if not args.p3_input_report:
+            print("ERROR: --p3-input-report is required for P3 mode")
+            return 1
+        p3_result = _run_p3_confirmation(
+            input_report=args.p3_input_report,
+            max_candidates=args.p3_max_candidates,
+            expand_neighborhood_blocks=args.p3_expand_neighborhood_blocks,
+            cross_reference_asset_ctxs=args.p3_cross_reference_asset_ctxs,
+            cross_reference_l2=args.p3_cross_reference_l2,
+            allow_network_public=args.allow_network_public,
+            allow_s3_archive_read=args.allow_s3_archive_read,
+            download_budget_bytes=args.download_budget_bytes,
+            explorer_block_budget_bytes=args.explorer_block_budget_bytes,
+        )
+        run_dir = out_root / (p3_result.run_id + "_p3_confirmation")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        _write_p3_artifacts(run_dir, p3_result, sys.argv[1:])
+        print(f"{p3_result.status}")
+        print(f"P3 confirmation completed. Report written to {run_dir}")
+        return 0
 
     if args.p2_deployment_search:
         result = run_p2_deployment_search(

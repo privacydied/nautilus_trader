@@ -1481,3 +1481,296 @@ def test_p2_credentials_required_status():
     )
     assert result.status == ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED
 
+
+# ---------------------------------------------------------------------------
+# P3 confirmation tests
+# ---------------------------------------------------------------------------
+
+def test_p3_loads_p2_candidate_artifacts():
+    """P3 loads P2 candidate artifacts from a report directory."""
+    import tempfile, json, pathlib
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _load_p2_candidates,
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        report_dir = pathlib.Path(td)
+        candidates = [
+            {"action_type": "order", "source_key": "test_key", "source_content_hash": "abc",
+             "block_number": 100, "block_timestamp_utc": "2025-10-13", "tx_index": 0,
+             "user_or_deployer": "0x123", "matched_terms": [], "candidate_class": "rare_action_type",
+             "redacted_excerpt": "{}", "window_name": "prelaunch"},
+        ]
+        (report_dir / "p2_deployment_event_candidates.json").write_text(
+            json.dumps({"candidates": candidates, "total_candidates": 1})
+        )
+        (report_dir / "run_manifest.json").write_text(json.dumps({"git_sha": "abc123"}))
+        (report_dir / "summary.json").write_text(json.dumps({"status": "HIP3_DEPLOYMENT_EVENT_CANDIDATES_FOUND"}))
+
+        loaded, manifest, summary = _load_p2_candidates(str(report_dir))
+        assert len(loaded) == 1
+        assert loaded[0]["action_type"] == "order"
+        assert manifest["git_sha"] == "abc123"
+
+
+def test_p3_symbol_extraction_from_synthetic_setglobalaction():
+    """P3 extracts external perp symbols from SetGlobalAction."""
+    import json
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _normalize_candidate,
+    )
+
+    excerpt = json.dumps({
+        "actions": [{
+            "type": "SetGlobalAction",
+            "externalPerpPxs": [["AAVE", "305.905"], ["ACE", "0.5686"], ["ADA", "0.96555"]],
+            "pxs": [["117923", "117879"]],
+        }],
+        "error": None,
+        "user": "0x58e1b0e63c905d5982324fcd9108582623b8132e",
+    })
+
+    p2c = {
+        "action_type": "SetGlobalAction",
+        "source_key": "test",
+        "source_content_hash": "abc",
+        "block_number": 100,
+        "block_timestamp_utc": "2025-10-13",
+        "tx_index": 0,
+        "user_or_deployer": "0x58e1b0e63c905d5982324fcd9108582623b8132e",
+        "matched_terms": ["perp", "externalperp", "coin"],
+        "candidate_class": "rare_action_type",
+        "redacted_excerpt": excerpt,
+        "window_name": "prelaunch",
+    }
+
+    conf = _normalize_candidate(p2c)
+    assert conf.is_universe_update is True
+    assert len(conf.extracted_external_perp_symbols) == 3
+    assert "AAVE" in conf.extracted_external_perp_symbols
+    assert "ADA" in conf.extracted_external_perp_symbols
+    assert conf.confirmation_status == "HIP3_P3_CANDIDATES_CONFIG_ONLY"
+
+
+def test_p3_deployer_extraction_from_approvebuilderfee():
+    """P3 extracts deployer from approveBuilderFee."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _normalize_candidate,
+    )
+
+    p2c = {
+        "action_type": "approveBuilderFee",
+        "source_key": "test",
+        "source_content_hash": "abc",
+        "block_number": 200,
+        "block_timestamp_utc": "2025-10-14",
+        "tx_index": 1,
+        "user_or_deployer": "0xabcdef1234567890abcdef1234567890abcdef12",
+        "matched_terms": ["builder"],
+        "candidate_class": "term_match",
+        "redacted_excerpt": "{}",
+        "window_name": "launch",
+    }
+
+    conf = _normalize_candidate(p2c)
+    assert conf.is_builder_deployed is True
+    assert conf.extracted_deployer == "0xabcdef1234567890abcdef1234567890abcdef12"
+    assert conf.confirmation_status == "HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED"
+
+
+def test_p3_opaque_candidate_preservation():
+    """P3 preserves opaque candidates."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _normalize_candidate,
+    )
+
+    p2c = {
+        "action_type": "unknown_action",
+        "source_key": "test",
+        "source_content_hash": "abc",
+        "block_number": 300,
+        "block_timestamp_utc": "2025-10-15",
+        "tx_index": 0,
+        "user_or_deployer": None,
+        "matched_terms": [],
+        "candidate_class": "opaque_candidate",
+        "redacted_excerpt": "{}",
+        "window_name": "prelaunch",
+    }
+
+    conf = _normalize_candidate(p2c)
+    assert conf.extraction_class == "opaque_candidate"
+    assert conf.confirmation_status == "HIP3_P3_CANDIDATES_OPAQUE"
+
+
+def test_p3_trading_actions_classified_as_not_builder_deployed():
+    """P3 classifies order/cancel as not builder-deployed."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _normalize_candidate,
+    )
+
+    for action_type in ("order", "cancel", "cancelByCloid", "batchModify", "scheduleCancel"):
+        p2c = {
+            "action_type": action_type,
+            "source_key": "test",
+            "source_content_hash": "abc",
+            "block_number": 100,
+            "block_timestamp_utc": "2025-10-13",
+            "tx_index": 0,
+            "user_or_deployer": "0x123",
+            "matched_terms": [],
+            "candidate_class": "rare_action_type",
+            "redacted_excerpt": "{}",
+            "window_name": "prelaunch",
+        }
+        conf = _normalize_candidate(p2c)
+        assert conf.is_trading_action is True
+        assert conf.confirmation_status == "HIP3_P3_CANDIDATES_NOT_BUILDER_DEPLOYED"
+
+
+def test_p3_symbol_classification_avoids_substring_false_positives():
+    """P3 classification avoids substring false positives."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _classify_symbol,
+    )
+
+    assert _classify_symbol("SPX6900") == "unknown"  # Not in known set, despite name
+    assert _classify_symbol("DOGE-SPX") == "unknown"
+    assert _classify_symbol("GOLDEN") == "unknown"
+    assert _classify_symbol("SPX") == "index_like"
+    assert _classify_symbol("GOLD") == "commodity_like"
+    assert _classify_symbol("BTC") == "unknown"  # Not in external perp set (native perp)
+    assert _classify_symbol("AAVE") == "crypto_like"
+    assert _classify_symbol("SOL") == "crypto_like"
+    assert _classify_symbol("XYZ100") == "unknown"
+
+
+def test_p3_never_emits_forbidden_statuses():
+    """P3 never emits REJECTED, PROFITABLE, ALPHA_FOUND, etc."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _run_p3_confirmation,
+        ScoutStatus,
+    )
+    import tempfile, json, pathlib
+
+    forbidden = {
+        "REJECTED", "PROFITABLE", "ALPHA_FOUND", "TRADE_READY",
+        "EXECUTION_READY", "LIVE_READY", "READY_FOR_PHASE_0",
+        "CANDIDATE_FOR_LIVE", "PAPER_STRATEGY_PROMOTED",
+    }
+
+    with tempfile.TemporaryDirectory() as td:
+        report_dir = pathlib.Path(td)
+        (report_dir / "p2_deployment_event_candidates.json").write_text(
+            json.dumps({"candidates": [], "total_candidates": 0})
+        )
+        (report_dir / "run_manifest.json").write_text(json.dumps({}))
+        (report_dir / "summary.json").write_text(json.dumps({}))
+
+        result = _run_p3_confirmation(input_report=str(report_dir))
+        status_str = str(result.status.value) if hasattr(result.status, 'value') else str(result.status)
+        for f in forbidden:
+            assert f not in status_str, f"P3 emitted forbidden status containing {f}"
+
+
+def test_p3_artifacts_contain_no_pnl_basis_residual_fields():
+    """P3 artifacts must not contain PnL/basis/residual/return fields."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _write_p3_artifacts,
+        P3ConfirmationResult,
+        ScoutStatus,
+    )
+    import tempfile, json, pathlib
+
+    result = P3ConfirmationResult(
+        status=ScoutStatus.HIP3_P3_CONFIRMATION_READY,
+        run_id="test_p3_fields",
+        final_status="HIP3_P3_CONFIRMATION_READY",
+        git_sha="abc",
+        git_dirty=False,
+        repo_root="/tmp",
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = pathlib.Path(td)
+        _write_p3_artifacts(run_dir, result, [])
+        for fname in ("summary.json", "run_manifest.json", "p3_candidate_confirmation.json",
+                      "p3_symbol_cross_reference.json", "p3_deployer_cross_reference.json",
+                      "p3_archive_visibility.json"):
+            content = (run_dir / fname).read_text().lower()
+            for forbidden in ("pnl", "basis", "residual", "strategy_return", "alpha", "sharpe", "returns"):
+                assert forbidden not in content, f"Found forbidden field '{forbidden}' in {fname}"
+
+
+def test_p3_no_production_subprocess_os_system_eval():
+    """Production module must not use subprocess, os.system, or eval."""
+    import pathlib
+    src_path = pathlib.Path(__file__).resolve().parents[1] / "hip3_builder_deployment_event_discovery_v0.py"
+    src = src_path.read_text()
+    assert "import subprocess" not in src
+    assert "subprocess.run" not in src
+    assert "os.system(" not in src
+    assert "eval(" not in src
+
+
+def test_p3_evm_raw_tx_classified_as_opaque():
+    """evmRawTx candidates are classified as opaque EVM payloads."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _normalize_candidate,
+    )
+
+    p2c = {
+        "action_type": "evmRawTx",
+        "source_key": "test",
+        "source_content_hash": "abc",
+        "block_number": 400,
+        "block_timestamp_utc": "2025-10-13",
+        "tx_index": 0,
+        "user_or_deployer": "0x58e1b0e63c905d5982324fcd9108582623b8132e",
+        "matched_terms": [],
+        "candidate_class": "rare_action_type",
+        "redacted_excerpt": "{}",
+        "window_name": "prelaunch",
+    }
+
+    conf = _normalize_candidate(p2c)
+    assert conf.extraction_class == "evm_payload_candidate"
+    assert conf.confirmation_status == "HIP3_P3_CANDIDATES_OPAQUE"
+
+
+def test_p3_noop_classified_as_failed_transaction():
+    """noop candidates are classified as failed transactions."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _normalize_candidate,
+    )
+
+    p2c = {
+        "action_type": "noop",
+        "source_key": "test",
+        "source_content_hash": "abc",
+        "block_number": 500,
+        "block_timestamp_utc": "2025-10-13",
+        "tx_index": 0,
+        "user_or_deployer": "0x7839e2f2c375dd2935193f2736167514efff9916",
+        "matched_terms": [],
+        "candidate_class": "rare_action_type",
+        "redacted_excerpt": json.dumps({"actions": [{"type": "noop"}], "error": "Invalid nonce"}),
+        "window_name": "prelaunch",
+    }
+
+    conf = _normalize_candidate(p2c)
+    assert conf.is_failed_transaction is True
+    assert conf.confirmation_status == "HIP3_P3_CANDIDATES_NOT_BUILDER_DEPLOYED"
+
+
+def test_p3_missing_p2_report_returns_error():
+    """P3 returns ERROR when P2 report is missing."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _run_p3_confirmation,
+        ScoutStatus,
+    )
+
+    result = _run_p3_confirmation(input_report="/nonexistent/path")
+    assert result.status == ScoutStatus.HIP3_P3_ERROR
+
+
