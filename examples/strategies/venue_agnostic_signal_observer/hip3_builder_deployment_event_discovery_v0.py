@@ -16,6 +16,7 @@ import hashlib
 import json
 import lz4.frame
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -27,6 +28,17 @@ from urllib.request import urlopen, Request
 
 
 UTC = timezone.utc
+
+# ---------------------------------------------------------------------------
+# Archive source constants — must not be swapped.
+# Explorer blocks live in hl-mainnet-node-data, NOT hyperliquid-archive.
+# ---------------------------------------------------------------------------
+EXPLORER_BLOCK_BUCKET = "hl-mainnet-node-data"
+EXPLORER_BLOCK_PREFIX = "explorer_blocks"
+
+MARKET_DATA_BUCKET = "hyperliquid-archive"
+ASSET_CTXS_PREFIX = "asset_ctxs"
+MARKET_DATA_PREFIX = "market_data"
 
 
 class ScoutStatus(Enum):
@@ -40,11 +52,12 @@ class ScoutStatus(Enum):
     HIP3_ACTION_SCHEMA_UNKNOWN = "HIP3_ACTION_SCHEMA_UNKNOWN"
     HIP3_ARCHIVE_HELPER_RECONCILIATION_REQUIRED = "HIP3_ARCHIVE_HELPER_RECONCILIATION_REQUIRED"
     HIP3_DEPLOYMENT_DISCOVERY_ERROR = "HIP3_DEPLOYMENT_DISCOVERY_ERROR"
-    # New granular statuses
-    HIP3_EXPLORER_BLOCK_PREFIX_EMPTY = "HIP3_EXPLORER_BLOCK_PREFIX_EMPTY"
+    HIP3_EXPLORER_BLOCK_LAYOUT_DISCOVERED = "HIP3_EXPLORER_BLOCK_LAYOUT_DISCOVERED"
+    HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN = "HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN"
+    HIP3_EXPLORER_BLOCK_ROOT_EMPTY = "HIP3_EXPLORER_BLOCK_ROOT_EMPTY"
+    HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED = "HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED"
+    HIP3_EXPLORER_BLOCK_DATE_MAPPING_UNAVAILABLE = "HIP3_EXPLORER_BLOCK_DATE_MAPPING_UNAVAILABLE"
     HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID = "HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID"
-    HIP3_EXPLORER_BLOCK_LISTING_FAILED = "HIP3_EXPLORER_BLOCK_LISTING_FAILED"
-    HIP3_EXPLORER_BLOCK_FILES_NOT_FOUND_IN_WINDOW = "HIP3_EXPLORER_BLOCK_FILES_NOT_FOUND_IN_WINDOW"
 
 
 STUDY_ID = "hip3_builder_deployment_event_discovery_v0"
@@ -97,6 +110,12 @@ class ProbeResult:
     candidate_symbols: list[str] = field(default_factory=list)
     public_info_cross_reference: dict[str, Any] = field(default_factory=dict)
     archive_visibility: dict[str, Any] = field(default_factory=dict)
+    explorer_block_bucket: str = EXPLORER_BLOCK_BUCKET
+    explorer_block_root_prefix: str = EXPLORER_BLOCK_PREFIX
+    explorer_block_layout: str = ""
+    explorer_root_listing_status: str = ""
+    explorer_root_prefixes: list[str] = field(default_factory=list)
+    explorer_root_keys: list[str] = field(default_factory=list)
     safety_mode: str = SAFETY_MODE
     schema_version: str = SCHEMA_VERSION
     download_budget_bytes: int = 5_000_000_000
@@ -306,6 +325,82 @@ def _extract_candidate_from_match(match: dict, block_data: dict, source_path: st
 # Core probe workflow
 # ---------------------------------------------------------------------------
 
+def _discover_explorer_block_layout(chokepoint: NetworkChokepoint) -> dict:
+    """Discover the key layout under the explorer_blocks bucket.
+
+    Returns a dict with keys:
+        - status: ScoutStatus indicating the outcome of the root listing.
+        - layout: one of "date_partitioned", "block_range_partitioned", "flat_block_files", "unknown", or "".
+        - prefixes: list of up to 20 child prefixes (strings ending with '/').
+        - keys: list of up to 20 object keys (full s3 paths).
+    """
+    root_pref = f"s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/"
+    cmd = ["aws", "s3", "ls", root_pref, "--requester-pays"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return {"status": ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED, "layout": "", "prefixes": [], "keys": []}
+    if result.returncode != 0:
+        return {"status": ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED, "layout": "", "prefixes": [], "keys": []}
+
+    prefixes: list[str] = []
+    keys: list[str] = []
+    for line in result.stdout.splitlines():
+        parts = line.strip().split()
+        if not parts:
+            continue
+        if parts[0] == "PRE":
+            # Prefix entry
+            if len(parts) >= 2:
+                prefixes.append(parts[1])
+        else:
+            # File entry, assumes size then date then key
+            if len(parts) >= 4:
+                keys.append(parts[3])
+    if not prefixes and not keys:
+        return {"status": ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY, "layout": "", "prefixes": [], "keys": []}
+    # Determine layout heuristics
+    layout = "unknown"
+    date_pat = re.compile(r"\d{4}-\d{2}-\d{2}/")
+    block_range_pat = re.compile(r"\d{10,}\.json")
+    if any(date_pat.match(p) for p in prefixes):
+        layout = "date_partitioned"
+    elif any(block_range_pat.search(k) for k in keys):
+        layout = "block_range_partitioned"
+    elif keys and not prefixes:
+        layout = "flat_block_files"
+    # Return discovery result
+    return {
+        "status": ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_DISCOVERED,
+        "layout": layout,
+        "prefixes": prefixes[:20],
+        "keys": keys[:20],
+    }
+
+def _validate_explorer_block_source(start_date: str, chokepoint: NetworkChokepoint) -> tuple[bool, list[str]]:
+    """Validate that the explorer‑block S3 source exists and is reachable.
+
+    Returns a tuple ``(valid, sample_keys)`` where ``valid`` is ``True`` when the prefix
+    ``s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/<YYYY-MM-DD>/`` contains at least one object.
+    ``sample_keys`` contains up to the first ten object keys (or an empty list on failure).
+    """
+    pref = f"s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/{start_date}/"
+    cmd = ["aws", "s3", "ls", pref, "--requester-pays"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        return False, []
+    if result.returncode != 0:
+        return False, []
+    keys: list[str] = []
+    for line in result.stdout.splitlines():
+        parts = line.strip().split()
+        if len(parts) < 4:
+            continue
+        keys.append(parts[3])
+    return (len(keys) > 0), keys[:10]
+
+
 def _list_explorer_block_files(
     start_date: str,
     end_date: str | None,
@@ -327,15 +422,15 @@ def _list_explorer_block_files(
     cur = start_dt
     while cur <= end_dt:
         day_str = cur.strftime("%Y-%m-%d")
-        prefixes.append(f"s3://hyperliquid-archive/explorer_blocks/{day_str}/")
+        prefixes.append(f"s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/{cur.strftime('%Y/%m/%d')}/")
         cur += timedelta(days=1)
 
     files: list[tuple[str, int]] = []
     for pref in prefixes:
-        cmd = ["aws", "s3", "ls", pref, "--no-sign-request"]
+        cmd = ["aws", "s3", "ls", pref, "--requester-pays"]
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        except subprocess.TimeoutExpired as e:
+        except subprocess.TimeoutExpired:
             continue
         if result.returncode != 0:
             continue
@@ -352,6 +447,7 @@ def _list_explorer_block_files(
         if len(files) >= max_files:
             break
     return files
+
 
 def _download_and_process_block(
     s3_path: str,
@@ -417,6 +513,7 @@ def _cross_reference_public_info(candidates: list[DeploymentCandidate], chokepoi
         info_map[sym] = sym in data
     return info_map
 
+
 def _check_archive_visibility(symbols: list[str], chokepoint: NetworkChokepoint) -> dict:
     """Check ``asset_ctxs`` and L2 archive visibility for candidate symbols.
 
@@ -447,6 +544,8 @@ def _check_archive_visibility(symbols: list[str], chokepoint: NetworkChokepoint)
                 visibility[sym][key] = True
     return visibility
 
+
+
 def run_probe(
     start_date: str = "2025-10-13",
     end_date: str | None = None,
@@ -458,7 +557,7 @@ def run_probe(
     allow_s3_archive_read: bool = False,
     dry_run: bool = False,
 ) -> ProbeResult:
-    """Execute the HIP‑3 builder deployment event discovery probe.
+    """Execute the HIP-3 builder deployment event discovery probe.
 
     Returns a fully populated :class:`ProbeResult`.
     """
@@ -480,12 +579,39 @@ def run_probe(
         result.status = ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_READY
         return result
 
-
+    # Discover explorer‑block bucket layout before scanning.
+    layout_info = _discover_explorer_block_layout(chokepoint)
+    # Record layout discovery details in result for reporting.
+    result.explorer_root_listing_status = layout_info["status"].value
+    result.explorer_block_layout = layout_info["layout"]
+    result.explorer_root_prefixes = layout_info["prefixes"]
+    result.explorer_root_keys = layout_info["keys"]
+    # Handle failure or unknown layout cases.
+    if layout_info["status"] == ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED:
+        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED
+        return result
+    if layout_info["status"] == ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY:
+        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY
+        return result
+    if layout_info["status"] == ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN:
+        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN
+        return result
+    if layout_info["layout"] != "date_partitioned":
+        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_DATE_MAPPING_UNAVAILABLE
+        return result
+    # Continue with date‑based block file listing.
+    # ---------------------------------------------------------------------
+    # Validate that the explorer‑block archive source exists before scanning.
+    # ---------------------------------------------------------------------
+    valid_prefix, sample_keys = _validate_explorer_block_source(start_date, chokepoint)
+    if not valid_prefix:
+        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_PREFIX_OR_PATH_INVALID
+        result.public_info_cross_reference = {"sample_keys": sample_keys}
+        return result
+ 
     try:
         block_files = _list_explorer_block_files(start_date, end_date, max_days, max_block_files, chokepoint)
-        if not block_files:
-            result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_FILES_NOT_FOUND_IN_WINDOW
-            return result
+
         total_explorer = sum(sz for _, sz in block_files)
         if total_explorer > explorer_block_budget_bytes:
             raise BudgetExceededError("Explorer block download budget exceeded")

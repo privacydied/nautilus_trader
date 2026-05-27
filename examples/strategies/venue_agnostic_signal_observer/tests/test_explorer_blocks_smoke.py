@@ -1,5 +1,6 @@
 # Smoke test for explorer_blocks availability
 
+import os
 import sys
 from pathlib import Path
 import pytest
@@ -10,26 +11,41 @@ if str(repo_root) not in sys.path:
 
 from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
     _list_explorer_block_files,
+    _discover_explorer_block_layout,
     NetworkChokepoint,
     ScoutStatus,
+    EXPLORER_BLOCK_BUCKET,
+    EXPLORER_BLOCK_PREFIX,
 )
 
+_SKIP_NET = os.environ.get("SKIP_S3_SMOKE_TESTS") == "1"
+
+
+def test_explorer_blocks_bucket_constant():
+    """Bucket constant must be hl-mainnet-node-data, not hyperliquid-archive."""
+    assert EXPLORER_BLOCK_BUCKET == "hl-mainnet-node-data"
+    assert EXPLORER_BLOCK_PREFIX == "explorer_blocks"
+    assert "hyperliquid-archive" not in EXPLORER_BLOCK_BUCKET
+
+
+@pytest.mark.skipif(_SKIP_NET, reason="SKIP_S3_SMOKE_TESTS=1")
 def test_explorer_blocks_listing_known_window():
     """Attempt to list explorer_blocks for a date range known to contain data.
 
-    The exact block content is not validated here; we only verify that the S3 listing succeeds
-    and returns at least one object, and that action type inventory is non‑empty when a file
-    is processed.
+    Uses the canonical bucket hl-mainnet-node-data. If S3 returns zero results
+    from the correct bucket, that is a data-plane failure — not a silent skip.
     """
-    # The date 2025-10-10 is referenced in REJECTED_RESEARCH.md as a window where NetChildVaultPositionsAction
-    # was discovered. It should have at least one explorer block file.
     chokepoint = NetworkChokepoint(allow_network_public=False, allow_s3_archive_read=True)
     block_files = _list_explorer_block_files("2025-10-10", None, max_days=1, max_files=5, chokepoint=chokepoint)
-    # If the prefix is empty or invalid, the function returns an empty list.
-    if not block_files:
-        pytest.skip("No explorer block files found for the known-good window – cannot verify listing.")
-    # At least one block file should be listed.
-    assert len(block_files) >= 1
-    # Verify that the S3 path appears to follow the expected bucket/prefix layout.
+    # Empty result from the correct bucket is a data-plane failure, not a harmless skip.
+    assert block_files, (
+        f"S3 listing returned zero files from s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/2025/10/10/ "
+        "— data-plane failure. The correct bucket may require requester-pays credentials."
+    )
     first_key, _size = block_files[0]
-    assert first_key.startswith("s3://hyperliquid-archive/explorer_blocks/2025/10/10")
+    assert first_key.startswith(f"s3://{EXPLORER_BLOCK_BUCKET}/{EXPLORER_BLOCK_PREFIX}/"), (
+        f"Unexpected S3 path prefix: {first_key}"
+    )
+    assert "hyperliquid-archive" not in first_key, (
+        f"Explorer block path must not use hyperliquid-archive bucket: {first_key}"
+    )

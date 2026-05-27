@@ -109,8 +109,12 @@ def test_probe_status_no_block_files():
         allow_s3_archive_read=True,
         dry_run=False,
     )
-    # Expect the specific status for no files found.
-    assert result.status == ScoutStatus.HIP3_EXPLORER_BLOCK_FILES_NOT_FOUND_IN_WINDOW
+    # Expect either ROOT_EMPTY (listing succeeded but empty) or ROOT_LISTING_FAILED
+    # (requester-pays rejected without credentials). Both are correct non-data outcomes.
+    assert result.status in (
+        ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY,
+        ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED,
+    )
     # No bytes should have been downloaded.
     assert result.bytes_downloaded_total == 0
     assert not result.candidate_events
