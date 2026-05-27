@@ -507,3 +507,212 @@ class TestSymbolValidation:
     def test_link_rejected(self):
         from hyperliquid_btc_eth_ml_atr_paper_v0 import VALID_SYMBOLS
         assert "LINK" not in VALID_SYMBOLS
+
+
+# ---------------------------------------------------------------------------
+# 15. Batch-vs-Sequential Equivalence (CORE CONTRACT)
+# ---------------------------------------------------------------------------
+@pytest.mark.determinism
+def test_paper_runner_equivalent_to_v0_batch_on_synthetic_fixture(tmp_path):
+    """
+    CORE CONTRACT: paper sequential simulation must match v0 batch backtest
+    on the same synthetic fixture input.
+
+    Uses deterministic synthetic bars, a deterministic model bundle fixture,
+    and asserts per-trade equivalence within 0.01 bps.
+    """
+    import hashlib
+    import json
+    import sys
+
+    from hyperliquid_btc_eth_ml_atr_v0 import (
+        MlAtrConfig, SplitConfig, FeatureConfig, CostConfig, ExitConfig, ModelConfig,
+        generate_features as v0_generate_features,
+        run_backtest as v0_run_backtest,
+        compute_trade_metrics as v0_compute_trade_metrics,
+        compute_rsi_wilder as v0_compute_rsi_wilder,
+        compute_atr as v0_compute_atr,
+    )
+    from hyperliquid_btc_eth_ml_atr_paper_v0 import (
+        ModelBundle, PaperConfig, load_model_bundle,
+        simulate_paper_once, generate_features_paper,
+        score_features_with_bundle, verify_bundle_against_batch_backtest,
+        EquivalenceReport,
+    )
+
+    # ---- 1. Deterministic synthetic BTC bars (30 days, hourly) ----
+    rng = np.random.RandomState(42)
+    n = 30 * 24  # 720 bars
+    dates = pd.date_range("2025-07-01T00:00:00Z", periods=n, freq="h", tz="UTC")
+    base = 60000.0
+    prices = base + rng.randn(n).cumsum() * 80
+    prices = np.maximum(prices, 40000)
+    highs = prices + rng.uniform(20, 150, n)
+    lows = prices - rng.uniform(20, 150, n)
+    opens = prices + rng.randn(n) * 30
+    # Ensure OHLC consistency
+    highs = np.maximum(highs, np.maximum(prices, opens))
+    lows = np.minimum(lows, np.minimum(prices, opens))
+    vols = rng.uniform(500, 8000, n)
+
+    bars = pd.DataFrame({
+        "timestamp": dates, "symbol": "BTC",
+        "open": opens, "high": highs, "low": lows,
+        "close": prices, "volume": vols,
+    })
+
+    # ---- 2. Deterministic funding rows ----
+    fund_rates = rng.uniform(-0.0003, 0.0003, n)
+    funding = pd.DataFrame({
+        "timestamp": dates, "symbol": "BTC",
+        "funding_rate": fund_rates,
+    })
+
+    # ---- 3. Deterministic model bundle ----
+    feature_names = ["ret_1h", "ret_4h", "ret_24h", "realized_vol_24h",
+                     "atr_norm_14h", "funding_current", "funding_mean_24h", "rsi_14h"]
+    # Use small known coefficients that will trigger both long and short signals
+    coefs = [0.3, 0.15, 0.08, 0.12, -0.05, 0.10, 0.06, 0.03]
+    intercept = -0.02
+    scaler_mean = [0.0] * 8
+    scaler_scale = [1.0] * 8
+
+    bundle_dict = {
+        "spec_version": "v0",
+        "study_id": "hyperliquid_btc_eth_ml_atr_v0",
+        "created_at_utc": "2025-01-01T00:00:00Z",
+        "source_run_id": "synthetic_fixture",
+        "source_summary_sha256": "",
+        "source_config_sha256": "",
+        "source_precommitment_path": "",
+        "source_precommitment_sha256": "",
+        "source_summary_status": "ML_ATR_V0_TEST_DIAGNOSTIC_PASS_SHADOW_LOGGING_ELIGIBLE",
+        "source_test_split_status": "completed",
+        "source_test_split_boundary_timestamps": {
+            "train_start": None, "train_end": "2024-12-31T23:59:59Z",
+            "validation_start": "2025-01-01T00:00:00Z", "validation_end": "2025-06-30T23:59:59Z",
+            "test_start": "2025-07-01T00:00:00Z", "test_end": None,
+        },
+        "symbols": ["BTC"],
+        "feature_names": feature_names,
+        "scaler_mean": scaler_mean,
+        "scaler_scale": scaler_scale,
+        "model_backend": "sklearn",
+        "logistic_intercept": intercept,
+        "logistic_coefficients": coefs,
+        "regularization_C": 1.0,
+        "calibrator": "platt",
+        "platt_params": {"a": 0.0, "b": 0.0},
+        "thresholds": {"long_threshold": 0.55, "short_threshold": 0.40},
+        "feature_config": {"label_horizon_bars": 24, "atr_lookback": 14},
+        "exit_config": {"stop_atr_mult": 2.0, "trailing_atr_mult": 3.0},
+        "cost_config": {
+            "fee_bps_per_side": 1.0, "slippage_bps_per_side": 0.5,
+            "funding_interval_hours": 1, "max_abs_funding_rate": 0.01,
+            "allow_zero_volume_bars": True,
+        },
+        "label_horizon_bars": 24,
+        "train_window": {"start": None, "end": "2024-12-31T23:59:59Z"},
+        "validation_window": {"start": "2025-01-01T00:00:00Z", "end": "2025-06-30T23:59:59Z"},
+        "test_window": {"start": "2025-07-01T00:00:00Z", "end": None},
+        "latest_training_input_timestamp_by_symbol": {},
+        "eligibility_status_from_source_summary": "ML_ATR_V0_TEST_DIAGNOSTIC_PASS_SHADOW_LOGGING_ELIGIBLE",
+        "package_versions": {
+            "python_version": sys.version,
+            "numpy_version": np.__version__,
+            "pandas_version": pd.__version__,
+            "sklearn_version": getattr(sys.modules.get("sklearn", None), "__version__", "unavailable"),
+        },
+        "bundle_sha256_self": None,
+        "safety": {"observer_only": True, "no_orders": True, "no_auth": True, "no_live_execution": True},
+    }
+    bundle_for_hash = {k: v for k, v in bundle_dict.items() if k != "bundle_sha256_self"}
+    raw = json.dumps(bundle_for_hash, sort_keys=True, indent=2, default=str)
+    bundle_dict["bundle_sha256_self"] = hashlib.sha256(raw.encode()).hexdigest()
+
+    bundle_path = tmp_path / "model_bundle.json"
+    bundle_path.write_text(json.dumps(bundle_dict, sort_keys=True, indent=2, default=str) + "\n")
+    bundle = load_model_bundle(bundle_path)
+
+    # ---- 4. V0 BATCH BACKTEST PATH ----
+    # Generate features using v0 code
+    cfg = MlAtrConfig(
+        feature=FeatureConfig(atr_lookback=14),
+        exit=ExitConfig(stop_atr_mult=2.0, trailing_atr_mult=3.0),
+        cost=CostConfig(fee_bps_per_side=1.0, slippage_bps_per_side=0.5),
+        model=ModelConfig(long_threshold=0.55, short_threshold=0.40),
+    )
+
+    bars_with_features = v0_generate_features(bars.copy(), funding, cfg.feature, cfg.cost, no_funding=False)
+    # Score using frozen bundle
+    valid_mask = bars_with_features[feature_names].notna().all(axis=1)
+    scored = bars_with_features[valid_mask].copy()
+    probs = score_features_with_bundle(scored, bundle)
+    scored["calibrated_p_up"] = probs
+
+    # Run v0 batch backtest
+    batch_trades = v0_run_backtest(
+        scored, cfg.exit, cfg.cost,
+        cfg.model.long_threshold, cfg.model.short_threshold,
+        funding, strict_funding=False,
+    )
+    batch_metrics = v0_compute_trade_metrics(batch_trades, seed=42)
+
+    # ---- 5. PAPER SEQUENTIAL PATH ----
+    paper_output = tmp_path / "paper_output"
+    paper_cfg = PaperConfig(
+        model_bundle_path=bundle_path,
+        bars_path=tmp_path / "bars.csv",
+        funding_path=tmp_path / "funding.csv",
+        output_root=paper_output,
+        paper_run_id="equivalence_test",
+        symbols=("BTC",),
+        close_open_at_end=False,
+        allow_nonpassing_bundle_for_test_fixtures=True,
+        dry_run=True,
+    )
+    paper_summary = simulate_paper_once(paper_cfg, bundle, bars, funding, paper_output)
+
+    # ---- 6. COMPARE ----
+    # Both paths should produce trades (or both zero)
+    # The key contract: same model/scaler/calibrator/exit rules on same bars
+    # produces same signals and same exits
+
+    # If batch produced trades, paper should produce the same count
+    # (both use identical feature generation, scoring, and exit logic)
+    # For a synthetic fixture, the exact trade list depends on the random bars
+
+    # At minimum: both paths must not crash and produce valid results
+    assert paper_summary.status_kind == "STATUS_KIND_FINAL"
+
+    # Run the verification function
+    report = verify_bundle_against_batch_backtest(bundle, bars, funding, epsilon_bps=0.01)
+
+    # Write equivalence report
+    report_path = tmp_path / "equivalence_report.json"
+    report_path.write_text(json.dumps({
+        "bundle_sha256_self": report.bundle_sha256_self,
+        "bars_sha256": report.bars_sha256,
+        "funding_sha256": report.funding_sha256,
+        "trade_count_batch": report.trade_count_batch,
+        "trade_count_paper": report.trade_count_paper,
+        "max_abs_net_bps_diff": report.max_abs_net_bps_diff,
+        "mean_abs_net_bps_diff": report.mean_abs_net_bps_diff,
+        "passed": report.passed,
+        "epsilon_bps": report.epsilon_bps,
+    }, sort_keys=True, indent=2) + "\n")
+
+    # Core assertions
+    assert report.passed, f"Equivalence failed: max_diff={report.max_abs_net_bps_diff}"
+    assert report.bundle_sha256_self == bundle.bundle_sha256_self
+    assert report.epsilon_bps == 0.01
+
+    # Verify equivalence_report.json exists and has passed=true
+    loaded_report = json.loads(report_path.read_text())
+    assert loaded_report["passed"] is True
+
+    # If batch produced trades, verify trade counts match
+    if batch_metrics.total_trades > 0:
+        assert report.trade_count_batch == report.trade_count_paper, (
+            f"Trade count mismatch: batch={report.trade_count_batch} paper={report.trade_count_paper}"
+        )
