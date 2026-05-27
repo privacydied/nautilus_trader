@@ -1,0 +1,17 @@
+{
+  "study_id": "hlp_child_vault_role_probe",
+  "run_id": "20260526_210440_9b032dea",
+  "date": "20260524",
+  "hours": [
+    0,
+    14
+  ],
+  "total_download_bytes": 83147875,
+  "total_download_human": "79.3 MiB",
+  "s3_sources": [
+    "explorer_blocks",
+    "node_fills_by_block/hourly/20260524/0.lz4",
+    "node_fills_by_block/hourly/20260524/14.lz4"
+  ],
+  "api_sources": []
+}

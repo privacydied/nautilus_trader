@@ -579,9 +579,129 @@ def test_cli_skip_l2_parsing():
     assert args.skip_l2_download is True
 
 
-# ===========================================================================
-# Short-circuit ordering enforcement
-# ===========================================================================
+class TestS3PathValidation:
+    """Tests for _validate_s3_path in scout module."""
+
+    def test_validate_s3_path_valid(self):
+        """Valid hyperliquid-archive path passes validation."""
+        from examples.strategies.venue_agnostic_signal_observer.hip3_offhours_oracle_basis_residual_scout_v0 import (
+            _validate_s3_path,
+        )
+        # Should not raise
+        _validate_s3_path("s3://hyperliquid-archive/asset_ctxs/20251013.csv.lz4")
+        _validate_s3_path("s3://hyperliquid-archive/market_data/20251013/00/l2Book/SPX.lz4")
+
+    def test_validate_s3_path_rejects_wrong_bucket(self):
+        """Path to wrong S3 bucket raises RuntimeError."""
+        from examples.strategies.venue_agnostic_signal_observer.hip3_offhours_oracle_basis_residual_scout_v0 import (
+            _validate_s3_path,
+        )
+        with pytest.raises(RuntimeError, match="Invalid S3 path"):
+            _validate_s3_path("s3://other-bucket/data.lz4")
+
+    def test_validate_s3_path_rejects_path_traversal(self):
+        """Path with '..' raises RuntimeError."""
+        from examples.strategies.venue_agnostic_signal_observer.hip3_offhours_oracle_basis_residual_scout_v0 import (
+            _validate_s3_path,
+        )
+        with pytest.raises(RuntimeError, match="Path traversal"):
+            _validate_s3_path("s3://hyperliquid-archive/../../etc/passwd")
+
+    def test_validate_s3_path_rejects_shell_chars(self):
+        """Path with dangerous shell characters raises RuntimeError."""
+        from examples.strategies.venue_agnostic_signal_observer.hip3_offhours_oracle_basis_residual_scout_v0 import (
+            _validate_s3_path,
+        )
+        with pytest.raises(RuntimeError, match="Dangerous character"):
+            _validate_s3_path("s3://hyperliquid-archive/; rm -rf /")
+
+
+class TestSubprocessException:
+    """Tests for subprocess exception enforcement."""
+
+    def test_subprocess_only_in_s3_chokepoint(self):
+        """subprocess.run only appears inside approved S3 chokepoint functions."""
+        import inspect
+        from examples.strategies.venue_agnostic_signal_observer import (
+            hip3_offhours_oracle_basis_residual_scout_v0 as mod,
+        )
+        source = inspect.getsource(mod)
+        # Count subprocess.run occurrences
+        import re
+        occurrences = [(m.start(),) for m in re.finditer(r'subprocess\.run', source)]
+        # Expected: only in public_s3_read and public_s3_ls
+        # Get sourcelines for each
+        lines = source.split('\n')
+        for start_pos, in occurrences:
+            # Find which function this is inside
+            line_idx = source[:start_pos].count('\n')
+            # Walk upwards to find function definition
+            func_name = None
+            for i in range(line_idx, -1, -1):
+                line = lines[i].strip()
+                if line.startswith('def '):
+                    func_name = line[4:].split('(')[0].strip()
+                    break
+            assert func_name in ('public_s3_read', 'public_s3_ls'), (
+                f"subprocess.run found in '{func_name}', not in S3 chokepoint"
+            )
+
+    def test_subprocess_uses_shell_false(self):
+        """subprocess.run in S3 chokepoint uses shell=False."""
+        import inspect
+        from examples.strategies.venue_agnostic_signal_observer import (
+            hip3_offhours_oracle_basis_residual_scout_v0 as mod,
+        )
+        src = inspect.getsource(mod)
+        # Find each subprocess.run call and check it has shell=False
+        import re
+        for match in re.finditer(r'subprocess\.run\([^)]+\)', src):
+            call = match.group()
+            assert 'shell=False' in call, f"subprocess.run without shell=False: {call[:80]}"
+
+    def test_subprocess_uses_argv_list(self):
+        """subprocess.run in S3 chokepoint uses argv list, not shell string."""
+        import inspect
+        from examples.strategies.venue_agnostic_signal_observer import (
+            hip3_offhours_oracle_basis_residual_scout_v0 as mod,
+        )
+        src = inspect.getsource(mod)
+        import re
+        # Find subprocess.run calls and verify the first arg is a list
+        for match in re.finditer(r'subprocess\.run\(', src):
+            pos = match.end()
+            # Read the first argument until comma or closing paren (handling nesting)
+            args_src = src[pos:]
+            first_arg = ''
+            depth = 0
+            for ch in args_src:
+                if ch == ',' and depth == 0:
+                    break
+                if ch == ')' and depth == 0:
+                    break
+                if ch in '([{':
+                    depth += 1
+                elif ch in ')]}':
+                    depth -= 1
+                first_arg += ch
+            first_arg = first_arg.strip()
+            # Must start with [ (list literal) or be a variable name defined as a list
+            assert first_arg.startswith('[') or first_arg.isidentifier(), (
+                f"subprocess.run without argv list: first_arg={first_arg[:50]}"
+            )
+
+    def test_cli_has_no_subprocess(self):
+        """CLI runner has no subprocess import or usage."""
+        cli_path = Path(__file__).resolve().parent.parent / "run_hip3_offhours_oracle_basis_residual_scout_v0.py"
+        content = cli_path.read_text()
+        assert 'subprocess' not in content, "CLI must not import or use subprocess"
+
+    def test_cli_has_no_network_imports(self):
+        """CLI runner has no direct network library imports."""
+        cli_path = Path(__file__).resolve().parent.parent / "run_hip3_offhours_oracle_basis_residual_scout_v0.py"
+        content = cli_path.read_text()
+        for lib in ('urllib', 'requests', 'httpx', 'boto3', 'aiohttp'):
+            assert lib not in content, f"CLI must not import {lib}"
 
 
 def test_short_circuit_ordering():

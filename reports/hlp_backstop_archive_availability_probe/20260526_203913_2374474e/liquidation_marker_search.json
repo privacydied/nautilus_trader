@@ -1,0 +1,98 @@
+{
+  "study": "hlp_backstop_archive_availability_probe",
+  "probe_timestamp_utc": "2026-05-26T20:39:13Z",
+  "sources_searched": [
+    "explorer_blocks"
+  ],
+  "results": [
+    {
+      "source": "explorer_blocks",
+      "terms_searched": [
+        "liquidation",
+        "liquidate",
+        "liquidator",
+        "backstop",
+        "vault",
+        "takeover",
+        "margin",
+        "maintenance",
+        "force",
+        "forced",
+        "clearinghouse",
+        "deleverage",
+        "adl",
+        "liquida",
+        "liq",
+        "liquidat"
+      ],
+      "terms_found": [
+        "vault",
+        "margin",
+        "liq"
+      ],
+      "match_details": {
+        "vault": [
+          {
+            "pos": 114086,
+            "context": "tx_hash..error...actions...type.NetChildVaultPositionsAction.childVaultAddresses..*0x"
+          },
+          {
+            "pos": 114112,
+            "context": ".type.NetChildVaultPositionsAction.childVaultAddresses..*0x010461c14e146ac35fe42271bd"
+          }
+        ],
+        "margin": [
+          {
+            "pos": 919253,
+            "context": "h..error...actions...type.updateIsolatedMargin.asset......isBuy..ntli...B@.user.*0xf2f"
+          },
+          {
+            "pos": 1447921,
+            "context": "h..error...actions...type.updateIsolatedMargin.asset..isBuy..ntli..user.*0x86c8ae875c7"
+          },
+          {
+            "pos": 1843433,
+            "context": "h..error...actions...type.updateIsolatedMargin.asset......isBuy..ntli....p.user.*0xc62"
+          },
+          {
+            "pos": 2527691,
+            "context": "h..error...actions...type.updateIsolatedMargin.asset...isBuy..ntli..[...user.*0x2ba90d"
+          },
+          {
+            "pos": 2527825,
+            "context": "error.?Account does not have sufficient margin available for increase...actions...type"
+          }
+        ],
+        "liq": [
+          {
+            "pos": 919050,
+            "context": "uilderFee.signatureChainId.0x66eee.hyperliquidChain.Mainnet.maxFeeRate.0.01%.builde"
+          },
+          {
+            "pos": 1843709,
+            "context": "proveAgent.signatureChainId.0xa4b1.hyperliquidChain.Mainnet.agentAddress.*0x29b6659"
+          },
+          {
+            "pos": 2028416,
+            "context": "uilderFee.signatureChainId.0x66eee.hyperliquidChain.Mainnet.maxFeeRate.0.01%.builde"
+          },
+          {
+            "pos": 3157363,
+            "context": ".sendAsset.signatureChainId.0xa4b1.hyperliquidChain.Mainnet.destination.*0x20000000"
+          },
+          {
+            "pos": 3962055,
+            "context": "sendAsset.signatureChainId.0x66eee.hyperliquidChain.Mainnet.destination.*0x20000000"
+          }
+        ]
+      },
+      "join_keys_found": [
+        "block",
+        "time",
+        "user",
+        "hash"
+      ],
+      "characters_searched": 17997025
+    }
+  ]
+}

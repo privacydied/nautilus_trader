@@ -1,0 +1,156 @@
+{
+  "study": "hlp_backstop_archive_availability_probe",
+  "probe_timestamp_utc": "2026-05-26T19:46:43Z",
+  "git_sha": "30c5693e9bc058c80198e5af068ff3c70107df87",
+  "bucket": "hl-mainnet-node-data",
+  "prefix": "node_fills_by_block/hourly/",
+  "date_probed": "20260524",
+  "files_in_date": [
+    {
+      "name": "0.lz4",
+      "size_bytes": 27996979,
+      "size_human": "26.7 MiB",
+      "last_modified": "2026-05-24 03:02:16"
+    },
+    {
+      "name": "1.lz4",
+      "size_bytes": 28835840,
+      "size_human": "27.5 MiB",
+      "last_modified": "2026-05-24 04:02:52"
+    },
+    {
+      "name": "10.lz4",
+      "size_bytes": 27262976,
+      "size_human": "26.0 MiB",
+      "last_modified": "2026-05-24 13:02:16"
+    },
+    {
+      "name": "11.lz4",
+      "size_bytes": 22334668,
+      "size_human": "21.3 MiB",
+      "last_modified": "2026-05-24 14:02:54"
+    },
+    {
+      "name": "12.lz4",
+      "size_bytes": 23278387,
+      "size_human": "22.2 MiB",
+      "last_modified": "2026-05-24 15:03:05"
+    },
+    {
+      "name": "13.lz4",
+      "size_bytes": 28101836,
+      "size_human": "26.8 MiB",
+      "last_modified": "2026-05-24 16:02:42"
+    },
+    {
+      "name": "14.lz4",
+      "size_bytes": 52323942,
+      "size_human": "49.9 MiB",
+      "last_modified": "2026-05-24 17:02:40"
+    },
+    {
+      "name": "15.lz4",
+      "size_bytes": 27367833,
+      "size_human": "26.1 MiB",
+      "last_modified": "2026-05-24 18:02:18"
+    },
+    {
+      "name": "16.lz4",
+      "size_bytes": 25899827,
+      "size_human": "24.7 MiB",
+      "last_modified": "2026-05-24 19:02:27"
+    },
+    {
+      "name": "17.lz4",
+      "size_bytes": 22020096,
+      "size_human": "21.0 MiB",
+      "last_modified": "2026-05-24 20:02:30"
+    },
+    {
+      "name": "18.lz4",
+      "size_bytes": 19503513,
+      "size_human": "18.6 MiB",
+      "last_modified": "2026-05-24 21:02:59"
+    },
+    {
+      "name": "19.lz4",
+      "size_bytes": 20552089,
+      "size_human": "19.6 MiB",
+      "last_modified": "2026-05-24 22:02:31"
+    },
+    {
+      "name": "2.lz4",
+      "size_bytes": 23383244,
+      "size_human": "22.3 MiB",
+      "last_modified": "2026-05-24 05:02:58"
+    },
+    {
+      "name": "20.lz4",
+      "size_bytes": 21181235,
+      "size_human": "20.2 MiB",
+      "last_modified": "2026-05-24 23:03:01"
+    },
+    {
+      "name": "21.lz4",
+      "size_bytes": 33135001,
+      "size_human": "31.6 MiB",
+      "last_modified": "2026-05-25 00:02:59"
+    },
+    {
+      "name": "22.lz4",
+      "size_bytes": 40475033,
+      "size_human": "38.6 MiB",
+      "last_modified": "2026-05-26 01:02:15"
+    },
+    {
+      "name": "23.lz4",
+      "size_bytes": 27158118,
+      "size_human": "25.9 MiB",
+      "last_modified": "2026-05-26 01:02:20"
+    },
+    {
+      "name": "3.lz4",
+      "size_bytes": 28311552,
+      "size_human": "27.0 MiB",
+      "last_modified": "2026-05-24 06:02:25"
+    },
+    {
+      "name": "4.lz4",
+      "size_bytes": 18454937,
+      "size_human": "17.6 MiB",
+      "last_modified": "2026-05-24 07:03:03"
+    },
+    {
+      "name": "5.lz4",
+      "size_bytes": 19188940,
+      "size_human": "18.3 MiB",
+      "last_modified": "2026-05-24 08:02:36"
+    },
+    {
+      "name": "6.lz4",
+      "size_bytes": 20342374,
+      "size_human": "19.4 MiB",
+      "last_modified": "2026-05-24 09:03:02"
+    },
+    {
+      "name": "7.lz4",
+      "size_bytes": 22229811,
+      "size_human": "21.2 MiB",
+      "last_modified": "2026-05-24 10:02:55"
+    },
+    {
+      "name": "8.lz4",
+      "size_bytes": 24851251,
+      "size_human": "23.7 MiB",
+      "last_modified": "2026-05-24 11:02:52"
+    },
+    {
+      "name": "9.lz4",
+      "size_bytes": 27577548,
+      "size_human": "26.3 MiB",
+      "last_modified": "2026-05-24 12:03:03"
+    }
+  ],
+  "total_compressed_bytes": 631767030,
+  "total_compressed_human": "602.5 MiB"
+}

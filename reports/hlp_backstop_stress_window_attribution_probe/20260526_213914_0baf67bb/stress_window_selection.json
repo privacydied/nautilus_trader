@@ -1,0 +1,27 @@
+{
+  "study_id": "hlp_backstop_stress_window_attribution_probe",
+  "run_id": "20260526_213914_0baf67bb",
+  "date": "2025-10-10",
+  "hours": [
+    15,
+    16,
+    17,
+    18,
+    19,
+    20
+  ],
+  "symbols": [],
+  "selection_method": "explicit_date_with_elevated_activity",
+  "stress_validated": true,
+  "validation_evidence": {
+    "total_compressed_bytes_for_date": "386482699 bytes (368.6 MiB)",
+    "hourly_breakdown": {
+      "15": "node_fills_by_block/hourly/20251010/15.lz4",
+      "16": "node_fills_by_block/hourly/20251010/16.lz4",
+      "17": "node_fills_by_block/hourly/20251010/17.lz4",
+      "18": "node_fills_by_block/hourly/20251010/18.lz4",
+      "19": "node_fills_by_block/hourly/20251010/19.lz4",
+      "20": "node_fills_by_block/hourly/20251010/20.lz4"
+    }
+  }
+}

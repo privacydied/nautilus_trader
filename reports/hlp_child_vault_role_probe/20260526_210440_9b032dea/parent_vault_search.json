@@ -1,0 +1,10 @@
+{
+  "parent_vault_address": null,
+  "verdict": "HLP_PARENT_VAULT_NOT_FOUND",
+  "source": null,
+  "child_addresses": [],
+  "child_role_labels": {},
+  "raw_metadata_keys": [],
+  "error": null,
+  "download_bytes": 0
+}

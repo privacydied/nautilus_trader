@@ -1,0 +1,14 @@
+{
+  "study": "hlp_backstop_archive_availability_probe",
+  "probe_timestamp_utc": "2026-05-26T20:39:13Z",
+  "git_sha": "1984ef5541a2234571d884ca206de81cd4de1d3c",
+  "bucket": "hl-mainnet-node-data",
+  "prefixes_probed": [
+    "node_fills_by_block/hourly",
+    "misc_events_by_block/hourly",
+    "explorer_blocks",
+    "replica_cmds"
+  ],
+  "date_probed": "20260524",
+  "total_download_bytes": 40617121
+}

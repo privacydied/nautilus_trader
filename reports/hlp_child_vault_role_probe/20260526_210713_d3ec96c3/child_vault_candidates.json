@@ -1,0 +1,36 @@
+{
+  "study_id": "hlp_child_vault_role_probe",
+  "run_id": "20260526_210713_d3ec96c3",
+  "candidates": [
+    {
+      "address": "0x010461c14e146ac35fe42271bdc1134ee31c703a",
+      "count_occurrences": 1,
+      "first_block_seen": 1008000001,
+      "last_block_seen": 1008000001,
+      "assets_touched": [
+        "168",
+        "179",
+        "22",
+        "34",
+        "52",
+        "57"
+      ],
+      "source": "explorer_blocks"
+    },
+    {
+      "address": "0x31ca8395cf837de08b24da3f660e77761dfb974b",
+      "count_occurrences": 1,
+      "first_block_seen": 1008000001,
+      "last_block_seen": 1008000001,
+      "assets_touched": [
+        "168",
+        "179",
+        "22",
+        "34",
+        "52",
+        "57"
+      ],
+      "source": "explorer_blocks"
+    }
+  ]
+}

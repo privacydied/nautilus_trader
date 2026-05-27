@@ -1,0 +1,18 @@
+{
+  "study_id": "hlp_backstop_stress_window_attribution_probe",
+  "run_id": "20260526_215948_b41aa859",
+  "s3_bucket": "hl-mainnet-node-data",
+  "date_probed": "20251010",
+  "hours_probed": [
+    15,
+    16,
+    17,
+    18,
+    19,
+    20
+  ],
+  "total_records": 4900276,
+  "unique_addresses_profiled": 500,
+  "total_download_bytes": 386482699,
+  "stress_validated": true
+}

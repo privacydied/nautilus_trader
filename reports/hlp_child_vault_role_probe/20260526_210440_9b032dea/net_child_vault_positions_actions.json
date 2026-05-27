@@ -1,0 +1,38 @@
+{
+  "candidates": [
+    {
+      "address": "0x010461c14e146ac35fe42271bdc1134ee31c703a",
+      "count_occurrences": 1,
+      "first_block_seen": 1008000001,
+      "last_block_seen": 1008000001,
+      "assets_touched": [
+        "168",
+        "179",
+        "22",
+        "34",
+        "52",
+        "57"
+      ],
+      "source": "explorer_blocks"
+    },
+    {
+      "address": "0x31ca8395cf837de08b24da3f660e77761dfb974b",
+      "count_occurrences": 1,
+      "first_block_seen": 1008000001,
+      "last_block_seen": 1008000001,
+      "assets_touched": [
+        "168",
+        "179",
+        "22",
+        "34",
+        "52",
+        "57"
+      ],
+      "source": "explorer_blocks"
+    }
+  ],
+  "candidate_count": 2,
+  "blocks_sampled": 100,
+  "download_bytes": 2863730,
+  "source_s3": "s3://hl-mainnet-node-data/explorer_blocks/1000000000/1008000000/1008000100.rmp.lz4"
+}

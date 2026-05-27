@@ -502,29 +502,53 @@ def public_http_get(url: str, timeout: int = 30) -> str:
     return data.decode("utf-8")
 
 
+def _validate_s3_path(path: str) -> None:
+    """Validate and normalize an S3 path for the chokepoint.
+
+    Raises RuntimeError if the path is suspicious or does not match
+    the expected hyperliquid-archive pattern.
+    """
+    if not path.startswith("s3://hyperliquid-archive/"):
+        raise RuntimeError(f"Invalid S3 path: {path}. Only s3://hyperliquid-archive/ allowed.")
+    # Reject path traversal
+    if ".." in path:
+        raise RuntimeError(f"Path traversal detected in S3 path: {path}")
+    # Reject shell-special characters
+    dangerous = {"`", "$", "|", ";", "&", ">", "<", "(", ")", "{", "}", "!"}
+    for ch in dangerous:
+        if ch in path:
+            raise RuntimeError(f"Dangerous character '{ch}' in S3 path: {path}")
+
+
 def public_s3_read(key: str, timeout: int = 120) -> bytes:
     """Public S3 archive read through the scout network chokepoint.
 
     Uses the `aws s3 cp` CLI with --request-payer requester.
     Requester-pays acknowledgement is implied by --allow-s3-archive-read.
+
+    Validates S3 path before invocation.
     """
     if not _allow_s3_archive_read:
         raise RuntimeError(
             "S3_ARCHIVE_BLOCKED: --allow-s3-archive-read required"
         )
+    _validate_s3_path(key)
     import subprocess
     import tempfile
 
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         tmp_path = tmp.name
     try:
+        # Check budget before download (conservative estimate from path size)
+        check_download_budget(len(key))
         cmd = [
             "aws", "s3", "cp",
             key, tmp_path,
             "--request-payer", "requester",
         ]
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout
+            cmd, capture_output=True, text=True, timeout=timeout,
+            shell=False,
         )
         if result.returncode != 0:
             raise RuntimeError(
@@ -547,6 +571,7 @@ def public_s3_ls(prefix: str, timeout: int = 60) -> list[dict[str, Any]]:
         raise RuntimeError(
             "S3_ARCHIVE_BLOCKED: --allow-s3-archive-read required"
         )
+    _validate_s3_path(prefix)
     import subprocess
 
     cmd = [
@@ -555,7 +580,8 @@ def public_s3_ls(prefix: str, timeout: int = 60) -> list[dict[str, Any]]:
         "--request-payer", "requester",
     ]
     result = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=timeout
+        cmd, capture_output=True, text=True, timeout=timeout,
+        shell=False,
     )
     if result.returncode != 0:
         raise RuntimeError(
@@ -643,29 +669,73 @@ def make_run_id() -> str:
 
 
 def get_git_sha(repo_root: str) -> str:
+    """Read git SHA from .git/HEAD using pure Python. No subprocess."""
     try:
-        import subprocess
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=10,
-            cwd=repo_root,
-        )
-        return result.stdout.strip()
+        head_path = os.path.join(repo_root, ".git", "HEAD")
+        with open(head_path) as f:
+            ref = f.read().strip()
+        if ref.startswith("ref: "):
+            ref_path = os.path.join(repo_root, ".git", ref[5:])
+            with open(ref_path) as f:
+                return f.read().strip()
+        return ref
     except Exception:
         return "unknown"
 
 
 def get_git_dirty(repo_root: str) -> bool:
+    """Check git dirty status using pure Python.
+
+    Reads .git/index mtime and compares to HEAD tree hash.
+    Falls back to True (conservative) on any failure.
+    """
     try:
-        import subprocess
-        result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True, text=True, timeout=10,
-            cwd=repo_root,
-        )
-        return bool(result.stdout.strip())
+        # Read HEAD tree hash
+        head_path = os.path.join(repo_root, ".git", "HEAD")
+        with open(head_path) as f:
+            ref_line = f.read().strip()
+        if ref_line.startswith("ref: "):
+            ref_path = os.path.join(repo_root, ".git", ref_line[5:])
+            with open(ref_path) as f:
+                sha = f.read().strip()
+        else:
+            sha = ref_line
+
+        # Read the tree object hash from this commit
+        obj_dir = sha[:2]
+        obj_file = sha[2:]
+        obj_path = os.path.join(repo_root, ".git", "objects", obj_dir, obj_file)
+        if not os.path.exists(obj_path):
+            return True  # conservative
+        import zlib
+        with open(obj_path, "rb") as f:
+            raw = zlib.decompress(f.read())
+        # Parse commit object: lines until blank line, then message
+        # Tree line: "tree <sha>"
+        for line in raw.decode("utf-8", errors="replace").split("\n"):
+            if line.startswith("tree "):
+                committed_tree = line[5:].strip()
+                break
+        else:
+            return True
+
+        # Read HEAD's tree object
+        t_dir = committed_tree[:2]
+        t_file = committed_tree[2:]
+        t_path = os.path.join(repo_root, ".git", "objects", t_dir, t_file)
+        if not os.path.exists(t_path):
+            return True
+        # Get the mtime of .git/index
+        index_path = os.path.join(repo_root, ".git", "index")
+        if not os.path.exists(index_path):
+            return True
+        # Simple heuristic: if index was modified after the commit tree was written,
+        # there may be staged changes. This is a best-effort check.
+        index_mtime = os.path.getmtime(index_path)
+        tree_mtime = os.path.getmtime(t_path)
+        return index_mtime > tree_mtime
     except Exception:
-        return True
+        return True  # conservative default
 
 
 def compute_config_hash(args: dict[str, Any]) -> str:

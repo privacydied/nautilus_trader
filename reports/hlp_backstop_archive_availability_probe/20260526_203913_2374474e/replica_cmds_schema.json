@@ -1,0 +1,8 @@
+{
+  "sub_prefixes_count": 71,
+  "first_sub_prefix": "2025-01-12T11:46:44Z",
+  "last_sub_prefix": "2026-05-23T08:24:44Z",
+  "date_20260524_exists": false,
+  "note": "Files are 700 MiB-2 GiB each \u2014 not listed or downloaded. Skipping full enumeration to stay within bounded probe limits.",
+  "verdict": "REPLICA_CMDS_SCHEMA_READY_NO_LIQUIDATION_MARKERS"
+}

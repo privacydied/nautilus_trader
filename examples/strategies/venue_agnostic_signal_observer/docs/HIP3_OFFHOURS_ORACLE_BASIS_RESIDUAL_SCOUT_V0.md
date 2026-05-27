@@ -184,6 +184,21 @@ chokepoint is the only call site in new code that performs operations via
 - Per-symbol L2 budget: 500 MB
 - Exceeding either emits `HIP3_SCOUT_ERROR` with reason `DOWNLOAD_BUDGET_EXCEEDED`
 
+### Subprocess Exception
+
+`subprocess.run` is generally forbidden but a narrow audited exception exists:
+
+- `subprocess.run` is allowed **only** inside the S3 chokepoint functions (`public_s3_read`, `public_s3_ls`) for AWS CLI requester-pays S3 reads and listing.
+- Must use `shell=False` (argv list, never a shell string).
+- Must include a `timeout`.
+- Must validate/normalize S3 paths before invocation via `_validate_s3_path`.
+- Must reject paths that don't start with `s3://hyperliquid-archive/`, contain path traversal (`..`), or contain shell-dangerous characters.
+- Must enforce download budget before and after reads.
+- Must require `--allow-s3-archive-read`.
+- No subprocess usage in the CLI runner.
+- No subprocess usage outside the S3 chokepoint functions.
+- Git metadata (`get_git_sha`, `get_git_dirty`) uses pure Python file reads of `.git/HEAD` and object files, not subprocess.
+
 ## Allowed Statuses
 
 | Status | Meaning |

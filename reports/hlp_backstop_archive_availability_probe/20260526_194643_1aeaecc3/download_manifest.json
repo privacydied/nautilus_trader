@@ -1,0 +1,12 @@
+{
+  "study": "hlp_backstop_archive_availability_probe",
+  "probe_timestamp_utc": "2026-05-26T19:46:43Z",
+  "files_downloaded": [
+    "s3://hl-mainnet-node-data/node_fills_by_block/hourly/20260524/0.lz4"
+  ],
+  "total_bytes_downloaded": 27954891,
+  "total_bytes_decompressed": 138513641,
+  "total_rows_parsed": 200,
+  "download_seconds": 5.99,
+  "parse_seconds": 0.05
+}
