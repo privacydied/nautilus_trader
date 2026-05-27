@@ -1073,3 +1073,411 @@ def test_inventory_mode_explorer_block_budget_enforced():
     # Should have read at least 1 file but budget should have stopped further reads
     assert inv.files_read >= 1
     assert inv.bytes_downloaded >= compressed_size
+
+
+# ---------------------------------------------------------------------------
+# P2 deployment-event search tests
+# ---------------------------------------------------------------------------
+
+def test_p2_order_cancel_with_empty_p1_types_are_candidates():
+    """Order/cancel actions with empty P1 baseline are classified as new_vs_p1 candidates."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _run_p2_scan_window,
+        NetworkChokepoint,
+        ScoutStatus,
+    )
+    import lz4.frame
+    import msgpack
+
+    blocks = [
+        {
+            "header": {"height": 100, "block_time": "2025-10-13T00:00:00"},
+            "txs": [
+                {"type": "order", "side": "buy", "price": "100"},
+                {"type": "cancel", "oid": "123"},
+            ],
+        }
+    ]
+    packed = msgpack.packb(blocks)
+    compressed = lz4.frame.compress(packed)
+
+    call_count = [0]
+    sublisting_patch = {
+        "prefixes": [],
+        "keys": ["explorer_blocks/100000000/block_100.rmp.lz4"],
+        "objects": [],
+        "error_code": None,
+    }
+
+    def fake_list_prefix(self, bucket, prefix, **kw):
+        call_count[0] += 1
+        return sublisting_patch
+
+    cp = NetworkChokepoint(allow_network_public=False, allow_s3_archive_read=True)
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", fake_list_prefix):
+        with unittest.mock.patch.object(NetworkChokepoint, "s3_read_object", return_value=compressed):
+            summary = _run_p2_scan_window(
+                window_name="test",
+                start_date="2025-10-13",
+                end_date="2025-10-14",
+                mapped_ranges=["explorer_blocks/100000000/"],
+                max_files=1,
+                chokepoint=cp,
+                p1_action_types=set(),
+                rare_threshold=25,
+                download_budget_remaining=50_000_000,
+                explorer_budget_remaining=50_000_000,
+            )
+
+    assert summary.blocks_parsed > 0
+    assert summary.total_actions > 0
+    assert summary.status in (
+        ScoutStatus.HIP3_DEPLOYMENT_EVENT_CANDIDATES_FOUND.value,
+        ScoutStatus.HIP3_DEPLOYMENT_EVENT_CANDIDATES_FOUND,
+    )
+
+
+def test_p2_no_candidate_status_with_known_p1_types():
+    """HIP3_NO_DEPLOYMENT_EVENT_CANDIDATES_IN_SCANNED_BLOCKS requires known P1 types."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _run_p2_scan_window,
+        NetworkChokepoint,
+        ScoutStatus,
+    )
+    import lz4.frame
+    import msgpack
+
+    blocks = [
+        {
+            "header": {"height": 100, "block_time": "2025-10-13T00:00:00"},
+            "txs": [
+                {"type": "order", "side": "buy", "price": "100"},
+                {"type": "cancel", "oid": "123"},
+            ],
+        }
+    ]
+    packed = msgpack.packb(blocks)
+    compressed = lz4.frame.compress(packed)
+
+    call_count = [0]
+    sublisting_patch = {
+        "prefixes": [],
+        "keys": ["explorer_blocks/100000000/block_100.rmp.lz4"],
+        "objects": [],
+        "error_code": None,
+    }
+
+    def fake_list_prefix(self, bucket, prefix, **kw):
+        call_count[0] += 1
+        return sublisting_patch
+
+    cp = NetworkChokepoint(allow_network_public=False, allow_s3_archive_read=True)
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", fake_list_prefix):
+        with unittest.mock.patch.object(NetworkChokepoint, "s3_read_object", return_value=compressed):
+            summary = _run_p2_scan_window(
+                window_name="test",
+                start_date="2025-10-13",
+                end_date="2025-10-14",
+                mapped_ranges=["explorer_blocks/100000000/"],
+                max_files=1,
+                chokepoint=cp,
+                p1_action_types={"order", "cancel"},
+                rare_threshold=1,
+                download_budget_remaining=50_000_000,
+                explorer_budget_remaining=50_000_000,
+            )
+
+    assert summary.blocks_parsed > 0
+    assert summary.total_actions > 0
+    assert summary.status in (
+        ScoutStatus.HIP3_NO_DEPLOYMENT_EVENT_CANDIDATES_IN_SCANNED_BLOCKS.value,
+        ScoutStatus.HIP3_NO_DEPLOYMENT_EVENT_CANDIDATES_IN_SCANNED_BLOCKS,
+    )
+
+
+def test_p2_schema_unknown_when_no_actions_in_parsed_files():
+    """HIP3_DEPLOYMENT_EVENT_SCHEMA_UNKNOWN fires when parsed files have no actions."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _run_p2_scan_window,
+        NetworkChokepoint,
+        ScoutStatus,
+    )
+    import json
+    import lz4.frame
+
+    blocks = [
+        {"header": {"height": 200}, "metadata": "no_actions"},
+    ]
+    compressed = lz4.frame.compress(json.dumps(blocks).encode())
+
+    call_count = [0]
+    sublisting_patch = {
+        "prefixes": [],
+        "keys": ["explorer_blocks/100000000/block_200.json.lz4"],
+        "objects": [],
+        "error_code": None,
+    }
+
+    def fake_list_prefix(self, bucket, prefix, **kw):
+        call_count[0] += 1
+        return sublisting_patch
+
+    cp = NetworkChokepoint(allow_network_public=False, allow_s3_archive_read=True)
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", fake_list_prefix):
+        with unittest.mock.patch.object(NetworkChokepoint, "s3_read_object", return_value=compressed):
+            summary = _run_p2_scan_window(
+                window_name="test",
+                start_date="2025-10-13",
+                end_date="2025-10-14",
+                mapped_ranges=["explorer_blocks/100000000/"],
+                max_files=1,
+                chokepoint=cp,
+                p1_action_types=set(),
+                rare_threshold=25,
+                download_budget_remaining=50_000_000,
+                explorer_budget_remaining=50_000_000,
+            )
+
+    assert summary.blocks_parsed > 0
+    assert summary.total_actions == 0
+    assert summary.status in (
+        ScoutStatus.HIP3_DEPLOYMENT_EVENT_SCHEMA_UNKNOWN.value,
+        ScoutStatus.HIP3_DEPLOYMENT_EVENT_SCHEMA_UNKNOWN,
+    )
+
+
+def test_p2_rare_action_extraction():
+    """Rare action examples are extracted correctly."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _run_p2_scan_window,
+        NetworkChokepoint,
+        ScoutStatus,
+    )
+    import lz4.frame
+    import msgpack
+
+    blocks = [
+        {
+            "header": {"height": 300, "block_time": "2025-10-13T00:00:00"},
+            "txs": [
+                {"type": "HyperliquidDeployer", "deployer": "0xabc123", "symbol": "TEST"},
+            ],
+        }
+    ]
+    packed = msgpack.packb(blocks)
+    compressed = lz4.frame.compress(packed)
+
+    call_count = [0]
+    sublisting_patch = {
+        "prefixes": [],
+        "keys": ["explorer_blocks/100000000/block_300.rmp.lz4"],
+        "objects": [],
+        "error_code": None,
+    }
+
+    def fake_list_prefix(self, bucket, prefix, **kw):
+        call_count[0] += 1
+        return sublisting_patch
+
+    cp = NetworkChokepoint(allow_network_public=False, allow_s3_archive_read=True)
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", fake_list_prefix):
+        with unittest.mock.patch.object(NetworkChokepoint, "s3_read_object", return_value=compressed):
+            summary = _run_p2_scan_window(
+                window_name="test",
+                start_date="2025-10-13",
+                end_date="2025-10-14",
+                mapped_ranges=["explorer_blocks/100000000/"],
+                max_files=1,
+                chokepoint=cp,
+                p1_action_types=set(),
+                rare_threshold=25,
+                download_budget_remaining=50_000_000,
+                explorer_budget_remaining=50_000_000,
+            )
+
+    assert summary.candidate_count > 0
+    assert summary.status in (
+        ScoutStatus.HIP3_DEPLOYMENT_EVENT_CANDIDATES_FOUND.value,
+        ScoutStatus.HIP3_DEPLOYMENT_EVENT_CANDIDATES_FOUND,
+    )
+
+
+def test_p2_new_action_type_vs_p1():
+    """New action type not in P1 baseline is classified as new_vs_p1."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        _classify_candidate,
+        P2_CANDIDATE_CLASS_NEW_ACTION_TYPE_VS_P1,
+    )
+
+    p1_types = {"order", "cancel", "SetGlobalAction", "CreditBridgeDepositAction", "connect"}
+    cls, is_rare, is_new = _classify_candidate(
+        action_type="HyperliquidDeployer",
+        tx={"deployer": "0xabc"},
+        matched_terms=[],
+        p1_action_types=p1_types,
+        rare_threshold=25,
+        global_action_counts={"HyperliquidDeployer": 1},
+    )
+    assert is_new is True
+    assert cls == P2_CANDIDATE_CLASS_NEW_ACTION_TYPE_VS_P1
+
+
+def test_p2_dry_run_does_not_hit_s3():
+    """P2 dry run (credentials required) should not hit S3."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_p2_deployment_search,
+        ScoutStatus,
+    )
+
+    result = run_p2_deployment_search(
+        p2_window="all",
+        allow_network_public=False,
+        allow_s3_archive_read=False,
+    )
+    assert result.status == ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED
+    assert result.files_read == 0
+    assert result.bytes_downloaded == 0
+
+
+def test_p2_inventory_mode_does_not_emit_no_deployment_events():
+    """P2 search must NOT emit HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_p2_deployment_search,
+        ScoutStatus,
+    )
+
+    result = run_p2_deployment_search(
+        p2_window="all",
+        allow_network_public=False,
+        allow_s3_archive_read=False,
+    )
+    assert result.status != ScoutStatus.HIP3_NO_DEPLOYMENT_EVENTS_IN_PUBLIC_BLOCKS
+
+
+def test_p2_no_pnl_basis_residual_fields():
+    """P2 artifacts must not contain PnL/basis/residual/strategy fields."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        P2SearchResult,
+        ScoutStatus,
+    )
+
+    result = P2SearchResult(
+        status=ScoutStatus.HIP3_DEPLOYMENT_EVENT_SEARCH_READY,
+        run_id="test_pnl",
+    )
+    result_dict = result.__dict__
+    forbidden = {"pnl", "basis", "residual", "strategy_return", "alpha", "sharpe", "returns"}
+    overlap = forbidden & set(result_dict.keys())
+    assert not overlap, f"P2SearchResult has forbidden fields: {overlap}"
+
+
+def test_p2_no_registry_paper_live_artifacts():
+    """P2 does not write registry/paper/live artifacts."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        P2SearchResult,
+        ScoutStatus,
+    )
+
+    result = P2SearchResult(
+        status=ScoutStatus.HIP3_DEPLOYMENT_EVENT_SEARCH_READY,
+        run_id="test",
+    )
+    assert result.safety_mode == "public_data_observer_only"
+    result_dict = {k: v for k, v in result.__dict__.items() if not k.startswith("_")}
+    flat = str(result_dict)
+    for forbidden in ("pnl", "basis", "residual", "strategy_return", "alpha", "sharpe"):
+        assert forbidden not in flat
+
+
+def test_p2_no_production_subprocess_os_system_eval():
+    """Production module must not use subprocess, os.system, or eval."""
+    import pathlib
+    src_path = pathlib.Path(__file__).resolve().parents[1] / "hip3_builder_deployment_event_discovery_v0.py"
+    src = src_path.read_text()
+    assert "import subprocess" not in src
+    assert "subprocess.run" not in src
+    assert "os.system(" not in src
+    assert "eval(" not in src
+
+
+def test_p2_multi_window_scan_summaries_are_stable():
+    """Multi-window scan summaries produce stable output."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        P2WindowScanSummary,
+    )
+
+    ws1 = P2WindowScanSummary(
+        window_name="prelaunch",
+        date_range=("2025-09-01", "2025-10-13"),
+        mapped_ranges=["explorer_blocks/100000000/"],
+        files_scanned=10,
+        bytes_downloaded=100000,
+        blocks_parsed=5,
+        total_actions=100,
+        unique_action_types=["order", "cancel"],
+        candidate_count=2,
+        decode_failures=0,
+        opaque_count=1,
+        status="HIP3_DEPLOYMENT_EVENT_CANDIDATES_FOUND",
+    )
+    ws2 = P2WindowScanSummary(
+        window_name="launch",
+        date_range=("2025-10-13", "2025-11-13"),
+        mapped_ranges=["explorer_blocks/200000000/"],
+        files_scanned=20,
+        bytes_downloaded=200000,
+        blocks_parsed=10,
+        total_actions=200,
+        unique_action_types=["order", "cancel", "SetGlobalAction"],
+        candidate_count=0,
+        decode_failures=1,
+        opaque_count=2,
+        status="HIP3_NO_DEPLOYMENT_EVENT_CANDIDATES_IN_SCANNED_BLOCKS",
+    )
+
+    assert ws1.window_name == "prelaunch"
+    assert ws2.window_name == "launch"
+    assert ws1.candidate_count == 2
+    assert ws2.candidate_count == 0
+
+
+def test_p2_root_layout_must_be_known_before_reading():
+    """P2 must discover layout before reading any block files."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_p2_deployment_search,
+        ScoutStatus,
+        NetworkChokepoint,
+    )
+
+    unknown_layout = {
+        "prefixes": ["explorer_blocks/mystery/"],
+        "keys": [],
+        "objects": [],
+        "error_code": None,
+    }
+
+    with unittest.mock.patch.object(NetworkChokepoint, "s3_list_prefix", return_value=unknown_layout):
+        result = run_p2_deployment_search(
+            p2_window="all",
+            allow_network_public=False,
+            allow_s3_archive_read=True,
+        )
+
+    assert result.status == ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN
+    assert result.files_read == 0
+
+
+def test_p2_credentials_required_status():
+    """No AWS credentials -> CREDENTIALS_REQUIRED."""
+    from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
+        run_p2_deployment_search,
+        ScoutStatus,
+    )
+
+    result = run_p2_deployment_search(
+        p2_window="all",
+        allow_network_public=False,
+        allow_s3_archive_read=False,
+    )
+    assert result.status == ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED
+

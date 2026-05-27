@@ -80,6 +80,13 @@ class ScoutStatus(Enum):
     HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY = "HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_READY"
     HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_EMPTY = "HIP3_EXPLORER_BLOCK_ACTION_INVENTORY_EMPTY"
     HIP3_EXPLORER_BLOCK_ACTION_SCHEMA_OPAQUE = "HIP3_EXPLORER_BLOCK_ACTION_SCHEMA_OPAQUE"
+    # P2 deployment-event search statuses
+    HIP3_DEPLOYMENT_EVENT_SEARCH_READY = "HIP3_DEPLOYMENT_EVENT_SEARCH_READY"
+    HIP3_DEPLOYMENT_EVENT_CANDIDATES_FOUND = "HIP3_DEPLOYMENT_EVENT_CANDIDATES_FOUND"
+    HIP3_NO_DEPLOYMENT_EVENT_CANDIDATES_IN_SCANNED_BLOCKS = "HIP3_NO_DEPLOYMENT_EVENT_CANDIDATES_IN_SCANNED_BLOCKS"
+    HIP3_DEPLOYMENT_EVENT_SCHEMA_UNKNOWN = "HIP3_DEPLOYMENT_EVENT_SCHEMA_UNKNOWN"
+    HIP3_DEPLOYMENT_EVENT_SEARCH_UNDERPOWERED = "HIP3_DEPLOYMENT_EVENT_SEARCH_UNDERPOWERED"
+    HIP3_DEPLOYMENT_EVENT_SEARCH_ERROR = "HIP3_DEPLOYMENT_EVENT_SEARCH_ERROR"
 
 
 STUDY_ID = "hip3_builder_deployment_event_discovery_v0"
@@ -93,6 +100,26 @@ DEPLOYMENT_SEARCH_TERMS = [
     "setoracle", "schedule", "spotdeploy", "perpdeploy",
     "registerasset", "deployperp", "createmarket"
 ]
+
+# Extended P2 search terms (term + rarity)
+P2_DEPLOYMENT_SEARCH_TERMS = [
+    "hip3", "builder", "deploy", "deployer", "register",
+    "asset", "perp", "oracle", "universe", "margintable",
+    "setoracle", "schedule", "spotdeploy", "perpdeploy",
+    "registerasset", "deployperp", "createmarket",
+    "setmargin", "setfunding", "externalperp", "builderperp",
+    "market", "name", "coin"
+]
+
+# Candidate classification labels
+P2_CANDIDATE_CLASS_TERM_MATCH = "term_match"
+P2_CANDIDATE_CLASS_RARE_ACTION_TYPE = "rare_action_type"
+P2_CANDIDATE_CLASS_NEW_ACTION_TYPE_VS_P1 = "new_action_type_vs_p1"
+P2_CANDIDATE_CLASS_SYMBOL_LIKE_PAYLOAD = "symbol_like_payload"
+P2_CANDIDATE_CLASS_ORACLE_LIKE_PAYLOAD = "oracle_like_payload"
+P2_CANDIDATE_CLASS_DEPLOYER_LIKE_PAYLOAD = "deployer_like_payload"
+P2_CANDIDATE_CLASS_ASSET_REGISTRATION_LIKE_PAYLOAD = "asset_registration_like_payload"
+P2_CANDIDATE_CLASS_UNKNOWN_RELEVANT_SHAPE = "unknown_relevant_shape"
 
 
 @dataclass
@@ -172,6 +199,88 @@ class ProbeResult:
     max_layout_prefixes: int = 11
     max_timestamp_sample_files: int = 50
     max_timestamp_sample_bytes: int = 200_000_000
+
+
+@dataclass
+class P2Candidate:
+    """A candidate from P2 deployment-event search."""
+    window_name: str
+    source_key: str
+    source_content_hash: str
+    block_number: int | None
+    block_timestamp_utc: str | None
+    tx_index: int | None
+    action_index: int | None
+    action_type: str
+    user_or_deployer: str | None
+    symbol_or_coin: str | None
+    matched_terms: list[str]
+    candidate_class: str
+    redacted_excerpt: str
+    nested_field_paths: list[str]
+    raw_action_type_count: int
+    is_rare_action: bool
+    is_new_vs_p1: bool
+
+
+@dataclass
+class P2WindowScanSummary:
+    """Per-window scan summary for P2 deployment event search."""
+    window_name: str
+    date_range: tuple[str, str]
+    mapped_ranges: list[str] = field(default_factory=list)
+    files_scanned: int = 0
+    bytes_downloaded: int = 0
+    blocks_parsed: int = 0
+    total_actions: int = 0
+    unique_action_types: list[str] = field(default_factory=list)
+    candidate_count: int = 0
+    decode_failures: int = 0
+    opaque_count: int = 0
+    status: str = "HIP3_DEPLOYMENT_EVENT_SEARCH_READY"
+    candidates: list[P2Candidate] = field(default_factory=list)
+
+
+@dataclass
+class P2SearchResult:
+    """Result of the P2 deployment-event search."""
+    status: ScoutStatus | str
+    study_id: str = STUDY_ID
+    run_id: str = ""
+    created_at_utc: str = ""
+    git_sha: str = ""
+    git_dirty: bool = False
+    repo_root: str = ""
+    safety_mode: str = SAFETY_MODE
+    schema_version: str = SCHEMA_VERSION
+    final_status: str = ""
+    candidates: list[P2Candidate] = field(default_factory=list)
+    candidate_symbols: list[str] = field(default_factory=list)
+    symbol_cross_reference: dict[str, Any] = field(default_factory=dict)
+    schema_field_inventory: dict[str, Any] = field(default_factory=dict)
+    window_summaries: list[P2WindowScanSummary] = field(default_factory=list)
+    p2_windows: list[dict[str, str]] = field(default_factory=list)
+    files_listed: int = 0
+    files_read: int = 0
+    bytes_downloaded: int = 0
+    blocks_parsed: int = 0
+    total_actions: int = 0
+    unique_action_types: list[str] = field(default_factory=list)
+    action_type_counts: dict[str, int] = field(default_factory=dict)
+    decode_method_used: str = "unknown"
+    decode_failures_count: int = 0
+    opaque_records_count: int = 0
+    inferred_layout: str = ""
+    explorer_block_bucket: str = EXPLORER_BLOCK_BUCKET
+    explorer_block_root_prefix: str = EXPLORER_BLOCK_PREFIX
+    explorer_root_listing_status: str = ""
+    aws_identity_available: bool = False
+    aws_account_suffix: str = ""
+    download_budget_bytes: int = 5_000_000_000
+    explorer_block_budget_bytes: int = 1_000_000_000
+    p2_max_files_per_window: int = 1000
+    p2_preserve_excerpts: int = 50
+    p2_rare_action_threshold: int = 25
 
 
 class NetworkChokepoint:
@@ -1580,6 +1689,557 @@ def _check_archive_visibility(symbols: list[str], chokepoint: NetworkChokepoint)
     return visibility
 
 
+
+
+
+# ---------------------------------------------------------------------------
+# P2 deployment-event search
+# ---------------------------------------------------------------------------
+
+# P2 window definitions: (name, start_date, end_date)
+P2_WINDOWS = {
+    "prelaunch": ("2025-09-01", "2025-10-13"),
+    "launch": ("2025-10-13", "2025-11-13"),
+    "recent": None,  # computed at runtime: latest - 30 days to latest
+}
+
+
+def _classify_candidate(
+    action_type: str,
+    tx: dict,
+    matched_terms: list[str],
+    p1_action_types: set[str],
+    rare_threshold: int,
+    global_action_counts: dict[str, int],
+) -> tuple[str, bool, bool]:
+    """Classify a candidate and determine rarity flags.
+
+    Returns (candidate_class, is_rare, is_new_vs_p1).
+    """
+    is_new_vs_p1 = action_type not in p1_action_types and action_type != "unknown"
+    is_rare = global_action_counts.get(action_type, 0) < rare_threshold
+
+    if is_new_vs_p1:
+        candidate_class = P2_CANDIDATE_CLASS_NEW_ACTION_TYPE_VS_P1
+    elif is_rare:
+        candidate_class = P2_CANDIDATE_CLASS_RARE_ACTION_TYPE
+    elif matched_terms:
+        candidate_class = P2_CANDIDATE_CLASS_TERM_MATCH
+    else:
+        tx_str = json.dumps(tx, default=str).lower()
+        if any(k in tx_str for k in ("symbol", "coin", "name")):
+            candidate_class = P2_CANDIDATE_CLASS_SYMBOL_LIKE_PAYLOAD
+        elif "oracle" in tx_str:
+            candidate_class = P2_CANDIDATE_CLASS_ORACLE_LIKE_PAYLOAD
+        elif any(k in tx_str for k in ("deployer", "builder", "namespace")):
+            candidate_class = P2_CANDIDATE_CLASS_DEPLOYER_LIKE_PAYLOAD
+        elif any(k in tx_str for k in ("register", "asset", "perp")):
+            candidate_class = P2_CANDIDATE_CLASS_ASSET_REGISTRATION_LIKE_PAYLOAD
+        else:
+            candidate_class = P2_CANDIDATE_CLASS_UNKNOWN_RELEVANT_SHAPE
+
+    return candidate_class, is_rare, is_new_vs_p1
+
+
+def _extract_symbol_from_tx(tx: dict) -> str | None:
+    """Try to extract a symbol/coin/name from a transaction dict."""
+    for key in ("symbol", "coin", "name", "asset", "market"):
+        val = tx.get(key)
+        if isinstance(val, str) and val and len(val) <= 15:
+            return val
+    for tx_key in ("action", "payload", "params", "data"):
+        nested = tx.get(tx_key)
+        if isinstance(nested, dict):
+            for key in ("symbol", "coin", "name", "asset", "market"):
+                val = nested.get(key)
+                if isinstance(val, str) and val and len(val) <= 15:
+                    return val
+    return None
+
+
+def _extract_user_deployer(tx: dict) -> str | None:
+    """Try to extract user/deployer address from a transaction dict."""
+    for key in ("user", "deployer", "deployerAddress", "deployer_address", "builder", "namespace"):
+        val = tx.get(key)
+        if isinstance(val, str) and val:
+            return val
+    for tx_key in ("action", "payload", "params", "data"):
+        nested = tx.get(tx_key)
+        if isinstance(nested, dict):
+            for key in ("user", "deployer", "deployerAddress", "deployer_address"):
+                val = nested.get(key)
+                if isinstance(val, str) and val:
+                    return val
+    return None
+
+
+def _extract_block_number_from_block(block: dict) -> int | None:
+    """Extract block number from a decoded block dict."""
+    hdr = block.get("header", {})
+    if not isinstance(hdr, dict):
+        return None
+    for key in ("height", "block_number", "number", "blockNumber"):
+        val = hdr.get(key)
+        if val is not None:
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                pass
+    return None
+
+
+def _extract_block_timestamp_from_block(block: dict) -> str | None:
+    """Extract block timestamp from a decoded block dict."""
+    hdr = block.get("header", {})
+    if not isinstance(hdr, dict):
+        return None
+    for key in ("block_time", "timestamp", "time"):
+        val = hdr.get(key)
+        if val is not None:
+            return str(val)
+    return None
+
+
+def _get_actions_from_block(block: dict) -> list[dict]:
+    """Extract action records from a decoded block, handling multiple schema layouts."""
+    txs = block.get("txs", [])
+    if isinstance(txs, list):
+        return txs
+    actions = block.get("actions", [])
+    if isinstance(actions, list):
+        return actions
+    return []
+
+
+def _redact_action_for_excerpt(tx: dict, max_len: int = 300) -> str:
+    """Create a hash-stable redacted excerpt of an action record."""
+    redacted = _redact_value(tx, max_len=80)
+    excerpt = json.dumps(redacted, default=str, sort_keys=True)
+    if len(excerpt) > max_len:
+        excerpt = excerpt[:max_len] + "..."
+    return excerpt
+
+
+def _run_p2_scan_window(
+    window_name: str,
+    start_date: str,
+    end_date: str,
+    mapped_ranges: list[str],
+    max_files: int,
+    chokepoint: NetworkChokepoint,
+    p1_action_types: set[str],
+    rare_threshold: int,
+    download_budget_remaining: int,
+    explorer_budget_remaining: int,
+) -> P2WindowScanSummary:
+    """Run a bounded P2 scan for a single window."""
+    bytes_downloaded = 0
+    blocks_parsed = 0
+    total_actions = 0
+    action_type_counts: dict[str, int] = {}
+    candidates: list[P2Candidate] = []
+    decode_failures = 0
+    opaque_count = 0
+    all_nested_paths: set[str] = set()
+    all_schema_shapes: list[frozenset] = []
+    files_scanned = 0
+    status = "HIP3_DEPLOYMENT_EVENT_SEARCH_READY"
+
+    # List files in mapped ranges
+    all_keys: list[str] = []
+    for rp in mapped_ranges:
+        listing = chokepoint.s3_list_prefix(
+            EXPLORER_BLOCK_BUCKET,
+            rp,
+            requester_pays=True,
+            max_keys=10000,
+            include_subdirs=False,
+        )
+        if listing.get("error_code"):
+            continue
+        for obj in listing.get("objects", []):
+            all_keys.append(obj["key"])
+        for key in listing.get("keys", []):
+            all_keys.append(key)
+        if len(all_keys) >= max_files:
+            break
+
+    all_keys = all_keys[:max_files]
+    files_scanned = len(all_keys)
+
+    for key in all_keys:
+        if bytes_downloaded >= min(download_budget_remaining, explorer_budget_remaining):
+            break
+
+        try:
+            data = chokepoint.s3_read_object(EXPLORER_BLOCK_BUCKET, key, requester_pays=True)
+        except Exception:
+            decode_failures += 1
+            continue
+
+        byte_count = len(data)
+        content_hash = hashlib.sha256(data).hexdigest()
+        bytes_downloaded += byte_count
+
+        # Decompress
+        try:
+            decompressed = lz4.frame.decompress(data)
+        except Exception:
+            decompressed = data
+
+        # Decode
+        decoded: Any = None
+        if _MSGPACK_AVAILABLE:
+            try:
+                decoded = msgpack.unpackb(decompressed, raw=False)
+            except Exception:
+                pass
+
+        if decoded is None:
+            try:
+                decoded = json.loads(decompressed)
+            except Exception:
+                try:
+                    lines = decompressed.splitlines()
+                    decoded = [json.loads(line) for line in lines if line]
+                except Exception:
+                    decode_failures += 1
+                    opaque_count += 1
+                    continue
+
+        if decoded is None:
+            decode_failures += 1
+            continue
+
+        # Process blocks
+        blocks: list[Any] = []
+        if isinstance(decoded, list):
+            blocks = decoded
+        elif isinstance(decoded, dict):
+            blocks = [decoded]
+
+        for block in blocks:
+            if not isinstance(block, dict):
+                opaque_count += 1
+                continue
+
+            blocks_parsed += 1
+
+            top_fields = frozenset(block.keys())
+            if top_fields not in all_schema_shapes:
+                all_schema_shapes.append(top_fields)
+            for p in _extract_field_paths(block):
+                all_nested_paths.add(p)
+
+            txs = _get_actions_from_block(block)
+            if not txs:
+                opaque_count += 1
+                continue
+
+            block_number = _extract_block_number_from_block(block)
+            block_timestamp = _extract_block_timestamp_from_block(block)
+
+            for tx_idx, tx in enumerate(txs):
+                if not isinstance(tx, dict):
+                    opaque_count += 1
+                    continue
+
+                # Extract action type
+                action_type = "unknown"
+                for ak in ("type", "actionType", "action_type", "kind"):
+                    av = tx.get(ak)
+                    if isinstance(av, str) and av:
+                        action_type = av
+                        break
+                if action_type == "unknown":
+                    for ak in ("action",):
+                        av = tx.get(ak)
+                        if isinstance(av, dict):
+                            inner_type = av.get("type", av.get("actionType", av.get("kind", "")))
+                            if isinstance(inner_type, str) and inner_type:
+                                action_type = inner_type
+                            break
+                if action_type == "unknown":
+                    nested_actions = tx.get("actions")
+                    if isinstance(nested_actions, list):
+                        for na in nested_actions:
+                            if isinstance(na, dict):
+                                t = na.get("type", na.get("actionType", na.get("kind", "")))
+                                if isinstance(t, str) and t:
+                                    action_type = t
+                                    break
+
+                action_type_counts[action_type] = action_type_counts.get(action_type, 0) + 1
+                total_actions += 1
+
+                # Term matching
+                tx_str = json.dumps(tx, default=str).lower()
+                matched = [t for t in P2_DEPLOYMENT_SEARCH_TERMS if t in tx_str]
+
+                # Candidate classification
+                candidate_class, is_rare, is_new_vs_p1 = _classify_candidate(
+                    action_type, tx, matched, p1_action_types, rare_threshold, action_type_counts
+                )
+
+                # Only keep candidates that are interesting
+                keep = False
+                if matched:
+                    keep = True
+                elif is_rare:
+                    keep = True
+                elif is_new_vs_p1:
+                    keep = True
+                elif action_type not in ("order", "cancel"):
+                    keep = True
+
+                if not keep:
+                    continue
+
+                symbol = _extract_symbol_from_tx(tx)
+                user = _extract_user_deployer(tx)
+
+                candidate = P2Candidate(
+                    window_name=window_name,
+                    source_key=key,
+                    source_content_hash=content_hash,
+                    block_number=block_number,
+                    block_timestamp_utc=block_timestamp,
+                    tx_index=tx_idx,
+                    action_index=None,
+                    action_type=action_type,
+                    user_or_deployer=user,
+                    symbol_or_coin=symbol,
+                    matched_terms=matched,
+                    candidate_class=candidate_class,
+                    redacted_excerpt=_redact_action_for_excerpt(tx),
+                    nested_field_paths=sorted(all_nested_paths),
+                    raw_action_type_count=action_type_counts.get(action_type, 0),
+                    is_rare_action=is_rare,
+                    is_new_vs_p1=is_new_vs_p1,
+                )
+                candidates.append(candidate)
+
+    unique_types = sorted(action_type_counts.keys())
+    status = "HIP3_DEPLOYMENT_EVENT_SEARCH_READY"
+    if candidates:
+        status = "HIP3_DEPLOYMENT_EVENT_CANDIDATES_FOUND"
+    elif blocks_parsed > 0 and total_actions > 0:
+        status = "HIP3_NO_DEPLOYMENT_EVENT_CANDIDATES_IN_SCANNED_BLOCKS"
+    elif blocks_parsed > 0 and total_actions == 0 and decode_failures == 0:
+        status = "HIP3_DEPLOYMENT_EVENT_SCHEMA_UNKNOWN"
+    elif blocks_parsed == 0 and decode_failures > 0:
+        status = "HIP3_DEPLOYMENT_EVENT_SCHEMA_UNKNOWN"
+
+    return P2WindowScanSummary(
+        window_name=window_name,
+        date_range=(start_date, end_date),
+        mapped_ranges=mapped_ranges,
+        files_scanned=files_scanned,
+        bytes_downloaded=bytes_downloaded,
+        blocks_parsed=blocks_parsed,
+        total_actions=total_actions,
+        unique_action_types=unique_types,
+        candidate_count=len(candidates),
+        decode_failures=decode_failures,
+        opaque_count=opaque_count,
+        status=status,
+        candidates=candidates,
+    )
+
+
+def run_p2_deployment_search(
+    p2_window: str = "all",
+    max_files_per_window: int = 1000,
+    preserve_excerpts: int = 50,
+    rare_action_threshold: int = 25,
+    download_budget_bytes: int = 5_000_000_000,
+    explorer_block_budget_bytes: int = 1_000_000_000,
+    allow_network_public: bool = False,
+    allow_s3_archive_read: bool = False,
+    p1_action_types: set[str] | None = None,
+) -> P2SearchResult:
+    """Execute the P2 deployment-event search."""
+    sha, dirty = _get_git_info()
+    run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%S") + "_p2_" + hashlib.sha256(b"p2").hexdigest()[:8]
+
+    result = P2SearchResult(
+        status=ScoutStatus.HIP3_DEPLOYMENT_EVENT_SEARCH_READY,
+        run_id=run_id,
+        created_at_utc=datetime.now(UTC).isoformat(),
+        git_sha=sha,
+        git_dirty=dirty,
+        repo_root=str(Path(__file__).resolve().parents[4]),
+        download_budget_bytes=download_budget_bytes,
+        explorer_block_budget_bytes=explorer_block_budget_bytes,
+        p2_max_files_per_window=max_files_per_window,
+        p2_preserve_excerpts=preserve_excerpts,
+        p2_rare_action_threshold=rare_action_threshold,
+    )
+
+    if not allow_s3_archive_read:
+        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED
+        result.final_status = result.status.value
+        return result
+
+    avail, suffix = _aws_identity_preflight(NetworkChokepoint(allow_network_public, allow_s3_archive_read))
+    result.aws_identity_available = avail
+    result.aws_account_suffix = suffix
+
+    chokepoint = NetworkChokepoint(allow_network_public, allow_s3_archive_read)
+
+    layout_info = _discover_explorer_block_layout(chokepoint)
+    result.inferred_layout = layout_info["layout"]
+    result.explorer_root_listing_status = layout_info["status"].value
+
+    if layout_info["status"] in (
+        ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_CREDENTIALS_REQUIRED,
+        ScoutStatus.HIP3_EXPLORER_BLOCK_REQUESTER_PAYS_ACCESS_DENIED,
+        ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_LISTING_FAILED,
+    ):
+        result.status = layout_info["status"]
+        result.final_status = result.status.value
+        return result
+
+    if layout_info["status"] == ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY:
+        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_ROOT_EMPTY
+        result.final_status = result.status.value
+        return result
+
+    if layout_info["layout"] not in ("block_range_partitioned", "date_partitioned"):
+        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_LAYOUT_UNKNOWN
+        result.final_status = result.status.value
+        return result
+
+    p1_types = set(p1_action_types) if p1_action_types else set()
+
+    windows_to_scan: list[tuple[str, str, str]] = []
+    if p2_window == "all":
+        windows_to_scan = [
+            ("prelaunch", "2025-09-01", "2025-10-13"),
+            ("launch", "2025-10-13", "2025-11-13"),
+        ]
+    elif p2_window in P2_WINDOWS:
+        start, end = P2_WINDOWS[p2_window]
+        if end is None:
+            windows_to_scan = [("recent", start, "")]
+        else:
+            windows_to_scan = [(p2_window, start, end)]
+
+    range_prefixes = layout_info["prefixes"][:11]
+    try:
+        timestamp_samples = _sample_block_timestamps(
+            chokepoint,
+            range_prefixes,
+            max_sample_files=50,
+            max_sample_bytes=200_000_000,
+        )
+    except BudgetExceededError:
+        result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENT_SEARCH_ERROR
+        result.final_status = result.status.value
+        return result
+
+    if not timestamp_samples:
+        result.status = ScoutStatus.HIP3_EXPLORER_BLOCK_DATE_MAPPING_INSUFFICIENT_SAMPLES
+        result.final_status = result.status.value
+        return result
+
+    latest_ts_ms = None
+    for s in timestamp_samples:
+        ts = _parse_timestamp(s.block_timestamp_utc)
+        if ts is not None:
+            if latest_ts_ms is None or ts > latest_ts_ms:
+                latest_ts_ms = ts
+
+    if p2_window == "all" or p2_window == "recent":
+        if latest_ts_ms is not None:
+            latest_dt = datetime.fromtimestamp(latest_ts_ms / 1000, UTC)
+            recent_start = latest_dt - timedelta(days=30)
+            recent_start_str = recent_start.strftime("%Y-%m-%d")
+            recent_end_str = latest_dt.strftime("%Y-%m-%d")
+            if p2_window == "all":
+                windows_to_scan.append(("recent", recent_start_str, recent_end_str))
+            else:
+                windows_to_scan = [("recent", recent_start_str, recent_end_str)]
+
+    result.p2_windows = [{"name": w[0], "start": w[1], "end": w[2]} for w in windows_to_scan]
+
+    all_candidates: list[P2Candidate] = []
+    window_summaries: list[P2WindowScanSummary] = []
+    total_bytes = 0
+    total_explorer_bytes = 0
+    total_blocks = 0
+    total_actions = 0
+
+    for window_name, start_date, end_date in windows_to_scan:
+        mapping = _map_date_to_block_range(start_date, end_date, timestamp_samples)
+        if mapping["status"] != "HIP3_EXPLORER_BLOCK_DATE_MAPPING_READY":
+            window_summaries.append(P2WindowScanSummary(
+                window_name=window_name,
+                date_range=(start_date, end_date or ""),
+                mapped_ranges=[],
+                files_scanned=0,
+                bytes_downloaded=0,
+                blocks_parsed=0,
+                total_actions=0,
+                unique_action_types=[],
+                candidate_count=0,
+                decode_failures=0,
+                opaque_count=0,
+                status=mapping["status"],
+            ))
+            continue
+
+        mapped_ranges = mapping["mapped_ranges"]
+
+        window_result = _run_p2_scan_window(
+            window_name=window_name,
+            start_date=start_date,
+            end_date=end_date or "",
+            mapped_ranges=mapped_ranges,
+            max_files=max_files_per_window,
+            chokepoint=chokepoint,
+            p1_action_types=p1_types,
+            rare_threshold=rare_action_threshold,
+            download_budget_remaining=download_budget_bytes - total_bytes,
+            explorer_budget_remaining=explorer_block_budget_bytes - total_explorer_bytes,
+        )
+
+        window_summaries.append(window_result)
+        all_candidates.extend(window_result.candidates[:preserve_excerpts])
+        total_bytes += window_result.bytes_downloaded
+        total_explorer_bytes += window_result.bytes_downloaded
+        total_blocks += window_result.blocks_parsed
+        total_actions += window_result.total_actions
+
+    if window_summaries:
+        any_candidates = any(w.candidate_count > 0 for w in window_summaries)
+        any_scanned = any(w.blocks_parsed > 0 for w in window_summaries)
+        if any_scanned and not any_candidates:
+            total_files = sum(w.files_scanned for w in window_summaries)
+            if total_files < 10:
+                result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENT_SEARCH_UNDERPOWERED
+            else:
+                result.status = ScoutStatus.HIP3_NO_DEPLOYMENT_EVENT_CANDIDATES_IN_SCANNED_BLOCKS
+        elif any_candidates:
+            result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENT_CANDIDATES_FOUND
+        else:
+            result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENT_SCHEMA_UNKNOWN
+    else:
+        result.status = ScoutStatus.HIP3_DEPLOYMENT_EVENT_SEARCH_READY
+
+    result.final_status = result.status.value
+    result.window_summaries = window_summaries
+    result.files_read = sum(w.files_scanned for w in window_summaries)
+    result.bytes_downloaded = total_bytes
+    result.blocks_parsed = total_blocks
+    result.total_actions = total_actions
+    result.files_listed = sum(w.files_scanned for w in window_summaries)
+    result.candidates = all_candidates
+
+    return result
+
+
+
 def run_probe(
     start_date: str = "2025-10-13",
     end_date: str | None = None,
@@ -1901,6 +2561,188 @@ def _write_inventory_artifacts(run_dir: Path, inv: ActionInventoryResult, argv: 
     })
 
 
+
+def _p2_summary_md(result: P2SearchResult) -> str:
+    """Generate a human-readable summary for P2 results."""
+    lines = [
+        "# HIP-3 P2 Deployment Event Search",
+        "",
+        f"**Status:** `{result.final_status}`",
+        f"**Run ID:** {result.run_id}",
+        f"**Layout:** {result.inferred_layout}",
+        f"**Files read:** {result.files_read}  |  **Bytes downloaded:** {result.bytes_downloaded:,}",
+        f"**Blocks parsed:** {result.blocks_parsed}",
+        f"**Total actions:** {result.total_actions}",
+        f"**Unique action types:** {len(result.unique_action_types)}",
+        f"**Candidates found:** {len(result.candidates)}",
+        f"**Decode method:** {result.decode_method_used}",
+        f"**Decode failures:** {result.decode_failures_count}",
+        f"**Opaque records:** {result.opaque_records_count}",
+        "",
+        "## P2 Windows Scanned",
+    ]
+    for ws in result.window_summaries:
+        lines.append("")
+        lines.append(f"### Window: {ws.window_name}")
+        lines.append(f"- Date range: {ws.date_range[0]} to {ws.date_range[1]}")
+        lines.append(f"- Mapped ranges: {len(ws.mapped_ranges)}")
+        lines.append(f"- Files scanned: {ws.files_scanned}")
+        lines.append(f"- Bytes: {ws.bytes_downloaded:,}")
+        lines.append(f"- Blocks parsed: {ws.blocks_parsed}")
+        lines.append(f"- Actions: {ws.total_actions}")
+        lines.append(f"- Unique types: {len(ws.unique_action_types)}")
+        lines.append(f"- Candidates: {ws.candidate_count}")
+        lines.append(f"- Status: `{ws.status}`")
+        if ws.unique_action_types:
+            lines.append("- Top action types:")
+            for at in ws.unique_action_types[:10]:
+                lines.append(f"  - `{at}`")
+
+    lines.append("")
+    if result.candidates:
+        lines.append("## Top Candidates")
+        for c in result.candidates[:20]:
+            lines.append(f"- **{c.window_name}** `{c.action_type}` class={c.candidate_class} symbol={c.symbol_or_coin} user={c.user_or_deployer} terms={c.matched_terms}")
+
+    lines.append("")
+    lines.append("> NOTE: Universe-delta probe (c9056978aa) found 13 post-launch symbol additions")
+    lines.append("> (all crypto_like or unknown). That result does NOT prove absence of HIP-3")
+    lines.append("> deployment events -- this P2 search independently enumerates candidates.")
+    return chr(10).join(lines)
+
+
+def _write_p2_artifacts(run_dir: Path, result: P2SearchResult, argv: list[str]) -> None:
+    """Write all required P2 artifacts."""
+    sha, dirty = result.git_sha, result.git_dirty
+    base_meta = {
+        "study_id": result.study_id,
+        "run_id": result.run_id,
+        "created_at_utc": result.created_at_utc,
+        "git_sha": sha,
+        "git_dirty": dirty,
+        "repo_root": result.repo_root,
+        "command_args": argv,
+        "safety_mode": result.safety_mode,
+        "schema_version": result.schema_version,
+        "final_status": result.final_status or str(result.status),
+    }
+
+    # summary.json
+    summary = {
+        **base_meta,
+        "files_listed": result.files_listed,
+        "files_read": result.files_read,
+        "bytes_downloaded": result.bytes_downloaded,
+        "blocks_parsed": result.blocks_parsed,
+        "total_actions": result.total_actions,
+        "unique_action_types": result.unique_action_types,
+        "candidate_count": len(result.candidates),
+        "inferred_layout": result.inferred_layout,
+        "decode_method_used": result.decode_method_used,
+        "decode_failures_count": result.decode_failures_count,
+        "opaque_records_count": result.opaque_records_count,
+        "aws_identity_available": result.aws_identity_available,
+        "aws_account_suffix": result.aws_account_suffix,
+        "explorer_root_listing_status": result.explorer_root_listing_status,
+        "p2_windows": result.p2_windows,
+        "p2_max_files_per_window": result.p2_max_files_per_window,
+        "p2_preserve_excerpts": result.p2_preserve_excerpts,
+        "p2_rare_action_threshold": result.p2_rare_action_threshold,
+    }
+    _atomic_write(run_dir / "summary.json", summary)
+
+    # summary.md
+    (run_dir / "summary.md").write_text(_p2_summary_md(result))
+
+    # run_manifest.json
+    manifest = {
+        **base_meta,
+        "archive_bucket": result.explorer_block_bucket,
+        "archive_prefix": result.explorer_block_root_prefix,
+        "no_registry_mutation": True,
+        "no_full_account_id": True,
+        "files_listed": result.files_listed,
+        "files_read": result.files_read,
+        "bytes_downloaded": result.bytes_downloaded,
+        "blocks_parsed": result.blocks_parsed,
+        "total_actions": result.total_actions,
+        "inferred_layout": result.inferred_layout,
+        "decode_method_used": result.decode_method_used,
+        "p2_windows": result.p2_windows,
+    }
+    _atomic_write(run_dir / "run_manifest.json", manifest)
+
+    # p2_window_scan_summary.json
+    _atomic_write(run_dir / "p2_window_scan_summary.json", {
+        **base_meta,
+        "windows": [
+            {
+                "window_name": ws.window_name,
+                "date_range": ws.date_range,
+                "files_scanned": ws.files_scanned,
+                "bytes_downloaded": ws.bytes_downloaded,
+                "blocks_parsed": ws.blocks_parsed,
+                "total_actions": ws.total_actions,
+                "unique_action_types": ws.unique_action_types,
+                "candidate_count": ws.candidate_count,
+                "status": ws.status,
+            }
+            for ws in result.window_summaries
+        ],
+    })
+
+    # p2_action_type_inventory.json
+    action_counts: dict[str, int] = {}
+    for ws in result.window_summaries:
+        for at in ws.unique_action_types:
+            action_counts[at] = action_counts.get(at, 0) + 1
+    _atomic_write(run_dir / "p2_action_type_inventory.json", {
+        **base_meta,
+        "action_type_counts": action_counts,
+        "total_actions": result.total_actions,
+        "decode_method_used": result.decode_method_used,
+    })
+
+    # p2_deployment_event_candidates.json
+    _atomic_write(run_dir / "p2_deployment_event_candidates.json", {
+        **base_meta,
+        "candidates": [
+            {
+                "window_name": c.window_name,
+                "source_key": c.source_key,
+                "source_content_hash": c.source_content_hash,
+                "block_number": c.block_number,
+                "block_timestamp_utc": c.block_timestamp_utc,
+                "tx_index": c.tx_index,
+                "action_type": c.action_type,
+                "user_or_deployer": c.user_or_deployer,
+                "symbol_or_coin": c.symbol_or_coin,
+                "matched_terms": c.matched_terms,
+                "candidate_class": c.candidate_class,
+                "redacted_excerpt": c.redacted_excerpt,
+                "raw_action_type_count": c.raw_action_type_count,
+                "is_rare_action": c.is_rare_action,
+                "is_new_vs_p1": c.is_new_vs_p1,
+            }
+            for c in result.candidates
+        ],
+        "total_candidates": len(result.candidates),
+    })
+
+    # p2_candidate_symbol_cross_reference.json
+    symbols = list(set(c.symbol_or_coin for c in result.candidates if c.symbol_or_coin))
+    _atomic_write(run_dir / "p2_candidate_symbol_cross_reference.json", {
+        **base_meta,
+        "extracted_symbols": symbols,
+    })
+
+    # p2_schema_field_inventory.json
+    _atomic_write(run_dir / "p2_schema_field_inventory.json", {
+        **base_meta,
+        "schema_field_inventory": result.schema_field_inventory,
+    })
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
     parser = argparse.ArgumentParser(description="HIP‑3 Builder Deployment Event Discovery Probe")
@@ -1922,8 +2764,50 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="P1 mode: enumerate explorer-block action types without searching for deployment events.",
     )
+    parser.add_argument(
+        "--p2-deployment-search",
+        action="store_true",
+        help="P2 mode: search for HIP-3 deployment events across bounded windows.",
+    )
+    parser.add_argument(
+        "--p2-window",
+        default="all",
+        choices=["prelaunch", "launch", "recent", "all"],
+        help="P2 window to scan (default: all).",
+    )
+    parser.add_argument(
+        "--p2-max-files-per-window", type=int, default=1000,
+        help="P2 max files to scan per window (default: 1000).",
+    )
+    parser.add_argument(
+        "--p2-preserve-excerpts", type=int, default=50,
+        help="P2 max rare action excerpts to preserve (default: 50).",
+    )
+    parser.add_argument(
+        "--p2-rare-action-threshold", type=int, default=25,
+        help="P2 action type count threshold for rarity (default: 25).",
+    )
     args = parser.parse_args(argv)
     out_root = Path(args.out_root)
+
+    if args.p2_deployment_search:
+        result = run_p2_deployment_search(
+            p2_window=args.p2_window,
+            max_files_per_window=args.p2_max_files_per_window,
+            preserve_excerpts=args.p2_preserve_excerpts,
+            rare_action_threshold=args.p2_rare_action_threshold,
+            download_budget_bytes=args.download_budget_bytes,
+            explorer_block_budget_bytes=args.explorer_block_budget_bytes,
+            allow_network_public=args.allow_network_public,
+            allow_s3_archive_read=args.allow_s3_archive_read,
+            p1_action_types={"order", "cancel", "SetGlobalAction", "CreditBridgeDepositAction", "connect"},
+        )
+        run_dir = out_root / result.run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        _write_p2_artifacts(run_dir, result, sys.argv[1:])
+        print(f"{result.status}")
+        print(f"P2 deployment search completed. Report written to {run_dir}")
+        return 0
 
     if args.inventory_action_types_only:
         inv = run_inventory_probe(
