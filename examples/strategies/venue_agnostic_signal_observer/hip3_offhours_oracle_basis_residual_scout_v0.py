@@ -1164,19 +1164,63 @@ def _load_cme_futures_proxy(
     start_date: date,
     end_date: date | None,
 ) -> list[AnchorSample]:
-    """Load CME futures proxy anchor.
+    """Load CME futures proxy anchor from public Yahoo Finance data.
 
-    Public reference data sources (no auth required):
-    - CME delayed futures data
-    - Barchart delayed quotes
-    - Yahoo Finance adjusted close for ES/NQ futures
+    Fetches daily close for ES=F (S&P 500 E-mini) or NQ=F (NASDAQ 100)
+    continuous futures via the public Yahoo Finance chart API (no auth).
 
-    For scout framework, this is a stub that returns empty unless
-    the chokepoint allows network and data is available.
+    Uses the scout network chokepoint for all HTTP calls.
     """
-    # Stub: In a real scout, this would fetch from a public CME proxy.
-    # Return empty to signal the caller that data must be mocked in tests.
-    return []
+    # Map symbol to Yahoo Finance ticker
+    symbol_upper = symbol.upper()
+    if "SPX" in symbol_upper or "S&P" in symbol_upper or "US500" in symbol_upper:
+        yahoo_ticker = "ES=F"
+    elif "NDX" in symbol_upper or "NASDAQ" in symbol_upper or "NAS100" in symbol_upper or "QQQ" in symbol_upper:
+        yahoo_ticker = "NQ=F"
+    elif "DOW" in symbol_upper or "DJI" in symbol_upper:
+        yahoo_ticker = "YM=F"
+    else:
+        # Default to ES
+        yahoo_ticker = "ES=F"
+
+    end = end_date or datetime.now(UTC).date()
+    period1 = int(datetime(start_date.year, start_date.month, start_date.day, tzinfo=UTC).timestamp())
+    period2 = int(datetime(end.year, end.month, end.day, 23, 59, 59, tzinfo=UTC).timestamp())
+
+    url = (
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_ticker}"
+        f"?period1={period1}&period2={period2}&interval=1d"
+    )
+
+    try:
+        raw = public_http_get(url, timeout=30)
+    except Exception:
+        return []
+
+    import json as _json
+    try:
+        data = _json.loads(raw)
+    except Exception:
+        return []
+
+    result: list[AnchorSample] = []
+    try:
+        timestamps = data["chart"]["result"][0]["timestamp"]
+        quotes = data["chart"]["result"][0]["indicators"]["adjclose"][0]["adjclose"]
+    except (KeyError, IndexError, TypeError):
+        # Try regular close
+        try:
+            quotes = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
+        except (KeyError, IndexError, TypeError):
+            return []
+
+    for ts, close in zip(timestamps, quotes):
+        if close is None or close <= 0:
+            continue
+        dt = datetime.fromtimestamp(ts, tz=UTC)
+        result.append(AnchorSample(timestamp_utc=dt, anchor_value=float(close)))
+
+    return result
 
 
 def _load_cash_eod_anchor(
