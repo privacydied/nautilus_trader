@@ -165,10 +165,13 @@ class TestGzipParsing:
         with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
             gz.write(payload)
         raw = buf.getvalue()
-        mock_resp = {"Body": MagicMock(read=lambda: raw)}
-        mock_s3 = MagicMock(get_object=lambda Bucket, Key: mock_resp)
-        result = download_and_parse(mock_s3, "test.json.gz")
-        assert isinstance(result, list)
+
+        class FakeS3:
+            def get_object(self, Bucket, Key, RequestPayer=None):
+                return {"Body": MagicMock(read=lambda: raw)}
+
+        result = download_and_parse(FakeS3(), "test.json.gz")
+        assert result == data
         assert len(result) == 1
         assert result[0]["height"] == 1
 
