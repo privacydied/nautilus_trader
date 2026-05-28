@@ -375,7 +375,7 @@ def run_probe(args: argparse.Namespace) -> Mapping[str, Any]:
     md_path = make_artifact_path(root, run_id, "summary.md")
     md_path.parent.mkdir(parents=True, exist_ok=True)
     with md_path.open("w", encoding="utf-8") as f:
-        f.write("# SonarX HIP‑13 L2 Summary Coverage Probe\n\n")
+        f.write("# SonarX HIP-3 L2 Summary Coverage Probe\n\n")
         f.write(f"**Study ID**: {args.study_id}\n")
         f.write(f"**Run ID**: {run_id}\n")
         f.write(f"**Status**: {gate_status}\n")
