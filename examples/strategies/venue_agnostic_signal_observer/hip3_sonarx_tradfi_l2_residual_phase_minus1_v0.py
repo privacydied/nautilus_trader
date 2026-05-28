@@ -43,6 +43,30 @@ from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_
 )
 
 # ---------------------------------------------------------------------------
+# Anchor cache and rate limiting
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AnchorCacheEntry:
+    """Cached anchor response with staleness tracking."""
+    display_symbol: str
+    price: float
+    timestamp_utc: str
+    raw_response_hash: str
+    data_points: int
+    fetched_at_utc: str
+    staleness_seconds: int = 0
+    
+@dataclass 
+class RateLimitState:
+    """Per-host rate limiting state."""
+    last_request_at: datetime | None = None
+    request_count_window: int = 0
+    backoff_until: datetime | None = None
+    consecutive_429s: int = 0
+    consecutive_failures: int = 0
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 STATUSES = frozenset({
@@ -80,6 +104,12 @@ FORBIDDEN_STATUSES = frozenset({
     "CANDIDATE_FOR_LIVE", "PAPER_STRATEGY_PROMOTED",
     "PROMOTION_AUTHORIZED", "EDGE_CONFIRMED",
 })
+
+# Candle snapshot request formats to audit
+CANDLE_FORMATS = [
+    {"name": "dex_qualified", "template": "dex:SYMBOL"},
+    {"name": "bare_symbol", "template": "SYMBOL"},
+]
 
 S3_BUCKET = "sonarx-hyperliquid-public"
 S3_BASE_PREFIX = "market_data/hip3/"
@@ -864,68 +894,276 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
     liq_summary = {**meta, "per_api_symbol": liquidity, "thresholds_note": "diagnostic only, not trading thresholds"}
     write_json(root / "liquidity_feasibility_summary.json", liq_summary)
 
-    # --- Phase E: candleSnapshot join ---
-    candle_join: dict[str, Any] = {**meta, "candles_by_api_symbol": {}}
-    # Candle join is disabled by default; requires --enable-candle-join AND not --disable-candle-join
+    # --- Phase E: candleSnapshot join with format audit ---
+    candle_join: dict[str, Any] = {**meta, "candles_by_api_symbol": {}, "format_audit": []}
     candle_enabled = getattr(args, "enable_candle_join", False) and not getattr(args, "disable_candle_join", False)
+    
+    # Format audit results
+    format_audit_results: list[dict] = []
+    candle_status = "SONARX_CANDLE_JOIN_BLOCKED"
+    
     if candle_enabled and cp.allow_network_public:
+        # Only audit formats for 2 representative symbols to avoid spam
+        audit_symbols = ["cash:TSLA", "xyz:NVDA"]
+        
+        for api_sym in audit_symbols:
+            display_sym, dex_name = parse_api_symbol(api_sym)
+            for fmt in CANDLE_FORMATS:
+                if fmt["name"] == "dex_qualified":
+                    coin_param = api_sym
+                else:  # bare_symbol
+                    coin_param = display_sym
+                
+                audit_entry = {
+                    "request_format_name": fmt["name"],
+                    "symbol": api_sym,
+                    "coin_param_used": coin_param,
+                    "request_body_hash": hashlib.sha256(json.dumps({"coin": coin_param}).encode()).hexdigest()[:16],
+                }
+                
+                for interval in ["1h"]:  # Only test 1h to minimize requests
+                    try:
+                        payload = {"type": "candleSnapshot", "coin": coin_param, "interval": interval, "startTime": 0, "endTime": 0}
+                        resp_bytes = cp.http_post_json(HYPERLIQUID_INFO_URL, payload)
+                        if isinstance(resp_bytes, list) and len(resp_bytes) > 0:
+                            audit_entry["http_status"] = 200
+                            audit_entry["bars_returned"] = len(resp_bytes)
+                            audit_entry["earliest_candle"] = resp_bytes[0].get("t") if resp_bytes else None
+                            audit_entry["latest_candle"] = resp_bytes[-1].get("t") if resp_bytes else None
+                            audit_entry["rate_limited"] = False
+                            audit_entry["request_format_valid"] = True
+                            audit_entry["status"] = "CANDLE_SNAPSHOT_AVAILABLE"
+                        elif isinstance(resp_bytes, list):
+                            audit_entry["http_status"] = 200
+                            audit_entry["bars_returned"] = 0
+                            audit_entry["rate_limited"] = False
+                            audit_entry["request_format_valid"] = True
+                            audit_entry["status"] = "CANDLE_SNAPSHOT_AVAILABLE"
+                        else:
+                            audit_entry["http_status"] = "non-200"
+                            audit_entry["error_class"] = "unexpected_response"
+                            audit_entry["request_format_valid"] = None
+                            audit_entry["status"] = "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED"
+                    except Exception as exc:
+                        exc_str = str(exc)
+                        if "429" in exc_str:
+                            audit_entry["http_status"] = 429
+                            audit_entry["error_class"] = "rate_limit"
+                            audit_entry["error_text_excerpt"] = exc_str[:100]
+                            audit_entry["rate_limited"] = True
+                            audit_entry["request_format_valid"] = None
+                            audit_entry["status"] = "CANDLE_SNAPSHOT_RATE_LIMITED"
+                        elif "422" in exc_str:
+                            audit_entry["http_status"] = 422
+                            audit_entry["error_class"] = "unprocessable_entity"
+                            audit_entry["error_text_excerpt"] = exc_str[:100]
+                            audit_entry["rate_limited"] = False
+                            audit_entry["request_format_valid"] = False
+                            audit_entry["status"] = "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED"
+                        else:
+                            audit_entry["http_status"] = "error"
+                            audit_entry["error_class"] = "request_error"
+                            audit_entry["error_text_excerpt"] = exc_str[:100]
+                            audit_entry["rate_limited"] = False
+                            audit_entry["request_format_valid"] = None
+                            audit_entry["status"] = "CANDLE_SNAPSHOT_BLOCKED"
+                
+                format_audit_results.append(audit_entry)
+        
+        candle_join["format_audit"] = format_audit_results
+        
+        # Determine overall candle status
+        available_count = sum(1 for a in format_audit_results if a.get("status") == "CANDLE_SNAPSHOT_AVAILABLE")
+        rate_limited_count = sum(1 for a in format_audit_results if a.get("status") == "CANDLE_SNAPSHOT_RATE_LIMITED")
+        unresolved_count = sum(1 for a in format_audit_results if a.get("status") == "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED")
+        
+        if available_count > 0:
+            candle_status = "CANDLE_SNAPSHOT_AVAILABLE"
+        elif rate_limited_count > 0:
+            candle_status = "CANDLE_SNAPSHOT_RATE_LIMITED"
+        elif unresolved_count > 0:
+            candle_status = "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED"
+        else:
+            candle_status = "CANDLE_SNAPSHOT_BLOCKED"
+        
+        candle_join["candle_status"] = candle_status
+        statuses.append(candle_status)
+        
+        # Also populate per-API-symbol data for backward compatibility
         for api_sym in markets:
             display_sym, dex_name = parse_api_symbol(api_sym)
             candle_data: dict[str, Any] = {"intervals": {}}
             for interval in ["1h", "4h", "1d"]:
-                try:
-                    payload = {"type": "candleSnapshot", "coin": api_sym, "interval": interval, "startTime": 0, "endTime": 0}
-                    resp_bytes = cp.http_post_json(HYPERLIQUID_INFO_URL, payload)
-                    if isinstance(resp_bytes, list):
-                        candle_data["intervals"][interval] = {
-                            "candle_count": len(resp_bytes),
-                            "capped_at_5000": len(resp_bytes) >= 5000,
-                            "status": "SONARX_CANDLE_JOIN_AVAILABLE",
-                        }
-                    else:
-                        candle_data["intervals"][interval] = {"candle_count": 0, "status": "NO_DATA"}
-                except Exception as exc:
-                    candle_data["intervals"][interval] = {"error": str(exc), "status": "SONARX_CANDLE_JOIN_BLOCKED"}
+                candle_data["intervals"][interval] = {"status": candle_status, "note": "format audit only, not per-symbol fetch"}
             candle_join["candles_by_api_symbol"][api_sym] = candle_data
-        statuses.append("SONARX_CANDLE_JOIN_AVAILABLE")
     else:
         candle_join["status"] = "SONARX_CANDLE_JOIN_BLOCKED"
         candle_join["disabled_reason"] = "explicitly_disabled_via_flags" if getattr(args, "disable_candle_join", False) else "not_enabled"
+        candle_join["format_audit"] = []
+        candle_join["candle_status"] = "SONARX_CANDLE_JOIN_BLOCKED"
         statuses.append("SONARX_CANDLE_JOIN_BLOCKED")
     write_json(root / "hyperliquid_candle_snapshot_join.json", candle_join)
+    
+    # Write separate format audit artifact
+    candle_audit_artifact = {
+        **meta,
+        "audit_symbols": ["cash:TSLA", "xyz:NVDA"],
+        "formats_tested": CANDLE_FORMATS,
+        "results": format_audit_results,
+        "overall_status": candle_status if candle_enabled and cp.allow_network_public else "SONARX_CANDLE_JOIN_BLOCKED",
+    }
+    write_json(root / "candle_snapshot_request_format_audit.json", candle_audit_artifact)
 
-    # --- Phase F: anchor probe ---
+    # --- Phase F: anchor probe with dedup/cache/backoff ---
     anchor_probe: dict[str, Any] = {**meta, "anchors_by_display": {}}
     anchor_available = False
+    anchor_cache: dict[str, AnchorCacheEntry] = {}
+    rate_limit_state: dict[str, RateLimitState] = defaultdict(RateLimitState)
+    
+    # Dedup tracking
+    deduped_request_count = 0
+    cache_hits = 0
+    cache_misses = 0
+    rate_limit_count = 0
+    backoff_attempts = 0
+    failures_by_display: dict[str, str] = {}
+    
     # Anchors are disabled by default; requires --enable-anchors AND not --disable-anchors
     anchors_enabled = getattr(args, "enable_anchors", False) and not getattr(args, "disable_anchors", False)
     if anchors_enabled and cp.allow_network_public:
-        for dsym in ["TSLA", "AAPL", "MSFT", "NVDA"]:
-            try:
-                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{dsym}?range=5d&interval=1d"
-                raw = cp.http_get(url)
-                parsed = json.loads(raw)
-                ts_list = parsed.get("chart", {}).get("result", [{}])[0].get("timestamp", [])
-                meta_info = parsed.get("chart", {}).get("result", [{}])[0].get("meta", {})
-                price = meta_info.get("regularMarketPrice", 0)
+        # Only fetch anchors for the 4 display symbols, not per-DEX
+        display_symbols_needed = sorted(set(parse_api_symbol(api_sym)[0] for api_sym in markets))
+        anchor_probe["display_symbols_requested"] = display_symbols_needed
+        anchor_probe["api_symbols_mapped"] = {api_sym: parse_api_symbol(api_sym)[0] for api_sym in markets}
+        
+        for dsym in display_symbols_needed:
+            deduped_request_count += 1
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{dsym}?range=5d&interval=1d"
+            
+            # Check cache first (5-minute staleness threshold)
+            if dsym in anchor_cache:
+                cached = anchor_cache[dsym]
+                fetched_dt = datetime.fromisoformat(cached.fetched_at_utc.replace("Z", "+00:00"))
+                age_seconds = (datetime.now(timezone.utc) - fetched_dt).total_seconds()
+                if age_seconds < 300:  # 5-minute cache
+                    cache_hits += 1
+                    anchor_probe["anchors_by_display"][dsym] = {
+                        "available": cached.price > 0,
+                        "price": cached.price,
+                        "data_points": cached.data_points,
+                        "status": "ANCHOR_CACHE_HIT",
+                        "response_hash": cached.raw_response_hash,
+                        "staleness_seconds": int(age_seconds),
+                        "cache_hit": True,
+                    }
+                    if cached.price > 0:
+                        anchor_available = True
+                    continue
+            
+            cache_misses += 1
+            
+            # Check rate limit / backoff
+            rl_state = rate_limit_state["yahoo.com"]
+            if rl_state.backoff_until and datetime.now(timezone.utc) < rl_state.backoff_until:
+                rate_limit_count += 1
+                backoff_attempts += 1
+                failures_by_display[dsym] = "ANCHOR_BACKOFF_EXHAUSTED"
                 anchor_probe["anchors_by_display"][dsym] = {
-                    "available": bool(price),
-                    "price": price,
-                    "data_points": len(ts_list),
-                    "status": "SONARX_ANCHOR_AVAILABLE" if price else "SONARX_ANCHOR_BLOCKED",
-                    "response_hash": hashlib.sha256(raw[:4096]).hexdigest()[:16],
+                    "available": False,
+                    "status": "ANCHOR_BACKOFF_EXHAUSTED",
+                    "backoff_until": rl_state.backoff_until.isoformat(),
                 }
-                if price:
-                    anchor_available = True
-            except Exception as exc:
-                anchor_probe["anchors_by_display"][dsym] = {
-                    "available": False, "error": str(exc),
-                    "status": "SONARX_ANCHOR_BLOCKED",
-                }
-        statuses.append("SONARX_ANCHOR_AVAILABLE" if anchor_available else "SONARX_ANCHOR_BLOCKED")
+                continue
+            
+            # Make request with bounded retries
+            max_retries = 2
+            base_delay = 2.0
+            success = False
+            for attempt in range(max_retries + 1):
+                try:
+                    rl_state.last_request_at = datetime.now(timezone.utc)
+                    rl_state.request_count_window += 1
+                    raw = cp.http_get(url)
+                    parsed = json.loads(raw)
+                    ts_list = parsed.get("chart", {}).get("result", [{}])[0].get("timestamp", [])
+                    meta_info = parsed.get("chart", {}).get("result", [{}])[0].get("meta", {})
+                    price = float(meta_info.get("regularMarketPrice", 0) or 0)
+                    
+                    # Cache the response
+                    fetched_at = utc_now_iso()
+                    anchor_cache[dsym] = AnchorCacheEntry(
+                        display_symbol=dsym,
+                        price=price,
+                        timestamp_utc=meta_info.get("regularMarketTime", fetched_at),
+                        raw_response_hash=hashlib.sha256(raw[:4096]).hexdigest()[:16],
+                        data_points=len(ts_list),
+                        fetched_at_utc=fetched_at,
+                        staleness_seconds=0,
+                    )
+                    
+                    anchor_probe["anchors_by_display"][dsym] = {
+                        "available": bool(price),
+                        "price": price,
+                        "data_points": len(ts_list),
+                        "status": "SONARX_ANCHOR_AVAILABLE" if price else "SONARX_ANCHOR_BLOCKED",
+                        "response_hash": anchor_cache[dsym].raw_response_hash,
+                        "staleness_seconds": 0,
+                        "cache_hit": False,
+                    }
+                    if price:
+                        anchor_available = True
+                    success = True
+                    rl_state.consecutive_429s = 0
+                    rl_state.consecutive_failures = 0
+                    break
+                    
+                except Exception as exc:
+                    exc_str = str(exc)
+                    if "429" in exc_str:
+                        rl_state.consecutive_429s += 1
+                        # Exponential backoff: 2^consecutive * base_delay
+                        delay = (2 ** rl_state.consecutive_429s) * base_delay
+                        rl_state.backoff_until = datetime.now(timezone.utc).replace(microsecond=0)
+                        from datetime import timedelta
+                        rl_state.backoff_until += timedelta(seconds=delay)
+                        rate_limit_count += 1
+                        if attempt < max_retries:
+                            import time
+                            time.sleep(min(delay, 10))  # Cap at 10s
+                            continue
+                    
+                    rl_state.consecutive_failures += 1
+                    failures_by_display[dsym] = f"ANCHOR_UNAVAILABLE: {exc_str[:100]}"
+                    anchor_probe["anchors_by_display"][dsym] = {
+                        "available": False,
+                        "error": exc_str[:200],
+                        "status": "SONARX_ANCHOR_BLOCKED",
+                        "consecutive_failures": rl_state.consecutive_failures,
+                    }
+                    break
+        
+        anchor_probe["deduped_request_count"] = deduped_request_count
+        anchor_probe["cache_hits"] = cache_hits
+        anchor_probe["cache_misses"] = cache_misses
+        anchor_probe["rate_limit_count"] = rate_limit_count
+        anchor_probe["backoff_attempts"] = backoff_attempts
+        anchor_probe["failures_by_display_symbol"] = failures_by_display
+        anchor_probe["availability_by_display_symbol"] = {
+            dsym: anchor_probe["anchors_by_display"][dsym].get("available", False)
+            for dsym in display_symbols_needed
+        }
+        anchor_probe["residual_blocked_if_anchor_unavailable"] = not anchor_available
+        statuses.append("ANCHOR_DEDUPED_BY_DISPLAY_SYMBOL")
+        statuses.append("SONARX_ANCHOR_AVAILABLE" if anchor_available else "SONARX_ANCHOR_UNAVAILABLE")
     else:
         anchor_probe["status"] = "SONARX_ANCHOR_BLOCKED"
         anchor_probe["disabled_reason"] = "explicitly_disabled_via_flags" if getattr(args, "disable_anchors", False) else "not_enabled"
+        anchor_probe["deduped_request_count"] = 0
+        anchor_probe["cache_hits"] = 0
+        anchor_probe["cache_misses"] = 0
+        anchor_probe["rate_limit_count"] = 0
+        anchor_probe["backoff_attempts"] = 0
+        anchor_probe["residual_blocked_if_anchor_unavailable"] = True
         statuses.append("SONARX_ANCHOR_BLOCKED")
     write_json(root / "anchor_availability_probe.json", anchor_probe)
 
