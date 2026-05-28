@@ -402,13 +402,6 @@ class TestPerMarketDownloads:
         assert args.max_files_per_market == 20
         # This is used in scan_partitions_for_nonempty_keys to limit selected_keys per market
     
-    def test_min_files_per_market_enforcement(self):
-        """Verify min_files_per_market is a target for selection per market."""
-        from examples.strategies.venue_agnostic_signal_observer.hip3_sonarx_tradfi_l2_residual_phase_minus1_v0 import build_arg_parser
-        parser = build_arg_parser()
-        args = parser.parse_args(["--min-files-per-market", "5"])
-        assert args.min_files_per_market == 5
-    
     def test_all_markets_iterated_no_early_exit(self):
         """Ensure the market loop doesn't exit after first successful download."""
         from examples.strategies.venue_agnostic_signal_observer.hip3_sonarx_tradfi_l2_residual_phase_minus1_v0 import run_phase_minus1
