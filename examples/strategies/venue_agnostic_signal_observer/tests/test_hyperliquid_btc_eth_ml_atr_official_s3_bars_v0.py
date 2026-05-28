@@ -137,7 +137,53 @@ class TestCLI:
 
 
 # ---------------------------------------------------------------------------
-# 7. Forbidden Strings
+# 7. Orjson Parser Regression
+# ---------------------------------------------------------------------------
+class TestOrjsonParserRegression:
+    def test_orjson_trade_records_use_string_keys_not_bytes(self):
+        """Regression: orjson.loads returns str keys, not bytes.
+        Using t.get(b'coin') would return None, causing zero retained trades."""
+        try:
+            import orjson
+        except ImportError:
+            pytest.skip("orjson not installed")
+
+        btc_line = b'{"coin":"BTC","side":"A","time":"2025-03-22T10:00:00.123456789","px":"84000.0","sz":"0.5","hash":"0xabc"}'
+        eth_line = b'{"coin":"ETH","side":"A","time":"2025-03-22T10:00:01.123456789","px":"3200.0","sz":"1.0","hash":"0xdef"}'
+        btc2_line = b'{"coin":"BTC","side":"B","time":"2025-03-22T10:00:02.123456789","px":"84001.0","sz":"0.3","hash":"0xghi"}'
+
+        trades = [btc_line, eth_line, btc2_line]
+        retained = []
+
+        for raw in trades:
+            t = orjson.loads(raw)
+            coin = t.get('coin', '')
+            if coin in ('BTC', 'ETH'):
+                px = float(t['px'])
+                sz = float(t['sz'])
+                ts = t['time']
+                assert isinstance(coin, str), "coin must be str, not bytes"
+                assert isinstance(ts, str), "time must be str, not bytes"
+                retained.append(coin)
+
+        assert len(retained) == 3, f"Expected 3 retained trades, got {len(retained)}"
+        assert retained == ['BTC', 'ETH', 'BTC']
+
+        # Verify that the WRONG approach (byte keys) returns zero
+        zero_retained = []
+        for raw in trades:
+            t = orjson.loads(raw)
+            coin_wrong = t.get(b'coin', b'')  # WRONG: byte key
+            if coin_wrong in (b'BTC', b'ETH'):
+                zero_retained.append(coin_wrong)
+        assert len(zero_retained) == 0, (
+            f"Byte-key lookup should have retained 0 trades, got {len(zero_retained)}. "
+            "This means orjson now returns bytes keys, which breaks the fix."
+        )
+
+
+# ---------------------------------------------------------------------------
+# 8. Forbidden Strings
 # ---------------------------------------------------------------------------
 class TestForbiddenStrings:
     def test_no_live_order_strings(self):
