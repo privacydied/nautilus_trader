@@ -804,6 +804,266 @@ def fetch_anchor_for_display_symbol(cp: NetworkChokepoint, display_sym: str,
 
 
 # ---------------------------------------------------------------------------
+# Public anchor source audit
+# ---------------------------------------------------------------------------
+
+ANCHOR_SOURCE_STATUSES = frozenset({
+    "ANCHOR_SOURCE_USABLE_INTRADAY",
+    "ANCHOR_SOURCE_DAILY_ONLY_STALE",
+    "ANCHOR_SOURCE_RATE_LIMITED",
+    "ANCHOR_SOURCE_REQUIRES_API_KEY",
+    "ANCHOR_SOURCE_CAPTCHA_OR_MANUAL_FLOW",
+    "ANCHOR_SOURCE_NO_DATA",
+    "ANCHOR_SOURCE_ERROR",
+    "ANCHOR_SOURCE_UNSUPPORTED",
+})
+
+GLOBAL_AUDIT_STATUSES = frozenset({
+    "PUBLIC_ANCHOR_USABLE",
+    "PUBLIC_ANCHOR_STALE_ONLY",
+    "PUBLIC_ANCHOR_UNAVAILABLE",
+})
+
+
+def audit_anchor_source(cp: NetworkChokepoint, source_name: str, display_sym: str,
+                        timeout_seconds: int = 20) -> dict:
+    """Audit a single anchor source for a single display symbol.
+    
+    Returns dict with audit results including status, errors, and usability.
+    """
+    result = {
+        "source_name": source_name,
+        "display_symbol": display_sym,
+        "request_url_hash": None,
+        "request_url_redacted": None,
+        "request_method": "GET",
+        "status_code": None,
+        "error_class": None,
+        "error_excerpt": None,
+        "response_bytes": 0,
+        "points_returned": 0,
+        "earliest_timestamp": None,
+        "latest_timestamp": None,
+        "inferred_frequency": None,
+        "intraday_available": False,
+        "extended_hours_available_if_detectable": None,
+        "daily_only": True,
+        "requires_api_key_detected": False,
+        "captcha_or_manual_flow_detected": False,
+        "rate_limited": False,
+        "usable_for_normal_residual": False,
+        "usable_for_stale_diagnostic_only": False,
+        "rejection_reason": None,
+        "source_status": "ANCHOR_SOURCE_ERROR",
+    }
+    
+    try:
+        if source_name == "yahoo":
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{display_sym}?range=5d&interval=1d"
+            result["request_url_redacted"] = f"https://query1.finance.yahoo.com/v8/finance/chart/{display_sym}?range=5d&interval=1d"
+            result["request_url_hash"] = hashlib.sha256(url.encode()).hexdigest()[:16]
+            
+            try:
+                raw = cp.http_get(url, timeout=timeout_seconds)
+                result["response_bytes"] = len(raw)
+                result["status_code"] = 200
+                parsed = json.loads(raw)
+                chart_result = parsed.get("chart", {}).get("result", [{}])[0]
+                if not chart_result:
+                    result["error_class"] = "NO_DATA"
+                    result["rejection_reason"] = "Yahoo returned empty result"
+                    result["source_status"] = "ANCHOR_SOURCE_NO_DATA"
+                    return result
+                
+                ts_list = chart_result.get("timestamp", [])
+                meta = chart_result.get("meta", {})
+                price = meta.get("regularMarketPrice", 0)
+                
+                if not price:
+                    result["error_class"] = "NO_PRICE"
+                    result["rejection_reason"] = "No price in Yahoo response"
+                    result["source_status"] = "ANCHOR_SOURCE_NO_DATA"
+                    return result
+                
+                result["points_returned"] = len(ts_list)
+                if ts_list:
+                    result["earliest_timestamp"] = datetime.fromtimestamp(ts_list[0]).isoformat()
+                    result["latest_timestamp"] = datetime.fromtimestamp(ts_list[-1]).isoformat()
+                    # Check if we have intraday data
+                    if len(ts_list) > 1:
+                        diff_seconds = ts_list[-1] - ts_list[0]
+                        if diff_seconds > 0 and len(ts_list) >= 5:
+                            # Daily data expected for 5d range
+                            result["inferred_frequency"] = "daily"
+                            result["daily_only"] = True
+                            result["intraday_available"] = False
+                            result["usable_for_stale_diagnostic_only"] = True
+                
+                result["source_status"] = "ANCHOR_SOURCE_DAILY_ONLY_STALE"
+                result["usable_for_stale_diagnostic_only"] = True
+                return result
+                
+            except Exception as e:
+                err_str = str(e)
+                result["error_excerpt"] = err_str[:200] if err_str else "Unknown error"
+                if "429" in err_str or "Too Many Requests" in err_str:
+                    result["status_code"] = 429
+                    result["error_class"] = "HTTP_429"
+                    result["rate_limited"] = True
+                    result["rejection_reason"] = "Yahoo rate-limited (HTTP 429)"
+                    result["source_status"] = "ANCHOR_SOURCE_RATE_LIMITED"
+                elif "404" in err_str:
+                    result["status_code"] = 404
+                    result["error_class"] = "HTTP_404"
+                    result["rejection_reason"] = "Symbol not found on Yahoo"
+                    result["source_status"] = "ANCHOR_SOURCE_NO_DATA"
+                else:
+                    result["error_class"] = "HTTP_ERROR"
+                    result["rejection_reason"] = f"Yahoo fetch failed: {err_str[:100]}"
+                    result["source_status"] = "ANCHOR_SOURCE_ERROR"
+                return result
+        
+        elif source_name == "stooq":
+            # Stooq symbol mapping
+            stooq_map = {
+                "TSLA": "tsla.us",
+                "AAPL": "aapl.us",
+                "MSFT": "msft.us",
+                "NVDA": "nvda.us",
+            }
+            stooq_sym = stooq_map.get(display_sym)
+            if not stooq_sym:
+                result["error_class"] = "SYMBOL_NOT_MAPPED"
+                result["rejection_reason"] = f"No Stooq mapping for {display_sym}"
+                result["source_status"] = "ANCHOR_SOURCE_UNSUPPORTED"
+                return result
+            
+            url = f"https://stooq.com/q/d/l/?s={stooq_sym}&f=epoch2,d1,o,h,l,c,v"
+            result["request_url_redacted"] = f"https://stooq.com/q/d/l/?s={stooq_sym}&f=epoch2,d1,o,h,l,c,v"
+            result["request_url_hash"] = hashlib.sha256(url.encode()).hexdigest()[:16]
+            
+            try:
+                raw = cp.http_get(url, timeout=timeout_seconds)
+                result["response_bytes"] = len(raw)
+                raw_str = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+                
+                # Check for API key requirement
+                if "apikey" in raw_str.lower() or "captcha" in raw_str.lower() or "get your apikey" in raw_str.lower():
+                    result["error_class"] = "API_KEY_REQUIRED"
+                    result["requires_api_key_detected"] = True
+                    result["captcha_or_manual_flow_detected"] = True
+                    result["rejection_reason"] = "Stooq requires API key (detected in response)"
+                    result["source_status"] = "ANCHOR_SOURCE_REQUIRES_API_KEY"
+                    return result
+                
+                lines = raw_str.strip().splitlines()
+                if not lines or len(lines) < 2:
+                    result["error_class"] = "NO_DATA"
+                    result["rejection_reason"] = "Stooq returned no data"
+                    result["source_status"] = "ANCHOR_SOURCE_NO_DATA"
+                    return result
+                
+                # Parse last line for most recent close
+                parts = lines[-1].split(",")
+                if len(parts) < 6:
+                    result["error_class"] = "PARSE_ERROR"
+                    result["rejection_reason"] = "Stooq CSV parse failed"
+                    result["source_status"] = "ANCHOR_SOURCE_ERROR"
+                    return result
+                
+                close_price = float(parts[4])
+                if close_price <= 0:
+                    result["error_class"] = "INVALID_PRICE"
+                    result["rejection_reason"] = "Stooq returned invalid price"
+                    result["source_status"] = "ANCHOR_SOURCE_NO_DATA"
+                    return result
+                
+                result["points_returned"] = len(lines) - 1  # Exclude header
+                result["inferred_frequency"] = "daily"
+                result["daily_only"] = True
+                result["intraday_available"] = False
+                result["usable_for_stale_diagnostic_only"] = True
+                result["source_status"] = "ANCHOR_SOURCE_DAILY_ONLY_STALE"
+                return result
+                
+            except Exception as e:
+                err_str = str(e)
+                result["error_excerpt"] = err_str[:200] if err_str else "Unknown error"
+                if "429" in err_str:
+                    result["status_code"] = 429
+                    result["error_class"] = "HTTP_429"
+                    result["rate_limited"] = True
+                    result["source_status"] = "ANCHOR_SOURCE_RATE_LIMITED"
+                elif "apikey" in err_str.lower() or "captcha" in err_str.lower():
+                    result["error_class"] = "API_KEY_REQUIRED"
+                    result["requires_api_key_detected"] = True
+                    result["source_status"] = "ANCHOR_SOURCE_REQUIRES_API_KEY"
+                else:
+                    result["error_class"] = "HTTP_ERROR"
+                    result["source_status"] = "ANCHOR_SOURCE_ERROR"
+                return result
+        
+        else:
+            result["error_class"] = "UNSUPPORTED_SOURCE"
+            result["rejection_reason"] = f"Unknown anchor source: {source_name}"
+            result["source_status"] = "ANCHOR_SOURCE_UNSUPPORTED"
+            return result
+            
+    except Exception as e:
+        result["error_class"] = "UNEXPECTED_ERROR"
+        result["error_excerpt"] = str(e)[:200]
+        result["rejection_reason"] = f"Unexpected error: {str(e)[:100]}"
+        result["source_status"] = "ANCHOR_SOURCE_ERROR"
+        return result
+
+
+def run_anchor_source_audit(cp: NetworkChokepoint, symbols: list[str],
+                            sources: list[str],
+                            max_symbols: int = 4,
+                            timeout_seconds: int = 20,
+                            max_requests_per_source: int = 4,
+                            cache_dir: Path | None = None) -> dict:
+    """Run anchor source audit for multiple symbols and sources.
+    
+    Returns comprehensive audit report with per-source and global status.
+    """
+    symbols = symbols[:max_symbols]
+    results = []
+    
+    for display_sym in symbols:
+        for source_name in sources:
+            result = audit_anchor_source(cp, source_name, display_sym, timeout_seconds)
+            results.append(result)
+    
+    # Compute global status
+    usable_intraday = any(r["usable_for_normal_residual"] for r in results)
+    usable_daily_only = any(r["usable_for_stale_diagnostic_only"] and not r["usable_for_normal_residual"] for r in results)
+    all_blocked = all(r["source_status"] in ("ANCHOR_SOURCE_RATE_LIMITED", "ANCHOR_SOURCE_REQUIRES_API_KEY", "ANCHOR_SOURCE_ERROR", "ANCHOR_SOURCE_NO_DATA", "ANCHOR_SOURCE_UNSUPPORTED") for r in results)
+    
+    if usable_intraday:
+        global_status = "PUBLIC_ANCHOR_USABLE"
+    elif usable_daily_only:
+        global_status = "PUBLIC_ANCHOR_STALE_ONLY"
+    else:
+        global_status = "PUBLIC_ANCHOR_UNAVAILABLE"
+    
+    return {
+        "audit_symbols": symbols,
+        "audit_sources": sources,
+        "max_symbols": max_symbols,
+        "timeout_seconds": timeout_seconds,
+        "max_requests_per_source": max_requests_per_source,
+        "results": results,
+        "global_status": global_status,
+        "usable_intraday_count": sum(1 for r in results if r["usable_for_normal_residual"]),
+        "usable_daily_only_count": sum(1 for r in results if r["usable_for_stale_diagnostic_only"] and not r["usable_for_normal_residual"]),
+        "rate_limited_count": sum(1 for r in results if r["rate_limited"]),
+        "requires_api_key_count": sum(1 for r in results if r["requires_api_key_detected"]),
+        "captcha_detected_count": sum(1 for r in results if r["captcha_or_manual_flow_detected"]),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Residual diagnostics with alignment
 # ---------------------------------------------------------------------------
 
@@ -997,6 +1257,7 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
         "s3_read_timeout_seconds": getattr(args, "s3_read_timeout_seconds", 30),
         "s3_max_attempts": getattr(args, "s3_max_attempts", 2),
         "real_smoke_mode": getattr(args, "real_smoke", False),
+        "anchor_source_audit_mode": getattr(args, "anchor_source_audit", False),
         "executable_pnl_modeled": False,
         "queue_position_modeled": False,
         "fills_modeled": False,
@@ -1004,6 +1265,56 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
         "diagnostic_only": True,
     }
     write_json(root / "run_manifest.json", run_manifest)
+    
+    # Handle anchor source audit mode
+    if getattr(args, "anchor_source_audit", False):
+        audit_symbols = [s.strip() for s in getattr(args, "anchor_audit_symbols", "TSLA,AAPL,MSFT,NVDA").split(",") if s.strip()]
+        max_audit_symbols = getattr(args, "anchor_audit_max_symbols", 4)
+        audit_timeout = getattr(args, "anchor_audit_timeout_seconds", 20)
+        max_requests_per_source = getattr(args, "anchor_audit_max_requests_per_source", 4)
+        anchor_sources = [s.strip() for s in getattr(args, "anchor_source", "yahoo,stooq").split(",") if s.strip()]
+        
+        audit_result = run_anchor_source_audit(
+            cp, audit_symbols, anchor_sources,
+            max_symbols=max_audit_symbols,
+            timeout_seconds=audit_timeout,
+            max_requests_per_source=max_requests_per_source,
+            cache_dir=getattr(args, "anchor_cache_dir", None)
+        )
+        
+        write_json(root / "public_anchor_source_audit.json", audit_result)
+        
+        # Determine final status based on audit
+        global_status = audit_result.get("global_status", "PUBLIC_ANCHOR_UNAVAILABLE")
+        if global_status == "PUBLIC_ANCHOR_USABLE":
+            final_status = "SONARX_RESIDUAL_DIAGNOSTIC_AVAILABLE"
+        elif global_status == "PUBLIC_ANCHOR_STALE_ONLY":
+            final_status = "SONARX_PHASE_MINUS1_NOT_ENOUGH_FOR_PRECOMMITMENT"
+        else:
+            final_status = "SONARX_PHASE_MINUS1_NOT_ENOUGH_FOR_PRECOMMITMENT"
+        
+        # Write summary
+        summary = {
+            **meta,
+            "run_id": run_id,
+            "status": final_status,
+            "audit_global_status": global_status,
+            "audit_symbols": audit_symbols,
+            "audit_sources": anchor_sources,
+            "usable_intraday_count": audit_result.get("usable_intraday_count", 0),
+            "usable_daily_only_count": audit_result.get("usable_daily_only_count", 0),
+            "rate_limited_count": audit_result.get("rate_limited_count", 0),
+            "requires_api_key_count": audit_result.get("requires_api_key_count", 0),
+            "safety_mode": "public_data_observer_only",
+            "no_orders_no_auth_no_live_confirmation": True,
+        }
+        write_json(root / "summary.json", summary)
+        
+        return {
+            "status": final_status,
+            "run_id": run_id,
+            "audit_result": audit_result,
+        }
     
     # Initial status artifact
     initial_status = {
@@ -1448,6 +1759,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--anchor-alignment-mode", default="exact_or_previous_anchor", help="Anchor alignment mode")
     p.add_argument("--max-anchor-staleness-minutes", type=int, default=15, help="Max anchor staleness in minutes")
     p.add_argument("--allow-daily-stale-anchor-diagnostic", action="store_true", help="Allow daily-only stale anchors for diagnostic residuals")
+    p.add_argument("--anchor-source-audit", action="store_true", help="Run no-auth public anchor source audit only")
+    p.add_argument("--anchor-audit-symbols", default="TSLA,AAPL,MSFT,NVDA", help="Comma-separated display symbols for anchor audit")
+    p.add_argument("--anchor-audit-max-symbols", type=int, default=4, help="Max symbols to audit")
+    p.add_argument("--anchor-audit-timeout-seconds", type=int, default=20, help="HTTP timeout per anchor audit request")
+    p.add_argument("--anchor-audit-max-requests-per-source", type=int, default=4, help="Max requests per source in audit")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--real-smoke", action="store_true", help="Smoke test mode: max 2 markets, 10 files each, 50MB budget")
     p.add_argument("--s3-connect-timeout-seconds", type=int, default=10)
