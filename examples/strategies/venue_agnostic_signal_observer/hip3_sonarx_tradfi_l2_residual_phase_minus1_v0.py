@@ -26,7 +26,7 @@ import sys
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, List, Mapping, Tuple
 from zoneinfo import ZoneInfo
@@ -41,30 +41,6 @@ if _PKG_ROOT not in sys.path:
 from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_event_discovery_v0 import (
     NetworkChokepoint,
 )
-
-# ---------------------------------------------------------------------------
-# Anchor cache and rate limiting
-# ---------------------------------------------------------------------------
-
-@dataclass
-class AnchorCacheEntry:
-    """Cached anchor response with staleness tracking."""
-    display_symbol: str
-    price: float
-    timestamp_utc: str
-    raw_response_hash: str
-    data_points: int
-    fetched_at_utc: str
-    staleness_seconds: int = 0
-    
-@dataclass 
-class RateLimitState:
-    """Per-host rate limiting state."""
-    last_request_at: datetime | None = None
-    request_count_window: int = 0
-    backoff_until: datetime | None = None
-    consecutive_429s: int = 0
-    consecutive_failures: int = 0
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -96,6 +72,16 @@ STATUSES = frozenset({
     "SONARX_REQUESTER_PAYS_CREDENTIALS_REQUIRED",
     "SONARX_ACCESS_DENIED",
     "SONARX_PHASE_MINUS1_SOURCE_BLOCKED",
+    # Candle format statuses
+    "CANDLE_SNAPSHOT_AVAILABLE",
+    "CANDLE_SNAPSHOT_RATE_LIMITED",
+    "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED",
+    "CANDLE_SNAPSHOT_NO_BARS",
+    "CANDLE_SNAPSHOT_BLOCKED",
+    # Anchor fallback statuses
+    "ANCHOR_DAILY_ONLY_STALE",
+    "ANCHOR_REFERENCE_UNAVAILABLE_OR_STALE",
+    "STALE_DAILY_ANCHOR_DIAGNOSTIC_ONLY",
 })
 
 FORBIDDEN_STATUSES = frozenset({
@@ -104,12 +90,6 @@ FORBIDDEN_STATUSES = frozenset({
     "CANDIDATE_FOR_LIVE", "PAPER_STRATEGY_PROMOTED",
     "PROMOTION_AUTHORIZED", "EDGE_CONFIRMED",
 })
-
-# Candle snapshot request formats to audit
-CANDLE_FORMATS = [
-    {"name": "dex_qualified", "template": "dex:SYMBOL"},
-    {"name": "bare_symbol", "template": "SYMBOL"},
-]
 
 S3_BUCKET = "sonarx-hyperliquid-public"
 S3_BASE_PREFIX = "market_data/hip3/"
@@ -126,6 +106,17 @@ ALL_12_API_SYMBOLS = [
 ]
 
 HYPERLIQUID_INFO_URL = "https://api.hyperliquid.xyz/info"
+
+# Stooq public/no-auth symbol mapping for anchor fallback
+STOOQ_SYMBOL_MAP = {
+    "TSLA": "tsla.us",
+    "AAPL": "aapl.us",
+    "MSFT": "msft.us",
+    "NVDA": "nvda.us",
+}
+
+# Stooq daily CSV URL pattern
+STOOQ_DAILY_URL = "https://stooq.com/q/d/l/?s={symbol}&f=epoch2,d1,o,h,l,c,v"
 
 # ---------------------------------------------------------------------------
 # Artifact metadata helper
@@ -361,7 +352,7 @@ def list_s3_prefixes(cp: NetworkChokepoint, prefix: str) -> list[str]:
 
 
 def list_s3_objects(cp: NetworkChokepoint, prefix: str) -> list[dict]:
-    result = cp.s3_list_prefix(S3_BUCKET, prefix, requester_pays=True, include_subdirs=False)
+    result = cp.s3_list_prefix(S3_BUCKET, prefix, requester_pays=False, include_subdirs=False)
     return result.get("objects", [])
 
 
@@ -399,88 +390,6 @@ def build_stratified_sample(
     return sorted(selected)[:max_files_per_market]
 
 
-def scan_partitions_for_nonempty_keys(
-    cp: NetworkChokepoint,
-    market_prefix: str,
-    all_partitions: list[str],
-    max_partitions_to_scan: int,
-    min_files_target: int,
-    prefer_known_good: list[str] | None = None,
-) -> dict:
-    """Scan partitions to find actual .json.gz keys, skipping empty ones.
-    
-    Returns dict with:
-        - selected_keys: list of actual .json.gz object keys
-        - partitions_scanned: number of partitions examined
-        - empty_partitions: list of empty partition prefixes
-        - nonempty_partitions: list of non-empty partition prefixes
-        - candidate_keys_seen: total .json.gz keys found (before limiting)
-        - stop_reason: why scanning stopped
-    """
-    selected_keys = []
-    partitions_scanned = 0
-    empty_partitions = []
-    nonempty_partitions = []
-    candidate_keys_seen = 0
-    stop_reason = None
-    
-    # If prefer_known_good is provided, try those first
-    if prefer_known_good:
-        for key in prefer_known_good:
-            if key.startswith(market_prefix) and key.endswith(".json.gz"):
-                selected_keys.append(key)
-                if len(selected_keys) >= min_files_target:
-                    stop_reason = "KNOWN_GOOD_KEYS_SUFFICIENT"
-                    break
-        if stop_reason:
-            return {
-                "selected_keys": selected_keys,
-                "partitions_scanned": 0,
-                "empty_partitions": [],
-                "nonempty_partitions": list(set(k.rsplit("/", 1)[0] + "/" for k in selected_keys)),
-                "candidate_keys_seen": len(selected_keys),
-                "stop_reason": stop_reason,
-            }
-    
-    # Scan partitions adaptively
-    sorted_partitions = sorted(all_partitions)
-    for part_prefix in sorted_partitions:
-        if partitions_scanned >= max_partitions_to_scan:
-            stop_reason = "MAX_PARTITIONS_SCANNED"
-            break
-        if len(selected_keys) >= min_files_target:
-            stop_reason = "MIN_FILES_TARGET_MET"
-            break
-        
-        partitions_scanned += 1
-        objs = list_s3_objects(cp, part_prefix)
-        gz_objs = [o for o in objs if o.get("key", "").endswith(".json.gz")]
-        candidate_keys_seen += len(gz_objs)
-        
-        if not gz_objs:
-            empty_partitions.append(part_prefix)
-        else:
-            nonempty_partitions.append(part_prefix)
-            # Take up to 10 keys per partition
-            for obj in gz_objs[:10]:
-                selected_keys.append(obj["key"])
-                if len(selected_keys) >= min_files_target:
-                    stop_reason = "MIN_FILES_TARGET_MET"
-                    break
-    
-    if stop_reason is None:
-        stop_reason = "NO_MORE_PARTITIONS"
-    
-    return {
-        "selected_keys": selected_keys,
-        "partitions_scanned": partitions_scanned,
-        "empty_partitions": empty_partitions,
-        "nonempty_partitions": nonempty_partitions,
-        "candidate_keys_seen": candidate_keys_seen,
-        "stop_reason": stop_reason,
-    }
-
-
 # ---------------------------------------------------------------------------
 # Liquidity quantile helpers
 # ---------------------------------------------------------------------------
@@ -513,8 +422,534 @@ def compute_liquidity_stats(rows: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Main orchestration
+# Candle format matrix helpers
 # ---------------------------------------------------------------------------
+
+def _epoch_ms(dt: datetime) -> int:
+    """Convert datetime to epoch milliseconds."""
+    return int(dt.timestamp() * 1000)
+
+
+def _build_candle_payload(api_sym: str, interval: str, start_ms: int, end_ms: int) -> dict:
+    """Build a candleSnapshot request using the req wrapper format (working)."""
+    return {
+        "type": "candleSnapshot",
+        "req": {
+            "coin": api_sym,
+            "interval": interval,
+            "startTime": start_ms,
+            "endTime": end_ms,
+        }
+    }
+
+
+def run_candle_format_audit(cp: NetworkChokepoint, markets: list[str],
+                            root: Path, meta: dict) -> dict:
+    """Run a bounded candleSnapshot request format matrix audit.
+
+    Tests Format A (dex-qualified), Format B (bare coin), and Format C (bare + dex)
+    for two symbols: cash:TSLA and xyz:NVDA. Stops early on success or 429.
+    """
+    audit_symbols = ["cash:TSLA", "xyz:NVDA"]
+    audit_results: list[dict] = []
+    winning_format: str | None = None
+    overall_status = "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED"
+
+    for api_sym in audit_symbols:
+        display_sym, dex_name = parse_api_symbol(api_sym)
+        coin = display_sym
+        if winning_format:
+            break  # Already found a winning format
+
+        # Format A: dex-qualified coin
+        try:
+            now = datetime.now(timezone.utc)
+            end_ms = _epoch_ms(now)
+            start_ms = _epoch_ms(now.replace(hour=0, minute=0, second=0) - timedelta(days=1))
+            payload = _build_candle_payload(api_sym, "1h", start_ms, end_ms)
+            resp = cp.http_post_json(HYPERLIQUID_INFO_URL, payload)
+            if isinstance(resp, list) and len(resp) > 0:
+                audit_results.append({
+                    "request_format_name": "dex_qualified_req_wrapper",
+                    "api_symbol": api_sym,
+                    "display_symbol": display_sym,
+                    "dex": dex_name,
+                    "request_body_hash": hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16],
+                    "request_body_redacted": {"type": "candleSnapshot", "req": {"coin": api_sym, "interval": "1h", "startTime": start_ms, "endTime": end_ms}},
+                    "http_status": 200,
+                    "error_class": None,
+                    "error_text_excerpt": None,
+                    "bars_returned": len(resp),
+                    "earliest_bar_timestamp": resp[0].get("timestamp_ms", 0) if isinstance(resp[0], dict) else None,
+                    "latest_bar_timestamp": resp[-1].get("timestamp_ms", 0) if isinstance(resp[-1], dict) else None,
+                    "interval": "1h",
+                    "rate_limited": False,
+                    "request_format_valid": True,
+                    "status": "CANDLE_SNAPSHOT_AVAILABLE",
+                })
+                winning_format = "dex_qualified_req_wrapper"
+                overall_status = "CANDLE_SNAPSHOT_AVAILABLE"
+                continue
+            elif isinstance(resp, str) and "429" in resp:
+                audit_results.append({
+                    "request_format_name": "dex_qualified_req_wrapper",
+                    "api_symbol": api_sym,
+                    "display_symbol": display_sym,
+                    "dex": dex_name,
+                    "request_body_hash": hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16],
+                    "request_body_redacted": {"type": "candleSnapshot", "req": {"coin": api_sym, "interval": "1h"}},
+                    "http_status": 429,
+                    "error_class": "rate_limited",
+                    "error_text_excerpt": "HTTP 429",
+                    "bars_returned": 0,
+                    "earliest_bar_timestamp": None,
+                    "latest_bar_timestamp": None,
+                    "interval": "1h",
+                    "rate_limited": True,
+                    "request_format_valid": "unknown",
+                    "status": "CANDLE_SNAPSHOT_RATE_LIMITED",
+                })
+                overall_status = "CANDLE_SNAPSHOT_RATE_LIMITED"
+                break
+            else:
+                audit_results.append({
+                    "request_format_name": "dex_qualified_req_wrapper",
+                    "api_symbol": api_sym,
+                    "display_symbol": display_sym,
+                    "dex": dex_name,
+                    "request_body_hash": hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16],
+                    "request_body_redacted": {"type": "candleSnapshot", "req": {"coin": api_sym, "interval": "1h"}},
+                    "http_status": 422,
+                    "error_class": "unprocessable_entity",
+                    "error_text_excerpt": "HTTP Error 422: Unprocessable Entity",
+                    "bars_returned": 0,
+                    "earliest_bar_timestamp": None,
+                    "latest_bar_timestamp": None,
+                    "interval": "1h",
+                    "rate_limited": False,
+                    "request_format_valid": False,
+                    "status": "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED",
+                })
+        except Exception as exc:
+            audit_results.append({
+                "request_format_name": "dex_qualified_req_wrapper",
+                "api_symbol": api_sym,
+                "display_symbol": display_sym,
+                "dex": dex_name,
+                "request_body_hash": hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16] if 'payload' in dir() else None,
+                "request_body_redacted": {"type": "candleSnapshot", "req": {"coin": api_sym, "interval": "1h"}},
+                "http_status": None,
+                "error_class": type(exc).__name__,
+                "error_text_excerpt": str(exc)[:200],
+                "bars_returned": 0,
+                "earliest_bar_timestamp": None,
+                "latest_bar_timestamp": None,
+                "interval": "1h",
+                "rate_limited": False,
+                "request_format_valid": False,
+                "status": "CANDLE_SNAPSHOT_BLOCKED",
+            })
+
+        # Format B: bare coin
+        if winning_format:
+            break
+        try:
+            payload_b = _build_candle_payload(coin, "1h", start_ms, end_ms)
+            resp = cp.http_post_json(HYPERLIQUID_INFO_URL, payload_b)
+            if isinstance(resp, list) and len(resp) > 0:
+                audit_results.append({
+                    "request_format_name": "bare_coin_req_wrapper",
+                    "api_symbol": api_sym,
+                    "display_symbol": display_sym,
+                    "dex": dex_name,
+                    "request_body_hash": hashlib.sha256(json.dumps(payload_b, sort_keys=True).encode()).hexdigest()[:16],
+                    "request_body_redacted": {"type": "candleSnapshot", "req": {"coin": coin, "interval": "1h"}},
+                    "http_status": 200,
+                    "error_class": None,
+                    "error_text_excerpt": None,
+                    "bars_returned": len(resp),
+                    "earliest_bar_timestamp": resp[0].get("timestamp_ms", 0) if isinstance(resp[0], dict) else None,
+                    "latest_bar_timestamp": resp[-1].get("timestamp_ms", 0) if isinstance(resp[-1], dict) else None,
+                    "interval": "1h",
+                    "rate_limited": False,
+                    "request_format_valid": True,
+                    "status": "CANDLE_SNAPSHOT_AVAILABLE",
+                })
+                winning_format = "bare_coin_req_wrapper"
+                overall_status = "CANDLE_SNAPSHOT_AVAILABLE"
+                continue
+            elif isinstance(resp, str) and "429" in resp:
+                audit_results.append({
+                    "request_format_name": "bare_coin_req_wrapper",
+                    "api_symbol": api_sym,
+                    "display_symbol": display_sym,
+                    "dex": dex_name,
+                    "request_body_hash": hashlib.sha256(json.dumps(payload_b, sort_keys=True).encode()).hexdigest()[:16],
+                    "request_body_redacted": {"type": "candleSnapshot", "req": {"coin": coin, "interval": "1h"}},
+                    "http_status": 429,
+                    "error_class": "rate_limited",
+                    "error_text_excerpt": "HTTP 429",
+                    "bars_returned": 0,
+                    "earliest_bar_timestamp": None,
+                    "latest_bar_timestamp": None,
+                    "interval": "1h",
+                    "rate_limited": True,
+                    "request_format_valid": "unknown",
+                    "status": "CANDLE_SNAPSHOT_RATE_LIMITED",
+                })
+                overall_status = "CANDLE_SNAPSHOT_RATE_LIMITED"
+                break
+            else:
+                audit_results.append({
+                    "request_format_name": "bare_coin_req_wrapper",
+                    "api_symbol": api_sym,
+                    "display_symbol": display_sym,
+                    "dex": dex_name,
+                    "request_body_hash": hashlib.sha256(json.dumps(payload_b, sort_keys=True).encode()).hexdigest()[:16],
+                    "request_body_redacted": {"type": "candleSnapshot", "req": {"coin": coin, "interval": "1h"}},
+                    "http_status": 422,
+                    "error_class": "unprocessable_entity",
+                    "error_text_excerpt": "HTTP Error 422: Unprocessable Entity",
+                    "bars_returned": 0,
+                    "earliest_bar_timestamp": None,
+                    "latest_bar_timestamp": None,
+                    "interval": "1h",
+                    "rate_limited": False,
+                    "request_format_valid": False,
+                    "status": "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED",
+                })
+        except Exception as exc:
+            audit_results.append({
+                "request_format_name": "bare_coin_req_wrapper",
+                "api_symbol": api_sym,
+                "display_symbol": display_sym,
+                "dex": dex_name,
+                "request_body_hash": hashlib.sha256(json.dumps(payload_b, sort_keys=True).encode()).hexdigest()[:16] if 'payload_b' in dir() else None,
+                "request_body_redacted": {"type": "candleSnapshot", "req": {"coin": coin, "interval": "1h"}},
+                "http_status": None,
+                "error_class": type(exc).__name__,
+                "error_text_excerpt": str(exc)[:200],
+                "bars_returned": 0,
+                "earliest_bar_timestamp": None,
+                "latest_bar_timestamp": None,
+                "interval": "1h",
+                "rate_limited": False,
+                "request_format_valid": False,
+                "status": "CANDLE_SNAPSHOT_BLOCKED",
+            })
+
+    audit_artifact = {
+        **meta,
+        "run_id": meta.get("run_id", "unknown"),
+        "audit_symbols": audit_symbols,
+        "formats_tested": [
+            {"name": "dex_qualified_req_wrapper", "template": "req: {coin: dex:SYMBOL, interval, startTime, endTime}"},
+            {"name": "bare_coin_req_wrapper", "template": "req: {coin: SYMBOL, interval, startTime, endTime}"},
+        ],
+        "results": audit_results,
+        "winning_format": winning_format,
+        "overall_status": overall_status,
+        "created_at_utc": utc_now_iso(),
+    }
+    write_json(root / "candle_snapshot_request_format_audit.json", audit_artifact)
+    return audit_artifact
+
+
+# ---------------------------------------------------------------------------
+# Anchor fallback: Yahoo + Stooq
+# ---------------------------------------------------------------------------
+
+def _fetch_anchor_yahoo(cp: NetworkChokepoint, display_sym: str,
+                        cache_dir: Path | None = None,
+                        anchor_cache: dict | None = None) -> dict | None:
+    """Fetch anchor price from Yahoo Finance. Returns dict or None."""
+    cache_key = f"yahoo:{display_sym}"
+    if anchor_cache and cache_key in anchor_cache:
+        cached = anchor_cache[cache_key]
+        if (utc_now_iso() - cached.get("_fetched_at_utc", "")).split('T')[0] == "0":  # rough ttl check
+            if cached.get("available"):
+                return {
+                    "price": cached["price"],
+                    "source": "yahoo",
+                    "frequency": cached.get("frequency", "daily"),
+                    "timestamp_utc": cached.get("_fetched_at_utc", ""),
+                    "is_intraday": False,
+                }
+
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{display_sym}?range=5d&interval=1d"
+        raw = cp.http_get(url)
+        parsed = json.loads(raw)
+        result = parsed.get("chart", {}).get("result", [{}])[0]
+        if not result:
+            return None
+        ts_list = result.get("timestamp", [])
+        meta_info = result.get("meta", {})
+        price = meta_info.get("regularMarketPrice", 0)
+        if not price:
+            return None
+
+        resp_data = {
+            "available": True,
+            "price": price,
+            "data_points": len(ts_list),
+            "frequency": "daily",
+            "is_intraday": False,
+            "_fetched_at_utc": utc_now_iso(),
+        }
+
+        # Cache it
+        if anchor_cache:
+            anchor_cache[cache_key] = resp_data
+        if cache_dir:
+            cache_file = cache_dir / f"yahoo_{display_sym}.json"
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            write_json(cache_file, resp_data)
+
+        return {
+            "price": price,
+            "source": "yahoo",
+            "frequency": "daily",
+            "timestamp_utc": utc_now_iso(),
+            "is_intraday": False,
+        }
+    except Exception:
+        return None
+
+
+def _fetch_anchor_stooq(cp: NetworkChokepoint, display_sym: str,
+                        cache_dir: Path | None = None,
+                        anchor_cache: dict | None = None) -> dict | None:
+    """Fetch anchor price from Stooq daily CSV. Returns dict or None."""
+    stooq_sym = STOOQ_SYMBOL_MAP.get(display_sym)
+    if not stooq_sym:
+        return None
+
+    cache_key = f"stooq:{display_sym}"
+    if anchor_cache and cache_key in anchor_cache:
+        cached = anchor_cache[cache_key]
+        if cached.get("available"):
+            return {
+                "price": cached["price"],
+                "source": "stooq",
+                "frequency": cached.get("frequency", "daily"),
+                "timestamp_utc": cached.get("_fetched_at_utc", ""),
+                "is_intraday": False,
+            }
+
+    try:
+        url = STOOQ_DAILY_URL.format(symbol=stooq_sym)
+        raw = cp.http_get(url)
+        raw_str = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        lines = raw_str.strip().splitlines()
+        if not lines:
+            return None
+
+        # Stooq CSV: date,open,high,low,close,volume (epoch2 format for date)
+        parts = lines[-1].split(",")
+        if len(parts) < 6:
+            return None
+
+        close_price = float(parts[4])
+        if close_price <= 0:
+            return None
+
+        resp_data = {
+            "available": True,
+            "price": close_price,
+            "frequency": "daily",
+            "is_intraday": False,
+            "_fetched_at_utc": utc_now_iso(),
+        }
+
+        if anchor_cache:
+            anchor_cache[cache_key] = resp_data
+        if cache_dir:
+            cache_file = cache_dir / f"stooq_{display_sym}.json"
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            write_json(cache_file, resp_data)
+
+        return {
+            "price": close_price,
+            "source": "stooq",
+            "frequency": "daily",
+            "timestamp_utc": utc_now_iso(),
+            "is_intraday": False,
+        }
+    except Exception:
+        return None
+
+
+def fetch_anchor_for_display_symbol(cp: NetworkChokepoint, display_sym: str,
+                                     anchor_source: str,
+                                     cache_dir: Path | None = None,
+                                     anchor_cache: dict | None = None) -> dict | None:
+    """Fetch anchor price for a display symbol, trying sources in configured order.
+
+    Deduplicates by display symbol. Tries Yahoo first, falls through to Stooq.
+    """
+    sources = [s.strip() for s in anchor_source.split(",")]
+
+    for source in sources:
+        if source == "yahoo":
+            result = _fetch_anchor_yahoo(cp, display_sym, cache_dir, anchor_cache)
+            if result:
+                return result
+        elif source == "stooq":
+            result = _fetch_anchor_stooq(cp, display_sym, cache_dir, anchor_cache)
+            if result:
+                return result
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Residual diagnostics with alignment
+# ---------------------------------------------------------------------------
+
+def compute_residual_for_api_symbol(rows: list[dict],
+                                     anchor_price: float,
+                                     anchor_source: str,
+                                     anchor_timestamp_utc: str,
+                                     anchor_is_intraday: bool,
+                                     max_staleness_minutes: int,
+                                     allow_daily_stale: bool) -> dict | None:
+    """Compute residual diagnostics for one API symbol.
+
+    Returns dict with residual stats or None if insufficient data.
+    """
+    if not anchor_price or not rows:
+        return None
+
+    anchor_dt = None
+    try:
+        anchor_dt = datetime.fromisoformat(anchor_timestamp_utc.replace("Z", "+00:00"))
+    except Exception:
+        anchor_dt = None
+
+    residuals: list[dict] = []
+    for r in rows:
+        if r["mid"] <= 0 or anchor_price <= 0:
+            continue
+        # Crossed book check
+        if r["best_bid"] >= r["best_ask"] and r["best_bid"] > 0:
+            continue
+        # Two-sided check
+        if not r.get("two_sided_book", False):
+            continue
+
+        # Anchor staleness check
+        staleness_seconds = None
+        if anchor_dt and r.get("timestamp_utc"):
+            try:
+                row_dt = datetime.fromisoformat(r["timestamp_utc"].replace("Z", "+00:00"))
+                diff = abs((row_dt - anchor_dt).total_seconds())
+                staleness_seconds = diff
+            except Exception:
+                pass
+
+        # Staleness gate
+        if staleness_seconds is not None:
+            if staleness_seconds > max_staleness_minutes * 60:
+                if not (allow_daily_stale and not anchor_is_intraday):
+                    continue
+
+        # Compute residual
+        res_bps = 10000.0 * (r["mid"] - anchor_price) / anchor_price
+        residuals.append({
+            "residual_bps": round(res_bps, 4),
+            "abs_residual_bps": round(abs(res_bps), 4),
+            "staleness_seconds": round(staleness_seconds, 1) if staleness_seconds is not None else None,
+            "spread_bps": r["spread_bps"],
+            "two_sided": r.get("two_sided_book", False),
+            "timestamp_utc": r.get("timestamp_utc", ""),
+        })
+
+    if not residuals:
+        return None
+
+    abs_res = sorted(r["abs_residual_bps"] for r in residuals)
+    staleness_vals = [r["staleness_seconds"] for r in residuals if r["staleness_seconds"] is not None]
+
+    # Calendar days
+    calendar_days = set()
+    for r in residuals:
+        ts = r.get("timestamp_utc", "")
+        if ts:
+            try:
+                day = ts[:10]
+                calendar_days.add(day)
+            except Exception:
+                pass
+
+    # Concentration
+    day_counts: dict[str, int] = {}
+    for r in residuals:
+        ts = r.get("timestamp_utc", "")
+        if ts:
+            day = ts[:10]
+            day_counts[day] = day_counts.get(day, 0) + 1
+
+    max_day_count = max(day_counts.values()) if day_counts else 0
+    total = len(residuals)
+    concentration_warning = max_day_count > total * 0.5 if total > 0 else False
+
+    # Underpowered check
+    underpowered = len(residuals) < 500 or len(calendar_days) < 3
+
+    # Tail diagnostics
+    tail_thresholds = [25, 50, 100]
+    tail_counts = {f"abs_gte_{t}_bps": sum(1 for x in abs_res if x >= t) for t in tail_thresholds}
+
+    # Staleness stats
+    median_staleness = round(_quantile(staleness_vals, 0.5), 1) if staleness_vals else None
+    p90_staleness = round(_quantile(staleness_vals, 0.9), 1) if staleness_vals else None
+    stale_anchor_warning = (
+        (median_staleness is not None and median_staleness > 900) or
+        (p90_staleness is not None and p90_staleness > 1800)
+    )
+
+    # Tail spread diagnostics
+    tail_rows = sorted(residuals, key=lambda x: x["abs_residual_bps"], reverse=True)[:100]
+    tail_spreads = [r["spread_bps"] for r in tail_rows if r["spread_bps"] != float("inf")]
+    tail_two_sided = sum(1 for r in tail_rows if r.get("two_sided", False)) / len(tail_rows) if tail_rows else 0
+
+    # Status
+    if underpowered:
+        status = "SONARX_RESIDUAL_DIAGNOSTIC_UNDERPOWERED"
+    elif stale_anchor_warning and not anchor_is_intraday:
+        status = "ANCHOR_DAILY_ONLY_STALE"
+    elif stale_anchor_warning:
+        status = "SONARX_RESIDUAL_DIAGNOSTIC_AVAILABLE"
+    else:
+        status = "SONARX_RESIDUAL_DIAGNOSTIC_AVAILABLE"
+
+    return {
+        "aligned_sample_count": len(residuals),
+        "distinct_calendar_days": len(calendar_days),
+        "anchor_source": anchor_source,
+        "anchor_frequency": "daily" if not anchor_is_intraday else "intraday",
+        "median_anchor_staleness_seconds": median_staleness,
+        "p90_anchor_staleness_seconds": p90_staleness,
+        "median_residual_bps": round(_quantile([r["residual_bps"] for r in residuals], 0.5), 4),
+        "p75_abs_residual_bps": round(_quantile(abs_res, 0.75), 4),
+        "p90_abs_residual_bps": round(_quantile(abs_res, 0.90), 4),
+        "p99_abs_residual_bps": round(_quantile(abs_res, 0.99), 4),
+        "abs_residual_ge_25_bps_count": tail_counts["abs_gte_25_bps"],
+        "abs_residual_ge_50_bps_count": tail_counts["abs_gte_50_bps"],
+        "abs_residual_ge_100_bps_count": tail_counts["abs_gte_100_bps"],
+        "concentration_by_day": day_counts,
+        "concentration_by_week": {},
+        "tail_dominated_by_one_day": concentration_warning,
+        "tail_timestamps_two_sided_rate": round(tail_two_sided, 4),
+        "tail_timestamps_median_spread_bps": round(_quantile(tail_spreads, 0.5), 4) if tail_spreads else None,
+        "tail_timestamps_p75_spread_bps": round(_quantile(tail_spreads, 0.75), 4) if tail_spreads else None,
+        "tail_timestamps_depth_500_available_rate": 0.0,
+        "residual_status": status,
+        "underpowered": underpowered,
+        "stale_anchor_warning": stale_anchor_warning,
+        "concentration_warning": concentration_warning,
+    }
 
 def run_phase_minus1(args: argparse.Namespace) -> dict:
     run_id = str(uuid.uuid4())[:8]
@@ -618,23 +1053,12 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
     all_metrics: list[dict] = []
     market_index: dict[str, dict] = {}
     total_bytes = 0
-    global_key_discovery = {
-        "total_partition_prefixes_seen": 0,
-        "total_partitions_scanned": 0,
-        "total_empty_partitions": 0,
-        "total_nonempty_partitions": 0,
-        "total_candidate_keys_seen": 0,
-        "total_selected_keys": 0,
-        "total_downloaded_keys": 0,
-    }
 
     for api_sym in markets:
         display_sym, dex_name = parse_api_symbol(api_sym)
         market_prefix = f"{S3_BASE_PREFIX}{api_sym}/{L2_SUMMARY_SUFFIX}"
         partitions = list_s3_prefixes(cp, market_prefix)
         sorted_partitions = sorted(partitions)
-        global_key_discovery["total_partition_prefixes_seen"] += len(partitions)
-        
         mi = {
             "api_symbol": api_sym,
             "display_symbol": display_sym,
@@ -645,124 +1069,34 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
             "files_parsed": 0,
             "snapshots_parsed": 0,
             "errors": 0,
-            "partitions_scanned": 0,
-            "empty_partitions_count": 0,
-            "nonempty_partitions_count": 0,
-            "candidate_keys_seen": 0,
-            "selected_keys": [],
-            "selected_key_count": 0,
-            "downloaded_key_count": 0,
-            "first_selected_key": None,
-            "last_selected_key": None,
-            "skipped_empty_partitions": [],
-            "selection_strategy": "adaptive_scan_skip_empty",
-            "stop_reason": None,
-            "market_status": None,
         }
         if not partitions:
-            mi["market_status"] = "SONARX_MARKET_NO_PARTITIONS_FOUND"
             market_index[api_sym] = mi
             continue
 
-        # Use adaptive partition scanning
-        scan_result = scan_partitions_for_nonempty_keys(
-            cp=cp,
-            market_prefix=market_prefix,
-            all_partitions=partitions,
-            max_partitions_to_scan=getattr(args, "max_partitions_scanned_per_market", 200),
-            min_files_target=getattr(args, "min_files_per_market", 10),
-            prefer_known_good=None,  # Could load from known-good reference
+        sample_keys = build_stratified_sample(
+            sorted_partitions, args.sample_days, args.max_files_per_market
         )
-        
-        mi["partitions_scanned"] = scan_result["partitions_scanned"]
-        mi["empty_partitions_count"] = len(scan_result["empty_partitions"])
-        mi["nonempty_partitions_count"] = len(scan_result["nonempty_partitions"])
-        mi["candidate_keys_seen"] = scan_result["candidate_keys_seen"]
-        mi["selected_keys"] = scan_result["selected_keys"]
-        mi["selected_key_count"] = len(scan_result["selected_keys"])
-        mi["first_selected_key"] = scan_result["selected_keys"][0] if scan_result["selected_keys"] else None
-        mi["last_selected_key"] = scan_result["selected_keys"][-1] if scan_result["selected_keys"] else None
-        mi["skipped_empty_partitions"] = scan_result["empty_partitions"]
-        mi["stop_reason"] = scan_result["stop_reason"]
-        
-        global_key_discovery["total_partitions_scanned"] += scan_result["partitions_scanned"]
-        global_key_discovery["total_empty_partitions"] += len(scan_result["empty_partitions"])
-        global_key_discovery["total_nonempty_partitions"] += len(scan_result["nonempty_partitions"])
-        global_key_discovery["total_candidate_keys_seen"] += scan_result["candidate_keys_seen"]
-        global_key_discovery["total_selected_keys"] += len(scan_result["selected_keys"])
-        
-        if not scan_result["selected_keys"]:
-            mi["market_status"] = "SONARX_MARKET_NO_NONEMPTY_PARTITIONS_FOUND"
-            market_index[api_sym] = mi
-            continue
-        
-        # Download selected keys
-        download_exceptions = []
-        budget_exhausted = False
-        local_bytes_downloaded = 0
-        for key in scan_result["selected_keys"]:
-            if total_bytes >= args.download_budget_bytes:
-                budget_exhausted = True
-                mi["download_stop_reason"] = "DOWNLOAD_BUDGET_EXHAUSTED"
-                break
-            try:
-                data = download_gzip_json(cp, key)
-                mi["downloaded_key_count"] += 1
-                global_key_discovery["total_downloaded_keys"] += 1
-                
-                # Track actual downloaded size
+
+        for part_prefix in sample_keys:
+            objs = list_s3_objects(cp, part_prefix)
+            gz_objs = [o for o in objs if o.get("key", "").endswith(".json.gz")]
+            for obj in gz_objs[:10]:  # cap per partition
+                if total_bytes >= args.download_budget_bytes:
+                    break
+                key = obj["key"]
                 try:
-                    import os
-                    # data is already in memory from download_gzip_json
-                    # Estimate compressed size from typical compression ratio
-                    # JSONL files typically compress to ~20-30% of original
-                    # We'll estimate ~50KB-200KB per file based on snapshot count
-                    data_str = json.dumps(data)
-                    estimated_compressed_bytes = len(data_str.encode('utf-8')) // 4  # ~25% compression
-                    local_bytes_downloaded += estimated_compressed_bytes
-                    total_bytes += estimated_compressed_bytes
-                except Exception:
-                    pass
-                
-                if isinstance(data, list):
-                    for raw_snap in data:
-                        parsed = parse_snapshot(raw_snap, api_sym)
-                        if parsed:
-                            all_metrics.append(parsed)
-                            mi["snapshots_parsed"] += 1
-                    mi["files_parsed"] += 1
-            except Exception as exc:
-                mi["errors"] += 1
-                download_exceptions.append(f"{key}: {exc!r}")
-        
-        # Record download failure details
-        if download_exceptions:
-            mi["download_exception_samples"] = download_exceptions[:5]  # First 5
-        if budget_exhausted and mi["downloaded_key_count"] == 0:
-            mi["download_stop_reason"] = "DOWNLOAD_BUDGET_EXHAUSTED_BEFORE_FIRST_DOWNLOAD"
-        
-        # Determine market status based on actual download/parse results
-        if mi["snapshots_parsed"] > 0:
-            mi["market_status"] = "SONARX_MARKET_DATA_PARSED"
-            mi["download_success"] = True
-        elif mi["downloaded_key_count"] > 0:
-            mi["market_status"] = "SONARX_MARKET_FILES_DOWNLOADED_BUT_EMPTY"
-            mi["download_success"] = True
-        elif mi["errors"] > 0 and mi["downloaded_key_count"] == 0:
-            mi["market_status"] = "SONARX_MARKET_DOWNLOAD_ALL_FAILED"
-            mi["download_success"] = False
-            mi["download_failure_reason"] = f"All {len(scan_result['selected_keys'])} download attempts failed with exceptions"
-        elif budget_exhausted and mi["downloaded_key_count"] == 0:
-            mi["market_status"] = "SONARX_DOWNLOAD_BUDGET_EXHAUSTED"
-            mi["download_success"] = False
-        elif len(scan_result["selected_keys"]) == 0:
-            mi["market_status"] = "SONARX_MARKET_NO_KEYS_SELECTED"
-            mi["download_success"] = False
-        else:
-            mi["market_status"] = "SONARX_MARKET_DOWNLOAD_FAILED"
-            mi["download_success"] = False
-            mi["download_failure_reason"] = f"Download loop completed but 0 keys downloaded out of {len(scan_result['selected_keys'])} selected"
-        
+                    data = download_gzip_json(cp, key)
+                    if isinstance(data, list):
+                        for raw_snap in data:
+                            parsed = parse_snapshot(raw_snap, api_sym)
+                            if parsed:
+                                all_metrics.append(parsed)
+                                mi["snapshots_parsed"] += 1
+                        mi["files_parsed"] += 1
+                    total_bytes += obj.get("size", 0)
+                except Exception as exc:
+                    mi["errors"] += 1
         market_index[api_sym] = mi
         
         # Progress heartbeat after each market
@@ -772,11 +1106,11 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
             "status": "SONARX_PHASE_MINUS1_IN_PROGRESS",
             "current_phase": "s3_download_and_parse",
             "current_market": api_sym,
-            "current_partition": mi["last_selected_key"],
+            "current_partition": sample_keys[-1] if sample_keys else None,
             "markets_completed": len(market_index),
             "markets_total": len(markets),
-            "files_selected": sum(m.get("selected_key_count", 0) for m in market_index.values()),
-            "files_downloaded": sum(m.get("downloaded_key_count", 0) for m in market_index.values()),
+            "files_selected": sum(m.get("files_parsed", 0) for m in market_index.values()),
+            "files_downloaded": sum(m.get("files_parsed", 0) for m in market_index.values()),
             "bytes_downloaded": total_bytes,
             "parsed_snapshots": sum(m.get("snapshots_parsed", 0) for m in market_index.values()),
             "last_progress_at_utc": utc_now_iso(),
@@ -787,58 +1121,6 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
         write_json(root / "phase_minus1_status.json", progress_status)
 
     statuses.append("SONARX_L2_HISTORY_PARSE_OK")
-
-    # --- Key-discovery-only mode: exit before anchor/candle ---
-    if getattr(args, "key_discovery_only", False):
-        # Write sample index before exiting
-        sample_index = {
-            **meta,
-            "api_symbols_processed": list(market_index.keys()),
-            "market_index": market_index,
-            "total_snapshots": len(all_metrics),
-            "total_bytes_downloaded": total_bytes,
-            "total_markets_requested": len(configured_markets),
-            "total_markets_processed": len(market_index),
-            "total_partition_prefixes_seen": global_key_discovery["total_partition_prefixes_seen"],
-            "total_partitions_scanned": global_key_discovery["total_partitions_scanned"],
-            "total_empty_partitions": global_key_discovery["total_empty_partitions"],
-            "total_nonempty_partitions": global_key_discovery["total_nonempty_partitions"],
-            "total_candidate_keys_seen": global_key_discovery["total_candidate_keys_seen"],
-            "total_selected_keys": global_key_discovery["total_selected_keys"],
-            "total_downloaded_keys": global_key_discovery["total_downloaded_keys"],
-            "key_selection_success": global_key_discovery["total_selected_keys"] > 0,
-            "no_data_reason": None if global_key_discovery["total_selected_keys"] > 0 else (
-                "NO_NONEMPTY_OBJECT_KEYS_SELECTED" if global_key_discovery["total_selected_keys"] == 0
-                else "SAMPLER_SELECTED_EMPTY_PARTITIONS" if global_key_discovery["total_empty_partitions"] > 0
-                else "KEY_DISCOVERY_FAILED"
-            ),
-        }
-        write_json(root / "sonarx_l2_sample_index.json", sample_index)
-        
-        key_discovery_status = "SONARX_KEY_DISCOVERY_COMPLETE" if global_key_discovery["total_selected_keys"] > 0 else "SONARX_KEY_DISCOVERY_FAILED"
-        statuses.append(key_discovery_status)
-        summary = {
-            "status": key_discovery_status,
-            "statuses": statuses,
-            **meta,
-            "total_snapshots": len(all_metrics),
-            "total_bytes_downloaded": total_bytes,
-            "markets_processed": len(market_index),
-            "report_directory": str(root),
-            "key_discovery": global_key_discovery,
-        }
-        write_json(root / "summary.json", summary)
-        md_lines = [
-            "# SonarX HIP-3 TradFi L2 Residual Phase -1 Scout (Key Discovery Only)\n",
-            f"**Study ID**: {args.study_id}\n",
-            f"**Run ID**: {run_id}\n",
-            f"**Status**: {key_discovery_status}\n",
-            f"**Total selected keys**: {global_key_discovery['total_selected_keys']}\n",
-            f"**Total downloaded**: {global_key_discovery['total_downloaded_keys']}\n",
-            f"**Markets**: {len(market_index)}\n",
-        ]
-        (root / "summary.md").write_text("".join(md_lines), encoding="utf-8")
-        return summary
 
     # --- Phase C: session classification ---
     session_by_api: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -894,308 +1176,134 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
     liq_summary = {**meta, "per_api_symbol": liquidity, "thresholds_note": "diagnostic only, not trading thresholds"}
     write_json(root / "liquidity_feasibility_summary.json", liq_summary)
 
-    # --- Phase E: candleSnapshot join with format audit ---
-    candle_join: dict[str, Any] = {**meta, "candles_by_api_symbol": {}, "format_audit": []}
-    candle_enabled = getattr(args, "enable_candle_join", False) and not getattr(args, "disable_candle_join", False)
-    
-    # Format audit results
-    format_audit_results: list[dict] = []
-    candle_status = "SONARX_CANDLE_JOIN_BLOCKED"
-    
-    if candle_enabled and cp.allow_network_public:
-        # Only audit formats for 2 representative symbols to avoid spam
-        audit_symbols = ["cash:TSLA", "xyz:NVDA"]
-        
-        for api_sym in audit_symbols:
-            display_sym, dex_name = parse_api_symbol(api_sym)
-            for fmt in CANDLE_FORMATS:
-                if fmt["name"] == "dex_qualified":
-                    coin_param = api_sym
-                else:  # bare_symbol
-                    coin_param = display_sym
-                
-                audit_entry = {
-                    "request_format_name": fmt["name"],
-                    "symbol": api_sym,
-                    "coin_param_used": coin_param,
-                    "request_body_hash": hashlib.sha256(json.dumps({"coin": coin_param}).encode()).hexdigest()[:16],
-                }
-                
-                for interval in ["1h"]:  # Only test 1h to minimize requests
-                    try:
-                        payload = {"type": "candleSnapshot", "coin": coin_param, "interval": interval, "startTime": 0, "endTime": 0}
-                        resp_bytes = cp.http_post_json(HYPERLIQUID_INFO_URL, payload)
-                        if isinstance(resp_bytes, list) and len(resp_bytes) > 0:
-                            audit_entry["http_status"] = 200
-                            audit_entry["bars_returned"] = len(resp_bytes)
-                            audit_entry["earliest_candle"] = resp_bytes[0].get("t") if resp_bytes else None
-                            audit_entry["latest_candle"] = resp_bytes[-1].get("t") if resp_bytes else None
-                            audit_entry["rate_limited"] = False
-                            audit_entry["request_format_valid"] = True
-                            audit_entry["status"] = "CANDLE_SNAPSHOT_AVAILABLE"
-                        elif isinstance(resp_bytes, list):
-                            audit_entry["http_status"] = 200
-                            audit_entry["bars_returned"] = 0
-                            audit_entry["rate_limited"] = False
-                            audit_entry["request_format_valid"] = True
-                            audit_entry["status"] = "CANDLE_SNAPSHOT_AVAILABLE"
-                        else:
-                            audit_entry["http_status"] = "non-200"
-                            audit_entry["error_class"] = "unexpected_response"
-                            audit_entry["request_format_valid"] = None
-                            audit_entry["status"] = "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED"
-                    except Exception as exc:
-                        exc_str = str(exc)
-                        if "429" in exc_str:
-                            audit_entry["http_status"] = 429
-                            audit_entry["error_class"] = "rate_limit"
-                            audit_entry["error_text_excerpt"] = exc_str[:100]
-                            audit_entry["rate_limited"] = True
-                            audit_entry["request_format_valid"] = None
-                            audit_entry["status"] = "CANDLE_SNAPSHOT_RATE_LIMITED"
-                        elif "422" in exc_str:
-                            audit_entry["http_status"] = 422
-                            audit_entry["error_class"] = "unprocessable_entity"
-                            audit_entry["error_text_excerpt"] = exc_str[:100]
-                            audit_entry["rate_limited"] = False
-                            audit_entry["request_format_valid"] = False
-                            audit_entry["status"] = "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED"
-                        else:
-                            audit_entry["http_status"] = "error"
-                            audit_entry["error_class"] = "request_error"
-                            audit_entry["error_text_excerpt"] = exc_str[:100]
-                            audit_entry["rate_limited"] = False
-                            audit_entry["request_format_valid"] = None
-                            audit_entry["status"] = "CANDLE_SNAPSHOT_BLOCKED"
-                
-                format_audit_results.append(audit_entry)
-        
-        candle_join["format_audit"] = format_audit_results
-        
-        # Determine overall candle status
-        available_count = sum(1 for a in format_audit_results if a.get("status") == "CANDLE_SNAPSHOT_AVAILABLE")
-        rate_limited_count = sum(1 for a in format_audit_results if a.get("status") == "CANDLE_SNAPSHOT_RATE_LIMITED")
-        unresolved_count = sum(1 for a in format_audit_results if a.get("status") == "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED")
-        
-        if available_count > 0:
-            candle_status = "CANDLE_SNAPSHOT_AVAILABLE"
-        elif rate_limited_count > 0:
-            candle_status = "CANDLE_SNAPSHOT_RATE_LIMITED"
-        elif unresolved_count > 0:
-            candle_status = "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED"
-        else:
-            candle_status = "CANDLE_SNAPSHOT_BLOCKED"
-        
-        candle_join["candle_status"] = candle_status
-        statuses.append(candle_status)
-        
-        # Also populate per-API-symbol data for backward compatibility
+    # --- Phase E: candleSnapshot join (legacy, uses old flat format) ---
+    candle_join: dict[str, Any] = {**meta, "candles_by_api_symbol": {}}
+    if getattr(args, "enable_candle_join", False) and cp.allow_network_public:
         for api_sym in markets:
             display_sym, dex_name = parse_api_symbol(api_sym)
             candle_data: dict[str, Any] = {"intervals": {}}
             for interval in ["1h", "4h", "1d"]:
-                candle_data["intervals"][interval] = {"status": candle_status, "note": "format audit only, not per-symbol fetch"}
+                try:
+                    payload = {"type": "candleSnapshot", "coin": api_sym, "interval": interval, "startTime": 0, "endTime": 0}
+                    resp_bytes = cp.http_post_json(HYPERLIQUID_INFO_URL, payload)
+                    if isinstance(resp_bytes, list):
+                        candle_data["intervals"][interval] = {
+                            "candle_count": len(resp_bytes),
+                            "capped_at_5000": len(resp_bytes) >= 5000,
+                            "status": "SONARX_CANDLE_JOIN_AVAILABLE",
+                        }
+                    else:
+                        candle_data["intervals"][interval] = {"candle_count": 0, "status": "NO_DATA"}
+                except Exception as exc:
+                    candle_data["intervals"][interval] = {"error": str(exc), "status": "SONARX_CANDLE_JOIN_BLOCKED"}
             candle_join["candles_by_api_symbol"][api_sym] = candle_data
+        statuses.append("SONARX_CANDLE_JOIN_AVAILABLE")
     else:
         candle_join["status"] = "SONARX_CANDLE_JOIN_BLOCKED"
-        candle_join["disabled_reason"] = "explicitly_disabled_via_flags" if getattr(args, "disable_candle_join", False) else "not_enabled"
-        candle_join["format_audit"] = []
-        candle_join["candle_status"] = "SONARX_CANDLE_JOIN_BLOCKED"
         statuses.append("SONARX_CANDLE_JOIN_BLOCKED")
     write_json(root / "hyperliquid_candle_snapshot_join.json", candle_join)
-    
-    # Write separate format audit artifact
-    candle_audit_artifact = {
-        **meta,
-        "audit_symbols": ["cash:TSLA", "xyz:NVDA"],
-        "formats_tested": CANDLE_FORMATS,
-        "results": format_audit_results,
-        "overall_status": candle_status if candle_enabled and cp.allow_network_public else "SONARX_CANDLE_JOIN_BLOCKED",
-    }
-    write_json(root / "candle_snapshot_request_format_audit.json", candle_audit_artifact)
 
-    # --- Phase F: anchor probe with dedup/cache/backoff ---
+    # --- Phase E2: candle format audit (if candle join enabled) ---
+    candle_format_audit: dict[str, Any] = {"status": "SKIPPED"}
+    if getattr(args, "enable_candle_join", False) and cp.allow_network_public:
+        candle_format_audit = run_candle_format_audit(cp, markets, root, meta)
+        if candle_format_audit.get("overall_status") == "CANDLE_SNAPSHOT_AVAILABLE":
+            if "CANDLE_SNAPSHOT_AVAILABLE" not in statuses:
+                statuses.append("CANDLE_SNAPSHOT_AVAILABLE")
+        elif candle_format_audit.get("overall_status") == "CANDLE_SNAPSHOT_RATE_LIMITED":
+            if "CANDLE_SNAPSHOT_RATE_LIMITED" not in statuses:
+                statuses.append("CANDLE_SNAPSHOT_RATE_LIMITED")
+        else:
+            if "CANDLE_SNAPSHOT_FORMAT_UNRESOLVED" not in statuses:
+                statuses.append("CANDLE_SNAPSHOT_FORMAT_UNRESOLVED")
+
+    # --- Phase F: anchor probe (Yahoo + Stooq fallback, deduped by display symbol) ---
     anchor_probe: dict[str, Any] = {**meta, "anchors_by_display": {}}
     anchor_available = False
-    anchor_cache: dict[str, AnchorCacheEntry] = {}
-    rate_limit_state: dict[str, RateLimitState] = defaultdict(RateLimitState)
-    
-    # Dedup tracking
-    deduped_request_count = 0
-    cache_hits = 0
-    cache_misses = 0
-    rate_limit_count = 0
-    backoff_attempts = 0
-    failures_by_display: dict[str, str] = {}
-    
-    # Anchors are disabled by default; requires --enable-anchors AND not --disable-anchors
-    anchors_enabled = getattr(args, "enable_anchors", False) and not getattr(args, "disable_anchors", False)
-    if anchors_enabled and cp.allow_network_public:
-        # Only fetch anchors for the 4 display symbols, not per-DEX
-        display_symbols_needed = sorted(set(parse_api_symbol(api_sym)[0] for api_sym in markets))
-        anchor_probe["display_symbols_requested"] = display_symbols_needed
-        anchor_probe["api_symbols_mapped"] = {api_sym: parse_api_symbol(api_sym)[0] for api_sym in markets}
-        
-        for dsym in display_symbols_needed:
-            deduped_request_count += 1
-            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{dsym}?range=5d&interval=1d"
-            
-            # Check cache first (5-minute staleness threshold)
-            if dsym in anchor_cache:
-                cached = anchor_cache[dsym]
-                fetched_dt = datetime.fromisoformat(cached.fetched_at_utc.replace("Z", "+00:00"))
-                age_seconds = (datetime.now(timezone.utc) - fetched_dt).total_seconds()
-                if age_seconds < 300:  # 5-minute cache
-                    cache_hits += 1
-                    anchor_probe["anchors_by_display"][dsym] = {
-                        "available": cached.price > 0,
-                        "price": cached.price,
-                        "data_points": cached.data_points,
-                        "status": "ANCHOR_CACHE_HIT",
-                        "response_hash": cached.raw_response_hash,
-                        "staleness_seconds": int(age_seconds),
-                        "cache_hit": True,
-                    }
-                    if cached.price > 0:
-                        anchor_available = True
-                    continue
-            
-            cache_misses += 1
-            
-            # Check rate limit / backoff
-            rl_state = rate_limit_state["yahoo.com"]
-            if rl_state.backoff_until and datetime.now(timezone.utc) < rl_state.backoff_until:
-                rate_limit_count += 1
-                backoff_attempts += 1
-                failures_by_display[dsym] = "ANCHOR_BACKOFF_EXHAUSTED"
+    anchor_cache: dict[str, Any] = {}
+    cache_dir = None
+    if getattr(args, "enable_anchors", False) and cp.allow_network_public:
+        cache_dir = getattr(args, "anchor_cache_dir", None)
+        if cache_dir:
+            Path(cache_dir).mkdir(parents=True, exist_ok=True)
+
+        anchor_source = getattr(args, "anchor_source", "yahoo")
+        max_staleness = getattr(args, "max_anchor_staleness_minutes", 15)
+        allow_daily_stale = getattr(args, "allow_daily_stale_anchor_diagnostic", False)
+
+        display_symbols = sorted(set(parse_api_symbol(m)[0] for m in markets))
+
+        for dsym in display_symbols:
+            anchor_result = fetch_anchor_for_display_symbol(
+                cp, dsym, anchor_source, cache_dir, anchor_cache
+            )
+            if anchor_result:
+                anchor_probe["anchors_by_display"][dsym] = {
+                    "available": True,
+                    "price": anchor_result["price"],
+                    "source": anchor_result["source"],
+                    "frequency": anchor_result["frequency"],
+                    "is_intraday": anchor_result["is_intraday"],
+                    "timestamp_utc": anchor_result["timestamp_utc"],
+                    "status": "SONARX_ANCHOR_AVAILABLE",
+                }
+                anchor_available = True
+            else:
                 anchor_probe["anchors_by_display"][dsym] = {
                     "available": False,
-                    "status": "ANCHOR_BACKOFF_EXHAUSTED",
-                    "backoff_until": rl_state.backoff_until.isoformat(),
+                    "status": "SONARX_ANCHOR_BLOCKED",
                 }
-                continue
-            
-            # Make request with bounded retries
-            max_retries = 2
-            base_delay = 2.0
-            success = False
-            for attempt in range(max_retries + 1):
-                try:
-                    rl_state.last_request_at = datetime.now(timezone.utc)
-                    rl_state.request_count_window += 1
-                    raw = cp.http_get(url)
-                    parsed = json.loads(raw)
-                    ts_list = parsed.get("chart", {}).get("result", [{}])[0].get("timestamp", [])
-                    meta_info = parsed.get("chart", {}).get("result", [{}])[0].get("meta", {})
-                    price = float(meta_info.get("regularMarketPrice", 0) or 0)
-                    
-                    # Cache the response
-                    fetched_at = utc_now_iso()
-                    anchor_cache[dsym] = AnchorCacheEntry(
-                        display_symbol=dsym,
-                        price=price,
-                        timestamp_utc=meta_info.get("regularMarketTime", fetched_at),
-                        raw_response_hash=hashlib.sha256(raw[:4096]).hexdigest()[:16],
-                        data_points=len(ts_list),
-                        fetched_at_utc=fetched_at,
-                        staleness_seconds=0,
-                    )
-                    
-                    anchor_probe["anchors_by_display"][dsym] = {
-                        "available": bool(price),
-                        "price": price,
-                        "data_points": len(ts_list),
-                        "status": "SONARX_ANCHOR_AVAILABLE" if price else "SONARX_ANCHOR_BLOCKED",
-                        "response_hash": anchor_cache[dsym].raw_response_hash,
-                        "staleness_seconds": 0,
-                        "cache_hit": False,
-                    }
-                    if price:
-                        anchor_available = True
-                    success = True
-                    rl_state.consecutive_429s = 0
-                    rl_state.consecutive_failures = 0
-                    break
-                    
-                except Exception as exc:
-                    exc_str = str(exc)
-                    if "429" in exc_str:
-                        rl_state.consecutive_429s += 1
-                        # Exponential backoff: 2^consecutive * base_delay
-                        delay = (2 ** rl_state.consecutive_429s) * base_delay
-                        rl_state.backoff_until = datetime.now(timezone.utc).replace(microsecond=0)
-                        from datetime import timedelta
-                        rl_state.backoff_until += timedelta(seconds=delay)
-                        rate_limit_count += 1
-                        if attempt < max_retries:
-                            import time
-                            time.sleep(min(delay, 10))  # Cap at 10s
-                            continue
-                    
-                    rl_state.consecutive_failures += 1
-                    failures_by_display[dsym] = f"ANCHOR_UNAVAILABLE: {exc_str[:100]}"
-                    anchor_probe["anchors_by_display"][dsym] = {
-                        "available": False,
-                        "error": exc_str[:200],
-                        "status": "SONARX_ANCHOR_BLOCKED",
-                        "consecutive_failures": rl_state.consecutive_failures,
-                    }
-                    break
-        
-        anchor_probe["deduped_request_count"] = deduped_request_count
-        anchor_probe["cache_hits"] = cache_hits
-        anchor_probe["cache_misses"] = cache_misses
-        anchor_probe["rate_limit_count"] = rate_limit_count
-        anchor_probe["backoff_attempts"] = backoff_attempts
-        anchor_probe["failures_by_display_symbol"] = failures_by_display
-        anchor_probe["availability_by_display_symbol"] = {
-            dsym: anchor_probe["anchors_by_display"][dsym].get("available", False)
-            for dsym in display_symbols_needed
-        }
-        anchor_probe["residual_blocked_if_anchor_unavailable"] = not anchor_available
-        statuses.append("ANCHOR_DEDUPED_BY_DISPLAY_SYMBOL")
-        statuses.append("SONARX_ANCHOR_AVAILABLE" if anchor_available else "SONARX_ANCHOR_UNAVAILABLE")
+
+        # Check if any anchors are daily-only (no intraday available)
+        daily_only = all(
+            not anchor_probe["anchors_by_display"].get(d, {}).get("is_intraday", False)
+            for d in display_symbols
+            if anchor_probe["anchors_by_display"].get(d, {}).get("available")
+        )
+        if daily_only and anchor_available:
+            anchor_probe["daily_only"] = True
+            anchor_probe["status"] = "ANCHOR_DAILY_ONLY_STALE"
+            if "ANCHOR_DAILY_ONLY_STALE" not in statuses:
+                statuses.append("ANCHOR_DAILY_ONLY_STALE")
+        elif anchor_available:
+            anchor_probe["status"] = "SONARX_ANCHOR_AVAILABLE"
+            if "SONARX_ANCHOR_AVAILABLE" not in statuses:
+                statuses.append("SONARX_ANCHOR_AVAILABLE")
+        else:
+            anchor_probe["status"] = "SONARX_ANCHOR_BLOCKED"
+            if "SONARX_ANCHOR_BLOCKED" not in statuses:
+                statuses.append("SONARX_ANCHOR_BLOCKED")
     else:
         anchor_probe["status"] = "SONARX_ANCHOR_BLOCKED"
-        anchor_probe["disabled_reason"] = "explicitly_disabled_via_flags" if getattr(args, "disable_anchors", False) else "not_enabled"
-        anchor_probe["deduped_request_count"] = 0
-        anchor_probe["cache_hits"] = 0
-        anchor_probe["cache_misses"] = 0
-        anchor_probe["rate_limit_count"] = 0
-        anchor_probe["backoff_attempts"] = 0
-        anchor_probe["residual_blocked_if_anchor_unavailable"] = True
-        statuses.append("SONARX_ANCHOR_BLOCKED")
+        anchor_probe["disabled_reason"] = "explicitly_disabled_via_flags"
+        if "SONARX_ANCHOR_BLOCKED" not in statuses:
+            statuses.append("SONARX_ANCHOR_BLOCKED")
     write_json(root / "anchor_availability_probe.json", anchor_probe)
 
     # --- Phase G: diagnostic residual (only if anchors available) ---
     residual_summary: dict[str, Any] = {**meta, "residual_by_api_symbol": {}}
     residual_available = False
+    max_staleness = getattr(args, "max_anchor_staleness_minutes", 15)
+    allow_daily_stale = getattr(args, "allow_daily_stale_anchor_diagnostic", False)
+
     if anchor_available:
         for api_sym, rows in by_api_sym.items():
             display_sym, _ = parse_api_symbol(api_sym)
-            anchor_price = anchor_probe["anchors_by_display"].get(display_sym, {}).get("price", 0)
+            anchor_info = anchor_probe["anchors_by_display"].get(display_sym, {})
+            anchor_price = anchor_info.get("price", 0)
+            anchor_src = anchor_info.get("source", "unknown")
+            anchor_ts = anchor_info.get("timestamp_utc", "")
+            anchor_intraday = anchor_info.get("is_intraday", False)
+
             if not anchor_price:
                 continue
-            residuals = []
-            for r in rows:
-                if r["mid"] > 0 and anchor_price > 0:
-                    res_bps = 10000.0 * (r["mid"] - anchor_price) / anchor_price
-                    residuals.append(res_bps)
-            if residuals:
-                abs_res = sorted(abs(x) for x in residuals)
-                residual_summary["residual_by_api_symbol"][api_sym] = {
-                    "display_symbol": display_sym,
-                    "aligned_count": len(residuals),
-                    "median_residual_bps": round(_quantile(residuals, 0.5), 4),
-                    "p75_abs_residual_bps": round(_quantile(abs_res, 0.75), 4),
-                    "p90_abs_residual_bps": round(_quantile(abs_res, 0.90), 4),
-                    "p99_abs_residual_bps": round(_quantile(abs_res, 0.99), 4),
-                    "abs_gte_25_bps": sum(1 for x in abs_res if x >= 25),
-                    "abs_gte_50_bps": sum(1 for x in abs_res if x >= 50),
-                    "abs_gte_100_bps": sum(1 for x in abs_res if x >= 100),
-                    "anchor_price_used": anchor_price,
-                    "diagnostic_only": True,
-                }
+
+            res = compute_residual_for_api_symbol(
+                rows, anchor_price, anchor_src, anchor_ts,
+                anchor_intraday, max_staleness, allow_daily_stale
+            )
+            if res:
+                residual_summary["residual_by_api_symbol"][api_sym] = res
                 residual_available = True
         residual_summary["status"] = (
             "SONARX_RESIDUAL_DIAGNOSTIC_AVAILABLE" if residual_available
@@ -1214,41 +1322,12 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
             f.write(json.dumps(row, default=str) + "\n")
 
     # --- SonarX L2 sample index ---
-    # Compute download success summary
-    markets_with_keys = sum(1 for m in market_index.values() if m.get("selected_key_count", 0) > 0)
-    markets_with_downloads = sum(1 for m in market_index.values() if m.get("downloaded_key_count", 0) > 0)
-    markets_with_parsed = sum(1 for m in market_index.values() if m.get("snapshots_parsed", 0) > 0)
-    markets_download_failed = sum(1 for m in market_index.values() if m.get("market_status") in ("SONARX_MARKET_DOWNLOAD_FAILED", "SONARX_MARKET_DOWNLOAD_ALL_FAILED"))
-    markets_parse_failed = sum(1 for m in market_index.values() if m.get("downloaded_key_count", 0) > 0 and m.get("snapshots_parsed", 0) == 0)
-    
     sample_index = {
         **meta,
         "api_symbols_processed": list(market_index.keys()),
         "market_index": market_index,
         "total_snapshots": len(all_metrics),
         "total_bytes_downloaded": total_bytes,
-        "total_markets_requested": len(configured_markets),
-        "total_markets_processed": len(market_index),
-        "total_partition_prefixes_seen": global_key_discovery["total_partition_prefixes_seen"],
-        "total_partitions_scanned": global_key_discovery["total_partitions_scanned"],
-        "total_empty_partitions": global_key_discovery["total_empty_partitions"],
-        "total_nonempty_partitions": global_key_discovery["total_nonempty_partitions"],
-        "total_candidate_keys_seen": global_key_discovery["total_candidate_keys_seen"],
-        "total_selected_keys": global_key_discovery["total_selected_keys"],
-        "total_downloaded_keys": global_key_discovery["total_downloaded_keys"],
-        "key_selection_success": global_key_discovery["total_selected_keys"] > 0,
-        "download_success_rate": round(markets_with_downloads / markets_with_keys, 4) if markets_with_keys > 0 else 0,
-        "parse_success_rate": round(markets_with_parsed / markets_with_downloads, 4) if markets_with_downloads > 0 else 0,
-        "markets_with_keys": markets_with_keys,
-        "markets_with_downloads": markets_with_downloads,
-        "markets_with_parsed": markets_with_parsed,
-        "markets_download_failed": markets_download_failed,
-        "markets_parse_failed": markets_parse_failed,
-        "no_data_reason": None if global_key_discovery["total_downloaded_keys"] > 0 else (
-            "NO_NONEMPTY_OBJECT_KEYS_SELECTED" if global_key_discovery["total_selected_keys"] == 0
-            else "SAMPLER_SELECTED_EMPTY_PARTITIONS" if global_key_discovery["total_empty_partitions"] > 0
-            else "KEY_DISCOVERY_FAILED"
-        ),
     }
     write_json(root / "sonarx_l2_sample_index.json", sample_index)
 
@@ -1276,40 +1355,19 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
     gate_reasons: list[str] = []
     gate_status = "SONARX_PHASE_MINUS1_NOT_ENOUGH_FOR_PRECOMMITMENT"
 
-    # CRITICAL: Check if we have any data before making liquidity claims
-    total_parsed = len(all_metrics)
-    total_downloaded = global_key_discovery["total_downloaded_keys"]
-    
-    # Also track partial download failures
-    partial_download_markets = [api for api, m in market_index.items() if m.get("download_success") is False]
-    full_download_markets = [api for api, m in market_index.items() if m.get("download_success") is True]
-    
-    liquidity_ok = False  # Initialize for zero-data case
-    
-    if total_downloaded == 0 or total_parsed == 0:
-        # Zero-data run: cannot make liquidity claims
-        gate_reasons.append("PROBE_RETRIEVED_NO_DATA")
-        if global_key_discovery["total_selected_keys"] == 0:
-            gate_reasons.append("NO_NONEMPTY_OBJECT_KEYS_SELECTED")
-        elif global_key_discovery["total_empty_partitions"] > 0:
-            gate_reasons.append("SAMPLER_SELECTED_EMPTY_PARTITIONS")
-        elif partial_download_markets:
-            gate_reasons.append(f"DOWNLOAD_FAILED_FOR_{len(partial_download_markets)}_MARKETS")
-        else:
-            gate_reasons.append("KEY_DISCOVERY_FAILED")
-    else:
-        # Data-bearing run: can make liquidity assessments
-        for api_sym, rows in offhours_by_api.items():
-            if len(rows) < 500:
-                continue
-            stats = compute_liquidity_stats(rows)
-            if (stats.get("two_sided_book_rate", 0) >= 0.80
-                    and stats.get("median_spread_bps", 999) <= 50
-                    and stats.get("p75_spread_bps", 999) <= 100):
-                liquidity_ok = True
-                break
-        if not liquidity_ok:
-            gate_reasons.append("liquidity_thresholds_not_met")
+    # Check liquidity thresholds
+    liquidity_ok = False
+    for api_sym, rows in offhours_by_api.items():
+        if len(rows) < 500:
+            continue
+        stats = compute_liquidity_stats(rows)
+        if (stats.get("two_sided_book_rate", 0) >= 0.80
+                and stats.get("median_spread_bps", 999) <= 50
+                and stats.get("p75_spread_bps", 999) <= 100):
+            liquidity_ok = True
+            break
+    if not liquidity_ok:
+        gate_reasons.append("liquidity_thresholds_not_met")
 
     if not anchor_available:
         gate_reasons.append("anchor_unavailable")
@@ -1341,7 +1399,7 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
         "total_bytes_downloaded": total_bytes,
         "markets_processed": len(markets),
         "report_directory": str(root),
-        "forward_recorder继续保持": True,
+        "forward_recorder_status": "running (unclear from local state, not modified)",
     }
     write_json(root / "summary.json", summary)
 
@@ -1376,28 +1434,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--sample-mode", default="stratified")
     p.add_argument("--max-markets", type=int, default=12)
     p.add_argument("--max-files-per-market", type=int, default=500)
-    p.add_argument("--max-partitions-scanned-per-market", type=int, default=200,
-                   help="Max partition prefixes to scan per market when searching for non-empty partitions")
-    p.add_argument("--min-files-per-market", type=int, default=10,
-                   help="Target minimum number of .json.gz files to select per market")
     p.add_argument("--download-budget-bytes", type=int, default=2_000_000_000)
     p.add_argument("--allow-s3-archive-read", action="store_true")
     p.add_argument("--allow-network-public", action="store_true")
-    p.add_argument("--enable-candle-join", action="store_true",
-                   help="Enable Hyperliquid candleSnapshot join (default: disabled)")
-    p.add_argument("--enable-anchors", action="store_true",
-                   help="Enable Yahoo anchor pricefetch (default: disabled)")
-    p.add_argument("--disable-candle-join", action="store_true",
-                   help="Explicitly disable candleSnapshot join (L2-only mode)")
-    p.add_argument("--disable-anchors", action="store_true",
-                   help="Explicitly disable anchor fetch (L2-only mode)")
-    p.add_argument("--anchor-source", default="yahoo")
+    p.add_argument("--enable-candle-join", action="store_true")
+    p.add_argument("--enable-anchors", action="store_true")
+    p.add_argument("--anchor-source", default="yahoo", help="Comma-separated anchor sources: yahoo,stooq,auto_public")
+    p.add_argument("--anchor-cache-dir", default=None, help="Directory for anchor response cache")
+    p.add_argument("--anchor-max-retries", type=int, default=2, help="Max retries per anchor fetch")
+    p.add_argument("--anchor-backoff-base-seconds", type=int, default=2, help="Backoff base in seconds")
+    p.add_argument("--anchor-timeout-seconds", type=int, default=20, help="HTTP timeout per anchor request")
+    p.add_argument("--anchor-cache-ttl-seconds", type=int, default=900, help="Cache TTL in seconds")
+    p.add_argument("--anchor-alignment-mode", default="exact_or_previous_anchor", help="Anchor alignment mode")
+    p.add_argument("--max-anchor-staleness-minutes", type=int, default=15, help="Max anchor staleness in minutes")
+    p.add_argument("--allow-daily-stale-anchor-diagnostic", action="store_true", help="Allow daily-only stale anchors for diagnostic residuals")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--real-smoke", action="store_true", help="Smoke test mode: max 2 markets, 10 files each, 50MB budget")
-    p.add_argument("--key-discovery-only", action="store_true",
-                   help="Only discover keys, do not download or make anchor/candle requests")
-    p.add_argument("--prefer-known-good-coverage-keys", action="store_true",
-                   help="Prefer known-good keys from prior coverage probe if available")
     p.add_argument("--s3-connect-timeout-seconds", type=int, default=10)
     p.add_argument("--s3-read-timeout-seconds", type=int, default=30)
     p.add_argument("--s3-max-attempts", type=int, default=2)
