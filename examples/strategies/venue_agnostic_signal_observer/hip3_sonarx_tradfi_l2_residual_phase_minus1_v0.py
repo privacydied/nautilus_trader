@@ -42,6 +42,15 @@ from examples.strategies.venue_agnostic_signal_observer.hip3_builder_deployment_
     NetworkChokepoint,
 )
 
+# HL Oracle audit module (import via direct path)
+_oracle_audit_root = str(Path(__file__).resolve().parent)
+if _oracle_audit_root not in sys.path:
+    sys.path.insert(0, _oracle_audit_root)
+from hip3_hl_oracle_audit import (
+    run_oracle_source_audit,
+    compute_hl_oracle_residuals,
+)
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -117,6 +126,48 @@ STOOQ_SYMBOL_MAP = {
 
 # Stooq daily CSV URL pattern
 STOOQ_DAILY_URL = "https://stooq.com/q/d/l/?s={symbol}&f=epoch2,d1,o,h,l,c,v"
+
+# Hyperliquid oracle source classes
+ORACLE_SOURCE_CLASSES = frozenset({
+    "SONARX_L2_EMBEDDED_ORACLE",
+    "HYPERLIQUID_HISTORICAL_ASSET_CTXS",
+    "HYPERLIQUID_LIVE_META_ONLY",
+    "FORWARD_RECORDER_TIMESTAMPED_ASSET_CTXS",
+    "ORACLE_SOURCE_UNAVAILABLE",
+})
+
+# Oracle timestamp alignment statuses
+TIMESTAMP_ALIGNMENT_STATUSES = frozenset({
+    "TIMESTAMP_ALIGNED",
+    "CURRENT_ONLY_NOT_HISTORICAL",
+    "FORWARD_ONLY",
+    "MISSING_ORACLE",
+    "MISSING_MARK",
+    "UNSUPPORTED",
+})
+
+# Global oracle source audit statuses
+ORACLE_GLOBAL_STATUSES = frozenset({
+    "HL_ORACLE_HISTORICAL_USABLE",
+    "HL_ORACLE_FORWARD_ONLY_USABLE",
+    "HL_ORACLE_CURRENT_ONLY_NOT_HISTORICAL",
+    "HL_ORACLE_SOURCE_UNAVAILABLE",
+    "HL_ORACLE_PHASE_MINUS1_RESIDUAL_AVAILABLE",
+    "HL_ORACLE_PHASE_MINUS1_RESIDUAL_UNDERPOWERED",
+    "HL_ORACLE_TRACKS_MID_TIGHT",
+    "HL_ORACLE_MID_BASIS_HAS_TAILS",
+    "HL_ORACLE_NOT_TIMESTAMP_ALIGNED_FOR_HISTORICAL_RESIDUAL",
+    "SONARX_PHASE_MINUS1_NEXT_PRECOMMITMENT_REVIEW_ALLOWED",
+    "SONARX_PHASE_MINUS1_NOT_ENOUGH_FOR_PRECOMMITMENT",
+})
+
+# Oracle tracks mid diagnostic
+ORACLE_TRACKS_MID_DIAGNOSTICS = frozenset({
+    "ORACLE_TRACKS_MID_TIGHT",
+    "ORACLE_MID_BASIS_HAS_TAILS",
+    "ORACLE_MID_BASIS_UNDERPOWERED",
+    "ORACLE_MID_BASIS_UNAVAILABLE",
+})
 
 # ---------------------------------------------------------------------------
 # Artifact metadata helper
@@ -1316,6 +1367,46 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
             "audit_result": audit_result,
         }
     
+    # Handle HL oracle source audit mode
+    if getattr(args, "oracle_source_audit", False):
+        oracle_markets = [m.strip() for m in getattr(args, "oracle_audit_markets", ",".join(ALL_12_API_SYMBOLS)).split(",") if m.strip()]
+        max_oracle_markets = getattr(args, "oracle_audit_max_markets", 12)
+        oracle_timeout = getattr(args, "anchor_timeout_seconds", 20)
+        
+        oracle_audit_result = run_oracle_source_audit(
+            cp, oracle_markets,
+            max_markets=max_oracle_markets,
+            timeout_seconds=oracle_timeout
+        )
+        
+        write_json(root / "oracle_source_availability_audit.json", oracle_audit_result)
+        
+        # Determine final status based on oracle audit
+        oracle_global_status = oracle_audit_result.get("global_status", "HL_ORACLE_SOURCE_UNAVAILABLE")
+        
+        # Write summary
+        summary = {
+            **meta,
+            "run_id": run_id,
+            "status": "SONARX_PHASE_MINUS1_NOT_ENOUGH_FOR_PRECOMMITMENT",
+            "oracle_audit_global_status": oracle_global_status,
+            "oracle_audit_markets": oracle_markets,
+            "historical_usable_count": oracle_audit_result.get("historical_usable_count", 0),
+            "forward_only_usable_count": oracle_audit_result.get("forward_only_usable_count", 0),
+            "current_only_count": oracle_audit_result.get("current_only_count", 0),
+            "unavailable_count": oracle_audit_result.get("unavailable_count", 0),
+            "safety_mode": "public_data_observer_only",
+            "no_orders_no_auth_no_live_confirmation": True,
+        }
+        write_json(root / "summary.json", summary)
+        
+        return {
+            "status": "SONARX_PHASE_MINUS1_NOT_ENOUGH_FOR_PRECOMMITMENT",
+            "run_id": run_id,
+            "oracle_audit_result": oracle_audit_result,
+            "oracle_global_status": oracle_global_status,
+        }
+    
     # Initial status artifact
     initial_status = {
         **meta,
@@ -1764,6 +1855,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--anchor-audit-max-symbols", type=int, default=4, help="Max symbols to audit")
     p.add_argument("--anchor-audit-timeout-seconds", type=int, default=20, help="HTTP timeout per anchor audit request")
     p.add_argument("--anchor-audit-max-requests-per-source", type=int, default=4, help="Max requests per source in audit")
+    p.add_argument("--oracle-source-audit", action="store_true", help="Run HL oracle source availability audit")
+    p.add_argument("--oracle-audit-markets", default=",".join(ALL_12_API_SYMBOLS), help="Markets for oracle audit")
+    p.add_argument("--oracle-audit-max-markets", type=int, default=12, help="Max markets for oracle audit")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--real-smoke", action="store_true", help="Smoke test mode: max 2 markets, 10 files each, 50MB budget")
     p.add_argument("--s3-connect-timeout-seconds", type=int, default=10)
