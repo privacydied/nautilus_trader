@@ -667,14 +667,33 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
             continue
         
         # Download selected keys
+        download_exceptions = []
+        budget_exhausted = False
+        local_bytes_downloaded = 0
         for key in scan_result["selected_keys"]:
             if total_bytes >= args.download_budget_bytes:
-                mi["market_status"] = "SONARX_DOWNLOAD_BUDGET_EXHAUSTED"
+                budget_exhausted = True
+                mi["download_stop_reason"] = "DOWNLOAD_BUDGET_EXHAUSTED"
                 break
             try:
                 data = download_gzip_json(cp, key)
                 mi["downloaded_key_count"] += 1
                 global_key_discovery["total_downloaded_keys"] += 1
+                
+                # Track actual downloaded size
+                try:
+                    import os
+                    # data is already in memory from download_gzip_json
+                    # Estimate compressed size from typical compression ratio
+                    # JSONL files typically compress to ~20-30% of original
+                    # We'll estimate ~50KB-200KB per file based on snapshot count
+                    data_str = json.dumps(data)
+                    estimated_compressed_bytes = len(data_str.encode('utf-8')) // 4  # ~25% compression
+                    local_bytes_downloaded += estimated_compressed_bytes
+                    total_bytes += estimated_compressed_bytes
+                except Exception:
+                    pass
+                
                 if isinstance(data, list):
                     for raw_snap in data:
                         parsed = parse_snapshot(raw_snap, api_sym)
@@ -682,16 +701,37 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
                             all_metrics.append(parsed)
                             mi["snapshots_parsed"] += 1
                     mi["files_parsed"] += 1
-                total_bytes += int(key.rsplit("/", 1)[-1].replace(".json.gz", "").split("_")[0][-10:] if "_" in key else 0) or 0
             except Exception as exc:
                 mi["errors"] += 1
+                download_exceptions.append(f"{key}: {exc!r}")
         
+        # Record download failure details
+        if download_exceptions:
+            mi["download_exception_samples"] = download_exceptions[:5]  # First 5
+        if budget_exhausted and mi["downloaded_key_count"] == 0:
+            mi["download_stop_reason"] = "DOWNLOAD_BUDGET_EXHAUSTED_BEFORE_FIRST_DOWNLOAD"
+        
+        # Determine market status based on actual download/parse results
         if mi["snapshots_parsed"] > 0:
             mi["market_status"] = "SONARX_MARKET_DATA_PARSED"
+            mi["download_success"] = True
         elif mi["downloaded_key_count"] > 0:
             mi["market_status"] = "SONARX_MARKET_FILES_DOWNLOADED_BUT_EMPTY"
+            mi["download_success"] = True
+        elif mi["errors"] > 0 and mi["downloaded_key_count"] == 0:
+            mi["market_status"] = "SONARX_MARKET_DOWNLOAD_ALL_FAILED"
+            mi["download_success"] = False
+            mi["download_failure_reason"] = f"All {len(scan_result['selected_keys'])} download attempts failed with exceptions"
+        elif budget_exhausted and mi["downloaded_key_count"] == 0:
+            mi["market_status"] = "SONARX_DOWNLOAD_BUDGET_EXHAUSTED"
+            mi["download_success"] = False
+        elif len(scan_result["selected_keys"]) == 0:
+            mi["market_status"] = "SONARX_MARKET_NO_KEYS_SELECTED"
+            mi["download_success"] = False
         else:
             mi["market_status"] = "SONARX_MARKET_DOWNLOAD_FAILED"
+            mi["download_success"] = False
+            mi["download_failure_reason"] = f"Download loop completed but 0 keys downloaded out of {len(scan_result['selected_keys'])} selected"
         
         market_index[api_sym] = mi
         
@@ -936,6 +976,13 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
             f.write(json.dumps(row, default=str) + "\n")
 
     # --- SonarX L2 sample index ---
+    # Compute download success summary
+    markets_with_keys = sum(1 for m in market_index.values() if m.get("selected_key_count", 0) > 0)
+    markets_with_downloads = sum(1 for m in market_index.values() if m.get("downloaded_key_count", 0) > 0)
+    markets_with_parsed = sum(1 for m in market_index.values() if m.get("snapshots_parsed", 0) > 0)
+    markets_download_failed = sum(1 for m in market_index.values() if m.get("market_status") in ("SONARX_MARKET_DOWNLOAD_FAILED", "SONARX_MARKET_DOWNLOAD_ALL_FAILED"))
+    markets_parse_failed = sum(1 for m in market_index.values() if m.get("downloaded_key_count", 0) > 0 and m.get("snapshots_parsed", 0) == 0)
+    
     sample_index = {
         **meta,
         "api_symbols_processed": list(market_index.keys()),
@@ -951,7 +998,14 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
         "total_candidate_keys_seen": global_key_discovery["total_candidate_keys_seen"],
         "total_selected_keys": global_key_discovery["total_selected_keys"],
         "total_downloaded_keys": global_key_discovery["total_downloaded_keys"],
-        "key_selection_success": global_key_discovery["total_downloaded_keys"] > 0,
+        "key_selection_success": global_key_discovery["total_selected_keys"] > 0,
+        "download_success_rate": round(markets_with_downloads / markets_with_keys, 4) if markets_with_keys > 0 else 0,
+        "parse_success_rate": round(markets_with_parsed / markets_with_downloads, 4) if markets_with_downloads > 0 else 0,
+        "markets_with_keys": markets_with_keys,
+        "markets_with_downloads": markets_with_downloads,
+        "markets_with_parsed": markets_with_parsed,
+        "markets_download_failed": markets_download_failed,
+        "markets_parse_failed": markets_parse_failed,
         "no_data_reason": None if global_key_discovery["total_downloaded_keys"] > 0 else (
             "NO_NONEMPTY_OBJECT_KEYS_SELECTED" if global_key_discovery["total_selected_keys"] == 0
             else "SAMPLER_SELECTED_EMPTY_PARTITIONS" if global_key_discovery["total_empty_partitions"] > 0
@@ -988,6 +1042,10 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
     total_parsed = len(all_metrics)
     total_downloaded = global_key_discovery["total_downloaded_keys"]
     
+    # Also track partial download failures
+    partial_download_markets = [api for api, m in market_index.items() if m.get("download_success") is False]
+    full_download_markets = [api for api, m in market_index.items() if m.get("download_success") is True]
+    
     liquidity_ok = False  # Initialize for zero-data case
     
     if total_downloaded == 0 or total_parsed == 0:
@@ -997,6 +1055,8 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
             gate_reasons.append("NO_NONEMPTY_OBJECT_KEYS_SELECTED")
         elif global_key_discovery["total_empty_partitions"] > 0:
             gate_reasons.append("SAMPLER_SELECTED_EMPTY_PARTITIONS")
+        elif partial_download_markets:
+            gate_reasons.append(f"DOWNLOAD_FAILED_FOR_{len(partial_download_markets)}_MARKETS")
         else:
             gate_reasons.append("KEY_DISCOVERY_FAILED")
     else:
