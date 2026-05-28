@@ -58,6 +58,9 @@ def main():
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--stop-after-init", action="store_true")
     parser.add_argument("--include-secondary-symbols", action="store_true")
+    parser.add_argument("--resolution-policy", default="capture_all",
+                        choices=["capture_all", "canonical_by_liquidity"],
+                        help="Multi-DEX symbol resolution policy (default: capture_all)")
     parser.add_argument("--summarize", type=str, default=None)
     args = parser.parse_args()
 
@@ -87,6 +90,7 @@ def main():
         enable_anchors=args.enable_anchors,
         anchor_source=args.anchor_source,
         dry_run=args.dry_run,
+        resolution_policy=args.resolution_policy,
         once=args.once,
         stop_after_init=args.stop_after_init,
         run_id=run_id,

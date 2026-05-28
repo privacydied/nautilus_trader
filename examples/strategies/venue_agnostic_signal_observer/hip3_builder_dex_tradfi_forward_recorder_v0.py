@@ -26,6 +26,7 @@ import logging
 import traceback
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Optional
 from collections import defaultdict
@@ -200,25 +201,50 @@ class PublicInfoChokepoint:
 # Symbol Resolution
 # ──────────────────────────────────────────────────────────────────────────────
 
+class ResolutionPolicy(str):
+    CAPTURE_ALL = "capture_all"
+    CANONICAL_BY_LIQUIDITY = "canonical_by_liquidity"
+
+class AmbiguityStatus(str):
+    SINGLE_RESOLUTION = "single_resolution"
+    MULTI_RESOLUTION_CAPTURE_ALL = "multi_resolution_capture_all"
+    MULTI_RESOLUTION_CANONICAL_SELECTED = "multi_resolution_canonical_selected"
+    UNRESOLVED = "unresolved"
+
 @dataclass
 class ResolvedSymbol:
     display_symbol: str
     api_symbol: str
     dex_name: str
 
-def resolve_symbols(info_cp: PublicInfoChokepoint, requested_symbols: list[str]) -> list[ResolvedSymbol]:
+@dataclass
+class SymbolResolutionGroup:
+    """All resolved API symbols for a single display ticker."""
+    display_symbol: str
+    resolved_symbols: list[ResolvedSymbol] = field(default_factory=list)
+    ambiguity_status: str = AmbiguityStatus.UNRESOLVED
+    selected_for_capture: list[str] = field(default_factory=list)  # api_symbols selected
+    selection_reason: str = ""
+    liquidity_snapshot_used: bool = False
+
+@dataclass
+class ResolutionPolicyConfig:
+    policy: ResolutionPolicy = ResolutionPolicy.CAPTURE_ALL
+    selected_symbols: list[ResolvedSymbol] = field(default_factory=list)
+    groups: list[SymbolResolutionGroup] = field(default_factory=list)
+
+def resolve_symbols(info_cp: PublicInfoChokepoint, requested_symbols: list[str],
+                    policy: str | ResolutionPolicy = ResolutionPolicy.CAPTURE_ALL) -> ResolutionPolicyConfig:
     """Resolve display symbols to actual builder DEX API symbols.
 
-    API structure for metaAndAssetCtxs:
-      [0] = {"universe": [{"name": "cash:TSLA", ...}, ...], "marginTables": ..., "collateralToken": ...}
-      [1] = [{"funding": ..., "markPx": ..., ...}, ...]  # one per universe item, no 'coin' field
+    Groups results by display ticker with explicit ambiguity status.
+    Default policy: capture_all (capture every resolved API symbol separately).
 
-    1. Query perpDexs to find all builder DEX namespaces.
-    2. Query metaAndAssetCtxs for each DEX.
-    3. Match requested symbols against universe item names.
-    4. Return ResolvedSymbol entries.
+    Returns ResolutionPolicyConfig with groups and selected symbols.
     """
-    # Step 1: Get all builder DEXs
+    # Accept both str and ResolutionPolicy enum
+    if isinstance(policy, str):
+        policy = ResolutionPolicy(policy)
     dex_resp = info_cp.post_info({"type": "perpDexs"})
     dex_data = dex_resp["data"]
     if not isinstance(dex_data, list):
@@ -226,45 +252,31 @@ def resolve_symbols(info_cp: PublicInfoChokepoint, requested_symbols: list[str])
 
     dex_names = [d.get("name", "") for d in dex_data if isinstance(d, dict) and d.get("name")]
 
-    # Step 2: Query metaAndAssetCtxs for each DEX
     symbol_map: dict[str, list[ResolvedSymbol]] = defaultdict(list)
     for dex_name in dex_names:
         try:
             ctx_resp = info_cp.post_info({"type": "metaAndAssetCtxs", "dex": dex_name})
             ctx_data = ctx_resp["data"]
-
-            # API returns [universe_info_dict, assetCtxs_list]
             if not isinstance(ctx_data, list) or len(ctx_data) < 2:
                 logger.warning(f"metaAndAssetCtxs for {dex_name} returned unexpected structure: {type(ctx_data)}")
                 continue
-
             universe_info = ctx_data[0]
             asset_ctxs = ctx_data[1]
-
-            if not isinstance(universe_info, dict):
+            if not isinstance(universe_info, dict) or not isinstance(asset_ctxs, list):
                 continue
-            if not isinstance(asset_ctxs, list):
-                continue
-
             universe = universe_info.get("universe", [])
             if not isinstance(universe, list):
                 continue
-
-            # Match by index: universe[i].name corresponds to asset_ctxs[i]
             for i, item in enumerate(universe):
                 if not isinstance(item, dict):
                     continue
-                name = item.get("name", "")  # e.g. "cash:TSLA"
+                name = item.get("name", "")
                 if not name:
                     continue
-
-                # Extract the coin part after the colon
                 parts = name.split(":")
                 if len(parts) < 2:
                     continue
-                coin = parts[1]  # e.g. "TSLA"
-
-                # Check if this coin matches any requested symbol
+                coin = parts[1]
                 coin_upper = coin.upper()
                 for req_sym in requested_symbols:
                     if coin_upper == req_sym.upper():
@@ -278,19 +290,41 @@ def resolve_symbols(info_cp: PublicInfoChokepoint, requested_symbols: list[str])
             logger.warning(f"Failed to query metaAndAssetCtxs for {dex_name}: {e}")
             continue
 
-    # Deduplicate and return
-    resolved = []
+    groups: list[SymbolResolutionGroup] = []
+    all_selected: list[ResolvedSymbol] = []
     seen = set()
-    for sym_upper, entries in symbol_map.items():
-        for entry in entries:
-            if entry.api_symbol not in seen:
-                resolved.append(entry)
-                seen.add(entry.api_symbol)
 
-    if not resolved:
+    for req_sym in requested_symbols:
+        sym_upper = req_sym.upper()
+        entries = symbol_map.get(sym_upper, [])
+        if not entries:
+            groups.append(SymbolResolutionGroup(
+                display_symbol=req_sym,
+                ambiguity_status=AmbiguityStatus.UNRESOLVED,
+            ))
+            continue
+        unique_entries = [e for e in entries if e.api_symbol not in seen]
+        for e in unique_entries:
+            seen.add(e.api_symbol)
+        ambiguity = AmbiguityStatus.SINGLE_RESOLUTION if len(unique_entries) == 1 else AmbiguityStatus.MULTI_RESOLUTION_CAPTURE_ALL
+        group = SymbolResolutionGroup(
+            display_symbol=req_sym,
+            resolved_symbols=unique_entries,
+            ambiguity_status=ambiguity,
+            selected_for_capture=[e.api_symbol for e in unique_entries],
+            selection_reason=f"Policy: {policy} — all {len(unique_entries)} DEX markets captured",
+        )
+        groups.append(group)
+        all_selected.extend(unique_entries)
+
+    if not all_selected:
         raise ValueError(f"No symbols resolved for {requested_symbols}")
 
-    return resolved
+    return ResolutionPolicyConfig(
+        policy=policy,
+        selected_symbols=all_selected,
+        groups=groups,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -580,38 +614,47 @@ def fetch_anchor_yahoo(symbol: str, timeout: int = 15) -> Optional[dict]:
 def classify_market_session(dt: datetime) -> str:
     """Classify a UTC datetime into ET market session buckets.
 
+    Uses zoneinfo for correct EDT/EST switching.
+    Regular session: 09:30-16:00 America/New_York weekdays.
+    Holiday calendar not available in v0; weekends still classified.
+
     Returns one of:
-    - regular_hours
-    - premarket
-    - after_hours
-    - overnight
-    - weekend_or_holiday
-    - unknown
+    - regular_hours: Mon-Fri 09:30-16:00 ET
+    - premarket: Mon-Fri 00:00-09:30 ET
+    - after_hours: Mon-Fri 16:00-23:59 ET
+    - overnight: Mon-Fri 00:00-06:00 ET (deep overnight, before premarket)
+    - weekend_or_holiday: Sat-Sun
     """
-    # Simple ET approximation: UTC-4 (EDT) / UTC-5 (EST)
-    # Use UTC-5 as conservative baseline
-    et_hour = dt.hour - 5
-    day_of_week = dt.weekday()  # 0=Mon, 6=Sun
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    ny_tz = ZoneInfo("America/New_York")
+    et_dt = dt.astimezone(ny_tz)
+    day_of_week = et_dt.weekday()  # 0=Mon, 6=Sun
 
     if day_of_week >= 5:  # Saturday or Sunday
         return "weekend_or_holiday"
 
-    if et_hour < 0:
-        et_hour += 24
+    et_hour = et_dt.hour
+    et_minute = et_dt.minute
 
-    # Regular session: 09:30-16:00 ET weekdays
-    if 9 <= et_hour < 16:
-        if et_hour == 9 and dt.minute < 30:
-            return "premarket"
-        if et_hour == 16:
-            return "after_hours"
+    # Regular session: 09:30-16:00 ET
+    if et_hour == 9 and et_minute >= 30:
         return "regular_hours"
-    elif et_hour < 9:
-        return "premarket"
-    elif et_hour >= 16:
+    if 10 <= et_hour < 16:
+        return "regular_hours"
+    if et_hour == 16 and et_minute == 0:
+        # 16:00:00 is the instant market closes; classify as after_hours
         return "after_hours"
 
-    return "unknown"
+    if et_hour >= 16:
+        return "after_hours"
+
+    if et_hour < 6:
+        return "overnight"
+
+    # 06:00-09:29 ET
+    return "premarket"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Derived Metrics
@@ -698,6 +741,7 @@ class ForwardRecorderConfig:
     stop_after_init: bool = False
     run_id: str = ""
     study_id: str = STUDY_ID
+    resolution_policy: str = ResolutionPolicy.CAPTURE_ALL
 
 @dataclass
 class CaptureState:
@@ -823,18 +867,28 @@ def run_forward_recorder(config: ForwardRecorderConfig) -> dict:
 
     try:
         state.status = RecorderStatus.SYMBOLS_RESOLVED
-        symbol_resolutions = resolve_symbols(info_cp, config.symbols)
-        state.symbol_resolutions = symbol_resolutions
+        resolution_config = resolve_symbols(info_cp, config.symbols, policy=config.resolution_policy)
+        state.symbol_resolutions = resolution_config.selected_symbols
 
         # Update manifest with resolved symbols
-        write_run_manifest(run_dir, config, symbol_resolutions, git_sha, git_dirty, branch, sys.argv[1:])
+        write_run_manifest(run_dir, config, resolution_config.selected_symbols, git_sha, git_dirty, branch, sys.argv[1:])
 
-        # Write symbol resolution
+        # Write symbol resolution with full group info
         sym_res_data = {
             "run_id": config.run_id,
             "resolved_at_utc": _now_utc(),
-            "symbols": [{"display": s.display_symbol, "api_symbol": s.api_symbol, "dex_name": s.dex_name}
-                        for s in symbol_resolutions],
+            "policy": str(config.resolution_policy),
+            "groups": [
+                {
+                    "display_symbol": g.display_symbol,
+                    "ambiguity_status": g.ambiguity_status,
+                    "resolved_api_symbols": [s.api_symbol for s in g.resolved_symbols],
+                    "resolved_dex_names": list(set(s.dex_name for s in g.resolved_symbols)),
+                    "selected_for_capture": g.selected_for_capture,
+                    "selection_reason": g.selection_reason,
+                }
+                for g in resolution_config.groups
+            ],
         }
         _write_json_atomic(run_dir / "symbol_resolution.json", sym_res_data)
 
@@ -842,7 +896,7 @@ def run_forward_recorder(config: ForwardRecorderConfig) -> dict:
         _append_jsonl(index_path, {
             "event": "symbols_resolved",
             "timestamp_utc": _now_utc(),
-            "symbols": [s.display_symbol for s in symbol_resolutions],
+            "symbols": [s.display_symbol for s in resolution_config.selected_symbols],
         })
 
     except Exception as e:
@@ -862,7 +916,7 @@ def run_forward_recorder(config: ForwardRecorderConfig) -> dict:
         _append_jsonl(run_dir / "heartbeat.jsonl", {
             "event": "dry_run_complete",
             "timestamp_utc": _now_utc(),
-            "symbols_resolved": [s.display_symbol for s in symbol_resolutions],
+            "symbols_resolved": [s.display_symbol for s in resolution_config.selected_symbols],
         })
         return {"status": state.status, "dry_run": True, "run_dir": str(run_dir)}
 
@@ -872,7 +926,7 @@ def run_forward_recorder(config: ForwardRecorderConfig) -> dict:
         _append_jsonl(run_dir / "heartbeat.jsonl", {
             "event": "stop_after_init",
             "timestamp_utc": _now_utc(),
-            "symbols_resolved": [s.display_symbol for s in symbol_resolutions],
+            "symbols_resolved": [s.display_symbol for s in resolution_config.selected_symbols],
         })
         return {"status": state.status, "run_dir": str(run_dir)}
 
@@ -913,7 +967,7 @@ def run_forward_recorder(config: ForwardRecorderConfig) -> dict:
 
         poll_errors = 0
 
-        for sym_res in symbol_resolutions:
+        for sym_res in resolution_config.selected_symbols:
             api_sym = sym_res.api_symbol
             display_sym = sym_res.display_symbol
             dex_name = sym_res.dex_name
@@ -1001,7 +1055,7 @@ def run_forward_recorder(config: ForwardRecorderConfig) -> dict:
             last_candle_poll_time = now
             candle_ts = _now_utc()
 
-            for sym_res in symbol_resolutions:
+            for sym_res in resolution_config.selected_symbols:
                 api_sym = sym_res.api_symbol
                 display_sym = sym_res.display_symbol
                 dex_name = sym_res.dex_name
@@ -1099,17 +1153,17 @@ def run_forward_recorder(config: ForwardRecorderConfig) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def summarize_forward_capture(report_dir: str) -> dict:
-    """Summarize captured forward data.
+    """Summarize captured forward data with per-API-symbol breakdowns.
 
     Produces forward_capture_summary.json and forward_capture_summary.md.
+    Metrics are keyed by api_symbol, not display_symbol, to avoid multi-DEX collapse.
     """
     run_path = Path(report_dir)
 
-    # Load manifest
     manifest = json.loads((run_path / "run_manifest.json").read_text()) if (run_path / "run_manifest.json").exists() else {}
     status_data = json.loads((run_path / "capture_status.json").read_text()) if (run_path / "capture_status.json").exists() else {}
+    sym_res = json.loads((run_path / "symbol_resolution.json").read_text()) if (run_path / "symbol_resolution.json").exists() else {}
 
-    # Read derived metrics
     metrics_files = sorted(run_path.glob("derived_metrics/*.jsonl"))
     all_metrics = []
     for mf in metrics_files:
@@ -1122,7 +1176,6 @@ def summarize_forward_capture(report_dir: str) -> dict:
                     except Exception:
                         continue
 
-    # Read L2 snapshots
     l2_files = sorted(run_path.glob("l2_snapshots/*.jsonl"))
     all_l2 = []
     for lf in l2_files:
@@ -1135,7 +1188,6 @@ def summarize_forward_capture(report_dir: str) -> dict:
                     except Exception:
                         continue
 
-    # Read anchor snapshots
     anchor_files = sorted(run_path.glob("anchor_snapshots/*.jsonl"))
     all_anchors = []
     for af in anchor_files:
@@ -1148,28 +1200,31 @@ def summarize_forward_capture(report_dir: str) -> dict:
                     except Exception:
                         continue
 
-    # Compute summary metrics
-    symbols = list(dict.fromkeys(manifest.get("symbols_resolved", [])))  # unique, preserve order
-    api_symbols = manifest.get("api_symbols", [])
     total_polls = status_data.get("total_polls", 0)
     total_l2_samples = len(all_l2)
     total_metrics_samples = len(all_metrics)
     total_anchor_samples = len(all_anchors)
     total_errors = status_data.get("total_errors", 0)
 
-    # Per-symbol stats
-    symbol_metrics = defaultdict(list)
+    # Per-API-symbol metrics (primary breakdown)
+    api_symbol_metrics = defaultdict(list)
+    for m in all_metrics:
+        api_sym = m.get("api_symbol", "unknown")
+        api_symbol_metrics[api_sym].append(m)
+
+    # Per-display-symbol metrics (secondary, clearly labeled)
+    display_symbol_metrics = defaultdict(list)
     for m in all_metrics:
         sym = m.get("symbol", "unknown")
-        symbol_metrics[sym].append(m)
+        display_symbol_metrics[sym].append(m)
 
-    # Spread statistics
+    # Global spread stats
     all_spread_bps = [m["spread_bps"] for m in all_metrics if m.get("spread_bps") is not None]
-    spread_stats = {}
+    global_spread_stats = {}
     if all_spread_bps:
         sorted_spreads = sorted(all_spread_bps)
         n = len(sorted_spreads)
-        spread_stats = {
+        global_spread_stats = {
             "count": n,
             "median_bps": round(sorted_spreads[n // 2], 4),
             "p75_bps": round(sorted_spreads[int(n * 0.75)], 4),
@@ -1178,29 +1233,58 @@ def summarize_forward_capture(report_dir: str) -> dict:
             "max_bps": round(sorted_spreads[-1], 4),
         }
 
-    # Depth availability
-    depth_stats = {}
-    for depth_key in ["depth_usd_100_bid", "depth_usd_100_ask",
-                      "depth_usd_1000_bid", "depth_usd_1000_ask",
-                      "depth_usd_5000_bid", "depth_usd_5000_ask"]:
-        values = [m.get(depth_key, 0) for m in all_metrics if m.get(depth_key) is not None]
-        if values:
-            non_zero = sum(1 for v in values if v > 0)
-            depth_stats[depth_key] = {
-                "non_zero_rate": round(non_zero / len(values), 4) if values else 0,
-                "mean": round(sum(values) / len(values), 2),
+    # Per-API-symbol spread stats
+    api_spread_stats = {}
+    for api_sym, sym_metrics in api_symbol_metrics.items():
+        vals = [m["spread_bps"] for m in sym_metrics if m.get("spread_bps") is not None]
+        if vals:
+            sv = sorted(vals)
+            sn = len(sv)
+            api_spread_stats[api_sym] = {
+                "count": sn,
+                "median_bps": round(sv[sn // 2], 4),
+                "p75_bps": round(sv[int(sn * 0.75)], 4),
+                "min_bps": round(sv[0], 4),
+                "max_bps": round(sv[-1], 4),
             }
 
-    # Empty side rate
+    # Global depth stats
+    depth_keys = ["depth_usd_100_bid", "depth_usd_100_ask",
+                  "depth_usd_1000_bid", "depth_usd_1000_ask",
+                  "depth_usd_5000_bid", "depth_usd_5000_ask"]
+    global_depth_stats = {}
+    api_depth_stats = {}
+    for dk in depth_keys:
+        values = [m.get(dk, 0) for m in all_metrics if m.get(dk) is not None]
+        if values:
+            non_zero = sum(1 for v in values if v > 0)
+            global_depth_stats[dk] = {
+                "non_zero_rate": round(non_zero / len(values), 4),
+                "mean": round(sum(values) / len(values), 2),
+            }
+            for api_sym, sym_metrics in api_symbol_metrics.items():
+                sv = [m.get(dk, 0) for m in sym_metrics if m.get(dk) is not None]
+                if sv:
+                    nz = sum(1 for v in sv if v > 0)
+                    if api_sym not in api_depth_stats:
+                        api_depth_stats[api_sym] = {}
+                    api_depth_stats[api_sym][dk] = {
+                        "non_zero_rate": round(nz / len(sv), 4),
+                        "mean": round(sum(sv) / len(sv), 2),
+                    }
+
     empty_bid_count = sum(1 for m in all_metrics if m.get("empty_bid_side"))
     empty_ask_count = sum(1 for m in all_metrics if m.get("empty_ask_side"))
     total_l2 = len(all_l2)
 
     # Session counts
     session_counts = defaultdict(int)
+    api_session_counts = defaultdict(lambda: defaultdict(int))
     for m in all_metrics:
         session = m.get("market_session_bucket", "unknown")
+        api_sym = m.get("api_symbol", "unknown")
         session_counts[session] += 1
+        api_session_counts[api_sym][session] += 1
 
     # Anchor stats
     anchor_available = len(all_anchors)
@@ -1215,6 +1299,11 @@ def summarize_forward_capture(report_dir: str) -> dict:
         n = len(sorted_staleness)
         anchor_stats["median_staleness_seconds"] = round(sorted_staleness[n // 2], 1)
         anchor_stats["mean_staleness_seconds"] = round(sum(sorted_staleness) / n, 1)
+
+    api_anchor_counts = defaultdict(int)
+    for a in all_anchors:
+        api_sym = a.get("api_symbol", "unknown")
+        api_anchor_counts[api_sym] += 1
 
     # Diagnostic residuals
     residuals = [m.get("diagnostic_residual_bps") for m in all_metrics if m.get("diagnostic_residual_bps") is not None]
@@ -1232,43 +1321,48 @@ def summarize_forward_capture(report_dir: str) -> dict:
             "abs_ge_100_bps": sum(1 for r in sorted_abs if r >= 100),
         }
 
-    # Two-sided book rate
     two_sided = sum(1 for m in all_metrics if not m.get("empty_bid_side") and not m.get("empty_ask_side"))
     two_sided_rate = round(two_sided / max(len(all_metrics), 1), 4)
 
     # Concentration
     day_counts = defaultdict(int)
     symbol_counts = defaultdict(int)
+    api_symbol_counts = defaultdict(int)
     for m in all_metrics:
         ts = m.get("timestamp_utc", "")
         day = ts[:10] if ts else "unknown"
         day_counts[day] += 1
         symbol_counts[m.get("symbol", "unknown")] += 1
+        api_symbol_counts[m.get("api_symbol", "unknown")] += 1
 
-    # Data sufficiency assessment
+    # Data sufficiency
     days_covered = len(day_counts)
     regular_sessions = session_counts.get("regular_hours", 0)
     off_hours_samples = session_counts.get("after_hours", 0) + session_counts.get("premarket", 0) + session_counts.get("overnight", 0)
 
-    # Per-symbol off-hours samples
-    per_symbol_offhours = {}
-    for sym in symbols:
-        sym_metrics = symbol_metrics.get(sym, [])
+    per_api_symbol_offhours = {}
+    for api_sym in api_symbol_metrics:
+        sym_metrics = api_symbol_metrics[api_sym]
         oh = sum(1 for m in sym_metrics if m.get("market_session_bucket") in ("after_hours", "premarket", "overnight"))
-        per_symbol_offhours[sym] = oh
+        per_api_symbol_offhours[api_sym] = oh
 
-    # Sufficiency thresholds
+    per_display_symbol_offhours = {}
+    for sym in display_symbol_metrics:
+        sym_metrics = display_symbol_metrics[sym]
+        oh = sum(1 for m in sym_metrics if m.get("market_session_bucket") in ("after_hours", "premarket", "overnight"))
+        per_display_symbol_offhours[sym] = oh
+
     sufficiency = {
         "days_covered": days_covered,
         "regular_session_samples": regular_sessions,
         "off_hours_samples": off_hours_samples,
-        "per_symbol_offhours": dict(per_symbol_offhours),
+        "per_api_symbol_offhours": dict(per_api_symbol_offhours),
+        "per_display_symbol_offhours": dict(per_display_symbol_offhours),
         "two_sided_book_rate": two_sided_rate,
-        "median_spread_bps": spread_stats.get("median_bps"),
-        "p75_spread_bps": spread_stats.get("p75_bps"),
+        "median_spread_bps": global_spread_stats.get("median_bps"),
+        "p75_spread_bps": global_spread_stats.get("p75_bps"),
     }
 
-    # Determine status
     required_offhours_per_symbol = 500
     required_days = 7
     required_regular_sessions = 3
@@ -1280,11 +1374,11 @@ def summarize_forward_capture(report_dir: str) -> dict:
         "days_ge_7": days_covered >= required_days,
         "regular_sessions_ge_3": regular_sessions >= required_regular_sessions,
         "offhours_ge_500_per_symbol": all(
-            per_symbol_offhours.get(s, 0) >= required_offhours_per_symbol for s in symbols
+            per_api_symbol_offhours.get(s, 0) >= required_offhours_per_symbol for s in api_symbol_metrics
         ),
-        "median_spread_le_50": spread_stats.get("median_bps", float("inf")) <= max_median_spread,
-        "p75_spread_le_100": spread_stats.get("p75_bps", float("inf")) <= max_p75_spread,
-        "two_sided_rate_ge_0.8": two_sided_rate >= min_two_sided_rate,
+        "median_spread_le_50": global_spread_stats.get("median_bps", float("inf")) <= max_median_spread,
+        "p75_spread_le_100": global_spread_stats.get("p75_bps", float("inf")) <= max_p75_spread,
+        "two_sided_rate_ge_0_8": two_sided_rate >= min_two_sided_rate,
     }
 
     all_pass = all(checks.values())
@@ -1300,96 +1394,111 @@ def summarize_forward_capture(report_dir: str) -> dict:
     if anchor_available == 0 and total_polls > 0:
         final_status = "FORWARD_DATA_ANCHOR_BLOCKED"
 
-    # Build summary
     summary = {
         "study_id": STUDY_ID,
         "run_id": manifest.get("run_id", ""),
         "generated_at_utc": _now_utc(),
+        "resolution_policy": sym_res.get("policy", "capture_all"),
         "total_capture_duration_polls": total_polls,
         "total_errors": total_errors,
-        "symbols": symbols,
-        "api_symbols": api_symbols,
-        "snapshots_per_symbol": {sym: len(symbol_metrics.get(sym, [])) for sym in symbols},
+        "symbols": list(dict.fromkeys(manifest.get("symbols_resolved", []))),
+        "api_symbols": manifest.get("api_symbols", []),
+        "snapshots_per_api_symbol": dict(api_symbol_counts),
+        "snapshots_per_display_symbol": dict(symbol_counts),
         "l2_availability_rate": round(total_l2_samples / max(total_l2_samples, 1), 4),
         "empty_bid_side_rate": round(empty_bid_count / max(total_l2, 1), 4),
         "empty_ask_side_rate": round(empty_ask_count / max(total_l2, 1), 4),
         "two_sided_book_rate": two_sided_rate,
-        "spread_statistics": spread_stats,
-        "depth_availability": depth_stats,
+        "spread_statistics": global_spread_stats,
+        "spread_statistics_per_api_symbol": api_spread_stats,
+        "depth_availability": global_depth_stats,
+        "depth_availability_per_api_symbol": api_depth_stats,
         "anchor_availability_rate": anchor_stats.get("availability_rate"),
         "anchor_median_staleness_seconds": anchor_stats.get("median_staleness_seconds"),
+        "anchor_availability_per_api_symbol": dict(api_anchor_counts),
         "session_counts": dict(session_counts),
+        "session_counts_per_api_symbol": {k: dict(v) for k, v in api_session_counts.items()},
         "off_hours_sample_count": off_hours_samples,
         "regular_hours_sample_count": regular_sessions,
         "residual_distribution": residual_stats,
         "concentration_by_day": dict(sorted(day_counts.items())),
-        "concentration_by_symbol": dict(sorted(symbol_counts.items())),
+        "concentration_by_display_symbol": dict(sorted(symbol_counts.items())),
+        "concentration_by_api_symbol": dict(sorted(api_symbol_counts.items())),
         "sufficiency_checks": checks,
         "sufficiency_assessment": sufficiency,
         "final_status": final_status,
         "forward_data_sufficient_for_phase_minus_1_tail_scout": all_pass,
     }
 
-    # Write summary JSON
     summary_json = run_path / "forward_capture_summary.json"
     _write_json_atomic(summary_json, summary)
 
-    # Write summary Markdown
     md_lines = [
-        f"# Forward Capture Summary",
-        f"",
+        "# Forward Capture Summary",
+        "",
         f"Study: {STUDY_ID}",
         f"Run: {manifest.get('run_id', 'unknown')}",
         f"Generated: {summary['generated_at_utc']}",
-        f"",
-        f"## Overview",
+        f"Resolution policy: {sym_res.get('policy', 'capture_all')}",
+        "",
+        "## Overview",
         f"- Total polls: {total_polls}",
         f"- Total errors: {total_errors}",
-        f"- Symbols: {', '.join(symbols)}",
+        f"- Symbols: {', '.join(manifest.get('symbols_resolved', []))}",
+        f"- API symbols: {', '.join(manifest.get('api_symbols', []))}",
         f"- Status: **{final_status}**",
-        f"",
-        f"## Spread Statistics",
+        "",
+        "## Spread Statistics (Global)",
     ]
-    if spread_stats:
+    if global_spread_stats:
         md_lines.extend([
-            f"- Median spread: {spread_stats['median_bps']} bps",
-            f"- P75 spread: {spread_stats['p75_bps']} bps",
-            f"- P90 spread: {spread_stats['p90_bps']} bps",
-            f"- Min/Max: {spread_stats['min_bps']} / {spread_stats['max_bps']} bps",
+            f"- Median spread: {global_spread_stats['median_bps']} bps",
+            f"- P75 spread: {global_spread_stats['p75_bps']} bps",
+            f"- P90 spread: {global_spread_stats['p90_bps']} bps",
+            f"- Min/Max: {global_spread_stats['min_bps']} / {global_spread_stats['max_bps']} bps",
         ])
     else:
         md_lines.append("- No spread data available")
 
-    md_lines.extend([
-        f"",
-        f"## Session Counts",
-    ])
+    md_lines.extend(["", "## Spread Statistics Per API Symbol"])
+    for api_sym in sorted(api_spread_stats.keys()):
+        ss = api_spread_stats[api_sym]
+        md_lines.append(f"- **{api_sym}**: median={ss['median_bps']} bps, p75={ss['p75_bps']} bps, count={ss['count']}")
+
+    md_lines.extend(["", "## Session Counts (Global)"])
     for session, count in sorted(session_counts.items()):
         md_lines.append(f"- {session}: {count}")
 
+    md_lines.extend(["", "## Session Counts Per API Symbol"])
+    for api_sym in sorted(api_session_counts.keys()):
+        sc = api_session_counts[api_sym]
+        md_lines.append(f"- **{api_sym}**: {', '.join(f'{s}={c}' for s, c in sorted(sc.items()))}")
+
     md_lines.extend([
-        f"",
-        f"## Anchor Availability",
+        "",
+        "## Anchor Availability",
         f"- Available: {anchor_available}",
         f"- Rate: {anchor_stats.get('availability_rate', 0)}",
         f"- Median staleness: {anchor_stats.get('median_staleness_seconds', 'N/A')}s",
-        f"",
-        f"## Sufficiency Checks",
+        "",
+        "## Per-API-Symbol Anchor Availability",
     ])
+    for api_sym in sorted(api_anchor_counts.keys()):
+        md_lines.append(f"- **{api_sym}**: {api_anchor_counts[api_sym]} anchors")
+
+    md_lines.extend(["", "## Sufficiency Checks"])
     for check, passed in checks.items():
         md_lines.append(f"- {'PASS' if passed else 'FAIL'}: {check}")
 
-    md_lines.extend([
-        f"",
-        f"## Per-Symbol Off-Hours Samples",
-    ])
-    for sym, count in sorted(per_symbol_offhours.items()):
+    md_lines.extend(["", "## Per-API-Symbol Off-Hours Samples"])
+    for api_sym, count in sorted(per_api_symbol_offhours.items()):
+        md_lines.append(f"- {api_sym}: {count}")
+
+    md_lines.extend(["", "## Per-Display-Symbol Off-Hours Samples (for reference)"])
+    for sym, count in sorted(per_display_symbol_offhours.items()):
         md_lines.append(f"- {sym}: {count}")
 
-    md_lines.extend([
-        f"",
-        f"## Residual Distribution (if anchor available)",
-    ])
+    md_lines.extend(["", "## Residual Distribution (if anchor available)"])
     if residual_stats:
         md_lines.extend([
             f"- Count: {residual_stats.get('count', 0)}",
@@ -1402,18 +1511,25 @@ def summarize_forward_capture(report_dir: str) -> dict:
         md_lines.append("- No anchor data available for residuals")
 
     md_lines.extend([
-        f"",
-        f"## Data Sufficiency",
-        f"- Days covered: {days_covered} (required: {required_days})",
+        "",
+        "## Data Sufficiency",
+        f"- Days covered: {days_covered}",
         f"- Regular session samples: {regular_sessions} (required: {required_regular_sessions})",
-        f"- Two-sided book rate: {two_sided_rate} (required: {min_two_sided_rate})",
-        f"",
-        f"**Verdict: {final_status}**",
-        f"",
-        f"No Phase 0 warrant. No profitability language. No trade signals.",
+        f"- Off-hours samples: {off_hours_samples}",
+        f"- Two-sided book rate: {two_sided_rate}",
+        "",
+        "## Notes",
+        "- Metrics are keyed by **api_symbol** (e.g., `cash:TSLA`) to avoid multi-DEX collapse.",
+        "- Display-symbol counts are included for reference only.",
+        "- Multi-DEX markets for the same display ticker are kept separate.",
+        "- Analysis should choose canonical markets only after enough liquidity data exists.",
     ])
 
-    summary_md = run_path / "forward_capture_summary.md"
-    summary_md.write_text("\n".join(md_lines), encoding="utf-8")
+    md_text = "\n".join(md_lines)
+    md_path = run_path / "forward_capture_summary.md"
+    md_path.write_text(md_text)
+
+    print(f"Summary written to: {summary_json}")
+    print(f"Markdown written to: {md_path}")
 
     return summary

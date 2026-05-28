@@ -217,3 +217,79 @@ ExecStart=/usr/bin/bash -c '\
     >> /var/log/hip3_forward_recorder.log 2>&1 \
 '
 ```
+
+## Market Session Classification
+
+The recorder classifies each capture timestamp into market session buckets using
+`zoneinfo` with `America/New_York` for correct EDT/EST switching.
+
+| Bucket | ET Time | Description |
+|---|---|---|
+| `regular_hours` | Mon-Fri 09:30-16:00 | US equity market open |
+| `premarket` | Mon-Fri 06:00-09:30 | Pre-market session |
+| `after_hours` | Mon-Fri 16:00-23:59 | After-hours session |
+| `overnight` | Mon-Fri 00:00-06:00 | Deep overnight (before premarket) |
+| `weekend_or_holiday` | Sat-Sun | No US equity session |
+
+**UTC vs ET warning:** The recorder stores all timestamps in UTC. When reading
+reports, convert UTC to ET using the correct DST offset:
+- EDT (March-November): UTC-4
+- EST (November-March): UTC-5
+
+The `zoneinfo` library handles this automatically. A raw `UTC - 5` calculation
+will be wrong during EDT.
+
+**Holiday calendar:** v0 does not have a holiday calendar. Weekday clock time
+is classified correctly even on holidays (e.g., 10:00 ET on Christmas Day
+would be classified as `regular_hours` even though markets are closed).
+
+## Multi-DEX Symbol Resolution
+
+Hyperliquid offers the same TradFi symbols on multiple builder DEXs. For example,
+TSLA is available as `cash:TSLA`, `xyz:TSLA`, `flx:TSLA`, and `km:TSLA`.
+
+**Each API symbol is captured separately.** They are NOT collapsed into a single
+TSLA series. The recorder writes `symbol_resolution.json` with full group info:
+
+```json
+{
+  "display_symbol": "TSLA",
+  "ambiguity_status": "multi_resolution_capture_all",
+  "resolved_api_symbols": ["cash:TSLA", "xyz:TSLA", "flx:TSLA", "km:TSLA"],
+  "selected_for_capture": ["cash:TSLA", "xyz:TSLA", "flx:TSLA", "km:TSLA"],
+  "selection_reason": "Policy: capture_all — all 4 DEX markets captured"
+}
+```
+
+### Resolution Policy
+
+The `--resolution-policy` flag controls how symbols are selected:
+
+- **`capture_all`** (default): Capture every resolved API symbol separately.
+  This is the recommended policy for data collection because it preserves all
+  liquidity information across DEXs.
+
+- **`canonical_by_liquidity`**: Perform one L2 snapshot per API symbol, score
+  each by two-sided depth/spread, and select the single best. Non-selected
+  candidates are still written to `symbol_resolution.json` but not captured
+  in the main loop.
+
+### Why `capture_all` is default
+
+1. **No premature canonical selection:** We don't know which DEX is the true
+   canonical market until we have enough liquidity data across multiple days
+   and sessions.
+2. **DEX-specific behavior:** Different DEXs may have different liquidity
+   patterns, spread behavior, and oracle reliability. Collapsing too early
+   loses this signal.
+3. **Analysis flexibility:** Later analysis can choose the canonical market
+   based on observed liquidity, or aggregate across DEXs as needed.
+
+### When to choose canonical markets
+
+After 7+ days of capture data, analysis should:
+1. Compare liquidity depth and spread across DEXs per display symbol
+2. Check oracle reliability and staleness per DEX
+3. Choose the canonical market (or weighted aggregate) based on observed data
+4. Document the selection criteria in the analysis report
+

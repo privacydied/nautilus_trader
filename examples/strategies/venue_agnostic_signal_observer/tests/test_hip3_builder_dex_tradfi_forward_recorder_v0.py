@@ -162,8 +162,8 @@ class TestSymbolResolution:
 
         resolved = resolve_symbols(cp, ["TSLA", "AAPL", "MSFT", "NVDA"])
 
-        assert len(resolved) == 4
-        api_symbols = {r.api_symbol for r in resolved}
+        assert len(resolved.selected_symbols) == 4
+        api_symbols = {r.api_symbol for r in resolved.selected_symbols}
         assert "cash:TSLA" in api_symbols
         assert "cash:AAPL" in api_symbols
         assert "cash:MSFT" in api_symbols
@@ -397,6 +397,56 @@ class TestCalendarClassification:
         dt = datetime(2026, 1, 4, 12, 0, 0, tzinfo=timezone.utc)
         result = classify_market_session(dt)
         assert result == "weekend_or_holiday"
+
+    def test_14_23_et_weekday_regular_hours(self):
+        """14:23 ET = 18:23 UTC on a weekday => regular_hours."""
+        dt = datetime(2026, 5, 27, 18, 23, 0, tzinfo=timezone.utc)
+        result = classify_market_session(dt)
+        assert result == "regular_hours", f"Expected regular_hours, got {result}"
+
+    def test_09_29_et_weekday_premarket(self):
+        """09:29 ET = 13:29 UTC on a weekday => premarket."""
+        dt = datetime(2026, 5, 27, 13, 29, 0, tzinfo=timezone.utc)
+        result = classify_market_session(dt)
+        assert result == "premarket", f"Expected premarket, got {result}"
+
+    def test_09_30_et_weekday_regular_hours(self):
+        """09:30 ET = 13:30 UTC on a weekday => regular_hours."""
+        dt = datetime(2026, 5, 27, 13, 30, 0, tzinfo=timezone.utc)
+        result = classify_market_session(dt)
+        assert result == "regular_hours", f"Expected regular_hours, got {result}"
+
+    def test_15_59_et_weekday_regular_hours(self):
+        """15:59 ET = 19:59 UTC on a weekday => regular_hours."""
+        dt = datetime(2026, 5, 27, 19, 59, 0, tzinfo=timezone.utc)
+        result = classify_market_session(dt)
+        assert result == "regular_hours", f"Expected regular_hours, got {result}"
+
+    def test_16_00_et_weekday_after_hours(self):
+        """16:00 ET = 20:00 UTC on a weekday => after_hours."""
+        dt = datetime(2026, 5, 27, 20, 0, 0, tzinfo=timezone.utc)
+        result = classify_market_session(dt)
+        assert result == "after_hours", f"Expected after_hours, got {result}"
+
+    def test_20_00_et_weekday_after_hours(self):
+        """20:00 ET = 00:00 UTC next day => after_hours."""
+        dt = datetime(2026, 5, 28, 0, 0, 0, tzinfo=timezone.utc)
+        result = classify_market_session(dt)
+        assert result == "after_hours", f"Expected after_hours, got {result}"
+
+    def test_02_00_et_weekday_overnight(self):
+        """02:00 EST (winter) = 07:00 UTC in January => overnight (between midnight and premarket)."""
+        # In January, ET = EST (UTC-5), so 02:00 EST = 07:00 UTC
+        dt = datetime(2026, 1, 5, 7, 0, 0, tzinfo=timezone.utc)
+        result = classify_market_session(dt)
+        assert result == "overnight", f"Expected overnight, got {result}"
+
+    def test_saturday_14_23_et_weekend(self):
+        """Saturday 14:23 ET => weekend_or_holiday."""
+        # 2026-05-23 is a Saturday
+        dt = datetime(2026, 5, 23, 18, 23, 0, tzinfo=timezone.utc)
+        result = classify_market_session(dt)
+        assert result == "weekend_or_holiday", f"Expected weekend_or_holiday, got {result}"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
