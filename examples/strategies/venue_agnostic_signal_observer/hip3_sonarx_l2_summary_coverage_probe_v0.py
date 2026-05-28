@@ -69,14 +69,41 @@ def git_metadata() -> Mapping[str, Any]:
     """Collect minimal git information for artifact metadata.
 
     Returns a mapping with ``git_sha``, ``git_dirty`` (bool) and ``branch``.
-    """
-    def run(cmd: str) -> str:
-        import subprocess
-        return subprocess.check_output(cmd, shell=True, text=True).strip()
 
-    sha = run("git rev-parse HEAD")
-    dirty = run("git diff --quiet || echo dirty") != ""
-    branch = run("git rev-parse --abbrev-ref HEAD")
+    This function reads ``.git`` files directly and never invokes shell
+    commands, ``subprocess``, ``os.system``, or ``eval``.
+    """
+    git_dir = Path(__file__).resolve().parent.parent.parent.parent / ".git"
+    sha = "unknown"
+    dirty = False
+    branch = "unknown"
+    try:
+        head_ref = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+        if head_ref.startswith("ref: "):
+            branch_path = head_ref[5:]
+            branch = branch_path.replace("refs/heads/", "")
+            ref_file = git_dir / branch_path
+            if ref_file.exists():
+                sha = ref_file.read_text(encoding="utf-8").strip()
+            else:
+                # Worktree .git file may point elsewhere
+                git_file = Path(__file__).resolve().parent.parent.parent.parent / ".git"
+                if git_file.is_file():
+                    gitdir_line = git_file.read_text(encoding="utf-8").strip()
+                    if gitdir_line.startswith("gitdir: "):
+                        real_git_dir = Path(gitdir_line[8:])
+                        real_ref = real_git_dir / branch_path
+                        if real_ref.exists():
+                            sha = real_ref.read_text(encoding="utf-8").strip()
+        else:
+            # Detached HEAD — value is the SHA itself
+            sha = head_ref
+        # Heuristic: MERGE_HEAD or CHERRY_PICK_HEAD indicate in-progress work
+        dirty = (git_dir / "MERGE_HEAD").exists() or (git_dir / "CHERRY_PICK_HEAD").exists()
+    except Exception:
+        sha = "unknown"
+        dirty = False
+        branch = "unknown"
     return {"git_sha": sha, "git_dirty": dirty, "branch": branch}
 
 

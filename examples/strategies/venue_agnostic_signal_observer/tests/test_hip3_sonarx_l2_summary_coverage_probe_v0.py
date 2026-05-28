@@ -385,9 +385,9 @@ class TestNoForbiddenImports:
         probe_path = Path(__file__).resolve().parents[1] / "hip3_sonarx_l2_summary_coverage_probe_v0.py"
         src = probe_path.read_text()
         assert "os.system(" not in src
-        assert "eval(" not in src  # simple grep
-        # subprocess is only used inside git_metadata(), which is acceptable
-        # but not in the main probe loop
+        assert "eval(" not in src
+        assert "import subprocess" not in src
+        assert "subprocess." not in src
 
 
 # ===================================================================
