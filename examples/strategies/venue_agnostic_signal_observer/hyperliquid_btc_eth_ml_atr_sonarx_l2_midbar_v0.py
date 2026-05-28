@@ -215,38 +215,48 @@ def list_sonarx_objects(
         bucket = parts[0]
         s3_path = parts[1] if len(parts) > 1 else ""
         
-        # List objects
-        result = _aws_cmd(["s3api", "list-objects-v2", "--bucket", bucket, "--prefix", s3_path], request_payer)
-        if result.returncode != 0:
-            logger.error("Failed to list S3 objects for %s: %s", symbol, result.stderr)
-            continue
-        
-        try:
-            data = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            logger.error("Failed to parse S3 listing for %s", symbol)
-            continue
-        
-        for obj in data.get("Contents", []):
-            key = obj["Key"]
-            # Skip directory markers
-            if key.endswith("/"):
-                continue
-            # Extract partition from key
-            partition = ""
-            if "date=" in key:
-                partition = key.split("date=")[1].split("/")[0]
-            elif "height=" in key:
-                partition = key.split("height=")[1].split("/")[0]
+        # List objects (paginated)
+        continuation_token = None
+        while True:
+            cmd = ["s3api", "list-objects-v2", "--bucket", bucket, "--prefix", s3_path]
+            if continuation_token:
+                cmd.extend(["--continuation-token", continuation_token])
+            result = _aws_cmd(cmd, request_payer)
+            if result.returncode != 0:
+                logger.error("Failed to list S3 objects for %s: %s", symbol, result.stderr)
+                break
             
-            objects.append(SonarXS3Object(
-                key=key,
-                size=obj.get("Size", 0),
-                last_modified=obj.get("LastModified", ""),
-                etag=obj.get("ETag", "").strip('"'),
-                symbol=symbol,
-                partition=partition,
-            ))
+            try:
+                data = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                logger.error("Failed to parse S3 listing for %s", symbol)
+                break
+            
+            for obj in data.get("Contents", []):
+                key = obj["Key"]
+                # Skip directory markers
+                if key.endswith("/"):
+                    continue
+                # Extract partition from key
+                partition = ""
+                if "date=" in key:
+                    partition = key.split("date=")[1].split("/")[0]
+                elif "height=" in key:
+                    partition = key.split("height=")[1].split("/")[0]
+                
+                objects.append(SonarXS3Object(
+                    key=f"s3://{bucket}/{key}",
+                    size=obj.get("Size", 0),
+                    last_modified=obj.get("LastModified", ""),
+                    etag=obj.get("ETag", "").strip('"'),
+                    symbol=symbol,
+                    partition=partition,
+                ))
+            
+            if data.get("IsTruncated"):
+                continuation_token = data.get("NextContinuationToken")
+            else:
+                break
     
     return objects
 
@@ -269,6 +279,9 @@ def parse_aws_s3_ls_output(output: str, symbol: str) -> List[SonarXS3Object]:
             size = int(size_str)
         except ValueError:
             continue
+        # Ensure key has s3:// prefix for consistency
+        if not key.startswith("s3://"):
+            key = f"s3://sonarx-hyperliquid-public/{key}"
         objects.append(SonarXS3Object(
             key=key,
             size=size,
@@ -352,13 +365,12 @@ def sample_sonarx_schema(
         with tempfile.NamedTemporaryFile(suffix=".json.gz", delete=False) as tmp:
             tmp_path = tmp.name
         
-        # Download with range
+        # Download full file (AWS CLI doesn't support --range for s3 cp)
         cmd = [
             "aws", "s3", "cp",
-            f"s3://{sample_obj.key}",
+            sample_obj.key,
             tmp_path,
             "--request-payer", "requester",
-            "--range", f"0-{sample_size-1}",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         
@@ -418,7 +430,7 @@ def download_object_atomic(
     
     cmd = [
         "aws", "s3", "cp",
-        f"s3://{obj.key}",
+        obj.key,
         str(tmp_path),
         "--request-payer", "requester" if request_payer else "no-requester",
     ]
@@ -1079,32 +1091,65 @@ def run_sonarx_l2_midbar_pipeline(
             run_id=run_id,
         )
     
-    # Download and parse
+    # Download and parse - use bulk download for speed
     all_snapshots = []
     rejected_counts = {"empty_bids_asks": 0, "crossed_book": 0, "invalid_market": 0, "parse_error": 0}
     
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         
-        for obj in objects:
-            # Download
-            local_path = download_object_atomic(obj, tmp_path, config.request_payer)
-            if local_path is None:
-                rejected_counts["parse_error"] += 1
+        # Group objects by symbol for bulk download
+        for symbol in config.symbols:
+            sym_objects = [o for o in objects if o.symbol == symbol]
+            if not sym_objects:
                 continue
             
-            # Parse
-            snapshots = parse_snapshot_file(local_path)
+            # Get the prefix from the first object's key
+            # key format: s3://bucket/market_data/perp/SYMBOL/l2-summary-snapshots/...
+            first_key = sym_objects[0].key
+            # Extract the S3 prefix from the objects
+            prefix = config.s3_prefixes.get(symbol, "")
+            if not prefix:
+                continue
             
-            # Track rejections
-            for _ in range(len(snapshots)):
-                pass  # Snapshots already filtered in parse
+            # Parse bucket and path from prefix
+            if not prefix.startswith("s3://"):
+                continue
+            prefix_parts = prefix[5:].split("/", 1)
+            bucket = prefix_parts[0]
+            s3_path = prefix_parts[1] if len(prefix_parts) > 1 else ""
             
-            all_snapshots.extend(snapshots)
+            # Bulk download all objects for this symbol
+            local_dir = tmp_path / symbol
+            local_dir.mkdir(exist_ok=True)
+            
+            logger.info("Bulk downloading %d objects for %s...", len(sym_objects), symbol)
+            cmd = [
+                "aws", "s3", "cp",
+                f"s3://{bucket}/{s3_path}",
+                str(local_dir),
+                "--recursive",
+                "--request-payer", "requester",
+                "--include", "*.json.gz",
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+            if result.returncode != 0:
+                logger.error("Bulk download failed for %s: %s", symbol, result.stderr)
+                continue
+            
+            # Parse all downloaded files
+            for local_file in sorted(local_dir.glob("*.json.gz")):
+                try:
+                    snapshots = parse_snapshot_file(local_file)
+                    all_snapshots.extend(snapshots)
+                except Exception as e:
+                    logger.warning("Failed to parse %s: %s", local_file, e)
+                    rejected_counts["parse_error"] += 1
             
             # Delete raw unless keep_raw
             if not config.keep_raw:
-                local_path.unlink(missing_ok=True)
+                import shutil
+                shutil.rmtree(local_dir, ignore_errors=True)
     
     if not all_snapshots:
         return SonarXMidbarRunSummary(
