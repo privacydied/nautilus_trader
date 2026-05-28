@@ -331,7 +331,7 @@ def list_s3_prefixes(cp: NetworkChokepoint, prefix: str) -> list[str]:
 
 
 def list_s3_objects(cp: NetworkChokepoint, prefix: str) -> list[dict]:
-    result = cp.s3_list_prefix(S3_BUCKET, prefix, requester_pays=False, include_subdirs=False)
+    result = cp.s3_list_prefix(S3_BUCKET, prefix, requester_pays=True, include_subdirs=False)
     return result.get("objects", [])
 
 
@@ -367,6 +367,88 @@ def build_stratified_sample(
     for i in range(0, n, step):
         selected.add(sorted_parts[i])
     return sorted(selected)[:max_files_per_market]
+
+
+def scan_partitions_for_nonempty_keys(
+    cp: NetworkChokepoint,
+    market_prefix: str,
+    all_partitions: list[str],
+    max_partitions_to_scan: int,
+    min_files_target: int,
+    prefer_known_good: list[str] | None = None,
+) -> dict:
+    """Scan partitions to find actual .json.gz keys, skipping empty ones.
+    
+    Returns dict with:
+        - selected_keys: list of actual .json.gz object keys
+        - partitions_scanned: number of partitions examined
+        - empty_partitions: list of empty partition prefixes
+        - nonempty_partitions: list of non-empty partition prefixes
+        - candidate_keys_seen: total .json.gz keys found (before limiting)
+        - stop_reason: why scanning stopped
+    """
+    selected_keys = []
+    partitions_scanned = 0
+    empty_partitions = []
+    nonempty_partitions = []
+    candidate_keys_seen = 0
+    stop_reason = None
+    
+    # If prefer_known_good is provided, try those first
+    if prefer_known_good:
+        for key in prefer_known_good:
+            if key.startswith(market_prefix) and key.endswith(".json.gz"):
+                selected_keys.append(key)
+                if len(selected_keys) >= min_files_target:
+                    stop_reason = "KNOWN_GOOD_KEYS_SUFFICIENT"
+                    break
+        if stop_reason:
+            return {
+                "selected_keys": selected_keys,
+                "partitions_scanned": 0,
+                "empty_partitions": [],
+                "nonempty_partitions": list(set(k.rsplit("/", 1)[0] + "/" for k in selected_keys)),
+                "candidate_keys_seen": len(selected_keys),
+                "stop_reason": stop_reason,
+            }
+    
+    # Scan partitions adaptively
+    sorted_partitions = sorted(all_partitions)
+    for part_prefix in sorted_partitions:
+        if partitions_scanned >= max_partitions_to_scan:
+            stop_reason = "MAX_PARTITIONS_SCANNED"
+            break
+        if len(selected_keys) >= min_files_target:
+            stop_reason = "MIN_FILES_TARGET_MET"
+            break
+        
+        partitions_scanned += 1
+        objs = list_s3_objects(cp, part_prefix)
+        gz_objs = [o for o in objs if o.get("key", "").endswith(".json.gz")]
+        candidate_keys_seen += len(gz_objs)
+        
+        if not gz_objs:
+            empty_partitions.append(part_prefix)
+        else:
+            nonempty_partitions.append(part_prefix)
+            # Take up to 10 keys per partition
+            for obj in gz_objs[:10]:
+                selected_keys.append(obj["key"])
+                if len(selected_keys) >= min_files_target:
+                    stop_reason = "MIN_FILES_TARGET_MET"
+                    break
+    
+    if stop_reason is None:
+        stop_reason = "NO_MORE_PARTITIONS"
+    
+    return {
+        "selected_keys": selected_keys,
+        "partitions_scanned": partitions_scanned,
+        "empty_partitions": empty_partitions,
+        "nonempty_partitions": nonempty_partitions,
+        "candidate_keys_seen": candidate_keys_seen,
+        "stop_reason": stop_reason,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -506,12 +588,23 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
     all_metrics: list[dict] = []
     market_index: dict[str, dict] = {}
     total_bytes = 0
+    global_key_discovery = {
+        "total_partition_prefixes_seen": 0,
+        "total_partitions_scanned": 0,
+        "total_empty_partitions": 0,
+        "total_nonempty_partitions": 0,
+        "total_candidate_keys_seen": 0,
+        "total_selected_keys": 0,
+        "total_downloaded_keys": 0,
+    }
 
     for api_sym in markets:
         display_sym, dex_name = parse_api_symbol(api_sym)
         market_prefix = f"{S3_BASE_PREFIX}{api_sym}/{L2_SUMMARY_SUFFIX}"
         partitions = list_s3_prefixes(cp, market_prefix)
         sorted_partitions = sorted(partitions)
+        global_key_discovery["total_partition_prefixes_seen"] += len(partitions)
+        
         mi = {
             "api_symbol": api_sym,
             "display_symbol": display_sym,
@@ -522,34 +615,84 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
             "files_parsed": 0,
             "snapshots_parsed": 0,
             "errors": 0,
+            "partitions_scanned": 0,
+            "empty_partitions_count": 0,
+            "nonempty_partitions_count": 0,
+            "candidate_keys_seen": 0,
+            "selected_keys": [],
+            "selected_key_count": 0,
+            "downloaded_key_count": 0,
+            "first_selected_key": None,
+            "last_selected_key": None,
+            "skipped_empty_partitions": [],
+            "selection_strategy": "adaptive_scan_skip_empty",
+            "stop_reason": None,
+            "market_status": None,
         }
         if not partitions:
+            mi["market_status"] = "SONARX_MARKET_NO_PARTITIONS_FOUND"
             market_index[api_sym] = mi
             continue
 
-        sample_keys = build_stratified_sample(
-            sorted_partitions, args.sample_days, args.max_files_per_market
+        # Use adaptive partition scanning
+        scan_result = scan_partitions_for_nonempty_keys(
+            cp=cp,
+            market_prefix=market_prefix,
+            all_partitions=partitions,
+            max_partitions_to_scan=getattr(args, "max_partitions_scanned_per_market", 200),
+            min_files_target=getattr(args, "min_files_per_market", 10),
+            prefer_known_good=None,  # Could load from known-good reference
         )
-
-        for part_prefix in sample_keys:
-            objs = list_s3_objects(cp, part_prefix)
-            gz_objs = [o for o in objs if o.get("key", "").endswith(".json.gz")]
-            for obj in gz_objs[:10]:  # cap per partition
-                if total_bytes >= args.download_budget_bytes:
-                    break
-                key = obj["key"]
-                try:
-                    data = download_gzip_json(cp, key)
-                    if isinstance(data, list):
-                        for raw_snap in data:
-                            parsed = parse_snapshot(raw_snap, api_sym)
-                            if parsed:
-                                all_metrics.append(parsed)
-                                mi["snapshots_parsed"] += 1
-                        mi["files_parsed"] += 1
-                    total_bytes += obj.get("size", 0)
-                except Exception as exc:
-                    mi["errors"] += 1
+        
+        mi["partitions_scanned"] = scan_result["partitions_scanned"]
+        mi["empty_partitions_count"] = len(scan_result["empty_partitions"])
+        mi["nonempty_partitions_count"] = len(scan_result["nonempty_partitions"])
+        mi["candidate_keys_seen"] = scan_result["candidate_keys_seen"]
+        mi["selected_keys"] = scan_result["selected_keys"]
+        mi["selected_key_count"] = len(scan_result["selected_keys"])
+        mi["first_selected_key"] = scan_result["selected_keys"][0] if scan_result["selected_keys"] else None
+        mi["last_selected_key"] = scan_result["selected_keys"][-1] if scan_result["selected_keys"] else None
+        mi["skipped_empty_partitions"] = scan_result["empty_partitions"]
+        mi["stop_reason"] = scan_result["stop_reason"]
+        
+        global_key_discovery["total_partitions_scanned"] += scan_result["partitions_scanned"]
+        global_key_discovery["total_empty_partitions"] += len(scan_result["empty_partitions"])
+        global_key_discovery["total_nonempty_partitions"] += len(scan_result["nonempty_partitions"])
+        global_key_discovery["total_candidate_keys_seen"] += scan_result["candidate_keys_seen"]
+        global_key_discovery["total_selected_keys"] += len(scan_result["selected_keys"])
+        
+        if not scan_result["selected_keys"]:
+            mi["market_status"] = "SONARX_MARKET_NO_NONEMPTY_PARTITIONS_FOUND"
+            market_index[api_sym] = mi
+            continue
+        
+        # Download selected keys
+        for key in scan_result["selected_keys"]:
+            if total_bytes >= args.download_budget_bytes:
+                mi["market_status"] = "SONARX_DOWNLOAD_BUDGET_EXHAUSTED"
+                break
+            try:
+                data = download_gzip_json(cp, key)
+                mi["downloaded_key_count"] += 1
+                global_key_discovery["total_downloaded_keys"] += 1
+                if isinstance(data, list):
+                    for raw_snap in data:
+                        parsed = parse_snapshot(raw_snap, api_sym)
+                        if parsed:
+                            all_metrics.append(parsed)
+                            mi["snapshots_parsed"] += 1
+                    mi["files_parsed"] += 1
+                total_bytes += int(key.rsplit("/", 1)[-1].replace(".json.gz", "").split("_")[0][-10:] if "_" in key else 0) or 0
+            except Exception as exc:
+                mi["errors"] += 1
+        
+        if mi["snapshots_parsed"] > 0:
+            mi["market_status"] = "SONARX_MARKET_DATA_PARSED"
+        elif mi["downloaded_key_count"] > 0:
+            mi["market_status"] = "SONARX_MARKET_FILES_DOWNLOADED_BUT_EMPTY"
+        else:
+            mi["market_status"] = "SONARX_MARKET_DOWNLOAD_FAILED"
+        
         market_index[api_sym] = mi
         
         # Progress heartbeat after each market
@@ -559,11 +702,11 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
             "status": "SONARX_PHASE_MINUS1_IN_PROGRESS",
             "current_phase": "s3_download_and_parse",
             "current_market": api_sym,
-            "current_partition": sample_keys[-1] if sample_keys else None,
+            "current_partition": mi["last_selected_key"],
             "markets_completed": len(market_index),
             "markets_total": len(markets),
-            "files_selected": sum(m.get("files_parsed", 0) for m in market_index.values()),
-            "files_downloaded": sum(m.get("files_parsed", 0) for m in market_index.values()),
+            "files_selected": sum(m.get("selected_key_count", 0) for m in market_index.values()),
+            "files_downloaded": sum(m.get("downloaded_key_count", 0) for m in market_index.values()),
             "bytes_downloaded": total_bytes,
             "parsed_snapshots": sum(m.get("snapshots_parsed", 0) for m in market_index.values()),
             "last_progress_at_utc": utc_now_iso(),
@@ -574,6 +717,58 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
         write_json(root / "phase_minus1_status.json", progress_status)
 
     statuses.append("SONARX_L2_HISTORY_PARSE_OK")
+
+    # --- Key-discovery-only mode: exit before anchor/candle ---
+    if getattr(args, "key_discovery_only", False):
+        # Write sample index before exiting
+        sample_index = {
+            **meta,
+            "api_symbols_processed": list(market_index.keys()),
+            "market_index": market_index,
+            "total_snapshots": len(all_metrics),
+            "total_bytes_downloaded": total_bytes,
+            "total_markets_requested": len(configured_markets),
+            "total_markets_processed": len(market_index),
+            "total_partition_prefixes_seen": global_key_discovery["total_partition_prefixes_seen"],
+            "total_partitions_scanned": global_key_discovery["total_partitions_scanned"],
+            "total_empty_partitions": global_key_discovery["total_empty_partitions"],
+            "total_nonempty_partitions": global_key_discovery["total_nonempty_partitions"],
+            "total_candidate_keys_seen": global_key_discovery["total_candidate_keys_seen"],
+            "total_selected_keys": global_key_discovery["total_selected_keys"],
+            "total_downloaded_keys": global_key_discovery["total_downloaded_keys"],
+            "key_selection_success": global_key_discovery["total_selected_keys"] > 0,
+            "no_data_reason": None if global_key_discovery["total_selected_keys"] > 0 else (
+                "NO_NONEMPTY_OBJECT_KEYS_SELECTED" if global_key_discovery["total_selected_keys"] == 0
+                else "SAMPLER_SELECTED_EMPTY_PARTITIONS" if global_key_discovery["total_empty_partitions"] > 0
+                else "KEY_DISCOVERY_FAILED"
+            ),
+        }
+        write_json(root / "sonarx_l2_sample_index.json", sample_index)
+        
+        key_discovery_status = "SONARX_KEY_DISCOVERY_COMPLETE" if global_key_discovery["total_selected_keys"] > 0 else "SONARX_KEY_DISCOVERY_FAILED"
+        statuses.append(key_discovery_status)
+        summary = {
+            "status": key_discovery_status,
+            "statuses": statuses,
+            **meta,
+            "total_snapshots": len(all_metrics),
+            "total_bytes_downloaded": total_bytes,
+            "markets_processed": len(market_index),
+            "report_directory": str(root),
+            "key_discovery": global_key_discovery,
+        }
+        write_json(root / "summary.json", summary)
+        md_lines = [
+            "# SonarX HIP-3 TradFi L2 Residual Phase -1 Scout (Key Discovery Only)\n",
+            f"**Study ID**: {args.study_id}\n",
+            f"**Run ID**: {run_id}\n",
+            f"**Status**: {key_discovery_status}\n",
+            f"**Total selected keys**: {global_key_discovery['total_selected_keys']}\n",
+            f"**Total downloaded**: {global_key_discovery['total_downloaded_keys']}\n",
+            f"**Markets**: {len(market_index)}\n",
+        ]
+        (root / "summary.md").write_text("".join(md_lines), encoding="utf-8")
+        return summary
 
     # --- Phase C: session classification ---
     session_by_api: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -631,7 +826,9 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
 
     # --- Phase E: candleSnapshot join ---
     candle_join: dict[str, Any] = {**meta, "candles_by_api_symbol": {}}
-    if getattr(args, "enable_candle_join", False) and cp.allow_network_public:
+    # Candle join is disabled by default; requires --enable-candle-join AND not --disable-candle-join
+    candle_enabled = getattr(args, "enable_candle_join", False) and not getattr(args, "disable_candle_join", False)
+    if candle_enabled and cp.allow_network_public:
         for api_sym in markets:
             display_sym, dex_name = parse_api_symbol(api_sym)
             candle_data: dict[str, Any] = {"intervals": {}}
@@ -653,13 +850,16 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
         statuses.append("SONARX_CANDLE_JOIN_AVAILABLE")
     else:
         candle_join["status"] = "SONARX_CANDLE_JOIN_BLOCKED"
+        candle_join["disabled_reason"] = "explicitly_disabled_via_flags" if getattr(args, "disable_candle_join", False) else "not_enabled"
         statuses.append("SONARX_CANDLE_JOIN_BLOCKED")
     write_json(root / "hyperliquid_candle_snapshot_join.json", candle_join)
 
     # --- Phase F: anchor probe ---
     anchor_probe: dict[str, Any] = {**meta, "anchors_by_display": {}}
     anchor_available = False
-    if getattr(args, "enable_anchors", False) and cp.allow_network_public:
+    # Anchors are disabled by default; requires --enable-anchors AND not --disable-anchors
+    anchors_enabled = getattr(args, "enable_anchors", False) and not getattr(args, "disable_anchors", False)
+    if anchors_enabled and cp.allow_network_public:
         for dsym in ["TSLA", "AAPL", "MSFT", "NVDA"]:
             try:
                 url = f"https://query1.finance.yahoo.com/v8/finance/chart/{dsym}?range=5d&interval=1d"
@@ -685,6 +885,7 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
         statuses.append("SONARX_ANCHOR_AVAILABLE" if anchor_available else "SONARX_ANCHOR_BLOCKED")
     else:
         anchor_probe["status"] = "SONARX_ANCHOR_BLOCKED"
+        anchor_probe["disabled_reason"] = "explicitly_disabled_via_flags" if getattr(args, "disable_anchors", False) else "not_enabled"
         statuses.append("SONARX_ANCHOR_BLOCKED")
     write_json(root / "anchor_availability_probe.json", anchor_probe)
 
@@ -741,6 +942,21 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
         "market_index": market_index,
         "total_snapshots": len(all_metrics),
         "total_bytes_downloaded": total_bytes,
+        "total_markets_requested": len(configured_markets),
+        "total_markets_processed": len(market_index),
+        "total_partition_prefixes_seen": global_key_discovery["total_partition_prefixes_seen"],
+        "total_partitions_scanned": global_key_discovery["total_partitions_scanned"],
+        "total_empty_partitions": global_key_discovery["total_empty_partitions"],
+        "total_nonempty_partitions": global_key_discovery["total_nonempty_partitions"],
+        "total_candidate_keys_seen": global_key_discovery["total_candidate_keys_seen"],
+        "total_selected_keys": global_key_discovery["total_selected_keys"],
+        "total_downloaded_keys": global_key_discovery["total_downloaded_keys"],
+        "key_selection_success": global_key_discovery["total_downloaded_keys"] > 0,
+        "no_data_reason": None if global_key_discovery["total_downloaded_keys"] > 0 else (
+            "NO_NONEMPTY_OBJECT_KEYS_SELECTED" if global_key_discovery["total_selected_keys"] == 0
+            else "SAMPLER_SELECTED_EMPTY_PARTITIONS" if global_key_discovery["total_empty_partitions"] > 0
+            else "KEY_DISCOVERY_FAILED"
+        ),
     }
     write_json(root / "sonarx_l2_sample_index.json", sample_index)
 
@@ -768,19 +984,34 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
     gate_reasons: list[str] = []
     gate_status = "SONARX_PHASE_MINUS1_NOT_ENOUGH_FOR_PRECOMMITMENT"
 
-    # Check liquidity thresholds
-    liquidity_ok = False
-    for api_sym, rows in offhours_by_api.items():
-        if len(rows) < 500:
-            continue
-        stats = compute_liquidity_stats(rows)
-        if (stats.get("two_sided_book_rate", 0) >= 0.80
-                and stats.get("median_spread_bps", 999) <= 50
-                and stats.get("p75_spread_bps", 999) <= 100):
-            liquidity_ok = True
-            break
-    if not liquidity_ok:
-        gate_reasons.append("liquidity_thresholds_not_met")
+    # CRITICAL: Check if we have any data before making liquidity claims
+    total_parsed = len(all_metrics)
+    total_downloaded = global_key_discovery["total_downloaded_keys"]
+    
+    liquidity_ok = False  # Initialize for zero-data case
+    
+    if total_downloaded == 0 or total_parsed == 0:
+        # Zero-data run: cannot make liquidity claims
+        gate_reasons.append("PROBE_RETRIEVED_NO_DATA")
+        if global_key_discovery["total_selected_keys"] == 0:
+            gate_reasons.append("NO_NONEMPTY_OBJECT_KEYS_SELECTED")
+        elif global_key_discovery["total_empty_partitions"] > 0:
+            gate_reasons.append("SAMPLER_SELECTED_EMPTY_PARTITIONS")
+        else:
+            gate_reasons.append("KEY_DISCOVERY_FAILED")
+    else:
+        # Data-bearing run: can make liquidity assessments
+        for api_sym, rows in offhours_by_api.items():
+            if len(rows) < 500:
+                continue
+            stats = compute_liquidity_stats(rows)
+            if (stats.get("two_sided_book_rate", 0) >= 0.80
+                    and stats.get("median_spread_bps", 999) <= 50
+                    and stats.get("p75_spread_bps", 999) <= 100):
+                liquidity_ok = True
+                break
+        if not liquidity_ok:
+            gate_reasons.append("liquidity_thresholds_not_met")
 
     if not anchor_available:
         gate_reasons.append("anchor_unavailable")
@@ -847,14 +1078,28 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--sample-mode", default="stratified")
     p.add_argument("--max-markets", type=int, default=12)
     p.add_argument("--max-files-per-market", type=int, default=500)
+    p.add_argument("--max-partitions-scanned-per-market", type=int, default=200,
+                   help="Max partition prefixes to scan per market when searching for non-empty partitions")
+    p.add_argument("--min-files-per-market", type=int, default=10,
+                   help="Target minimum number of .json.gz files to select per market")
     p.add_argument("--download-budget-bytes", type=int, default=2_000_000_000)
     p.add_argument("--allow-s3-archive-read", action="store_true")
     p.add_argument("--allow-network-public", action="store_true")
-    p.add_argument("--enable-candle-join", action="store_true")
-    p.add_argument("--enable-anchors", action="store_true")
+    p.add_argument("--enable-candle-join", action="store_true",
+                   help="Enable Hyperliquid candleSnapshot join (default: disabled)")
+    p.add_argument("--enable-anchors", action="store_true",
+                   help="Enable Yahoo anchor pricefetch (default: disabled)")
+    p.add_argument("--disable-candle-join", action="store_true",
+                   help="Explicitly disable candleSnapshot join (L2-only mode)")
+    p.add_argument("--disable-anchors", action="store_true",
+                   help="Explicitly disable anchor fetch (L2-only mode)")
     p.add_argument("--anchor-source", default="yahoo")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--real-smoke", action="store_true", help="Smoke test mode: max 2 markets, 10 files each, 50MB budget")
+    p.add_argument("--key-discovery-only", action="store_true",
+                   help="Only discover keys, do not download or make anchor/candle requests")
+    p.add_argument("--prefer-known-good-coverage-keys", action="store_true",
+                   help="Prefer known-good keys from prior coverage probe if available")
     p.add_argument("--s3-connect-timeout-seconds", type=int, default=10)
     p.add_argument("--s3-read-timeout-seconds", type=int, default=30)
     p.add_argument("--s3-max-attempts", type=int, default=2)
