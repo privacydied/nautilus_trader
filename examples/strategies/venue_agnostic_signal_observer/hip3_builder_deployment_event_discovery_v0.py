@@ -308,11 +308,26 @@ class NetworkChokepoint:
     Requires explicit guard flags for any public endpoint or S3 access.
     """
     
-    def __init__(self, allow_network_public: bool = False, allow_s3_archive_read: bool = False):
+    def __init__(
+        self,
+        allow_network_public: bool = False,
+        allow_s3_archive_read: bool = False,
+        s3_connect_timeout: int = 10,
+        s3_read_timeout: int = 30,
+        s3_max_attempts: int = 2,
+    ):
         self.allow_network_public = allow_network_public
         self.allow_s3_archive_read = allow_s3_archive_read
         self.bytes_downloaded = 0
         self.bytes_by_source: dict[str, int] = {}
+        self._s3_config = None
+        if _BOTO3_AVAILABLE:
+            from botocore.config import Config
+            self._s3_config = Config(
+                connect_timeout=s3_connect_timeout,
+                read_timeout=s3_read_timeout,
+                retries={"max_attempts": s3_max_attempts},
+            )
     
     def http_get(self, url: str, timeout: int = 20) -> bytes:
         """HTTP GET through chokepoint."""
@@ -369,7 +384,7 @@ class NetworkChokepoint:
         if requester_pays:
             kwargs["RequestPayer"] = "requester"
         try:
-            s3 = boto3.client("s3")
+            s3 = boto3.client("s3", config=self._s3_config) if self._s3_config else boto3.client("s3")
             resp = s3.list_objects_v2(**kwargs)
             prefixes = [cp["Prefix"] for cp in resp.get("CommonPrefixes") or []]
             contents = resp.get("Contents") or []
@@ -395,7 +410,7 @@ class NetworkChokepoint:
         kwargs: dict = {"Bucket": bucket, "Key": key}
         if requester_pays:
             kwargs["RequestPayer"] = "requester"
-        s3 = boto3.client("s3")
+        s3 = boto3.client("s3", config=self._s3_config) if self._s3_config else boto3.client("s3")
         resp = s3.get_object(**kwargs)
         data: bytes = resp["Body"].read()
         self._track_bytes(len(data), f"s3:{bucket}")

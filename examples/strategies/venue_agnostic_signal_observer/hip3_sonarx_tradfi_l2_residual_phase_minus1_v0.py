@@ -64,6 +64,14 @@ STATUSES = frozenset({
     "SONARX_PHASE_MINUS1_NEXT_PRECOMMITMENT_REVIEW_ALLOWED",
     "SONARX_PHASE_MINUS1_NOT_ENOUGH_FOR_PRECOMMITMENT",
     "SONARX_PHASE_MINUS1_ERROR",
+    "SONARX_PHASE_MINUS1_REAL_RUN_STARTED",
+    "SONARX_PHASE_MINUS1_IN_PROGRESS",
+    "SONARX_S3_TRANSPORT_TIMEOUT",
+    "SONARX_S3_READ_TIMEOUT",
+    "SONARX_S3_CONNECT_TIMEOUT",
+    "SONARX_REQUESTER_PAYS_CREDENTIALS_REQUIRED",
+    "SONARX_ACCESS_DENIED",
+    "SONARX_PHASE_MINUS1_SOURCE_BLOCKED",
 })
 
 FORBIDDEN_STATUSES = frozenset({
@@ -404,14 +412,70 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
     meta["run_id"] = run_id
 
     statuses: list[str] = []
+    
+    # Apply real-smoke mode limits BEFORE any network calls
+    configured_markets = [m.strip() for m in args.markets.split(",") if m.strip()]
+    max_markets = args.max_markets
+    max_files_per_market = args.max_files_per_market
+    download_budget = args.download_budget_bytes
+    
+    if getattr(args, "real_smoke", False):
+        max_markets = min(max_markets, 2) if max_markets else 2
+        max_files_per_market = min(max_files_per_market, 10) if max_files_per_market else 10
+        download_budget = min(download_budget, 50_000_000) if download_budget else 50_000_000
+    
+    # Create NetworkChokepoint with bounded timeouts
     cp = NetworkChokepoint(
         allow_network_public=getattr(args, "allow_network_public", False),
         allow_s3_archive_read=getattr(args, "allow_s3_archive_read", False),
+        s3_connect_timeout=getattr(args, "s3_connect_timeout_seconds", 10),
+        s3_read_timeout=getattr(args, "s3_read_timeout_seconds", 30),
+        s3_max_attempts=getattr(args, "s3_max_attempts", 2),
     )
+    
+    # Write early artifacts BEFORE first network call
+    run_manifest = {
+        **meta,
+        "run_id": run_id,
+        "created_at_utc": utc_now_iso(),
+        "status": "SONARX_PHASE_MINUS1_REAL_RUN_STARTED",
+        "current_phase": "initialization_complete",
+        "markets_configured": configured_markets,
+        "markets_limit": max_markets,
+        "max_files_per_market": max_files_per_market,
+        "download_budget_bytes": download_budget,
+        "sample_days": args.sample_days,
+        "sample_mode": args.sample_mode,
+        "s3_connect_timeout_seconds": getattr(args, "s3_connect_timeout_seconds", 10),
+        "s3_read_timeout_seconds": getattr(args, "s3_read_timeout_seconds", 30),
+        "s3_max_attempts": getattr(args, "s3_max_attempts", 2),
+        "real_smoke_mode": getattr(args, "real_smoke", False),
+        "executable_pnl_modeled": False,
+        "queue_position_modeled": False,
+        "fills_modeled": False,
+        "slippage_model_modeled": False,
+        "diagnostic_only": True,
+    }
+    write_json(root / "run_manifest.json", run_manifest)
+    
+    # Initial status artifact
+    initial_status = {
+        **meta,
+        "run_id": run_id,
+        "status": "SONARX_PHASE_MINUS1_REAL_RUN_STARTED",
+        "created_at_utc": utc_now_iso(),
+        "current_phase": "initialization_complete",
+        "last_progress_at_utc": utc_now_iso(),
+        "markets": configured_markets[:max_markets] if max_markets else configured_markets,
+        "command_args": vars(args),
+        "git_sha": meta.get("git_sha", "unknown"),
+        "safety_mode": "public_data_observer_only",
+        "executable_pnl_modeled": False,
+        "diagnostic_only": True,
+    }
+    write_json(root / "phase_minus1_status.json", initial_status)
 
-    markets = [m.strip() for m in args.markets.split(",") if m.strip()]
-    if args.max_markets:
-        markets = markets[: args.max_markets]
+    markets = configured_markets[:max_markets] if max_markets else configured_markets
 
     # --- Source coverage plan ---
     source_plan = {
@@ -419,8 +483,8 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
         "markets": markets,
         "sample_days": args.sample_days,
         "sample_mode": args.sample_mode,
-        "max_files_per_market": args.max_files_per_market,
-        "download_budget_bytes": args.download_budget_bytes,
+        "max_files_per_market": max_files_per_market,
+        "download_budget_bytes": download_budget,
         "sessions_targeted": [
             "regular_hours", "premarket", "after_hours",
             "overnight", "weekend_or_holiday",
@@ -487,6 +551,27 @@ def run_phase_minus1(args: argparse.Namespace) -> dict:
                 except Exception as exc:
                     mi["errors"] += 1
         market_index[api_sym] = mi
+        
+        # Progress heartbeat after each market
+        progress_status = {
+            **meta,
+            "run_id": run_id,
+            "status": "SONARX_PHASE_MINUS1_IN_PROGRESS",
+            "current_phase": "s3_download_and_parse",
+            "current_market": api_sym,
+            "current_partition": sample_keys[-1] if sample_keys else None,
+            "markets_completed": len(market_index),
+            "markets_total": len(markets),
+            "files_selected": sum(m.get("files_parsed", 0) for m in market_index.values()),
+            "files_downloaded": sum(m.get("files_parsed", 0) for m in market_index.values()),
+            "bytes_downloaded": total_bytes,
+            "parsed_snapshots": sum(m.get("snapshots_parsed", 0) for m in market_index.values()),
+            "last_progress_at_utc": utc_now_iso(),
+            "errors_count": sum(m.get("errors", 0) for m in market_index.values()),
+            "executable_pnl_modeled": False,
+            "diagnostic_only": True,
+        }
+        write_json(root / "phase_minus1_status.json", progress_status)
 
     statuses.append("SONARX_L2_HISTORY_PARSE_OK")
 
@@ -769,6 +854,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--enable-anchors", action="store_true")
     p.add_argument("--anchor-source", default="yahoo")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--real-smoke", action="store_true", help="Smoke test mode: max 2 markets, 10 files each, 50MB budget")
+    p.add_argument("--s3-connect-timeout-seconds", type=int, default=10)
+    p.add_argument("--s3-read-timeout-seconds", type=int, default=30)
+    p.add_argument("--s3-max-attempts", type=int, default=2)
     return p
 
 
