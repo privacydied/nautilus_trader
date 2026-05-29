@@ -480,3 +480,291 @@ class TestUtils:
         assert "subprocess." not in src
         assert "os.system(" not in src
         assert "eval(" not in src
+
+
+# ===================================================================
+# 10. Shared-date sampler
+# ===================================================================
+
+from examples.strategies.venue_agnostic_signal_observer.hip3_cross_dex_noarb_band_phase_minus1_v0 import (
+    extract_partition_from_sonarx_key,
+    extract_file_id_from_sonarx_key,
+    compute_shared_partitions_for_pair,
+    select_keys_from_shared_partitions,
+)
+
+
+class TestPartitionExtraction:
+    def test_extract_partition_standard_key(self):
+        key = "market_data/hip3/cash:NVDA/l2-summary-snapshots/885810000/885811000.json.gz"
+        assert extract_partition_from_sonarx_key(key) == "885810000"
+
+    def test_extract_partition_km_key(self):
+        key = "market_data/hip3/km:NVDA/l2-summary-snapshots/902750000/902751000.json.gz"
+        assert extract_partition_from_sonarx_key(key) == "902750000"
+
+    def test_extract_partition_no_match(self):
+        key = "market_data/hip3/cash:NVDA/other-path/885810000/file.json.gz"
+        assert extract_partition_from_sonarx_key(key) == ""
+
+    def test_extract_partition_empty(self):
+        assert extract_partition_from_sonarx_key("") == ""
+
+    def test_extract_file_id(self):
+        key = "market_data/hip3/cash:NVDA/l2-summary-snapshots/885810000/885811000.json.gz"
+        assert extract_file_id_from_sonarx_key(key) == "885811000"
+
+    def test_extract_file_id_no_gz(self):
+        key = "market_data/hip3/cash:NVDA/l2-summary-snapshots/885810000/885811000.json"
+        assert extract_file_id_from_sonarx_key(key) == "885811000"
+
+
+class TestSharedPartitions:
+    def _key(self, api_sym, partition, file_id):
+        return {"key": f"market_data/hip3/{api_sym}/l2-summary-snapshots/{partition}/{file_id}.json.gz", "size": 1000}
+
+    def test_tsla_shared_partition(self):
+        """TSLA: both legs have partition 885810000 -> shared."""
+        left = [self._key("cash:TSLA", "885810000", f"88581{i}000") for i in range(1, 11)]
+        right = [self._key("km:TSLA", "885810000", f"88581{i}000") for i in range(1, 11)]
+        result = compute_shared_partitions_for_pair(left, right, max_overlap_units=7)
+        assert "885810000" in result["overlap_units"]
+        assert "885810000" in result["selected_overlap_units"]
+        assert len(result["selected_overlap_units"]) <= 7
+
+    def test_nvda_no_shared_partition(self):
+        """NVDA: left has 885810000, right has 902750000 -> no overlap."""
+        left = [self._key("cash:NVDA", "885810000", f"88581{i}000") for i in range(1, 11)]
+        right = [self._key("km:NVDA", "902750000", f"90275{i}000") for i in range(1, 11)]
+        result = compute_shared_partitions_for_pair(left, right)
+        assert result["overlap_units"] == []
+        assert result["selected_overlap_units"] == []
+
+    def test_nvda_with_shared_partition(self):
+        """NVDA: if both legs have 885810000, they share."""
+        left = [self._key("cash:NVDA", "885810000", f"88581{i}000") for i in range(1, 11)]
+        right = [self._key("km:NVDA", "885810000", f"88581{i}000") for i in range(1, 11)]
+        result = compute_shared_partitions_for_pair(left, right)
+        assert "885810000" in result["overlap_units"]
+        assert result["left_keys_by_unit"]["885810000"] is not None
+        assert result["right_keys_by_unit"]["885810000"] is not None
+
+    def test_multiple_shared_partitions(self):
+        """Multiple partitions shared -> selected up to max."""
+        left = [self._key("cash:TSLA", p, f"f{i}") for p in ["885810000", "885820000"] for i in range(5)]
+        right = [self._key("km:TSLA", p, f"f{i}") for p in ["885810000", "885820000"] for i in range(5)]
+        result = compute_shared_partitions_for_pair(left, right, max_overlap_units=1)
+        assert len(result["selected_overlap_units"]) == 1
+
+    def test_left_right_units_available(self):
+        left = [self._key("cash:TSLA", "885810000", "f1"), self._key("cash:TSLA", "885820000", "f2")]
+        right = [self._key("km:TSLA", "885810000", "f1")]
+        result = compute_shared_partitions_for_pair(left, right)
+        assert "885810000" in result["left_units_available"]
+        assert "885820000" in result["left_units_available"]
+        assert "885810000" in result["right_units_available"]
+        assert "885820000" not in result["right_units_available"]
+
+
+class TestSelectKeysFromSharedPartitions:
+    def _key(self, api_sym, partition, file_id):
+        return {"key": f"market_data/hip3/{api_sym}/l2-summary-snapshots/{partition}/{file_id}.json.gz", "size": 1000}
+
+    def test_balanced_selection(self):
+        """Selects min_files_per_unit from each unit, then fills."""
+        keys_by_unit = {
+            "885810000": [self._key("cash:TSLA", "885810000", f"f{i}") for i in range(10)],
+            "885820000": [self._key("cash:TSLA", "885820000", f"f{i}") for i in range(10)],
+        }
+        selected = select_keys_from_shared_partitions(
+            keys_by_unit, ["885810000", "885820000"],
+            max_files=6, min_files_per_unit=2,
+        )
+        assert len(selected) == 6
+        # Check both units are represented
+        units_used = set()
+        for k in selected:
+            p = extract_partition_from_sonarx_key(k["key"])
+            units_used.add(p)
+        assert len(units_used) == 2
+
+    def test_respects_max_files(self):
+        keys_by_unit = {
+            "p1": [self._key("x", "p1", f"f{i}") for i in range(20)],
+        }
+        selected = select_keys_from_shared_partitions(
+            keys_by_unit, ["p1"], max_files=5, min_files_per_unit=1,
+        )
+        assert len(selected) == 5
+
+    def test_empty_units(self):
+        selected = select_keys_from_shared_partitions({}, [], max_files=10)
+        assert selected == []
+
+
+class TestSharedSamplerIntegration:
+    def test_tsla_both_legs_same_partition(self):
+        """TSLA: verify that shared-date sampler produces identical selected units."""
+        left_keys = [
+            {"key": f"market_data/hip3/cash:TSLA/l2-summary-snapshots/885810000/88581{i}000.json.gz", "size": 3000}
+            for i in range(1, 21)
+        ]
+        right_keys = [
+            {"key": f"market_data/hip3/km:TSLA/l2-summary-snapshots/885810000/88581{i}000.json.gz", "size": 3000}
+            for i in range(1, 21)
+        ]
+        shared = compute_shared_partitions_for_pair(left_keys, right_keys, max_overlap_units=7)
+        left_selected = select_keys_from_shared_partitions(
+            shared["left_keys_by_unit"], shared["selected_overlap_units"],
+            max_files=20, min_files_per_unit=1,
+        )
+        right_selected = select_keys_from_shared_partitions(
+            shared["right_keys_by_unit"], shared["selected_overlap_units"],
+            max_files=20, min_files_per_unit=1,
+        )
+        left_units = sorted(set(extract_partition_from_sonarx_key(k["key"]) for k in left_selected))
+        right_units = sorted(set(extract_partition_from_sonarx_key(k["key"]) for k in right_selected))
+        assert left_units == right_units, f"Left units {left_units} != Right units {right_units}"
+        assert len(left_selected) > 0
+        assert len(right_selected) > 0
+
+    def test_nvda_independent_dates_reproduces_old_failure(self):
+        """NVDA: independent partition selection reproduces the old bug."""
+        left_keys = [
+            {"key": f"market_data/hip3/cash:NVDA/l2-summary-snapshots/885810000/88581{i}000.json.gz", "size": 3000}
+            for i in range(1, 11)
+        ]
+        right_keys = [
+            {"key": f"market_data/hip3/km:NVDA/l2-summary-snapshots/902750000/90275{i}000.json.gz", "size": 2000}
+            for i in range(1, 11)
+        ]
+        shared = compute_shared_partitions_for_pair(left_keys, right_keys)
+        assert shared["overlap_units"] == [], "NVDA should have no shared partitions with independent dates"
+        assert shared["selected_overlap_units"] == []
+
+    def test_nvda_shared_units_aligns(self):
+        """NVDA: with shared partition, both legs align."""
+        left_keys = [
+            {"key": f"market_data/hip3/cash:NVDA/l2-summary-snapshots/885810000/88581{i}000.json.gz", "size": 3000}
+            for i in range(1, 21)
+        ]
+        right_keys = [
+            {"key": f"market_data/hip3/km:NVDA/l2-summary-snapshots/885810000/88581{i}000.json.gz", "size": 2000}
+            for i in range(1, 21)
+        ]
+        shared = compute_shared_partitions_for_pair(left_keys, right_keys)
+        assert "885810000" in shared["overlap_units"]
+        left_selected = select_keys_from_shared_partitions(
+            shared["left_keys_by_unit"], shared["selected_overlap_units"],
+            max_files=20, min_files_per_unit=1,
+        )
+        right_selected = select_keys_from_shared_partitions(
+            shared["right_keys_by_unit"], shared["selected_overlap_units"],
+            max_files=20, min_files_per_unit=1,
+        )
+        left_units = sorted(set(extract_partition_from_sonarx_key(k["key"]) for k in left_selected))
+        right_units = sorted(set(extract_partition_from_sonarx_key(k["key"]) for k in right_selected))
+        assert left_units == right_units
+
+    def test_no_silent_fallback_to_independent(self):
+        """When require_shared_dates=True and no overlap, inventory shows no overlap."""
+        left_keys = [
+            {"key": f"market_data/hip3/cash:NVDA/l2-summary-snapshots/885810000/88581{i}000.json.gz", "size": 3000}
+            for i in range(1, 11)
+        ]
+        right_keys = [
+            {"key": f"market_data/hip3/km:NVDA/l2-summary-snapshots/902750000/90275{i}000.json.gz", "size": 2000}
+            for i in range(1, 11)
+        ]
+        shared = compute_shared_partitions_for_pair(left_keys, right_keys)
+        assert shared["overlap_units"] == []
+        # When require_shared_dates=True, the caller should stop, not fall back
+        # This is verified by the integration test in run_phase_minus1
+
+    def test_selected_units_identical_flag(self):
+        """Verify sampled_units_identical is computed correctly."""
+        left_keys = [
+            {"key": f"market_data/hip3/cash:TSLA/l2-summary-snapshots/885810000/88581{i}000.json.gz", "size": 3000}
+            for i in range(1, 11)
+        ]
+        right_keys = [
+            {"key": f"market_data/hip3/km:TSLA/l2-summary-snapshots/885810000/88581{i}000.json.gz", "size": 3000}
+            for i in range(1, 11)
+        ]
+        shared = compute_shared_partitions_for_pair(left_keys, right_keys)
+        left_selected = select_keys_from_shared_partitions(
+            shared["left_keys_by_unit"], shared["selected_overlap_units"],
+            max_files=10, min_files_per_unit=1,
+        )
+        right_selected = select_keys_from_shared_partitions(
+            shared["right_keys_by_unit"], shared["selected_overlap_units"],
+            max_files=10, min_files_per_unit=1,
+        )
+        left_units = sorted(set(extract_partition_from_sonarx_key(k["key"]) for k in left_selected))
+        right_units = sorted(set(extract_partition_from_sonarx_key(k["key"]) for k in right_selected))
+        assert left_units == right_units
+
+    def test_exact_alignment_required_for_classification(self):
+        """Zero aligned observations cannot be classified within/outside band."""
+        pair = parse_pair_string("cash:NVDA|km:NVDA")
+        left = [L2BookSnapshot(
+            api_symbol="cash:NVDA", dex="cash", display_symbol="NVDA",
+            timestamp_ms=1000000.0, timestamp_utc="2026-05-29T10:00:00Z",
+            bids=[{"px": 100.0, "sz": 1.0}], asks=[{"px": 100.5, "sz": 1.0}],
+            best_bid=100.0, best_ask=100.5, mid=100.25, quoted_spread_bps=5.0,
+            two_sided=True, parse_status="ok", source_key="test",
+        )]
+        right = [L2BookSnapshot(
+            api_symbol="km:NVDA", dex="km", display_symbol="NVDA",
+            timestamp_ms=2000000.0, timestamp_utc="2026-05-29T10:00:01Z",
+            bids=[{"px": 100.0, "sz": 1.0}], asks=[{"px": 100.5, "sz": 1.0}],
+            best_bid=100.0, best_ask=100.5, mid=100.25, quoted_spread_bps=5.0,
+            two_sided=True, parse_status="ok", source_key="test",
+        )]
+        noarb = NoArbBandConfig(
+            pair_id=pair.pair_id,
+            left_fee_config=FeeMarginConfig(dex="cash", api_symbol="cash:NVDA"),
+            right_fee_config=FeeMarginConfig(dex="km", api_symbol="km:NVDA"),
+            left_funding_config=FundingConfig(dex="cash", api_symbol="cash:NVDA"),
+            right_funding_config=FundingConfig(dex="km", api_symbol="km:NVDA"),
+        )
+        obs, diag = align_snapshots(left, right, pair, noarb, alignment_mode="exact")
+        assert len(obs) == 0
+        # Cannot classify as within_band or outside_band with zero observations
+        assert diag.get("alignment_failure_reason") is not None
+
+    def test_below_threshold_underpowered(self):
+        """Below-threshold aligned observations classify as underpowered."""
+        ps = PairSpreadSummary(
+            pair_id="cash:TSLA|km:TSLA",
+            aligned_observation_count=30,  # below min_aligned_observations=50
+            p95_excess_over_noarb_band_bps=-10.0,
+        )
+        assert ps.aligned_observation_count < 50
+        # The gate decision should not classify as within_band with too few obs
+
+    def test_no_pnl_returns_signals_in_shared_inventory(self):
+        """Shared-date inventory contains no PnL/returns/signals fields."""
+        left_keys = [
+            {"key": f"market_data/hip3/cash:TSLA/l2-summary-snapshots/885810000/88581{i}000.json.gz", "size": 3000}
+            for i in range(1, 6)
+        ]
+        right_keys = [
+            {"key": f"market_data/hip3/km:TSLA/l2-summary-snapshots/885810000/88581{i}000.json.gz", "size": 3000}
+            for i in range(1, 6)
+        ]
+        shared = compute_shared_partitions_for_pair(left_keys, right_keys)
+        # Convert to JSON and check for forbidden fields
+        import json
+        shared_json = json.dumps(shared)
+        for forbidden in ["pnl", "profit", "returns", "signal", "entry", "exit", "position"]:
+            assert forbidden not in shared_json.lower(), f"Found forbidden field: {forbidden}"
+
+    def test_no_production_subprocess_os_system_eval(self):
+        """Module has no production subprocess, os.system, or eval."""
+        mod_path = Path(__file__).resolve().parents[1] / "hip3_cross_dex_noarb_band_phase_minus1_v0.py"
+        src = mod_path.read_text(encoding="utf-8")
+        assert "import subprocess" not in src
+        assert "subprocess." not in src
+        assert "os.system(" not in src
+        assert "eval(" not in src

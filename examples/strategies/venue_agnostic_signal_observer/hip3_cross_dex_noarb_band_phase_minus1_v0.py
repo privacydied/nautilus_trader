@@ -62,6 +62,8 @@ FLX_FORBIDDEN_BY_DEFAULT = True
 ALLOWED_STATUSES = frozenset({
     "HIP3_CROSS_DEX_NOARB_DRY_RUN_READY",
     "HIP3_CROSS_DEX_NOARB_COVERAGE_READY",
+    "HIP3_CROSS_DEX_NOARB_SHARED_DATE_COVERAGE_READY",
+    "HIP3_CROSS_DEX_NOARB_NO_OVERLAP_DATES",
     "HIP3_CROSS_DEX_NOARB_ZERO_DATA_SAMPLER_FAILURE",
     "HIP3_CROSS_DEX_NOARB_DECODE_FAILURE_BLOCKED",
     "HIP3_CROSS_DEX_NOARB_L2_UNDERPOWERED",
@@ -688,6 +690,311 @@ def discover_sonarx_keys(
 
         inventory["selected_keys_by_leg"][api_sym] = found_keys[:max_files_per_leg]
 
+    return inventory
+
+
+# ---------------------------------------------------------------------------
+# Shared-date (shared-partition) pair sampler
+# ---------------------------------------------------------------------------
+
+def extract_partition_from_sonarx_key(key: str) -> str:
+    """Extract the partition ID from a SonarX HIP-3 L2 summary key.
+
+    Key format: market_data/hip3/{symbol}/l2-summary-snapshots/{partition_id}/{file_id}.json.gz
+    Returns the partition_id string, or '' if parsing fails.
+    """
+    parts = key.split("/")
+    # Expected: [..., 'l2-summary-snapshots', partition_id, file_id.json.gz]
+    for i, p in enumerate(parts):
+        if p == "l2-summary-snapshots" and i + 1 < len(parts):
+            return parts[i + 1]
+    return ""
+
+
+def extract_file_id_from_sonarx_key(key: str) -> str:
+    """Extract the file ID (last component before .json.gz) from a SonarX key."""
+    parts = key.split("/")
+    if parts:
+        fname = parts[-1]
+        return fname.replace(".json.gz", "").replace(".json", "")
+    return ""
+
+
+def compute_shared_partitions_for_pair(
+    left_keys: List[dict],
+    right_keys: List[dict],
+    max_overlap_units: int = 7,
+    prefer_recent: bool = True,
+) -> dict:
+    """Compute the partition intersection between two legs of a pair.
+
+    Returns a dict with:
+      - overlap_unit_type: 'partition'
+      - left_units_available: set of partition IDs for left leg
+      - right_units_available: set of partition IDs for right leg
+      - overlap_units: sorted list of shared partition IDs
+      - selected_overlap_units: up to max_overlap_units from overlap_units
+      - left_keys_by_unit: {partition_id: [keys]} for left leg
+      - right_keys_by_unit: {partition_id: [keys]} for right leg
+    """
+    left_units: dict = defaultdict(list)
+    right_units: dict = defaultdict(list)
+
+    for obj in left_keys:
+        key = obj.get("key", "") if isinstance(obj, dict) else str(obj)
+        unit = extract_partition_from_sonarx_key(key)
+        if unit:
+            left_units[unit].append(obj)
+
+    for obj in right_keys:
+        key = obj.get("key", "") if isinstance(obj, dict) else str(obj)
+        unit = extract_partition_from_sonarx_key(key)
+        if unit:
+            right_units[unit].append(obj)
+
+    left_unit_set = set(left_units.keys())
+    right_unit_set = set(right_units.keys())
+    overlap = sorted(left_unit_set & right_unit_set)
+
+    if prefer_recent:
+        overlap = sorted(overlap, reverse=True)
+
+    selected = overlap[:max_overlap_units]
+
+    return {
+        "overlap_unit_type": "partition",
+        "left_units_available": sorted(left_unit_set),
+        "right_units_available": sorted(right_unit_set),
+        "overlap_units": overlap,
+        "selected_overlap_units": selected,
+        "left_keys_by_unit": {u: left_units[u] for u in selected},
+        "right_keys_by_unit": {u: right_units[u] for u in selected},
+    }
+
+
+def select_keys_from_shared_partitions(
+    keys_by_unit: dict,
+    selected_units: List[str],
+    max_files: int = 20,
+    min_files_per_unit: int = 1,
+) -> List[dict]:
+    """Select keys from shared partition units, balanced across units.
+
+    Picks min_files_per_unit from each selected unit, then fills up to max_files
+    by cycling through units with remaining keys.
+    """
+    selected = []
+    per_unit_count = defaultdict(int)
+
+    # First pass: min_files_per_unit from each unit
+    for unit in selected_units:
+        keys = keys_by_unit.get(unit, [])
+        take = min(min_files_per_unit, len(keys))
+        for k in keys[:take]:
+            selected.append(k)
+            per_unit_count[unit] += 1
+
+    if len(selected) >= max_files:
+        return selected[:max_files]
+
+    # Second pass: round-robin fill
+    unit_idx = 0
+    while len(selected) < max_files:
+        unit = selected_units[unit_idx % len(selected_units)] if selected_units else ""
+        keys = keys_by_unit.get(unit, [])
+        if per_unit_count[unit] < len(keys):
+            selected.append(keys[per_unit_count[unit]])
+            per_unit_count[unit] += 1
+            if len(selected) >= max_files:
+                break
+        # Check if all units exhausted
+        all_exhausted = all(
+            per_unit_count[u] >= len(keys_by_unit.get(u, []))
+            for u in selected_units
+        )
+        if all_exhausted:
+            break
+        unit_idx += 1
+
+    return selected
+
+
+def discover_sonarx_keys_shared_date(
+    chokepoint: NetworkChokepoint,
+    pairs: List[CrossDexPair],
+    sample_days: int = 30,
+    max_files_per_leg: int = 200,
+    max_overlap_units: int = 7,
+    min_files_per_overlap_unit: int = 1,
+    prefer_recent_overlap: bool = True,
+    require_shared_dates: bool = False,
+) -> dict:
+    """Discover SonarX keys using shared-partition sampling per pair.
+
+    Both legs of each pair are sampled from the same partition set.
+    Returns inventory dict with per-pair overlap information.
+    """
+    # First, discover all keys for all unique legs (independent discovery)
+    unique_legs = []
+    seen = set()
+    for pair in pairs:
+        for leg in [pair.left_leg, pair.right_leg]:
+            if leg.api_symbol not in seen:
+                seen.add(leg.api_symbol)
+                unique_legs.append(leg)
+
+    all_keys: dict = {}  # api_symbol -> list of key dicts
+    zero_data_legs = []
+
+    for leg in unique_legs:
+        api_sym = leg.api_symbol
+        prefixes_to_try = [
+            f"{BASE_PREFIX_HIP3}{api_sym}/l2-summary-snapshots/",
+            f"{BASE_PREFIX_HIP3}{api_sym.replace(':', '%3A')}/l2-summary-snapshots/",
+        ]
+        found_keys = []
+        for prefix in prefixes_to_try:
+            try:
+                result = chokepoint.s3_list_prefix(
+                    BUCKET_NAME, prefix, requester_pays=True, max_keys=1000,
+                    include_subdirs=False,
+                )
+                if result.get("error_code"):
+                    continue
+                objects = result.get("objects", [])
+                found_keys.extend(objects)
+                if found_keys:
+                    break
+            except Exception:
+                continue
+        all_keys[api_sym] = found_keys[:max_files_per_leg]
+        if not found_keys:
+            zero_data_legs.append(api_sym)
+
+    # Now compute shared partitions per pair
+    inventory = {
+        "keys_available_by_leg": {
+            sym: {"total_keys": len(keys), "keys": keys[:10]}  # first 10 for inventory
+            for sym, keys in all_keys.items()
+        },
+        "selected_keys_by_leg": {},
+        "shared_date_inventory": {},
+        "requester_pays_acknowledged": True,
+        "zero_data_status_if_any": zero_data_legs,
+        "decode_failure_status_if_any": [],
+    }
+
+    no_overlap_pairs = []
+
+    for pair in pairs:
+        left_sym = pair.left_leg.api_symbol
+        right_sym = pair.right_leg.api_symbol
+        left_keys = all_keys.get(left_sym, [])
+        right_keys = all_keys.get(right_sym, [])
+
+        if not left_keys or not right_keys:
+            inventory["shared_date_inventory"][pair.pair_id] = {
+                "pair_id": pair.pair_id,
+                "overlap_unit_type": "partition",
+                "left_units_available": [],
+                "right_units_available": [],
+                "overlap_units": [],
+                "selected_overlap_units": [],
+                "sampled_units_identical": False,
+                "no_overlap_reason": "one_or_both_legs_have_no_keys",
+            }
+            no_overlap_pairs.append(pair.pair_id)
+            continue
+
+        shared = compute_shared_partitions_for_pair(
+            left_keys, right_keys,
+            max_overlap_units=max_overlap_units,
+            prefer_recent=prefer_recent_overlap,
+        )
+
+        selected_units = shared["selected_overlap_units"]
+
+        if not selected_units:
+            inventory["shared_date_inventory"][pair.pair_id] = {
+                "pair_id": pair.pair_id,
+                "overlap_unit_type": "partition",
+                "left_units_available": shared["left_units_available"],
+                "right_units_available": shared["right_units_available"],
+                "overlap_units": [],
+                "selected_overlap_units": [],
+                "sampled_units_identical": False,
+                "no_overlap_reason": "no_shared_partitions_between_legs",
+            }
+            no_overlap_pairs.append(pair.pair_id)
+            if require_shared_dates:
+                continue
+            # Fall back to independent sampling (legacy behavior)
+            inventory["selected_keys_by_leg"][left_sym] = left_keys[:max_files_per_leg]
+            inventory["selected_keys_by_leg"][right_sym] = right_keys[:max_files_per_leg]
+            continue
+
+        # Select balanced keys from shared partitions
+        left_selected = select_keys_from_shared_partitions(
+            shared["left_keys_by_unit"], selected_units,
+            max_files=max_files_per_leg,
+            min_files_per_unit=min_files_per_overlap_unit,
+        )
+        right_selected = select_keys_from_shared_partitions(
+            shared["right_keys_by_unit"], selected_units,
+            max_files=max_files_per_leg,
+            min_files_per_unit=min_files_per_overlap_unit,
+        )
+
+        inventory["selected_keys_by_leg"][left_sym] = left_selected
+        inventory["selected_keys_by_leg"][right_sym] = right_selected
+
+        # Left/right selected units should be identical (same partition set)
+        left_selected_units = sorted(set(
+            extract_partition_from_sonarx_key(
+                k.get("key", "") if isinstance(k, dict) else str(k)
+            )
+            for k in left_selected
+        ))
+        right_selected_units = sorted(set(
+            extract_partition_from_sonarx_key(
+                k.get("key", "") if isinstance(k, dict) else str(k)
+            )
+            for k in right_selected
+        ))
+
+        inventory["shared_date_inventory"][pair.pair_id] = {
+            "pair_id": pair.pair_id,
+            "left_api_symbol": left_sym,
+            "right_api_symbol": right_sym,
+            "overlap_unit_type": "partition",
+            "left_units_available": shared["left_units_available"],
+            "right_units_available": shared["right_units_available"],
+            "overlap_units": shared["overlap_units"],
+            "selected_overlap_units": selected_units,
+            "selected_unit_count": len(selected_units),
+            "left_selected_units": left_selected_units,
+            "right_selected_units": right_selected_units,
+            "left_keys_selected_by_unit": {
+                u: len(shared["left_keys_by_unit"].get(u, []))
+                for u in selected_units
+            },
+            "right_keys_selected_by_unit": {
+                u: len(shared["right_keys_by_unit"].get(u, []))
+                for u in selected_units
+            },
+            "left_selected_count": len(left_selected),
+            "right_selected_count": len(right_selected),
+            "sampled_units_identical": left_selected_units == right_selected_units,
+            "selection_mode": "shared_date",
+            "fallback_used": False,
+            "budget_limits": {
+                "max_files_per_leg": max_files_per_leg,
+                "max_overlap_units": max_overlap_units,
+            },
+            "requester_pays_acknowledged": True,
+        }
+
+    inventory["no_overlap_pairs"] = no_overlap_pairs
     return inventory
 
 
@@ -1579,28 +1886,77 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
         return 0
 
     # SonarX key discovery
-    unique_legs = []
-    seen_syms = set()
-    for pair in pairs:
-        for leg in [pair.left_leg, pair.right_leg]:
-            if leg.api_symbol not in seen_syms:
-                seen_syms.add(leg.api_symbol)
-                unique_legs.append(leg)
+    sample_mode = getattr(args, "sample_mode", "stratified")
+    write_inventory = getattr(args, "write_date_overlap_inventory", False)
+    require_shared = getattr(args, "require_shared_dates", False)
 
-    print(f"DISCOVERING_SONARX_KEYS for {len(unique_legs)} legs...", flush=True)
-    sonarx_inventory = discover_sonarx_keys(
-        chokepoint, unique_legs,
-        sample_days=args.sample_days,
-        max_files_per_leg=args.max_files_per_leg,
-    )
+    if sample_mode == "shared_date":
+        print(f"DISCOVERING_SONARX_KEYS (shared_date mode) for {len(pairs)} pairs...", flush=True)
+        sonarx_inventory = discover_sonarx_keys_shared_date(
+            chokepoint, pairs,
+            sample_days=args.sample_days,
+            max_files_per_leg=args.max_files_per_leg,
+            max_overlap_units=getattr(args, "max_overlap_dates", 7),
+            min_files_per_overlap_unit=getattr(args, "min_files_per_overlap_date", 1),
+            prefer_recent_overlap=getattr(args, "prefer_recent_overlap", True),
+            require_shared_dates=require_shared,
+        )
+        if write_inventory:
+            write_json(out_root / "cross_dex_shared_date_inventory.json", {
+                "shared_date_inventory": sonarx_inventory.get("shared_date_inventory", {}),
+                "no_overlap_pairs": sonarx_inventory.get("no_overlap_pairs", []),
+                "requester_pays_acknowledged": True,
+            })
+
+        # Check for no-overlap pairs
+        no_overlap = sonarx_inventory.get("no_overlap_pairs", [])
+        if no_overlap and require_shared:
+            write_json(out_root / "phase_minus1_status.json", {
+                "status": "HIP3_CROSS_DEX_NOARB_NO_OVERLAP_DATES",
+                "run_id": run_id,
+                "no_overlap_pairs": no_overlap,
+            })
+            write_json(out_root / "summary.json", {
+                "status": "NO_OVERLAP_DATES",
+                "run_id": run_id,
+                "no_overlap_pairs": no_overlap,
+                "no_pnl_no_returns_no_signals": True,
+            })
+            print(f"NO_OVERLAP_DATES: {no_overlap}", flush=True)
+            return 0
+    else:
+        # Legacy stratified mode (independent per-leg)
+        unique_legs = []
+        seen_syms = set()
+        for pair in pairs:
+            for leg in [pair.left_leg, pair.right_leg]:
+                if leg.api_symbol not in seen_syms:
+                    seen_syms.add(leg.api_symbol)
+                    unique_legs.append(leg)
+
+        print(f"DISCOVERING_SONARX_KEYS (stratified mode) for {len(unique_legs)} legs...", flush=True)
+        sonarx_inventory = discover_sonarx_keys(
+            chokepoint, unique_legs,
+            sample_days=args.sample_days,
+            max_files_per_leg=args.max_files_per_leg,
+        )
+
     write_json(out_root / "sonarx_key_inventory.json", sonarx_inventory)
     write_json(out_root / "sonarx_key_selection_plan.json", {
         "selected_keys_by_leg": sonarx_inventory.get("selected_keys_by_leg", {}),
+        "sample_mode": sample_mode,
         "requester_pays": True,
     })
 
     zero_data_legs = sonarx_inventory.get("zero_data_status_if_any", [])
-    if len(zero_data_legs) == len(unique_legs):
+    unique_legs_all = []
+    seen_all = set()
+    for pair in pairs:
+        for leg in [pair.left_leg, pair.right_leg]:
+            if leg.api_symbol not in seen_all:
+                seen_all.add(leg.api_symbol)
+                unique_legs_all.append(leg)
+    if len(zero_data_legs) == len(unique_legs_all):
         write_json(out_root / "phase_minus1_status.json", {
             "status": "HIP3_CROSS_DEX_NOARB_ZERO_DATA_SAMPLER_FAILURE",
             "run_id": run_id, "zero_data_legs": zero_data_legs,
@@ -1619,7 +1975,7 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
         "observed_file_sizes": sorted(all_sizes)[:100],
         "p50_file_size_bytes": percentile(sorted(all_sizes), 50.0) if all_sizes else 0,
         "p95_file_size_bytes": percentile(sorted(all_sizes), 95.0) if all_sizes else 0,
-        "planned_files_total": min(args.max_files_total, len(all_sizes) * len(unique_legs)) if all_sizes else 0,
+        "planned_files_total": min(args.max_files_total, len(all_sizes) * len(unique_legs_all)) if all_sizes else 0,
         "requested_download_budget_bytes": args.download_budget_bytes,
         "budget_sufficient": True,
     }
@@ -1630,11 +1986,15 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
     write_json(out_root / "download_budget_calibration.json", budget)
 
     if args.coverage_only:
+        cov_status = ("HIP3_CROSS_DEX_NOARB_SHARED_DATE_COVERAGE_READY"
+                       if sample_mode == "shared_date"
+                       else "HIP3_CROSS_DEX_NOARB_COVERAGE_READY")
         write_json(out_root / "phase_minus1_status.json", {
-            "status": "HIP3_CROSS_DEX_NOARB_COVERAGE_READY",
+            "status": cov_status,
             "run_id": run_id,
+            "sample_mode": sample_mode,
         })
-        print(f"COVERAGE_READY: {run_id}", flush=True)
+        print(f"COVERAGE_READY ({sample_mode}): {run_id}", flush=True)
         return 0
 
     # Download and parse L2
@@ -1642,7 +2002,7 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
     decode_failures = []
     leg_snapshots = defaultdict(list)
 
-    for leg in unique_legs:
+    for leg in unique_legs_all:
         selected = sonarx_inventory.get("selected_keys_by_leg", {}).get(leg.api_symbol, [])
         count = 0
         for obj in selected:
@@ -1694,6 +2054,7 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
     alignment_mode = getattr(args, "alignment_mode", "nearest")
     max_gap = getattr(args, "max_align_gap_seconds", 60.0)
     min_aligned = getattr(args, "min_aligned_observations", 50)
+    shared_inv = sonarx_inventory.get("shared_date_inventory", {})
 
     for pair in pairs:
         left_snaps = leg_snapshots.get(pair.left_leg.api_symbol, [])
@@ -1713,6 +2074,20 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
             max_align_gap_seconds=max_gap,
         )
         alignment_diagnostics[pair.pair_id] = diag
+        # Augment with shared-date info
+        if pair.pair_id in shared_inv:
+            si = shared_inv[pair.pair_id]
+            diag["selected_overlap_units"] = si.get("selected_overlap_units", [])
+            diag["left_selected_units"] = si.get("left_selected_units", [])
+            diag["right_selected_units"] = si.get("right_selected_units", [])
+            diag["sampled_units_identical"] = si.get("sampled_units_identical", False)
+            diag["overlap_unit_type"] = si.get("overlap_unit_type", "partition")
+            if not si.get("sampled_units_identical", False):
+                diag["alignment_failure_root_cause"] = "sampler_selected_different_units_for_legs"
+            elif diag.get("alignment_failure_reason") and si.get("overlap_units"):
+                diag["alignment_failure_root_cause"] = (
+                    f"shared_units_selected_but_{diag['alignment_failure_reason']}"
+                )
 
         for o in obs:
             all_obs_dicts.append({
@@ -1803,6 +2178,7 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
         "pairs_attempted": len(pairs),
         "pairs_data_bearing": len([s for s in pair_summaries if s.aligned_observation_count > 0]),
         "pairs_aligned": len([s for s in pair_summaries if s.aligned_observation_count >= min_aligned]),
+        "sample_mode": sample_mode,
         "alignment_mode": alignment_mode,
         "min_aligned_observations": min_aligned,
         "conservative_noarb_band_bps": noarb_band_bps,
@@ -1816,18 +2192,40 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
         "limitations": decision.limitations,
         "no_pnl_no_returns_no_signals_confirmation": True,
     }
-    for ps in pair_summaries:
-        noarb_summary["classification_by_pair"][ps.pair_id] = {
-            "aligned": ps.aligned_observation_count,
-            "classification": ps.gate_status if ps.gate_status != "PENDING" else "evaluated",
+    # Add shared-date inventory summary if available
+    shared_inv = sonarx_inventory.get("shared_date_inventory", {})
+    if shared_inv:
+        noarb_summary["pairs_with_shared_units"] = len([
+            p for p, v in shared_inv.items()
+            if v.get("sampled_units_identical", False)
+        ])
+        noarb_summary["selected_overlap_units_by_pair"] = {
+            p: v.get("selected_overlap_units", [])
+            for p, v in shared_inv.items()
         }
+        noarb_summary["sampled_units_identical_by_pair"] = {
+            p: v.get("sampled_units_identical", False)
+            for p, v in shared_inv.items()
+        }
+    for ps in pair_summaries:
+        pair_class = ps.gate_status if ps.gate_status != "PENDING" else "evaluated"
+        pair_entry = {
+            "aligned": ps.aligned_observation_count,
+            "classification": pair_class,
+        }
+        # Attach shared-date info per pair
+        if ps.pair_id in shared_inv:
+            si = shared_inv[ps.pair_id]
+            pair_entry["selected_overlap_units"] = si.get("selected_overlap_units", [])
+            pair_entry["sampled_units_identical"] = si.get("sampled_units_identical", False)
+        noarb_summary["classification_by_pair"][ps.pair_id] = pair_entry
     write_json(out_root / "cross_dex_noarb_band_summary.json", noarb_summary)
 
     # Pair diagnostics
     pair_diag = {}
     for ps in pair_summaries:
         d = alignment_diagnostics.get(ps.pair_id, {})
-        pair_diag[ps.pair_id] = {
+        diag_entry = {
             "pair_id": ps.pair_id,
             "left_api_symbol": ps.pair_id.split("|")[0] if "|" in ps.pair_id else "",
             "right_api_symbol": ps.pair_id.split("|")[1] if "|" in ps.pair_id else "",
@@ -1852,6 +2250,16 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
             "classification": "within_band" if ps.p95_excess_over_noarb_band_bps <= 0 else "outside_band_diagnostic",
             "limitations": [],
         }
+        # Attach shared-date info
+        if ps.pair_id in shared_inv:
+            si = shared_inv[ps.pair_id]
+            diag_entry["selected_overlap_units"] = si.get("selected_overlap_units", [])
+            diag_entry["sampled_units_identical"] = si.get("sampled_units_identical", False)
+            diag_entry["left_selected_units"] = si.get("left_selected_units", [])
+            diag_entry["right_selected_units"] = si.get("right_selected_units", [])
+            if not si.get("sampled_units_identical", False):
+                diag_entry["alignment_failure_root_cause"] = "sampler_selected_different_units_for_legs"
+        pair_diag[ps.pair_id] = diag_entry
     write_json(out_root / "cross_dex_noarb_pair_diagnostics.json", pair_diag)
 
     # Summary markdown
@@ -1877,7 +2285,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--coverage-only", action="store_true")
     p.add_argument("--real-smoke", action="store_true")
     p.add_argument("--sample-days", type=int, default=30)
-    p.add_argument("--sample-mode", default="stratified")
+    p.add_argument("--sample-mode", default="stratified",
+                    choices=["stratified", "shared_date"],
+                    help="stratified: independent per-leg sampling (legacy); shared_date: both legs from same partition set")
+    p.add_argument("--max-overlap-dates", type=int, default=7,
+                    help="Max shared partition units to select per pair in shared_date mode")
+    p.add_argument("--min-files-per-overlap-date", type=int, default=1,
+                    help="Min files to select from each shared partition unit")
+    p.add_argument("--prefer-recent-overlap", action="store_true", default=True,
+                    help="Prefer recent shared partition units (default: True)")
+    p.add_argument("--require-shared-dates", action="store_true",
+                    help="Stop with NO_OVERLAP_DATES if no shared partitions exist for a pair")
+    p.add_argument("--write-date-overlap-inventory", action="store_true",
+                    help="Write cross_dex_shared_date_inventory.json artifact")
     p.add_argument("--max-files-per-leg", type=int, default=200)
     p.add_argument("--max-files-total", type=int, default=800)
     p.add_argument("--download-budget-bytes", type=int, default=4_000_000_000)
