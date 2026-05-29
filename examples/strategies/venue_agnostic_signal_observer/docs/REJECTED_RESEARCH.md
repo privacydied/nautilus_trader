@@ -1230,3 +1230,81 @@ If reopened, the next step must be a symbol-specific builder-confirmation/archiv
 
 **Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, bot path, systemd, registry mutation, precommitment unlock, conductor promotion, or paper strategy promotion were used. All S3 reads were bounded requester-pays behind --allow-s3-archive-read. No PnL, basis, residual, or strategy evaluation was performed.
 
+
+---
+
+### HIP-3 Builder-DEX Anchor-Free Cross-DEX No-Arb Spread — Scoped NULL
+
+**Tag:** `hip3-builder-dex-cross-dex-noarb-spread-scoped-null-v0`
+
+**Status:** `NULL / CROSS_DEX_SPREAD_WITHIN_CONSERVATIVE_NOARB_BAND`
+
+**Date:** 2026-05-29
+
+**Branch:** `feat/hip3-cross-dex-noarb-band-phase-minus1-v0`
+
+**What this is:**
+- A Phase -1 data-plane feasibility study comparing cross-DEX mid-price spreads for HIP-3 builder-deployed TradFi symbols
+- Anchor-free comparison of two builder DEXes directly using SonarX L2 summary snapshots
+- Conservative no-arb band analysis with four-fill fee awareness
+
+**What this is NOT:**
+- NOT a PnL result
+- NOT a backtest result
+- NOT a strategy result
+- NOT a profitability claim
+- NOT a trade-readiness claim
+- NOT a Phase 0 precommitment
+- NOT an authorization for paper/conductor/live promotion
+
+**Synchronized TSLA result (`cash:TSLA|km:TSLA`):**
+- 1000 aligned observations (exact, 3 shared partitions)
+- p95 absolute cross-mid spread: 8.17 bps
+- Conservative no-arb band: 57 bps
+- p95 excess over no-arb band: -48.83 bps
+- Classification: `HIP3_CROSS_DEX_NOARB_SPREAD_WITHIN_BAND`
+
+**Synchronized NVDA result (`cash:NVDA|xyz:NVDA`):**
+- 5050 aligned observations (exact, 11 shared partitions)
+- p95 absolute cross-mid spread: 8.16 bps
+- Conservative no-arb band: 57 bps
+- p95 excess over no-arb band: -48.84 bps
+- Classification: `HIP3_CROSS_DEX_NOARB_SPREAD_WITHIN_BAND`
+- Duplication sanity: LOW risk (API symbols distinct, mids differ in 98.6% of obs)
+
+**NVDA `cash:NVDA|km:NVDA`:**
+- NOT tested as a market result
+- Full-range SonarX partitions do not overlap (cash: range 885810000-886810000, km: range 902750000-903830000)
+- This is a real pair-specific archive coverage gap, not a sampler defect
+
+**`flx` exclusion:**
+- Excluded because prior replica_cmds evidence supported stale/sparse oracle artifact
+- See: `flx:TSLA` Phase -1 audit showing +133bps oracle deviation converging to -15bps
+
+**Scope — what this closes:**
+- This specific anchor-free cross-DEX no-arb Phase -1 branch for tested pairs (TSLA cash|km, NVDA cash|xyz)
+- Does NOT close all HIP-3 builder DEX research
+- Does NOT close future data sources, different symbols, or different mechanisms
+- Does NOT close NVDA cash|km testing if better archive coverage becomes available
+
+**Boundary — what this does NOT close:**
+- Other TradFi symbols not tested
+- Different DEX combinations not tested
+- Phase 0 precommitment on any symbol
+- Future data sources or archive expansions
+- Different alignment tolerances or fee assumptions
+
+**Reopen conditions:**
+1. Lower verified fee band (actual fee data instead of fallback conservative)
+2. Better overlapping archive coverage for untested pairs
+3. New active DEX pair with recurrent spread outside no-arb band
+4. Non-duplicated data source with confirmed tails
+5. Longer sample with clean reversion and depth
+
+**Artifact paths:**
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/20260529_084004_12e4e4d1/` (TSLA synchronized run)
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/20260529_090531_32f42bc3/` (NVDA synchronized run)
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/nvda_full_partition_intersection_audit.json` (NVDA partition audit)
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/nvda_cash_xyz_duplication_sanity_audit.json` (duplication sanity)
+
+**Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, paper broker, conductor promotion, wallet, signing, or exchange account endpoints were used. All S3 reads were bounded requester-pays behind --allow-s3-archive-read. No PnL, returns, Sharpe, profit factor, win rate, trade signals, entries/exits, or position sizing were computed. No strategy backtest was run. No Phase 0 precommitment was made. No registry mutation occurred during the diagnostic runs.
