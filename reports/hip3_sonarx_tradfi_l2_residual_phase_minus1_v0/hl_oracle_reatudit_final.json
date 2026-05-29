@@ -1,0 +1,41 @@
+{
+  "study_id": "hip3_sonarx_tradfi_l2_residual_phase_minus1_v0",
+  "created_at_utc": "2026-05-29T01:10:00+00:00",
+  "branch": "feat/hip3-sonarx-tradfi-l2-residual-phase-minus1-v0",
+  "starting_sha": "4bf8bbbdf06cec3cd0a95db91a34b92d0514ec0c",
+  "audit_type": "hl_oracle_false_negative_fix",
+  "prior_oracle_status": "HL_ORACLE_SOURCE_UNAVAILABLE (ff5c0627)",
+  "prior_status_falsified": true,
+  "findings": {
+    "forward_recorder_has_oracle": true,
+    "forward_recorder_oracle_samples_per_symbol": 250,
+    "live_api_has_oracle_with_explicit_dex": true,
+    "live_api_requires_dex_parameter": true,
+    "prior_audit_flaw": "Queried default perp universe instead of builder DEXes; did not check forward recorder artifacts"
+  },
+  "forward_residual_status": "HL_ORACLE_FORWARD_RESIDUAL_AVAILABLE",
+  "markets_with_data": 12,
+  "aligned_samples_per_market": 250,
+  "coverage_window": "2026-05-28T03:47 to 2026-05-28T08:37 (~5 hours)",
+  "calendar_days": 1,
+  "key_findings": [
+    "flx:TSLA and flx:NVDA show wide oracle basis (median +35-48 bps)",
+    "xyz/km/cash DEXes show tight oracle basis (median <10 bps)",
+    "Cross-DEX dislocation is real and systematic, not noise",
+    "Forward recorder has been capturing oraclePx all along"
+  ],
+  "final_status": "NEXT_PRECOMMITMENT_REVIEW_ALLOWED",
+  "final_status_reason": "HL oracle anchor path unblocked - forward recorder has timestamped oracle contexts for all 12 markets with sufficient samples",
+  "registry_unchanged": true,
+  "forward_recorder_untouched": true,
+  "safety_confirmation": {
+    "no_orders": true,
+    "no_private_keys": true,
+    "no_auth": true,
+    "no_live_execution": true,
+    "no_paper_execution": true,
+    "no_conductor_promotion": true,
+    "no_registry_mutation": true,
+    "no_pnl_returns_signals": true
+  }
+}

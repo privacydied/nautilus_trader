@@ -1,0 +1,90 @@
+{
+  "audit_symbols": [
+    "cash:TSLA",
+    "xyz:NVDA"
+  ],
+  "branch": "feat/hyperliquid-btc-eth-ml-atr-node-fills-probe-v0",
+  "command_args": {
+    "allow_daily_stale_anchor_diagnostic": false,
+    "allow_network_public": true,
+    "allow_s3_archive_read": true,
+    "anchor_alignment_mode": "exact_or_previous_anchor",
+    "anchor_backoff_base_seconds": 2,
+    "anchor_cache_dir": null,
+    "anchor_cache_ttl_seconds": 900,
+    "anchor_max_retries": 2,
+    "anchor_source": "yahoo",
+    "anchor_timeout_seconds": 20,
+    "download_budget_bytes": 25000000,
+    "dry_run": false,
+    "enable_anchors": false,
+    "enable_candle_join": true,
+    "markets": "cash:TSLA,xyz:NVDA",
+    "max_anchor_staleness_minutes": 15,
+    "max_files_per_market": 2,
+    "max_markets": 2,
+    "out_root": "reports/hip3_sonarx_tradfi_l2_residual_phase_minus1_v0",
+    "real_smoke": false,
+    "s3_connect_timeout_seconds": 10,
+    "s3_max_attempts": 2,
+    "s3_read_timeout_seconds": 30,
+    "sample_days": 1,
+    "sample_mode": "stratified",
+    "study_id": "hip3_sonarx_tradfi_l2_residual_phase_minus1_v0"
+  },
+  "created_at_utc": "2026-05-28T22:23:54+00:00",
+  "executable_l2_summary": true,
+  "formats_tested": [
+    {
+      "name": "dex_qualified_req_wrapper",
+      "template": "req: {coin: dex:SYMBOL, interval, startTime, endTime}"
+    },
+    {
+      "name": "bare_coin_req_wrapper",
+      "template": "req: {coin: SYMBOL, interval, startTime, endTime}"
+    }
+  ],
+  "full_depth_l2": false,
+  "git_dirty": false,
+  "git_sha": "e5efe64a412b906edb53c485d3dc3062c614ddf4",
+  "no_orders_no_auth_no_live_confirmation": true,
+  "official_hyperliquid_candleSnapshot_used": true,
+  "official_hyperliquid_s3": false,
+  "overall_status": "CANDLE_SNAPSHOT_AVAILABLE",
+  "repo_root": "/mnt/nasirjones/py/nautilus_trader/.worktrees/hip3-residual-validation",
+  "results": [
+    {
+      "api_symbol": "cash:TSLA",
+      "bars_returned": 47,
+      "dex": "cash",
+      "display_symbol": "TSLA",
+      "earliest_bar_timestamp": 0,
+      "error_class": null,
+      "error_text_excerpt": null,
+      "http_status": 200,
+      "interval": "1h",
+      "latest_bar_timestamp": 0,
+      "rate_limited": false,
+      "request_body_hash": "a67f0a5802ffd029",
+      "request_body_redacted": {
+        "req": {
+          "coin": "cash:TSLA",
+          "endTime": 1780007034437,
+          "interval": "1h",
+          "startTime": 1779840000437
+        },
+        "type": "candleSnapshot"
+      },
+      "request_format_name": "dex_qualified_req_wrapper",
+      "request_format_valid": true,
+      "status": "CANDLE_SNAPSHOT_AVAILABLE"
+    }
+  ],
+  "run_id": "a2b7da16",
+  "safety_mode": "public_data_observer_only",
+  "source_class": "third_party_public_l2_summary_archive",
+  "source_name": "sonarx_hyperliquid_public_l2_summary",
+  "study_id": "hip3_sonarx_tradfi_l2_residual_phase_minus1_v0",
+  "top_levels_per_side": 20,
+  "winning_format": "dex_qualified_req_wrapper"
+}

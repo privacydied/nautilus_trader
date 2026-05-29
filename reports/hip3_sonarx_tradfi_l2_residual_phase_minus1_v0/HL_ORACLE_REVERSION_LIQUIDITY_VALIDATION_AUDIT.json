@@ -1,0 +1,69 @@
+{
+  "study_id": "hip3_sonarx_tradfi_l2_residual_phase_minus1_v0",
+  "audit_type": "oracle_residual_validation_phase_minus1",
+  "created_at": "2026-05-29T00:47:41.297369Z",
+  "data_source": {
+    "forward_recorder_file": "/mnt/nasirjones/py/nautilus_trader/reports/hip3_builder_dex_tradfi_forward_recorder_v0/9b41ea53/asset_context_snapshots/20260528.jsonl",
+    "Date_range": "2026-05-28T03:47:24Z to 2026-05-28T08:37:52Z",
+    "oracle_bearing_days": 1,
+    "total_rows": 3000,
+    "rows_per_symbol": 250
+  },
+  "critical_findings": {
+    "flx_oracle_displacement": {
+      "description": "flx:TSLA and flx:NVDA residuals driven by oracle feed discrepancy, not mid-price dislocation",
+      "initial_deviation_bps": "+133bps (flx oracle vs xyz oracle at session start)",
+      "final_deviation_bps": "-15bps (flx oracle vs xyz oracle at session end)",
+      "convergence_pattern": "Gradual convergence over ~5 hour session"
+    },
+    "other_dex_oracle_consistency": {
+      "xyz_km_cash": "Oracle prices track within \u00b120bps across these DEXes",
+      "cash_systematic_offset": "cash:TSLA oracle shows consistent +15-18bps vs xyz (methodology difference?)"
+    },
+    "mid_price_behavior": {
+      "flx_mid_vs_xyz_oracle": "flx mid price tracks xyz oracle reasonably throughout",
+      "apparent_residual_cause": "mid - flx_oracle appears large due to flx_oracle displacement, not mid anomaly"
+    }
+  },
+  "reversion_classification": {
+    "flx_tsla": "PERSISTENT_ORACLE_LEVEL_SHIFT_NOT_REVERSION",
+    "flx_nvda": "PERSISTENT_ORACLE_LEVEL_SHIFT_NOT_REVERSION",
+    "reason": "Residual pattern reflects oracle feed convergence, not mean-reverting basis",
+    "excursions_detected": 2,
+    "excursion_interpretation": "Transition period from negative to positive oracle regime, NOT reversion around zero"
+  },
+  "single_day_limitation": {
+    "oracle_bearing_days": 1,
+    "implication": "Cannot determine if oracle displacement is persistent cross-day or single-day artifact",
+    "status": "FORWARD_RESIDUAL_SINGLE_DAY_DIAGNOSTIC"
+  },
+  "validation_verdict": {
+    "raw_data_integrity": "PASSED - 250 rows per symbol, no duplicates, all fields present",
+    "symbol_mapping": "PASSED - All 12 target symbols present and correctly keyed",
+    "residual_recompute": "MATCHED - Independent recompute confirms diagnostic values",
+    "reversion_pattern": "NOT_CONFIRMED - Pattern reflects oracle level shift, not tradeable reversion",
+    "liquidity_validation": "NOT_PERFORMED - Requires SonarX L2 join (Step 10)",
+    "overall_status": "HL_ORACLE_CROSS_DEX_DISLOCATION_UNCONFIRMED",
+    "precommitment_review_allowed": false,
+    "reason": "Residual driven by oracle feed discrepancy, not mid-price dislocation. Single-day data insufficient for mature validation."
+  },
+  "recommended_next_steps": [
+    "Verify flx oracle feed source and methodology vs xyz/km/cash",
+    "Check if flx oracle displacement persists across multiple days",
+    "Determine if cash:TSLA +15bps systematic oracle offset is expected",
+    "Only after oracle behavior understood, proceed to L2 liquidity join",
+    "Do NOT treat oracle artifact as tradeable basis without Oracle methodology reconciliation"
+  ],
+  "safety_declaration": {
+    "no_orders": true,
+    "no_private_keys": true,
+    "no_auth": true,
+    "no_execution": true,
+    "no_pnl": true,
+    "no_returns": true,
+    "no_signals": true,
+    "registry_unchanged": true,
+    "forward_recorder_untouched": true,
+    "public_data_only": true
+  }
+}
