@@ -140,6 +140,15 @@ ALLOWED_STATUSES = frozenset({
     "REPLICA_CMDS_TARGET_BLOCK_NOT_FOUND",
     "REPLICA_CMDS_FULL_FILE_SIZE_CAP_EXCEEDED",
     "REPLICA_CMDS_FULL_FILE_DECODE_FAILED",
+    # FLX frequency confirmation statuses
+    "FLX_SETORACLE_FOUND_BOUNDED_RECON",
+    "FLX_SETORACLE_NOT_FOUND_IN_BOUNDED_SAMPLE",
+    "FLX_SETORACLE_HUNT_UNDERPOWERED",
+    "FLX_SETORACLE_PERSISTENTLY_ABSENT_IN_SAMPLE",
+    "FLX_STALE_ORACLE_ARTIFACT_SUPPORTED",
+    "ORACLE_BASIS_EDGE_UNLIKELY_MECHANISM_DIAGNOSTIC",
+    "CROSS_DEX_SPREAD_PIVOT_RECOMMENDED",
+    "REPLICA_CMDS_FULL_FILE_HUNT_COMPLETE",
 })
 
 FORBIDDEN_STATUSES = frozenset({
@@ -244,6 +253,13 @@ class ReplicaCmdsProbeConfig:
     max_full_file_bytes: int = 1_500_000_000
     perpdeploy_histogram_only: bool = False
     stop_after_setoracle_payloads: Optional[int] = None
+    # FLX frequency confirmation mode
+    flx_frequency_confirmation: bool = False
+    target_dates: List[str] = field(default_factory=list)
+    max_full_files_per_date: int = 2
+    max_full_files_total: int = 8
+    stop_on_flx_found: bool = True
+    continue_after_flx_found: bool = False
 
     @property
     def api_symbols(self) -> set:
@@ -2381,6 +2397,19 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Hard cap on full-file object size for decode (default 1.5GB)")
     p.add_argument("--perpdeploy-histogram-only", action="store_true", default=False,
                     help="Skip irrelevant steps, only extract action taxonomy + perpDeploy.setOracle summaries")
+    # FLX frequency confirmation mode
+    p.add_argument("--flx-frequency-confirmation", action="store_true", default=False,
+                    help="Run bounded multi-date FLX oracle update frequency diagnostic")
+    p.add_argument("--target-dates", type=str, default=None,
+                    help="Comma-separated target dates YYYY-MM-DD (e.g. 2026-05-27,2026-05-28)")
+    p.add_argument("--max-full-files-per-date", type=int, default=2,
+                    help="Max full files to decode per date (default 2)")
+    p.add_argument("--max-full-files-total", type=int, default=8,
+                    help="Max total full files across all dates (default 8)")
+    p.add_argument("--stop-on-flx-found", action="store_true", default=True,
+                    help="Stop early when flx:TSLA or flx:NVDA is found")
+    p.add_argument("--continue-after-flx-found", action="store_true", default=False,
+                    help="Continue scanning even after flx is found")
     # S3 / network flags
     p.add_argument("--allow-s3-archive-read", action="store_true", default=False,
                     help="Allow S3 archive reads (requester-pays)")
@@ -2392,6 +2421,503 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--s3-read-timeout-seconds", type=int, default=30)
     p.add_argument("--s3-max-attempts", type=int, default=2)
     return p
+
+
+# ---------------------------------------------------------------------------
+# FLX frequency confirmation: multi-date bounded oracle-frequency diagnostic
+# ---------------------------------------------------------------------------
+
+def run_flx_frequency_confirmation(
+    chokepoint,
+    config: ReplicaCmdsProbeConfig,
+    budget: RuntimeBudgetState,
+    run_id: str,
+    run_dir: Path,
+) -> Tuple[str, Optional[str], List[str]]:
+    """Run bounded multi-date FLX oracle update frequency confirmation.
+
+    Returns (final_status, final_reason, artifacts_written).
+    """
+    import datetime as _dt_mod
+    artifacts: List[str] = []
+    progress_rows: List[dict] = []
+
+    # Aggregate accumulators
+    agg_dex_counts: Dict[str, int] = defaultdict(int)
+    agg_oracle_pxs_by_dex: Dict[str, int] = defaultdict(int)
+    agg_markets_by_dex: Dict[str, set] = defaultdict(set)
+    agg_files_with_dex: Dict[str, int] = defaultdict(int)
+    agg_dates_with_dex: Dict[str, set] = defaultdict(set)
+    total_bytes = 0
+    total_records = 0
+    total_perpdeploy = 0
+    total_setoracle = 0
+    total_oraclepxs = 0
+    total_action_bundles = 0
+    files_processed = 0
+    files_selected_by_date: Dict[str, List[str]] = {}
+    files_processed_by_date: Dict[str, List[str]] = {}
+    dex_dist_by_file: Dict[str, Dict[str, int]] = {}
+    dex_dist_by_date: Dict[str, Dict[str, int]] = {}
+    flx_tsla_found = False
+    flx_nvda_found = False
+    flx_any_found = False
+    flx_candidate_files: List[str] = []
+    flx_candidate_dates: List[str] = []
+    flx_candidate_payloads: List[dict] = []
+    cash_tsla_found = False
+    cash_nvda_found = False
+    km_controls_found = False
+    para_seen = False
+    xyz_seen = False
+    stop_reason = None
+    dates_processed: List[str] = []
+
+    for date_str in config.target_dates:
+        if flx_any_found and config.stop_on_flx_found and not config.continue_after_flx_found:
+            break
+        if not budget.check_deadline():
+            stop_reason = "runtime_budget_exceeded"
+            break
+        if files_processed >= config.max_full_files_total:
+            stop_reason = "max_full_files_total_reached"
+            break
+
+        date_yyyymmdd = date_str.replace("-", "")
+        print(f"FLX_FREQ_DATE date={date_str} yyyymmdd={date_yyyymmdd}")
+
+        # Create per-date config
+        date_config = ReplicaCmdsProbeConfig(
+            out_root=config.out_root,
+            target_date=date_str,
+            markets=config.markets,
+            dexes=config.dexes,
+            max_replica_files=config.max_full_files_per_date * 2,
+            download_budget_bytes=config.download_budget_bytes,
+            max_oracle_commands=config.max_oracle_commands,
+            max_runtime_minutes=config.max_runtime_minutes,
+            dry_run=False,
+            recon_only=True,
+            validate_overlap=False,
+            backfill_after_validation=False,
+            keep_raw=False,
+            source=config.source,
+            decode_full_file=True,
+            target_block=None,
+            block_selection="first",
+            max_full_file_bytes=config.max_full_file_bytes,
+            perpdeploy_histogram_only=False,
+        )
+
+        # Probe S3 inventory for this date
+        try:
+            inventory = probe_s3_inventory(chokepoint, date_config, budget)
+        except Exception as e:
+            print(f"FLX_FREQ_INVENTORY_ERROR date={date_str} error={e}")
+            continue
+
+        if not inventory.source_accessible or not inventory.candidate_keys:
+            print(f"FLX_FREQ_NO_KEYS date={date_str} accessible={inventory.source_accessible} keys={len(inventory.candidate_keys)}")
+            continue
+
+        # Select up to max_full_files_per_date keys
+        selected_keys = inventory.candidate_keys[:config.max_full_files_per_date]
+        remaining_budget = config.max_full_files_total - files_processed
+        selected_keys = selected_keys[:remaining_budget]
+        files_selected_by_date[date_str] = selected_keys
+        files_processed_by_date.setdefault(date_str, [])
+        dex_dist_by_date.setdefault(date_str, defaultdict(int))
+
+        print(f"FLX_FREQ_SELECTED date={date_str} keys={len(selected_keys)}")
+
+        for sk in selected_keys:
+            if flx_any_found and config.stop_on_flx_found and not config.continue_after_flx_found:
+                break
+            if not budget.check_deadline():
+                stop_reason = "runtime_budget_exceeded"
+                break
+            if files_processed >= config.max_full_files_total:
+                stop_reason = "max_full_files_total_reached"
+                break
+
+            # Decode full file
+            print(f"FLX_FREQ_FILE file_index={files_processed} source_key={sk}")
+            file_config = ReplicaCmdsProbeConfig(
+                out_root=config.out_root,
+                target_date=date_str,
+                markets=config.markets,
+                dexes=config.dexes,
+                max_replica_files=1,
+                download_budget_bytes=config.download_budget_bytes,
+                max_oracle_commands=config.max_oracle_commands,
+                max_runtime_minutes=config.max_runtime_minutes,
+                dry_run=False,
+                recon_only=True,
+                validate_overlap=False,
+                backfill_after_validation=False,
+                keep_raw=False,
+                source=config.source,
+                decode_full_file=True,
+                target_block=None,
+                block_selection="first",
+                max_full_file_bytes=config.max_full_file_bytes,
+                perpdeploy_histogram_only=False,
+            )
+            histogram = build_full_file_histogram(
+                chokepoint, file_config, sk, 0, budget,
+            )
+
+            files_processed += 1
+            files_processed_by_date[date_str].append(sk)
+            total_bytes += histogram.bytes_downloaded
+            total_records += histogram.records_decoded
+            total_perpdeploy += histogram.perpDeploy_count
+            total_setoracle += histogram.setOracle_payload_count
+            total_oraclepxs += histogram.oraclePxs_pair_count
+            total_action_bundles += histogram.action_bundles_seen
+
+            # Per-file DEX distribution
+            file_dex_dist = dict(histogram.setOracle_payloads_by_dex)
+            dex_dist_by_file[sk] = file_dex_dist
+
+            # Aggregate
+            for dex, count in histogram.setOracle_payloads_by_dex.items():
+                agg_dex_counts[dex] += count
+                agg_oracle_pxs_by_dex[dex] += histogram.oraclePxs_pairs_by_dex.get(dex, 0)
+                agg_files_with_dex[dex] += 1
+                agg_dates_with_dex[dex].add(date_str)
+                dex_dist_by_date[date_str][dex] += count
+            for dex, mkts in histogram.markets_seen_by_dex.items():
+                agg_markets_by_dex[dex].update(mkts)
+
+            # Track target market status
+            if histogram.flx_tsla_found:
+                flx_tsla_found = True
+                flx_any_found = True
+                flx_candidate_files.append(sk)
+                flx_candidate_dates.append(date_str)
+            if histogram.flx_nvda_found:
+                flx_nvda_found = True
+                flx_any_found = True
+                flx_candidate_files.append(sk)
+                flx_candidate_dates.append(date_str)
+            if histogram.cash_tsla_found:
+                cash_tsla_found = True
+            if histogram.cash_nvda_found:
+                cash_nvda_found = True
+            if histogram.km_seen:
+                km_controls_found = True
+            if "para" in histogram.setOracle_payloads_by_dex:
+                para_seen = True
+            if "xyz" in histogram.setOracle_payloads_by_dex:
+                xyz_seen = True
+
+            # FLX candidate payloads
+            if histogram.flx_seen:
+                flx_cands = histogram.bounded_candidate_examples_by_dex.get("flx", [])
+                flx_candidate_payloads.extend(flx_cands)
+
+            # Progress line
+            progress_row = {
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "file_index": files_processed - 1,
+                "source_key": sk,
+                "date": date_str,
+                "bytes_downloaded": histogram.bytes_downloaded,
+                "records_decoded": histogram.records_decoded,
+                "perpdeploy_count": histogram.perpDeploy_count,
+                "setoracle_payload_count": histogram.setOracle_payload_count,
+                "oraclepxs_pair_count": histogram.oraclePxs_pair_count,
+                "dexes_seen": histogram.dexes_seen,
+                "dex_distribution": file_dex_dist,
+                "flx_found_so_far": flx_any_found,
+                "stop_reason_if_any": stop_reason,
+            }
+            progress_rows.append(progress_row)
+            print(f"FLX_FREQ_PROGRESS file={sk} date={date_str} "
+                  f"perpDeploy={histogram.perpDeploy_count} setOracle={histogram.setOracle_payload_count} "
+                  f"flx_seen={histogram.flx_seen} dexes={histogram.dexes_seen}")
+
+            # Write per-file progress
+            _write_jsonl_rows(run_dir / "flx_frequency_progress.jsonl", progress_rows)
+
+    # Mark dates as processed
+    dates_processed = sorted(files_processed_by_date.keys())
+
+    # Compute update frequency by DEX
+    update_freq_by_dex: Dict[str, dict] = {}
+    for dex in sorted(agg_dex_counts.keys()):
+        count = agg_dex_counts[dex]
+        n_files = agg_files_with_dex.get(dex, 0)
+        n_dates = len(agg_dates_with_dex.get(dex, set()))
+        update_freq_by_dex[dex] = {
+            "setoracle_payload_count": count,
+            "oraclePxs_pair_count": agg_oracle_pxs_by_dex.get(dex, 0),
+            "market_count": len(agg_markets_by_dex.get(dex, set())),
+            "files_containing_dex": n_files,
+            "dates_containing_dex": n_dates,
+        }
+
+    # Classify final status
+    flx_seen_count = agg_dex_counts.get("flx", 0)
+    cash_seen_count = agg_dex_counts.get("cash", 0)
+    km_seen_count = agg_dex_counts.get("km", 0)
+    para_seen_count = agg_dex_counts.get("para", 0)
+    xyz_seen_count = agg_dex_counts.get("xyz", 0)
+
+    if flx_any_found:
+        final_status = "FLX_SETORACLE_FOUND_BOUNDED_RECON"
+        final_reason = None
+    elif files_processed == 0:
+        final_status = "FLX_SETORACLE_HUNT_UNDERPOWERED"
+        final_reason = "no_files_processed"
+    elif flx_seen_count == 0 and (cash_seen_count + km_seen_count + para_seen_count) > 0:
+        # FLX persistently absent while other DEXes active
+        if files_processed >= 4 and total_oraclepxs >= 5000:
+            final_status = "FLX_STALE_ORACLE_ARTIFACT_SUPPORTED"
+            final_reason = "flx_persistently_absent_while_cash_km_para_active"
+        else:
+            final_status = "FLX_SETORACLE_PERSISTENTLY_ABSENT_IN_SAMPLE"
+            final_reason = "flx_absent_in_bounded_sample_insufficient_for_staleness_claim"
+    elif flx_seen_count == 0 and (cash_seen_count + km_seen_count + para_seen_count) == 0:
+        final_status = "FLX_SETORACLE_HUNT_UNDERPOWERED"
+        final_reason = "no_dexes_active_in_any_file"
+    else:
+        final_status = "REPLICA_CMDS_FULL_FILE_HUNT_COMPLETE"
+        final_reason = None
+
+    # Recommendation
+    if flx_any_found:
+        recommendation_action = "run_flx_overlap_validation"
+        cross_dex_pivot = None
+        mechanism_status = "flx_oracle_found_validation_needed"
+        promised_land = "flx_validation_warranted"
+    elif final_status in ("FLX_STALE_ORACLE_ARTIFACT_SUPPORTED", "FLX_SETORACLE_PERSISTENTLY_ABSENT_IN_SAMPLE"):
+        recommendation_action = "pivot_to_cash_km_cross_dex_spread_phase_minus1"
+        cross_dex_pivot = {"cash:TSLA_vs_km:TSLA": True, "cash:NVDA_vs_km:NVDA": True}
+        mechanism_status = "flx_stale_or_sparse_oracle_likely"
+        promised_land = "oracle_basis_edge_unlikely"
+    else:
+        recommendation_action = "run_one_more_bounded_flx_frequency_sample"
+        cross_dex_pivot = None
+        mechanism_status = "inconclusive"
+        promised_land = "needs_one_more_flx_sample"
+
+    # Sample-backed staleness claim
+    sample_backed_staleness = (
+        flx_seen_count == 0
+        and (cash_seen_count + km_seen_count + para_seen_count) > 0
+        and files_processed >= 2
+    )
+
+    # Write flx candidate dump or stale oracle diagnostic
+    stale_diag: Optional[dict] = None
+    if flx_any_found:
+        candidate_dump = {
+            "source_key": flx_candidate_files[0] if flx_candidate_files else "",
+            "date": flx_candidate_dates[0] if flx_candidate_dates else "",
+            "candidate_count": len(flx_candidate_payloads),
+            "flx_tsla_found": flx_tsla_found,
+            "flx_nvda_found": flx_nvda_found,
+            "candidates": flx_candidate_payloads[:10],
+            "parser_confidence": "high",
+            "validation_not_run": True,
+        }
+        _write_json_artifact(run_dir / "flx_setoracle_candidate_dump.json", candidate_dump)
+        artifacts.append("flx_setoracle_candidate_dump.json")
+    else:
+        stale_diag = {
+            "files_scanned": files_processed,
+            "bytes_scanned": total_bytes,
+            "dates_scanned": len(dates_processed),
+            "setOracle_payloads_seen": total_setoracle,
+            "oraclePxs_pairs_seen": total_oraclepxs,
+            "dexes_seen": sorted(agg_dex_counts.keys()),
+            "cash_seen_count": cash_seen_count,
+            "km_seen_count": km_seen_count,
+            "para_seen_count": para_seen_count,
+            "xyz_seen_count": xyz_seen_count,
+            "flx_seen_count": flx_seen_count,
+            "flx_absent_while_other_dexes_active": sample_backed_staleness,
+            "sample_backed_staleness_artifact_supported": sample_backed_staleness,
+            "global_absence_claim_supported": False,
+            "reason_absence_not_global": (
+                f"Only {files_processed} files across {len(dates_processed)} dates scanned. "
+                f"FLX absence is sample-backed, not globally proven."
+            ),
+            "explanation_of_forward_recorder_residual": (
+                "consistent_with_sparse_or_stale_flx_oracle" if sample_backed_staleness
+                else "unknown"
+            ),
+            "recommended_stop_or_continue": recommendation_action,
+            "validation_not_run": True,
+        }
+        _write_json_artifact(run_dir / "flx_stale_oracle_artifact_diagnostic.json", stale_diag)
+        artifacts.append("flx_stale_oracle_artifact_diagnostic.json")
+
+    # Write recommendation
+    rec = {
+        "original_hypothesis": "HIP3 Builder-DEX TradFi Off-Hours Oracle-Basis Residual",
+        "data_plane_status": "historical_oracle_reconstructable",
+        "mechanism_status": mechanism_status,
+        "promised_land_assessment": promised_land,
+        "recommended_next_action": recommendation_action,
+        "cross_dex_pivot_candidate": cross_dex_pivot,
+        "reason_cross_dex_pivot_survives": (
+            "anchor-free, both DEXes update frequently, avoids stale-oracle poison, testable on SonarX L2"
+            if cross_dex_pivot else None
+        ),
+        "registry_mutation_recommended_now": False,
+        "registry_mutation_performed": False,
+    }
+    _write_json_artifact(run_dir / "oracle_basis_closure_or_pivot_recommendation.json", rec)
+    artifacts.append("oracle_basis_closure_or_pivot_recommendation.json")
+
+    # Write summary
+    summary = {
+        "run_id": run_id,
+        "target_dates_requested": config.target_dates,
+        "target_dates_processed": dates_processed,
+        "files_selected_by_date": files_selected_by_date,
+        "files_processed_by_date": {k: v for k, v in files_processed_by_date.items()},
+        "source_keys_attempted": sum(len(v) for v in files_selected_by_date.values()),
+        "files_processed": files_processed,
+        "bytes_downloaded": total_bytes,
+        "records_decoded": total_records,
+        "action_bundle_count": total_action_bundles,
+        "perpdeploy_count": total_perpdeploy,
+        "setoracle_payload_count": total_setoracle,
+        "oraclepxs_pair_count": total_oraclepxs,
+        "aggregate_dex_distribution": dict(agg_dex_counts),
+        "dex_distribution_by_file": dex_dist_by_file,
+        "dex_distribution_by_date": {k: dict(v) for k, v in dex_dist_by_date.items()},
+        "markets_seen_by_dex": {k: sorted(v) for k, v in agg_markets_by_dex.items()},
+        "update_frequency_by_dex": update_freq_by_dex,
+        "files_with_dex": dict(agg_files_with_dex),
+        "dates_with_dex": {k: sorted(v) for k, v in agg_dates_with_dex.items()},
+        "target_market_status": {
+            "flx:TSLA": "FOUND" if flx_tsla_found else "NOT_FOUND",
+            "flx:NVDA": "FOUND" if flx_nvda_found else "NOT_FOUND",
+            "cash:TSLA": "FOUND" if cash_tsla_found else "NOT_FOUND",
+            "cash:NVDA": "FOUND" if cash_nvda_found else "NOT_FOUND",
+            "km_controls": "FOUND" if km_controls_found else "NOT_FOUND",
+        },
+        "flx_tsla_found": flx_tsla_found,
+        "flx_nvda_found": flx_nvda_found,
+        "flx_any_found": flx_any_found,
+        "flx_candidate_count": len(flx_candidate_payloads),
+        "flx_candidate_files": flx_candidate_files,
+        "flx_candidate_dates": flx_candidate_dates,
+        "cash_control_found": cash_tsla_found or cash_nvda_found,
+        "km_control_found": km_controls_found,
+        "para_seen": para_seen,
+        "xyz_seen": xyz_seen,
+        "sample_backed_staleness_artifact_supported": sample_backed_staleness,
+        "absence_claim_supported": False,
+        "conclusion": final_reason or final_status,
+    }
+    _write_json_artifact(run_dir / "flx_frequency_confirmation_summary.json", summary)
+    artifacts.append("flx_frequency_confirmation_summary.json")
+
+    # Write final report markdown
+    _write_flx_frequency_report(run_dir, summary, rec, stale_diag if not flx_any_found else None, config)
+
+    return final_status, final_reason, artifacts
+
+
+def _write_flx_frequency_report(
+    run_dir: Path,
+    summary: dict,
+    recommendation: dict,
+    stale_diag: Optional[dict],
+    config: ReplicaCmdsProbeConfig,
+) -> None:
+    """Write the FLX frequency confirmation report markdown."""
+    lines = [
+        "# HIP-3 REPLICA_CMDS FLX FREQUENCY CONFIRMATION REPORT",
+        "",
+        "## Run Summary",
+        "",
+        f"- **Target dates requested**: {summary['target_dates_requested']}",
+        f"- **Target dates processed**: {summary['target_dates_processed']}",
+        f"- **Files processed**: {summary['files_processed']}",
+        f"- **Bytes downloaded**: {summary['bytes_downloaded']:,}",
+        f"- **Records decoded**: {summary['records_decoded']:,}",
+        f"- **perpDeploy count**: {summary['perpdeploy_count']}",
+        f"- **setOracle payload count**: {summary['setoracle_payload_count']}",
+        f"- **oraclePxs pair count**: {summary['oraclepxs_pair_count']}",
+        "",
+        "## Aggregate DEX Distribution",
+        "",
+        "| DEX | setOracle Count | oraclePxs Count | Markets | Files | Dates |",
+        "|-----|----------------|-----------------|---------|-------|-------|",
+    ]
+    for dex in sorted(summary["aggregate_dex_distribution"].keys()):
+        uf = summary["update_frequency_by_dex"].get(dex, {})
+        lines.append(
+            f"| {dex} | {uf.get('setoracle_payload_count', 0)} | "
+            f"{uf.get('oraclePxs_pair_count', 0)} | "
+            f"{uf.get('market_count', 0)} | "
+            f"{uf.get('files_containing_dex', 0)} | "
+            f"{uf.get('dates_containing_dex', 0)} |"
+        )
+    lines.extend([
+        "",
+        "## DEX Distribution by Date",
+        "",
+    ])
+    for date_str in sorted(summary["dex_distribution_by_date"].keys()):
+        dd = summary["dex_distribution_by_date"][date_str]
+        lines.append(f"### {date_str}")
+        lines.append("")
+        for dex in sorted(dd.keys()):
+            lines.append(f"- **{dex}**: {dd[dex]} oracle updates")
+        lines.append("")
+
+    lines.extend([
+        "## Target Market Status",
+        "",
+    ])
+    for market, status in summary["target_market_status"].items():
+        lines.append(f"- **{market}**: {status}")
+
+    lines.extend([
+        "",
+        "## FLX Status",
+        "",
+        f"- **flx:TSLA found**: {'YES' if summary['flx_tsla_found'] else 'NO'}",
+        f"- **flx:NVDA found**: {'YES' if summary['flx_nvda_found'] else 'NO'}",
+        f"- **flx any found**: {'YES' if summary['flx_any_found'] else 'NO'}",
+        f"- **flx candidate count**: {summary['flx_candidate_count']}",
+        f"- **Sample-backed staleness artifact supported**: {'YES' if summary['sample_backed_staleness_artifact_supported'] else 'NO'}",
+        f"- **Absence claim supported**: {'YES' if summary['absence_claim_supported'] else 'NO (sample-backed only)'}",
+        "",
+        "## Recommendation",
+        "",
+        f"- **Recommended next action**: {recommendation['recommended_next_action']}",
+        f"- **Mechanism status**: {recommendation['mechanism_status']}",
+        f"- **Promised land assessment**: {recommendation['promised_land_assessment']}",
+    ])
+    if recommendation.get("cross_dex_pivot_candidate"):
+        lines.append(f"- **Cross-DEX pivot candidate**: {recommendation['cross_dex_pivot_candidate']}")
+        lines.append(f"- **Reason pivot survives**: {recommendation['reason_cross_dex_pivot_survives']}")
+    lines.extend([
+        "",
+        "## Safety Confirmations",
+        "",
+        "- **Validation run**: NO",
+        "- **Backfill run**: NO",
+        "- **SonarX residual diagnostic run**: NO",
+        "- **Cross-DEX spread test run**: NO",
+        "- **Registry status**: UNCHANGED",
+        "- **Forward recorder status**: UNTOUCHED",
+        "",
+        "---",
+        "",
+        '"No overlap validation/backfill/cross-DEX spread test was run; stopped after bounded FLX oracle-frequency confirmation."',
+    ])
+    content = "\n".join(lines) + "\n"
+    (run_dir / "HIP3_REPLICA_CMDS_FLX_FREQUENCY_CONFIRMATION_REPORT.md").write_text(content)
 
 
 # ---------------------------------------------------------------------------
@@ -2438,6 +2964,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         block_selection=args.block_selection,
         max_full_file_bytes=args.max_full_file_bytes,
         perpdeploy_histogram_only=args.perpdeploy_histogram_only,
+        flx_frequency_confirmation=args.flx_frequency_confirmation,
+        target_dates=[d.strip() for d in args.target_dates.split(",") if d.strip()] if args.target_dates else [],
+        max_full_files_per_date=args.max_full_files_per_date,
+        max_full_files_total=args.max_full_files_total,
+        stop_on_flx_found=args.stop_on_flx_found and not args.continue_after_flx_found,
+        continue_after_flx_found=args.continue_after_flx_found,
     )
     # Runtime budget
     budget = RuntimeBudgetState.create(config.max_runtime_minutes)
@@ -2547,6 +3079,30 @@ def main(argv: Optional[List[str]] = None) -> int:
             })
             return 1
         final_status = "REPLICA_CMDS_SOURCE_ACCESSIBLE"
+        # FLX frequency confirmation mode: multi-date bounded diagnostic
+        if config.flx_frequency_confirmation and not config.dry_run and config.target_dates:
+            print(f"FLX_FREQ_START dates={config.target_dates} max_files_total={config.max_full_files_total}")
+            flx_status, flx_reason, flx_artifacts = run_flx_frequency_confirmation(
+                chokepoint, config, budget, run_id, run_dir,
+            )
+            final_status = flx_status
+            final_reason = flx_reason
+            artifacts_written.extend(flx_artifacts)
+            _write_json_artifact(run_dir / "final_status.json", {
+                "status": final_status,
+                "failure_reason": final_reason,
+                "artifacts_written": artifacts_written,
+                "runtime_elapsed_seconds": budget.elapsed_seconds,
+                "deadline_exceeded": budget.budget_exceeded,
+                "registry_mutated": False,
+                "phase0_precommitment_written": False,
+                "sonarx_residual_diagnostic_run": False,
+                "validation_run": False,
+                "backfill_run": False,
+                "cross_dex_spread_test_run": False,
+            })
+            print(f"FINAL status={final_status} artifacts={len(artifacts_written)}")
+            return 0 if final_status not in ("REPLICA_CMDS_PHASE_MINUS1_ERROR", "REPLICA_CMDS_SOURCE_BLOCKED") else 1
         # Full-file decode mode: if --decode-full-file is set, handle it here
         if config.decode_full_file and not config.dry_run:
             # Find target block in inventory
