@@ -111,14 +111,29 @@ def _make_budget_ok() -> RuntimeBudgetState:
 
 def _make_mock_chokepoint() -> MagicMock:
     cp = MagicMock()
-    cp.s3_list_prefix.return_value = {
-        "prefixes": ["replica_cmds/2024/01/01/"],
-        "keys": ["replica_cmds/2024/01/01/chunk_001.bin"],
-        "objects": [
-            {"key": "replica_cmds/2024/01/01/chunk_001.bin", "size": 1_000_000},
-        ],
-        "error_code": None,
-    }
+    # Multi-level listing: level1 -> timestamp prefixes, level2 -> date prefixes, level3 -> block files
+    cp.s3_list_prefix.side_effect = [
+        {  # Level 1: timestamp prefixes
+            "prefixes": ["replica_cmds/2024-01-15T00:00:00Z/"],
+            "keys": [],
+            "objects": [],
+            "error_code": None,
+        },
+        {  # Level 2: date prefixes under timestamp
+            "prefixes": ["replica_cmds/2024-01-15T00:00:00Z/20240120/"],
+            "keys": [],
+            "objects": [],
+            "error_code": None,
+        },
+        {  # Level 3: block files under date
+            "prefixes": [],
+            "keys": [],
+            "objects": [
+                {"key": "replica_cmds/2024-01-15T00:00:00Z/20240120/chunk_001.lz4", "size": 1_000_000},
+            ],
+            "error_code": None,
+        },
+    ]
     cp.s3_read_object.return_value = b"{}"
     return cp
 
@@ -174,7 +189,11 @@ def test_source_inventory_accessible_prefix():
     inv = probe_s3_inventory(cp, cfg, budget)
     assert inv.source_accessible is True
     assert inv.listing_status == "OK"
-    cp.s3_list_prefix.assert_called_once()
+    # Multi-level: called at least once (level 1), possibly more
+    assert cp.s3_list_prefix.call_count >= 1
+    # Should find nested block files
+    assert len(inv.candidate_keys) > 0
+    assert any("chunk_001.lz4" in k for k in inv.candidate_keys)
 
 
 # ---------------------------------------------------------------------------
@@ -1145,3 +1164,234 @@ def test_validate_overlap_exact_match_no_bps_diff():
     assert pdr.median_abs_bps_diff == pytest.approx(0.0)
     assert pdr.exact_near_match_rate == pytest.approx(1.0)
     assert pdr.validation_status == "VALIDATED"
+
+
+# ===========================================================================
+# 35-44: Nested date/block discovery regression tests (CLI inventory fix)
+# ===========================================================================
+
+def test_nested_listing_finds_block_files():
+    """Multi-level listing discovers block files under timestamp/date/ prefix."""
+    cp = MagicMock()
+    cp.s3_list_prefix.side_effect = [
+        {"prefixes": ["replica_cmds/2026-05-23T08:24:44Z/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": ["replica_cmds/2026-05-23T08:24:44Z/20260527/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": [], "keys": [], "objects": [
+            {"key": "replica_cmds/2026-05-23T08:24:44Z/20260527/1012290000.lz4", "size": 5_000_000},
+            {"key": "replica_cmds/2026-05-23T08:24:44Z/20260527/1012310000.lz4", "size": 5_000_000},
+        ], "error_code": None},
+    ]
+    cfg = ReplicaCmdsProbeConfig(
+        out_root=Path("/tmp/test"),
+        target_date="2026-05-27",
+        max_replica_files=10,
+        source=ReplicaCmdsSourceConfig(allow_s3_archive_read=True, requester_pays=True),
+    )
+    budget = _make_budget_ok()
+    inv = probe_s3_inventory(cp, cfg, budget)
+    assert inv.source_accessible is True
+    assert inv.listing_status == "OK"
+    assert len(inv.candidate_keys) >= 2
+    assert any("1012290000.lz4" in k for k in inv.candidate_keys)
+    assert any("1012310000.lz4" in k for k in inv.candidate_keys)
+    assert "nested_timestamps=" in inv.inferred_layout
+
+
+def test_nested_listing_date_filter():
+    """Only keys matching target_date YYYYMMDD are included."""
+    cp = MagicMock()
+    cp.s3_list_prefix.side_effect = [
+        {"prefixes": ["replica_cmds/ts1/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": [
+            "replica_cmds/ts1/20260527/",
+            "replica_cmds/ts1/20260528/",
+        ], "keys": [], "objects": [], "error_code": None},
+        # Level 3 for 20260527
+        {"prefixes": [], "keys": [], "objects": [
+            {"key": "replica_cmds/ts1/20260527/block_a.lz4", "size": 1_000_000},
+        ], "error_code": None},
+        # Level 3 for 20260528
+        {"prefixes": [], "keys": [], "objects": [
+            {"key": "replica_cmds/ts1/20260528/block_b.lz4", "size": 2_000_000},
+        ], "error_code": None},
+    ]
+    cfg = ReplicaCmdsProbeConfig(
+        out_root=Path("/tmp/test"),
+        target_date="2026-05-27",
+        max_replica_files=10,
+        source=ReplicaCmdsSourceConfig(allow_s3_archive_read=True, requester_pays=True),
+    )
+    budget = _make_budget_ok()
+    inv = probe_s3_inventory(cp, cfg, budget)
+    assert inv.source_accessible is True
+    # Only 20260527 block should be in candidates
+    assert any("block_a.lz4" in k for k in inv.candidate_keys)
+    assert not any("block_b.lz4" in k for k in inv.candidate_keys)
+
+
+def test_no_candidate_keys_not_returned_when_nested_exist():
+    """CLI no longer returns NO_CANDIDATE_KEYS when nested keys exist."""
+    cp = MagicMock()
+    cp.s3_list_prefix.side_effect = [
+        {"prefixes": ["replica_cmds/ts1/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": ["replica_cmds/ts1/20260527/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": [], "keys": [], "objects": [
+            {"key": "replica_cmds/ts1/20260527/block.lz4", "size": 500_000},
+        ], "error_code": None},
+    ]
+    cfg = ReplicaCmdsProbeConfig(
+        out_root=Path("/tmp/test"),
+        target_date="2026-05-27",
+        max_replica_files=5,
+        source=ReplicaCmdsSourceConfig(allow_s3_archive_read=True, requester_pays=True),
+    )
+    budget = _make_budget_ok()
+    inv = probe_s3_inventory(cp, cfg, budget)
+    assert inv.source_accessible is True
+    assert inv.failure_reason is None  # NO_CANDIDATE_KEYS should NOT appear
+    assert len(inv.candidate_keys) > 0
+
+
+def test_bounded_listing_stops_at_max_replica_files():
+    """Listing respects max_replica_files bound."""
+    cp = MagicMock()
+    many_blocks = [
+        {"key": f"replica_cmds/ts1/20260527/block_{i:04d}.lz4", "size": 500_000}
+        for i in range(50)
+    ]
+    cp.s3_list_prefix.side_effect = [
+        {"prefixes": ["replica_cmds/ts1/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": ["replica_cmds/ts1/20260527/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": [], "keys": [], "objects": many_blocks, "error_code": None},
+    ]
+    cfg = ReplicaCmdsProbeConfig(
+        out_root=Path("/tmp/test"),
+        target_date="2026-05-27",
+        max_replica_files=3,
+        source=ReplicaCmdsSourceConfig(allow_s3_archive_read=True, requester_pays=True),
+    )
+    budget = _make_budget_ok()
+    inv = probe_s3_inventory(cp, cfg, budget)
+    # candidate_keys is bounded by max_replica_files * 2
+    assert len(inv.candidate_keys) <= 3 * 2
+
+
+def test_requester_pays_flag_propagated():
+    """requester_pays flag is passed to all s3_list_prefix calls."""
+    cp = MagicMock()
+    cp.s3_list_prefix.side_effect = [
+        {"prefixes": ["replica_cmds/ts1/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": ["replica_cmds/ts1/20260527/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": [], "keys": [], "objects": [
+            {"key": "replica_cmds/ts1/20260527/block.lz4", "size": 100_000},
+        ], "error_code": None},
+    ]
+    cfg = ReplicaCmdsProbeConfig(
+        out_root=Path("/tmp/test"),
+        target_date="2026-05-27",
+        max_replica_files=5,
+        source=ReplicaCmdsSourceConfig(allow_s3_archive_read=True, requester_pays=True),
+    )
+    budget = _make_budget_ok()
+    inv = probe_s3_inventory(cp, cfg, budget)
+    # All calls should have RequestPayer=requester
+    for call in cp.s3_list_prefix.call_args_list:
+        assert call.kwargs.get("requester_pays") is True
+
+
+def test_inventory_records_nested_layout():
+    """Inventory inferred_layout records nested structure."""
+    cp = MagicMock()
+    # Code processes: Level 1, then all Level 2, then all Level 3
+    cp.s3_list_prefix.side_effect = [
+        # Level 1: timestamp prefixes
+        {"prefixes": ["replica_cmds/ts1/", "replica_cmds/ts2/"], "keys": [], "objects": [], "error_code": None},
+        # Level 2 for ts1
+        {"prefixes": ["replica_cmds/ts1/20260527/"], "keys": [], "objects": [], "error_code": None},
+        # Level 2 for ts2
+        {"prefixes": ["replica_cmds/ts2/20260527/"], "keys": [], "objects": [], "error_code": None},
+        # Level 3 for ts1/20260527
+        {"prefixes": [], "keys": [], "objects": [
+            {"key": "replica_cmds/ts1/20260527/block.lz4", "size": 100_000},
+        ], "error_code": None},
+        # Level 3 for ts2/20260527
+        {"prefixes": [], "keys": [], "objects": [
+            {"key": "replica_cmds/ts2/20260527/block2.lz4", "size": 200_000},
+        ], "error_code": None},
+    ]
+    cfg = ReplicaCmdsProbeConfig(
+        out_root=Path("/tmp/test"),
+        target_date="2026-05-27",
+        max_replica_files=10,
+        source=ReplicaCmdsSourceConfig(allow_s3_archive_read=True, requester_pays=True),
+    )
+    budget = _make_budget_ok()
+    inv = probe_s3_inventory(cp, cfg, budget)
+    assert "nested_timestamps=2" in inv.inferred_layout
+    assert "date_prefixes=2" in inv.inferred_layout
+    assert "block_keys=" in inv.inferred_layout
+
+
+def test_known_standalone_keys_discoverable_by_cli():
+    """Keys found by standalone recon are discoverable by normal CLI inventory."""
+    # Simulate the real S3 layout from the prior recon
+    known_keys = [
+        "replica_cmds/2026-05-23T08:24:44Z/20260527/1012290000.lz4",
+        "replica_cmds/2026-05-23T08:24:44Z/20260527/1012310000.lz4",
+        "replica_cmds/2026-05-23T08:24:44Z/20260527/1012070000.lz4",
+    ]
+    cp = MagicMock()
+    cp.s3_list_prefix.side_effect = [
+        {"prefixes": ["replica_cmds/2026-05-23T08:24:44Z/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": ["replica_cmds/2026-05-23T08:24:44Z/20260527/"], "keys": [], "objects": [], "error_code": None},
+        {"prefixes": [], "keys": [], "objects": [
+            {"key": k, "size": 5_242_880} for k in known_keys
+        ], "error_code": None},
+    ]
+    cfg = ReplicaCmdsProbeConfig(
+        out_root=Path("/tmp/test"),
+        target_date="2026-05-27",
+        max_replica_files=10,
+        source=ReplicaCmdsSourceConfig(allow_s3_archive_read=True, requester_pays=True),
+    )
+    budget = _make_budget_ok()
+    inv = probe_s3_inventory(cp, cfg, budget)
+    assert inv.source_accessible is True
+    for k in known_keys:
+        assert k in inv.candidate_keys, f"Key {k} not found in candidates"
+
+
+def test_no_subprocess_os_system_eval_in_inventory():
+    """No production subprocess, os.system, or eval in inventory code."""
+    import ast
+    src_path = Path(__file__).resolve().parent.parent / "hip3_replica_cmds_setoracle_reconstruction_v0.py"
+    src = src_path.read_text()
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr in ("system", "popen"):
+                if isinstance(func.value, ast.Name) and func.value.id == "os":
+                    pytest.fail(f"os.system/os.popen found at line {node.lineno}")
+            if isinstance(func, ast.Name) and func.id == "eval":
+                pytest.fail(f"eval() found at line {node.lineno}")
+            if isinstance(func, ast.Name) and func.id == "exec":
+                pytest.fail(f"exec() found at line {node.lineno}")
+
+
+def test_empty_listing_when_no_timestamps():
+    """Empty listing produces empty_listing layout."""
+    cp = MagicMock()
+    cp.s3_list_prefix.return_value = {
+        "prefixes": [], "keys": [], "objects": [], "error_code": None,
+    }
+    cfg = ReplicaCmdsProbeConfig(
+        out_root=Path("/tmp/test"),
+        source=ReplicaCmdsSourceConfig(allow_s3_archive_read=True, requester_pays=True),
+    )
+    budget = _make_budget_ok()
+    inv = probe_s3_inventory(cp, cfg, budget)
+    assert inv.source_accessible is True
+    assert inv.listing_status == "OK"
+    assert inv.inferred_layout == "empty_listing"
+    assert len(inv.candidate_keys) == 0

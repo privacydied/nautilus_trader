@@ -701,7 +701,11 @@ def probe_s3_inventory(
     config: ReplicaCmdsProbeConfig,
     budget: RuntimeBudgetState,
 ) -> ReplicaCmdsChunkInventory:
-    """List replica_cmds S3 prefix and select candidate keys."""
+    """List replica_cmds S3 prefix and select candidate keys.
+
+    Multi-level recursive listing for nested layout:
+      replica_cmds/<creation_timestamp>/<YYYYMMDD>/<block>.lz4
+    """
     inv = ReplicaCmdsChunkInventory(
         bucket=config.source.bucket,
         root_prefix=config.source.root_prefix,
@@ -715,43 +719,143 @@ def probe_s3_inventory(
         inv.listing_status = "BUDGET_EXCEEDED"
         inv.failure_reason = "RUNTIME_BUDGET_EXCEEDED"
         return inv
+    # --- Multi-level nested listing ---
+    # Target date filter: convert "2026-05-27" -> "20260527"
+    target_date_yyyymmdd = None
+    if config.target_date:
+        target_date_yyyymmdd = config.target_date.replace("-", "")
+
+    # Level 1: list timestamp prefixes under replica_cmds/
+    all_candidates: List[dict] = []
+    all_timestamp_prefixes: List[str] = []
+    listing_status_detail = ""
     try:
-        listing = chokepoint.s3_list_prefix(
+        l1 = chokepoint.s3_list_prefix(
             bucket=config.source.bucket,
-            prefix=config.source.root_prefix,
+            prefix=config.source.root_prefix + "/",
             requester_pays=config.source.requester_pays,
-            max_keys=min(config.max_replica_files * 10, 500),
+            max_keys=500,
             include_subdirs=True,
         )
     except Exception as e:
         inv.listing_status = "LISTING_FAILED"
         inv.failure_reason = str(e)
         return inv
-    if listing.get("error_code"):
+    if l1.get("error_code"):
         inv.listing_status = "LISTING_FAILED"
-        inv.error_code = listing["error_code"]
-        inv.failure_reason = listing["error_code"]
+        inv.error_code = l1["error_code"]
+        inv.failure_reason = l1["error_code"]
         return inv
-    prefixes = listing.get("prefixes", [])
-    keys = listing.get("keys", [])
-    objects = listing.get("objects", [])
-    inv.prefixes_sampled = prefixes[:20]
-    inv.keys_sampled = keys[:20]
-    # Candidate keys: prefer objects, fall back to prefix-based exploration
-    candidates = []
-    for obj in objects:
-        k = obj["key"]
-        sz = obj.get("size", 0)
-        candidates.append({"key": k, "size": sz})
-    inv.candidate_keys = [c["key"] for c in candidates[:config.max_replica_files * 2]]
-    inv.bytes_estimated_if_available = sum(c.get("size", 0) for c in candidates[:config.max_replica_files * 2])
-    # Infer layout from prefix/key patterns
-    if prefixes:
-        inv.inferred_layout = f"prefixes={len(prefixes)}, sample={prefixes[:3]}"
-    elif keys:
-        inv.inferred_layout = f"flat_keys={len(keys)}, sample={keys[:3]}"
+    l1_prefixes = l1.get("prefixes", [])
+    l1_objects = l1.get("objects", [])
+    all_timestamp_prefixes = l1_prefixes[:500]
+    # Also collect any direct objects under replica_cmds/ (flat layout fallback)
+    for obj in l1_objects:
+        all_candidates.append({"key": obj["key"], "size": obj.get("size", 0)})
+    inv.prefixes_sampled = [p for p in all_timestamp_prefixes[:20]]
+
+    # Level 2: for each timestamp prefix, list date prefixes
+    date_prefixes_to_scan: List[str] = []
+    # Date-aware early-skip: if target_date is specified, skip timestamps
+    # that are clearly too old to contain the target date's data.
+    # Based on observed S3 layout: creation timestamp can be several days
+    # before the data date. Use a 7-day lookback window.
+    ts_early_skip_prefix = None
+    if target_date_yyyymmdd:
+        try:
+            target_dt = datetime.strptime(target_date_yyyymmdd, "%Y%m%d")
+            early_dt = target_dt - timedelta(days=7)
+            ts_early_skip_prefix = early_dt.strftime("replica_cmds/%Y-%m-%dT")
+        except (ValueError, TypeError):
+            ts_early_skip_prefix = None
+    for ts_prefix in all_timestamp_prefixes:
+        if not budget.check_deadline():
+            listing_status_detail = "budget_exceeded_at_level2"
+            break
+        # Skip timestamps clearly before the target window
+        if ts_early_skip_prefix and ts_prefix < ts_early_skip_prefix:
+            continue
+        try:
+            l2 = chokepoint.s3_list_prefix(
+                bucket=config.source.bucket,
+                prefix=ts_prefix,
+                requester_pays=config.source.requester_pays,
+                max_keys=500,
+                include_subdirs=True,
+            )
+        except Exception:
+            continue
+        if l2.get("error_code"):
+            continue
+        l2_prefixes = l2.get("prefixes", [])
+        l2_objects = l2.get("objects", [])
+        # Collect date prefixes
+        for dp in l2_prefixes:
+            # dp looks like "replica_cmds/<ts>/20260527/"
+            date_segment = dp.rstrip("/").split("/")[-1]
+            if target_date_yyyymmdd and date_segment == target_date_yyyymmdd:
+                date_prefixes_to_scan.append(dp)
+            elif not target_date_yyyymmdd:
+                date_prefixes_to_scan.append(dp)
+        # Also collect any direct objects under timestamp (unusual but handle)
+        for obj in l2_objects:
+            k = obj["key"]
+            if target_date_yyyymmdd:
+                if target_date_yyyymmdd in k:
+                    all_candidates.append({"key": k, "size": obj.get("size", 0)})
+            else:
+                all_candidates.append({"key": k, "size": obj.get("size", 0)})
+
+    # Level 3: for each date prefix, list block files
+    for dp_prefix in date_prefixes_to_scan:
+        if not budget.check_deadline():
+            listing_status_detail = "budget_exceeded_at_level3"
+            break
+        if len(all_candidates) >= config.max_replica_files * 5:
+            break  # bounded
+        try:
+            l3 = chokepoint.s3_list_prefix(
+                bucket=config.source.bucket,
+                prefix=dp_prefix,
+                requester_pays=config.source.requester_pays,
+                max_keys=config.max_replica_files * 3,
+                include_subdirs=False,  # flat listing for block files
+            )
+        except Exception:
+            continue
+        if l3.get("error_code"):
+            continue
+        for obj in l3.get("objects", []):
+            all_candidates.append({"key": obj["key"], "size": obj.get("size", 0)})
+
+    # Deduplicate by key
+    seen_keys = set()
+    deduped: List[dict] = []
+    for c in all_candidates:
+        if c["key"] not in seen_keys:
+            seen_keys.add(c["key"])
+            deduped.append(c)
+    # Sort by key for determinism
+    deduped.sort(key=lambda x: x["key"])
+
+    inv.keys_sampled = [c["key"] for c in deduped[:20]]
+    inv.candidate_keys = [c["key"] for c in deduped[:config.max_replica_files * 2]]
+    inv.bytes_estimated_if_available = sum(c.get("size", 0) for c in deduped[:config.max_replica_files * 2])
+    # Infer layout
+    if all_timestamp_prefixes and date_prefixes_to_scan:
+        inv.inferred_layout = (
+            f"nested_timestamps={len(all_timestamp_prefixes)},"
+            f"date_prefixes={len(date_prefixes_to_scan)},"
+            f"block_keys={len(deduped)}"
+        )
+    elif all_timestamp_prefixes:
+        inv.inferred_layout = f"timestamp_prefixes_only={len(all_timestamp_prefixes)}"
+    elif deduped:
+        inv.inferred_layout = f"flat_keys={len(deduped)}"
     else:
         inv.inferred_layout = "empty_listing"
+    if listing_status_detail:
+        inv.inferred_layout += f",{listing_status_detail}"
     inv.listing_status = "OK"
     inv.source_accessible = True
     return inv
