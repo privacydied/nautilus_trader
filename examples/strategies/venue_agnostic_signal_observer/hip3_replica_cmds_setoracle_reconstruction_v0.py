@@ -30,7 +30,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 try:
     import orjson
@@ -131,6 +131,15 @@ ALLOWED_STATUSES = frozenset({
     "REPLICA_CMDS_PHASE_MINUS1_UNDERPOWERED",
     "REPLICA_CMDS_PHASE_MINUS1_ERROR",
     "FLX_ORACLE_LEVEL_SHIFT_CORROBORATED_DIAGNOSTIC",
+    # Full-file decode statuses
+    "REPLICA_CMDS_FULL_FILE_DECODE_ADDED",
+    "REPLICA_CMDS_FULL_FILE_HISTOGRAM_COMPLETE",
+    "FLX_SETORACLE_FOUND_FULL_FILE_HISTOGRAM",
+    "FLX_NOT_SEEN_IN_ONE_FULL_FILE",
+    "NO_SETORACLE_IN_SELECTED_FULL_FILE",
+    "REPLICA_CMDS_TARGET_BLOCK_NOT_FOUND",
+    "REPLICA_CMDS_FULL_FILE_SIZE_CAP_EXCEEDED",
+    "REPLICA_CMDS_FULL_FILE_DECODE_FAILED",
 })
 
 FORBIDDEN_STATUSES = frozenset({
@@ -228,6 +237,13 @@ class ReplicaCmdsProbeConfig:
     keep_raw: bool = False
     forward_recorder_root: Optional[Path] = None
     source: ReplicaCmdsSourceConfig = field(default_factory=ReplicaCmdsSourceConfig)
+    # Full-file decode mode
+    decode_full_file: bool = False
+    target_block: Optional[str] = None
+    block_selection: str = "first"  # exact | around | first
+    max_full_file_bytes: int = 1_500_000_000
+    perpdeploy_histogram_only: bool = False
+    stop_after_setoracle_payloads: Optional[int] = None
 
     @property
     def api_symbols(self) -> set:
@@ -569,6 +585,93 @@ class ObservedVolumeEstimate:
             "validation_budget_recommendation_bytes": self.validation_budget_recommendation_bytes,
             "validation_files_recommendation": self.validation_files_recommendation,
             "validation_run_feasible_under_default_budget": self.validation_run_feasible_under_default_budget,
+        }
+
+
+@dataclass
+class FullFileHistogramResult:
+    """Result of full-file perpDeploy.setOracle histogram."""
+    run_id: str = ""
+    target_date: str = ""
+    selected_source_key: str = ""
+    selected_block: str = ""
+    bytes_downloaded: int = 0
+    bytes_decompressed_estimate_or_actual: int = 0
+    records_decoded: int = 0
+    parse_failures: int = 0
+    malformed_records: int = 0
+    action_bundles_seen: int = 0
+    unique_action_types: int = 0
+    full_action_type_histogram: Dict[str, int] = field(default_factory=dict)
+    perpDeploy_count: int = 0
+    setOracle_payload_count: int = 0
+    oraclePxs_pair_count: int = 0
+    markPxs_pair_count: int = 0
+    dexes_seen: List[str] = field(default_factory=list)
+    setOracle_payloads_by_dex: Dict[str, int] = field(default_factory=dict)
+    oraclePxs_pairs_by_dex: Dict[str, int] = field(default_factory=dict)
+    markets_seen_by_dex: Dict[str, List[str]] = field(default_factory=dict)
+    target_markets_seen: List[str] = field(default_factory=list)
+    flx_seen: bool = False
+    cash_seen: bool = False
+    xyz_seen: bool = False
+    km_seen: bool = False
+    flx_tsla_found: bool = False
+    flx_nvda_found: bool = False
+    cash_tsla_found: bool = False
+    cash_nvda_found: bool = False
+    first_setOracle_record_index_by_dex: Dict[str, int] = field(default_factory=dict)
+    last_setOracle_record_index_by_dex: Dict[str, int] = field(default_factory=dict)
+    inferred_update_cadence_by_dex: Dict[str, dict] = field(default_factory=dict)
+    bounded_candidate_examples_by_dex: Dict[str, list] = field(default_factory=dict)
+    candidate_hashes_by_dex: Dict[str, list] = field(default_factory=dict)
+    parser_confidence: str = ""
+    limitations: List[str] = field(default_factory=list)
+    absence_claim_supported_by_full_file: bool = False
+    conclusion: str = ""
+    status: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "run_id": self.run_id,
+            "target_date": self.target_date,
+            "selected_source_key": self.selected_source_key,
+            "selected_block": self.selected_block,
+            "bytes_downloaded": self.bytes_downloaded,
+            "bytes_decompressed_estimate_or_actual": self.bytes_decompressed_estimate_or_actual,
+            "records_decoded": self.records_decoded,
+            "parse_failures": self.parse_failures,
+            "malformed_records": self.malformed_records,
+            "action_bundles_seen": self.action_bundles_seen,
+            "unique_action_types": self.unique_action_types,
+            "full_action_type_histogram": self.full_action_type_histogram,
+            "perpDeploy_count": self.perpDeploy_count,
+            "setOracle_payload_count": self.setOracle_payload_count,
+            "oraclePxs_pair_count": self.oraclePxs_pair_count,
+            "markPxs_pair_count": self.markPxs_pair_count,
+            "dexes_seen": self.dexes_seen,
+            "setOracle_payloads_by_dex": self.setOracle_payloads_by_dex,
+            "oraclePxs_pairs_by_dex": self.oraclePxs_pairs_by_dex,
+            "markets_seen_by_dex": self.markets_seen_by_dex,
+            "target_markets_seen": self.target_markets_seen,
+            "flx_seen": self.flx_seen,
+            "cash_seen": self.cash_seen,
+            "xyz_seen": self.xyz_seen,
+            "km_seen": self.km_seen,
+            "flx_tsla_found": self.flx_tsla_found,
+            "flx_nvda_found": self.flx_nvda_found,
+            "cash_tsla_found": self.cash_tsla_found,
+            "cash_nvda_found": self.cash_nvda_found,
+            "first_setOracle_record_index_by_dex": self.first_setOracle_record_index_by_dex,
+            "last_setOracle_record_index_by_dex": self.last_setOracle_record_index_by_dex,
+            "inferred_update_cadence_by_dex": self.inferred_update_cadence_by_dex,
+            "bounded_candidate_examples_by_dex": self.bounded_candidate_examples_by_dex,
+            "candidate_hashes_by_dex": self.candidate_hashes_by_dex,
+            "parser_confidence": self.parser_confidence,
+            "limitations": self.limitations,
+            "absence_claim_supported_by_full_file": self.absence_claim_supported_by_full_file,
+            "conclusion": self.conclusion,
+            "status": self.status,
         }
 
 
@@ -1264,6 +1367,463 @@ def compute_volume_estimate(
 
 
 # ---------------------------------------------------------------------------
+# Streaming LZ4 JSON-line decoder for full-file decode
+# ---------------------------------------------------------------------------
+
+def _iter_lz4_json_records_from_bytes(lz4_data: bytes):
+    """Yield parsed JSON objects from an LZ4 frame-compressed byte buffer.
+
+    Decompresses the full buffer at once (LZ4 frame format requires complete
+    data), then parses newline-delimited JSON lines with partial-line buffering.
+    Yields (record_index, parsed_obj, raw_line_bytes) tuples.
+    Yields (record_index, None, raw_line_bytes) for parse failures.
+    """
+    if _lz4_frame is None:
+        raise RuntimeError("lz4 module required for full-file decode")
+    # LZ4 frame format requires complete buffer - decompress at once
+    try:
+        decompressed = _lz4_frame.decompress(lz4_data)
+    except Exception as e:
+        raise RuntimeError(f"LZ4 decompress failed: {e}")
+    # Parse newline-delimited JSON lines
+    partial_line = b""
+    record_index = 0
+    chunk_size = 256 * 1024  # 256KB processing chunks
+    offset = 0
+    while offset < len(decompressed):
+        end = min(offset + chunk_size, len(decompressed))
+        partial_line += decompressed[offset:end]
+        offset = end
+        while b"\n" in partial_line:
+            line, partial_line = partial_line.split(b"\n", 1)
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = _loads_json(line)
+                yield (record_index, obj, line)
+            except Exception:
+                yield (record_index, None, line)
+            record_index += 1
+    # Process any remaining partial line
+    if partial_line.strip():
+        line = partial_line.strip()
+        try:
+            obj = _loads_json(line)
+            yield (record_index, obj, line)
+        except Exception:
+            yield (record_index, None, line)
+
+
+def _parse_perpdeploy_setoracle_payload(record: dict, record_index: int,
+                                         source_key: str) -> List[dict]:
+    """Extract perpDeploy.setOracle payloads from a decoded record.
+
+    Returns list of payload dicts with keys:
+      dex, api_symbol, display_symbol, oracle_price, mark_pxs, record_index, etc.
+    """
+    results = []
+    # Navigate action bundle structure - try multiple paths
+    action = record.get("action", {})
+    if not isinstance(action, dict) or not action:
+        # Try top-level perpDeploy
+        if record.get("type") == "perpDeploy" or record.get("actionType") == "perpDeploy":
+            action = record
+        elif "setOracle" in record and isinstance(record.get("setOracle"), dict):
+            # setOracle at top level
+            action = record
+        else:
+            return results
+    action_type = action.get("type", action.get("actionType", ""))
+    if action_type != "perpDeploy":
+        # Also check if setOracle is present (fallback)
+        if "setOracle" not in action:
+            return results
+    # Navigate to setOracle
+    set_oracle = action.get("setOracle", record.get("setOracle", {}))
+    if not isinstance(set_oracle, dict):
+        return results
+    oracle_pxs = set_oracle.get("oraclePxs", [])
+    mark_pxs = set_oracle.get("markPxs", [])
+    if not isinstance(oracle_pxs, list):
+        return results
+    # Extract per-market oracle prices
+    # oraclePxs is either:
+    #   - list of [market, price] tuples (actual S3 format)
+    #   - list of {coin, px} dicts (alternative format)
+    for i, entry in enumerate(oracle_pxs):
+        coin = ""
+        px = None
+        if isinstance(entry, list) and len(entry) >= 2:
+            # Tuple format: ["cash:TSLA", "435.070728"]
+            coin = str(entry[0])
+            px = entry[1]
+        elif isinstance(entry, dict):
+            # Dict format: {"coin": "cash:TSLA", "px": 435.07}
+            coin = entry.get("coin", entry.get("name", entry.get("symbol", "")))
+            px = entry.get("px", entry.get("price", entry.get("oraclePx", None)))
+        else:
+            continue
+        if not coin:
+            continue
+        # Parse dex:symbol
+        dex = ""
+        display_symbol = ""
+        if ":" in str(coin):
+            parts = str(coin).split(":", 1)
+            dex = parts[0].lower()
+            display_symbol = parts[1].upper()
+        else:
+            display_symbol = str(coin).upper()
+        # Corresponding mark price
+        mark_px = None
+        if isinstance(mark_pxs, list) and i < len(mark_pxs):
+            mpe = mark_pxs[i]
+            if isinstance(mpe, dict):
+                mark_px = mpe.get("px", mpe.get("price", None))
+            elif isinstance(mpe, list) and len(mpe) >= 2:
+                # Tuple format: [[market, price], ...]
+                if isinstance(mpe[0], list):
+                    # Nested array of tuples: [[market, price], [market, price]]
+                    mark_px = _safe_float(mpe[0][1]) if len(mpe[0]) >= 2 else None
+                else:
+                    mark_px = _safe_float(mpe[1])
+            elif isinstance(mpe, (int, float)):
+                mark_px = mpe
+        payload = {
+            "dex": dex,
+            "display_symbol": display_symbol,
+            "api_symbol": f"{dex}:{display_symbol}" if dex else display_symbol,
+            "oracle_price": _safe_float(px),
+            "mark_price": _safe_float(mark_px),
+            "record_index": record_index,
+            "source_key": source_key,
+            "raw_command_hash": _hash_bytes(_dumps_json(record)[:512]),
+            "timestamp": record.get("timestamp", record.get("ts", None)),
+            "block": record.get("block", record.get("blockNumber", None)),
+        }
+        results.append(payload)
+    return results
+
+
+def build_full_file_histogram(
+    chokepoint,
+    config: ReplicaCmdsProbeConfig,
+    source_key: str,
+    source_size: int,
+    budget: RuntimeBudgetState,
+) -> FullFileHistogramResult:
+    """Download and decode full LZ4 file, build per-DEX oracle histogram."""
+    result = FullFileHistogramResult(
+        selected_source_key=source_key,
+        selected_block=config.target_block or "",
+        target_date=config.target_date or "",
+    )
+    # Safety cap check
+    if source_size > config.max_full_file_bytes:
+        result.status = "REPLICA_CMDS_FULL_FILE_SIZE_CAP_EXCEEDED"
+        result.limitations.append(
+            f"Object size {source_size} exceeds max_full_file_bytes {config.max_full_file_bytes}"
+        )
+        return result
+    # Download
+    try:
+        data = chokepoint.s3_read_object(
+            bucket=config.source.bucket,
+            key=source_key,
+            requester_pays=config.source.requester_pays,
+        )
+    except Exception as e:
+        result.status = "REPLICA_CMDS_FULL_FILE_DECODE_FAILED"
+        result.limitations.append(f"S3 download failed: {e}")
+        return result
+    result.bytes_downloaded = len(data)
+    if len(data) > config.max_full_file_bytes:
+        result.status = "REPLICA_CMDS_FULL_FILE_SIZE_CAP_EXCEEDED"
+        result.limitations.append(
+            f"Downloaded {len(data)} bytes exceeds max {config.max_full_file_bytes}"
+        )
+        return result
+    # Decode LZ4
+    if _lz4_frame is None:
+        result.status = "REPLICA_CMDS_FULL_FILE_DECODE_FAILED"
+        result.limitations.append("lz4 module not available")
+        return result
+    # Accumulate histogram data
+    action_type_histogram: Dict[str, int] = defaultdict(int)
+    perpdeploy_count = 0
+    setoracle_count = 0
+    oracle_pxs_count = 0
+    mark_pxs_count = 0
+    dex_counts: Dict[str, int] = defaultdict(int)
+    oracle_pxs_by_dex: Dict[str, int] = defaultdict(int)
+    markets_by_dex: Dict[str, set] = defaultdict(set)
+    target_markets: set = set()
+    first_idx_by_dex: Dict[str, int] = {}
+    last_idx_by_dex: Dict[str, int] = {}
+    candidates_by_dex: Dict[str, list] = defaultdict(list)
+    hashes_by_dex: Dict[str, list] = defaultdict(list)
+    timestamps_by_dex: Dict[str, list] = defaultdict(list)
+    parse_failures = 0
+    malformed = 0
+    records_decoded = 0
+    stop_reached = False
+    try:
+        for rec_idx, obj, raw_line in _iter_lz4_json_records_from_bytes(data):
+            if stop_reached:
+                break
+            if not budget.check_deadline():
+                result.limitations.append("runtime_budget_exceeded")
+                break
+            records_decoded += 1
+            if obj is None:
+                parse_failures += 1
+                continue
+            if not isinstance(obj, dict):
+                malformed += 1
+                continue
+            # Extract perpDeploy.setOracle from ABCI block structure:
+            # obj -> abci_block -> signed_action_bundles[i] -> [sig, {signed_actions}]
+            #   -> signed_actions[j] -> {action: {type: "perpDeploy", setOracle: {...}}}
+            abci = obj.get("abci_block", {})
+            if not isinstance(abci, dict):
+                continue
+            bundles = abci.get("signed_action_bundles", [])
+            if not isinstance(bundles, list):
+                continue
+            # Count total action types for histogram
+            for b in bundles:
+                if isinstance(b, list) and len(b) >= 2:
+                    action_data = b[1]
+                    if isinstance(action_data, dict):
+                        for sa in action_data.get("signed_actions", []):
+                            if isinstance(sa, dict):
+                                action = sa.get("action", {})
+                                if isinstance(action, dict):
+                                    at = action.get("type", "unknown")
+                                    action_type_histogram[at] += 1
+                                else:
+                                    action_type_histogram["unknown"] += 1
+            # Now find perpDeploy actions specifically
+            for b_idx, b in enumerate(bundles):
+                if not isinstance(b, list) or len(b) < 2:
+                    continue
+                action_data = b[1]
+                if not isinstance(action_data, dict):
+                    continue
+                signed_actions = action_data.get("signed_actions", [])
+                if not isinstance(signed_actions, list):
+                    continue
+                for sa_idx, sa in enumerate(signed_actions):
+                    if not isinstance(sa, dict):
+                        continue
+                    action = sa.get("action", {})
+                    if not isinstance(action, dict):
+                        continue
+                    if action.get("type") != "perpDeploy":
+                        continue
+                    perpdeploy_count += 1
+                    # Extract setOracle payloads from this action
+                    set_oracle = action.get("setOracle", {})
+                    if not isinstance(set_oracle, dict):
+                        continue
+                    oracle_pxs = set_oracle.get("oraclePxs", [])
+                    if not isinstance(oracle_pxs, list):
+                        continue
+                    setoracle_count += 1
+                    # Extract per-market oracle prices
+                    for i, entry in enumerate(oracle_pxs):
+                        coin = ""
+                        px = None
+                        if isinstance(entry, list) and len(entry) >= 2:
+                            coin = str(entry[0])
+                            px = entry[1]
+                        elif isinstance(entry, dict):
+                            coin = entry.get("coin", entry.get("name", entry.get("symbol", "")))
+                            px = entry.get("px", entry.get("price", entry.get("oraclePx", None)))
+                        else:
+                            continue
+                        if not coin:
+                            continue
+                        # Parse dex:symbol
+                        dex = ""
+                        display_symbol = ""
+                        if ":" in str(coin):
+                            parts = str(coin).split(":", 1)
+                            dex = parts[0].lower()
+                            display_symbol = parts[1].upper()
+                        else:
+                            display_symbol = str(coin).upper()
+                        # Corresponding mark price
+                        mark_pxs = set_oracle.get("markPxs", [])
+                        mark_px = None
+                        if isinstance(mark_pxs, list) and i < len(mark_pxs):
+                            mpe = mark_pxs[i]
+                            if isinstance(mpe, dict):
+                                mark_px = mpe.get("px", mpe.get("price", None))
+                            elif isinstance(mpe, list) and len(mpe) >= 2:
+                                if isinstance(mpe[0], list):
+                                    mark_px = _safe_float(mpe[0][1]) if len(mpe[0]) >= 2 else None
+                                else:
+                                    mark_px = _safe_float(mpe[1])
+                            elif isinstance(mpe, (int, float)):
+                                mark_px = mpe
+                        oracle_pxs_count += 1
+                        if dex:
+                            dex_counts[dex] += 1
+                            oracle_pxs_by_dex[dex] += 1
+                            if dex not in markets_by_dex:
+                                markets_by_dex[dex] = set()
+                            markets_by_dex[dex].add(f"{dex}:{display_symbol}" if display_symbol else "")
+                        if mark_px is not None:
+                            mark_pxs_count += 1
+                        if dex and dex not in first_idx_by_dex:
+                            first_idx_by_dex[dex] = rec_idx
+                        if dex:
+                            last_idx_by_dex[dex] = rec_idx
+                        api_sym = f"{dex}:{display_symbol}" if dex else display_symbol
+                        if len(candidates_by_dex.get(dex, [])) < 5:
+                            candidates_by_dex[dex].append({
+                                "record_index": rec_idx,
+                                "bundle_index": b_idx,
+                                "action_index": sa_idx,
+                                "api_symbol": api_sym,
+                                "oracle_price": _safe_float(px),
+                                "mark_price": _safe_float(mark_px),
+                                "dex": dex,
+                            })
+                        hashes_by_dex[dex].append(_hash_bytes(raw_line[:512]))
+                        if api_sym in config.markets:
+                            target_markets.add(api_sym)
+                        if dex == "flx" and display_symbol == "TSLA":
+                            result.flx_tsla_found = True
+                        if dex == "flx" and display_symbol == "NVDA":
+                            result.flx_nvda_found = True
+                        if dex == "cash" and display_symbol == "TSLA":
+                            result.cash_tsla_found = True
+                        if dex == "cash" and display_symbol == "NVDA":
+                            result.cash_nvda_found = True
+            if config.stop_after_setoracle_payloads and setoracle_count >= config.stop_after_setoracle_payloads:
+                stop_reached = True
+    except Exception as e:
+        result.status = "REPLICA_CMDS_FULL_FILE_DECODE_FAILED"
+        result.limitations.append(f"Decode error: {type(e).__name__}: {e}")
+        return result
+    # Fill result
+    result.bytes_decompressed_estimate_or_actual = result.bytes_downloaded
+    result.records_decoded = records_decoded
+    result.parse_failures = parse_failures
+    result.malformed_records = malformed
+    result.action_bundles_seen = records_decoded
+    result.unique_action_types = len(action_type_histogram)
+    result.full_action_type_histogram = dict(action_type_histogram)
+    result.perpDeploy_count = perpdeploy_count
+    result.setOracle_payload_count = setoracle_count
+    result.oraclePxs_pair_count = oracle_pxs_count
+    result.markPxs_pair_count = mark_pxs_count
+    result.dexes_seen = sorted(dex_counts.keys())
+    result.setOracle_payloads_by_dex = dict(dex_counts)
+    result.oraclePxs_pairs_by_dex = dict(oracle_pxs_by_dex)
+    result.markets_seen_by_dex = {k: sorted(v) for k, v in markets_by_dex.items()}
+    result.target_markets_seen = sorted(target_markets)
+    result.flx_seen = "flx" in dex_counts
+    result.cash_seen = "cash" in dex_counts
+    result.xyz_seen = "xyz" in dex_counts
+    result.km_seen = "km" in dex_counts
+    result.first_setOracle_record_index_by_dex = first_idx_by_dex
+    result.last_setOracle_record_index_by_dex = last_idx_by_dex
+    result.bounded_candidate_examples_by_dex = {k: v for k, v in candidates_by_dex.items()}
+    result.candidate_hashes_by_dex = {k: v for k, v in hashes_by_dex.items()}
+    # Compute cadence by DEX
+    cadence_by_dex: Dict[str, dict] = {}
+    for dex, ts_list in timestamps_by_dex.items():
+        if len(ts_list) < 2:
+            cadence_by_dex[dex] = {
+                "update_count": len(ts_list),
+                "first_timestamp_utc": ts_list[0] if ts_list else None,
+                "last_timestamp_utc": ts_list[-1] if ts_list else None,
+                "span_seconds": None,
+                "updates_per_hour": None,
+                "median_inter_update_seconds": None,
+                "p90_inter_update_seconds": None,
+            }
+        else:
+            parsed = []
+            for ts in ts_list:
+                dt = _parse_ts(str(ts))
+                if dt:
+                    parsed.append(dt)
+            if len(parsed) >= 2:
+                parsed.sort()
+                span = (parsed[-1] - parsed[0]).total_seconds()
+                gaps = [(parsed[i+1] - parsed[i]).total_seconds() for i in range(len(parsed)-1)]
+                gaps.sort()
+                median_gap = gaps[len(gaps)//2] if gaps else None
+                p90_gap = gaps[int(len(gaps)*0.9)] if gaps else None
+                updates_per_hour = len(parsed) / (span / 3600) if span > 0 else None
+                cadence_by_dex[dex] = {
+                    "update_count": len(parsed),
+                    "first_timestamp_utc": parsed[0].isoformat(),
+                    "last_timestamp_utc": parsed[-1].isoformat(),
+                    "span_seconds": span,
+                    "updates_per_hour": updates_per_hour,
+                    "median_inter_update_seconds": median_gap,
+                    "p90_inter_update_seconds": p90_gap,
+                }
+            else:
+                cadence_by_dex[dex] = {
+                    "update_count": len(ts_list),
+                    "first_timestamp_utc": str(ts_list[0]) if ts_list else None,
+                    "last_timestamp_utc": str(ts_list[-1]) if ts_list else None,
+                    "span_seconds": None,
+                    "updates_per_hour": None,
+                    "median_inter_update_seconds": None,
+                    "p90_inter_update_seconds": None,
+                    "limitation": "timestamp_parsing_failed",
+                }
+    result.inferred_update_cadence_by_dex = cadence_by_dex
+    # Parser confidence
+    if setoracle_count > 0 and perpdeploy_count > 0:
+        result.parser_confidence = "high"
+    elif perpdeploy_count > 0:
+        result.parser_confidence = "medium"
+    else:
+        result.parser_confidence = "low"
+    # Status and conclusion
+    if setoracle_count > 0:
+        if result.flx_seen:
+            result.status = "FLX_SETORACLE_FOUND_FULL_FILE_HISTOGRAM"
+            result.conclusion = (
+                f"FLX setOracle found in full file. {dex_counts.get('flx', 0)} flx oracle updates. "
+                f"Full file histogram complete."
+            )
+        else:
+            result.status = "REPLICA_CMDS_FULL_FILE_HISTOGRAM_COMPLETE"
+            result.conclusion = (
+                f"perpDeploy.setOracle found ({setoracle_count} payloads) but flx not seen. "
+                f"DEXes: {sorted(dex_counts.keys())}. Full file histogram complete."
+            )
+    elif perpdeploy_count > 0:
+        result.status = "NO_SETORACLE_IN_SELECTED_FULL_FILE"
+        result.conclusion = f"perpDeploy found ({perpdeploy_count}) but no setOracle payloads."
+    else:
+        result.status = "NO_SETORACLE_IN_SELECTED_FULL_FILE"
+        result.conclusion = "No perpDeploy actions found in full file."
+    # Absence claim
+    if not result.flx_seen and setoracle_count > 0:
+        result.absence_claim_supported_by_full_file = False
+        result.limitations.append(
+            "FLX not seen in one full file; global absence not claimed"
+        )
+    elif not result.flx_seen and perpdeploy_count == 0:
+        result.absence_claim_supported_by_full_file = False
+        result.limitations.append(
+            "No perpDeploy actions in file; cannot assess FLX absence"
+        )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Parser: decode setOracle commands from replica_cmds
 # ---------------------------------------------------------------------------
 
@@ -1809,6 +2369,18 @@ def build_parser() -> argparse.ArgumentParser:
                     help="Keep raw downloaded chunks")
     p.add_argument("--forward-recorder-root", type=str, default=None,
                     help="Path to forward recorder reports root")
+    # Full-file decode options
+    p.add_argument("--decode-full-file", action="store_true", default=False,
+                    help="Download and decode entire selected LZ4 file, not just first block")
+    p.add_argument("--target-block", type=str, default=None,
+                    help="Target block number for exact file selection (e.g. 1012290000)")
+    p.add_argument("--block-selection", type=str, default="first",
+                    choices=["exact", "around", "first"],
+                    help="Block selection mode: exact (require exact), around (nearest), first (legacy)")
+    p.add_argument("--max-full-file-bytes", type=int, default=1_500_000_000,
+                    help="Hard cap on full-file object size for decode (default 1.5GB)")
+    p.add_argument("--perpdeploy-histogram-only", action="store_true", default=False,
+                    help="Skip irrelevant steps, only extract action taxonomy + perpDeploy.setOracle summaries")
     # S3 / network flags
     p.add_argument("--allow-s3-archive-read", action="store_true", default=False,
                     help="Allow S3 archive reads (requester-pays)")
@@ -1861,6 +2433,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         keep_raw=args.keep_raw,
         forward_recorder_root=Path(args.forward_recorder_root) if args.forward_recorder_root else None,
         source=source_config,
+        decode_full_file=args.decode_full_file,
+        target_block=args.target_block,
+        block_selection=args.block_selection,
+        max_full_file_bytes=args.max_full_file_bytes,
+        perpdeploy_histogram_only=args.perpdeploy_histogram_only,
     )
     # Runtime budget
     budget = RuntimeBudgetState.create(config.max_runtime_minutes)
@@ -1970,6 +2547,169 @@ def main(argv: Optional[List[str]] = None) -> int:
             })
             return 1
         final_status = "REPLICA_CMDS_SOURCE_ACCESSIBLE"
+        # Full-file decode mode: if --decode-full-file is set, handle it here
+        if config.decode_full_file and not config.dry_run:
+            # Find target block in inventory
+            selected_key = None
+            selected_size = 0
+            exact_found = False
+            block_str = config.target_block or ""
+            for ck in inventory.candidate_keys:
+                # Match by block number in filename
+                if block_str and block_str in ck:
+                    selected_key = ck
+                    exact_found = True
+                    break
+            if not selected_key and inventory.candidate_keys:
+                if config.block_selection == "first":
+                    selected_key = inventory.candidate_keys[0]
+                elif config.block_selection == "exact":
+                    # Exact mode requires exact match
+                    selected_key = None
+                elif config.block_selection == "around" and block_str:
+                    # Find nearest block by number
+                    best_dist = float("inf")
+                    for ck in inventory.candidate_keys:
+                        # Extract block number from filename
+                        fname = ck.rstrip("/").split("/")[-1].replace(".lz4", "")
+                        try:
+                            blk_num = int(fname)
+                            target_num = int(block_str)
+                            dist = abs(blk_num - target_num)
+                            if dist < best_dist:
+                                best_dist = dist
+                                selected_key = ck
+                        except (ValueError, TypeError):
+                            continue
+            # Get size from inventory
+            if selected_key:
+                for ck_info in inventory.candidate_keys:
+                    pass  # inventory.candidate_keys is just strings
+                # Try to get size from inventory listing
+                # The size info is in the listing but not in candidate_keys
+                # Use 0 as fallback - build_full_file_histogram will check after download
+                selected_size = 0
+            # Write selection plan
+            selection_plan = {
+                "target_date": config.target_date,
+                "target_block": block_str,
+                "block_selection_mode": config.block_selection,
+                "decode_full_file": True,
+                "total_candidate_keys": len(inventory.candidate_keys),
+                "selected_key": selected_key,
+                "selected_block": block_str,
+                "selected_block_distance": 0 if exact_found else None,
+                "exact_target_block_found": exact_found,
+                "selected_object_size_bytes_if_available": selected_size,
+                "max_full_file_bytes": config.max_full_file_bytes,
+                "download_budget_bytes": config.download_budget_bytes,
+                "runtime_budget_minutes": config.max_runtime_minutes,
+                "requester_pays_acknowledged": config.source.requester_pays,
+                "proceed_to_download": selected_key is not None,
+                "blocked_reason": None if selected_key else "REPLICA_CMDS_TARGET_BLOCK_NOT_FOUND",
+                "fallback_used": selected_key is not None and not exact_found,
+                "fallback_reason": f"Block {block_str} not found exactly; used {config.block_selection} selection" if (selected_key and not exact_found) else None,
+            }
+            _write_json_artifact(run_dir / "replica_cmds_full_file_selection_plan.json", selection_plan)
+            artifacts_written.append("replica_cmds_full_file_selection_plan.json")
+            if not selected_key:
+                final_status = "REPLICA_CMDS_TARGET_BLOCK_NOT_FOUND"
+                final_reason = f"Target block {block_str} not found in {len(inventory.candidate_keys)} candidates"
+                print(f"STOP status={final_status} reason={final_reason}")
+                _write_json_artifact(run_dir / "final_status.json", {
+                    "status": final_status, "failure_reason": final_reason,
+                    "artifacts_written": artifacts_written,
+                    "runtime_elapsed_seconds": budget.elapsed_seconds,
+                    "deadline_exceeded": budget.budget_exceeded,
+                    "registry_mutated": False, "phase0_precommitment_written": False,
+                    "sonarx_residual_diagnostic_run": False,
+                })
+                return 1
+            # Build full-file histogram
+            print(f"FULL_FILE_DECODE key={selected_key} max_bytes={config.max_full_file_bytes}")
+            histogram = build_full_file_histogram(
+                chokepoint, config, selected_key, selected_size, budget,
+            )
+            histogram.run_id = run_id
+            histogram.target_date = config.target_date or ""
+            # Write histogram
+            _write_json_artifact(run_dir / "perpdeploy_full_file_dex_histogram.json", histogram.to_dict())
+            artifacts_written.append("perpdeploy_full_file_dex_histogram.json")
+            print(f"HISTOGRAM status={histogram.status} records={histogram.records_decoded} "
+                  f"perpDeploy={histogram.perpDeploy_count} setOracle={histogram.setOracle_payload_count} "
+                  f"dexes={histogram.dexes_seen}")
+            # Write flx candidate dump or follow-up plan
+            if histogram.flx_seen:
+                # Write flx candidate dump
+                flx_candidates = histogram.bounded_candidate_examples_by_dex.get("flx", [])
+                _write_json_artifact(run_dir / "flx_full_file_setoracle_candidate_dump.json", {
+                    "source_key": selected_key,
+                    "selected_block": block_str,
+                    "candidate_count": len(flx_candidates),
+                    "candidates": flx_candidates,
+                    "flx_tsla_found": histogram.flx_tsla_found,
+                    "flx_nvda_found": histogram.flx_nvda_found,
+                    "parser_confidence": histogram.parser_confidence,
+                })
+                artifacts_written.append("flx_full_file_setoracle_candidate_dump.json")
+                # Write validation budget plan
+                _write_json_artifact(run_dir / "flx_overlap_validation_budget_plan.json", {
+                    "flx_candidate_found": True,
+                    "candidate_count": len(flx_candidates),
+                    "source_date": config.target_date,
+                    "candidate_blocks": [str(c.get("block", "")) for c in flx_candidates],
+                    "candidate_record_indices": [c.get("record_index", 0) for c in flx_candidates],
+                    "estimated_files_needed_for_overlap_validation": 5,
+                    "estimated_bytes_needed_for_overlap_validation": 5_000_000_000,
+                    "recommended_max_replica_files": 5,
+                    "recommended_download_budget_bytes": 5_000_000_000,
+                    "recommended_runtime_minutes": 120,
+                    "recommended_join_tolerance_primary_seconds": 5,
+                    "recommended_join_tolerance_secondary_seconds": 60,
+                    "next_command_not_run": True,
+                })
+                artifacts_written.append("flx_overlap_validation_budget_plan.json")
+            else:
+                # Write follow-up sampling plan
+                _write_json_artifact(run_dir / "flx_full_file_followup_sampling_plan.json", {
+                    "flx_candidate_found": False,
+                    "files_scanned": 1,
+                    "bytes_scanned": histogram.bytes_downloaded,
+                    "records_decoded": histogram.records_decoded,
+                    "setOracle_payloads_seen": histogram.setOracle_payload_count,
+                    "dexes_seen_in_setOracle": histogram.dexes_seen,
+                    "cash_update_count": histogram.setOracle_payloads_by_dex.get("cash", 0),
+                    "xyz_update_count": histogram.setOracle_payloads_by_dex.get("xyz", 0),
+                    "km_update_count": histogram.setOracle_payloads_by_dex.get("km", 0),
+                    "flx_update_count": 0,
+                    "estimated_probability_comment": (
+                        "FLX absent in one full file while other DEXes present. "
+                        "Consistent with sparse or absent FLX oracle updates in this file. "
+                        "Needs another date/file or overlap confirmation before closure."
+                    ),
+                    "recommended_next_dates_or_file_count": "Try 2-3 more dates or 3-5 more files",
+                    "absence_claim_supported_by_full_file": False,
+                    "next_command_not_run": True,
+                })
+                artifacts_written.append("flx_full_file_followup_sampling_plan.json")
+            final_status = histogram.status
+            # Write final status
+            _write_json_artifact(run_dir / "final_status.json", {
+                "status": final_status,
+                "failure_reason": None,
+                "artifacts_written": artifacts_written,
+                "runtime_elapsed_seconds": budget.elapsed_seconds,
+                "deadline_exceeded": budget.budget_exceeded,
+                "registry_mutated": False,
+                "phase0_precommitment_written": False,
+                "sonarx_residual_diagnostic_run": False,
+                "validation_run": False,
+                "backfill_run": False,
+                "sonarx_residual_diagnostic_run": False,
+            })
+            print(f"FINAL status={final_status} artifacts={len(artifacts_written)}")
+            return 0 if final_status not in ("REPLICA_CMDS_PHASE_MINUS1_ERROR", "REPLICA_CMDS_SOURCE_BLOCKED") else 1
+        # End of full-file decode mode
         # Envelope probe
         if not budget.check_deadline():
             final_reason = "RUNTIME_BUDGET_EXCEEDED"
