@@ -1235,76 +1235,166 @@ If reopened, the next step must be a symbol-specific builder-confirmation/archiv
 
 ### HIP-3 Builder-DEX Anchor-Free Cross-DEX No-Arb Spread — Scoped NULL
 
-**Tag:** `hip3-builder-dex-cross-dex-noarb-spread-scoped-null-v0`
+- **Tag:** `hip3-builder-dex-cross-dex-noarb-spread-scoped-null-v0`
+- **Status:** `NULL / CROSS_DEX_SPREAD_WITHIN_CONSERVATIVE_NOARB_BAND`
+- **Date:** 2026-05-29
+- **Branch:** `feat/hip3-cross-dex-noarb-band-phase-minus1-v0`
+- **Commit:** `7a2d12a4c4`
+- **Scope:** Phase -1 archive/data-plane diagnostic only.
+- **Safety posture:** public/archive data only; no orders, no private keys, no exchange account/auth endpoints, no live execution, no paper execution, no conductor promotion, no PnL, no returns, no trade signals.
 
-**Status:** `NULL / CROSS_DEX_SPREAD_WITHIN_CONSERVATIVE_NOARB_BAND`
+#### Question tested
 
-**Date:** 2026-05-29
+After the HIP-3 oracle-basis branch showed that the wide `flx` residual was likely stale/sparse-oracle plumbing rather than a clean fair-value dislocation, the remaining cleaner question was:
 
-**Branch:** `feat/hip3-cross-dex-noarb-band-phase-minus1-v0`
+> Do two active HIP-3 builder DEX markets for the same TradFi-like symbol diverge from each other by more than a conservative cross-DEX no-arb band?
 
-**What this is:**
-- A Phase -1 data-plane feasibility study comparing cross-DEX mid-price spreads for HIP-3 builder-deployed TradFi symbols
-- Anchor-free comparison of two builder DEXes directly using SonarX L2 summary snapshots
-- Conservative no-arb band analysis with four-fill fee awareness
+This branch intentionally avoided Yahoo/TradFi anchors and oracle fair-value assumptions. It compared builder DEX books directly using synchronized SonarX L2 archive partitions.
 
-**What this is NOT:**
-- NOT a PnL result
-- NOT a backtest result
-- NOT a strategy result
-- NOT a profitability claim
-- NOT a trade-readiness claim
-- NOT a Phase 0 precommitment
-- NOT an authorization for paper/conductor/live promotion
+#### Parent / sibling HIP-3 oracle-basis finding
 
-**Synchronized TSLA result (`cash:TSLA|km:TSLA`):**
-- 1000 aligned observations (exact, 3 shared partitions)
-- p95 absolute cross-mid spread: 8.17 bps
-- Conservative no-arb band: 57 bps
-- p95 excess over no-arb band: -48.83 bps
-- Classification: `HIP3_CROSS_DEX_NOARB_SPREAD_WITHIN_BAND`
+This cross-DEX branch should be read as a child of the HIP-3 oracle-basis investigation.
 
-**Synchronized NVDA result (`cash:NVDA|xyz:NVDA`):**
-- 5050 aligned observations (exact, 11 shared partitions)
-- p95 absolute cross-mid spread: 8.16 bps
-- Conservative no-arb band: 57 bps
-- p95 excess over no-arb band: -48.84 bps
-- Classification: `HIP3_CROSS_DEX_NOARB_SPREAD_WITHIN_BAND`
-- Duplication sanity: LOW risk (API symbols distinct, mids differ in 98.6% of obs)
+**Sibling registry entry:** `hip3-builder-offhours-oracle-basis-public-discovery-unresolved-v0` (line 1166 of REJECTED_RESEARCH.md).
 
-**NVDA `cash:NVDA|km:NVDA`:**
-- NOT tested as a market result
-- Full-range SonarX partitions do not overlap (cash: range 885810000-886810000, km: range 902750000-903830000)
-- This is a real pair-specific archive coverage gap, not a sampler defect
+The prior `replica_cmds` reconstruction showed that historical HIP-3 deployer oracle updates are publicly reconstructable from `s3://hl-mainnet-node-data/replica_cmds`, with oracle prices nested under `action.perpDeploy.setOracle.oraclePxs`.
 
-**`flx` exclusion:**
-- Excluded because prior replica_cmds evidence supported stale/sparse oracle artifact
-- See: `flx:TSLA` Phase -1 audit showing +133bps oracle deviation converging to -15bps
+In the bounded `flx` oracle-frequency confirmation:
 
-**Scope — what this closes:**
-- This specific anchor-free cross-DEX no-arb Phase -1 branch for tested pairs (TSLA cash|km, NVDA cash|xyz)
-- Does NOT close all HIP-3 builder DEX research
-- Does NOT close future data sources, different symbols, or different mechanisms
-- Does NOT close NVDA cash|km testing if better archive coverage becomes available
+- **Files sampled:** 8
+- **Dates sampled:** 4 (2026-05-23, 2026-05-26, 2026-05-27, 2026-05-28)
+- **Bytes downloaded:** approximately 9.3GB
+- **Records decoded:** 55,000
+- **`perpDeploy.setOracle` payloads:** 4,605
+- **`oraclePxs` pairs decoded:** 59,120
+- **`cash` oracle updates:** approximately 37,410
+- **`km` oracle updates:** approximately 16,654
+- **`para` oracle updates:** approximately 5,056
+- **`flx` oracle updates:** 0 in the decoded/data-bearing sample
 
-**Boundary — what this does NOT close:**
-- Other TradFi symbols not tested
-- Different DEX combinations not tested
-- Phase 0 precommitment on any symbol
-- Future data sources or archive expansions
-- Different alignment tolerances or fee assumptions
+The zero-record decode-failure files were not counted as evidence of `flx` absence. The `flx` exclusion is based only on decoded/data-bearing files where other DEXes were actively updating.
 
-**Reopen conditions:**
-1. Lower verified fee band (actual fee data instead of fallback conservative)
-2. Better overlapping archive coverage for untested pairs
-3. New active DEX pair with recurrent spread outside no-arb band
-4. Non-duplicated data source with confirmed tails
-5. Longer sample with clean reversion and depth
+Interpretation: `flx` was excluded from this cross-DEX pass because its earlier wide residual was more consistent with stale/sparse oracle plumbing than with a clean cross-DEX no-arb dislocation.
 
-**Artifact paths:**
-- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/20260529_084004_12e4e4d1/` (TSLA synchronized run)
-- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/20260529_090531_32f42bc3/` (NVDA synchronized run)
-- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/nvda_full_partition_intersection_audit.json` (NVDA partition audit)
-- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/nvda_cash_xyz_duplication_sanity_audit.json` (duplication sanity)
+**Method note:** historical HIP-3 deployer oracle updates are reconstructable from `s3://hl-mainnet-node-data/replica_cmds` via `action.perpDeploy.setOracle.oraclePxs`; see branch `feat/hip3-replica-cmds-setoracle-reconstruction-v0`. The action discriminator is `perpDeploy`, not a top-level `setOracle`. This disproves the earlier working assumption that no historical HIP-3 oracle path exists.
 
-**Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, paper broker, conductor promotion, wallet, signing, or exchange account endpoints were used. All S3 reads were bounded requester-pays behind --allow-s3-archive-read. No PnL, returns, Sharpe, profit factor, win rate, trade signals, entries/exits, or position sizing were computed. No strategy backtest was run. No Phase 0 precommitment was made. No registry mutation occurred during the diagnostic runs.
+**Registry gap:** the parent HIP-3 oracle-basis / `flx` stale-oracle investigation should receive its own dedicated registry note because it contains reusable oracle-reconstruction evidence beyond the scope of this cross-DEX no-arb closure.
+
+#### Conservative no-arb band
+
+The diagnostic used conservative no-arb-band discipline, including:
+
+- visible quoted spread on both books
+- four-fill fee burden, not a two-fill shortcut
+- conservative fallback HIP-3 fee assumptions (12.5 bps one-way, 50 bps four-fill)
+- extra uncertainty band (5 bps)
+- funding/margin uncertainty documented as diagnostic-only
+
+Both the TSLA and NVDA synchronized runs used the same 57 bps conservative no-arb band (source: `fallback_conservative`). No spread/PnL/return/position model was run.
+
+#### Result 1 — TSLA `cash|km`
+
+- **Pair:** `cash:TSLA|km:TSLA`
+- **Alignment:** synchronized shared-date / exact alignment
+- **Aligned observations:** 1,000
+- **Selected overlap units:** `885810000`, `885820000`, `885830000`
+- **p50 absolute cross-mid spread:** 6.34 bps
+- **p95 absolute cross-mid spread:** 8.17 bps
+- **p99 absolute cross-mid spread:** 9.02 bps
+- **Conservative no-arb band:** 57 bps
+- **p95 excess over no-arb band:** -48.83 bps
+- **Classification:** `HIP3_CROSS_DEX_NOARB_SPREAD_WITHIN_BAND`
+
+Interpretation: the synchronized TSLA cross-DEX spread was far inside its conservative no-arb band.
+
+#### Result 2 — NVDA `cash|xyz`
+
+The full partition-range audit showed that NVDA was not testable through `cash:NVDA|km:NVDA` in the archive coverage available as of 2026-05-29:
+
+- `cash:NVDA`: partition range `885810000-886810000`
+- `xyz:NVDA`: partition range `885810000-886810000`
+- `km:NVDA`: partition range `902750000-903830000`
+- `para:NVDA`: no data
+
+The `km:NVDA` partition range was systematically later than `cash:NVDA` and `xyz:NVDA`, consistent with different archival/listing timing rather than a permanent impossibility. Future SonarX loads may create overlap. The `NO_OVERLAP_DATES` result for `cash:NVDA|km:NVDA` is scoped to currently available SonarX coverage, not a permanent market-structure fact.
+
+Therefore the valid synchronized NVDA test pair was `cash:NVDA|xyz:NVDA`, which had full partition overlap (101 shared partitions).
+
+- **Pair:** `cash:NVDA|xyz:NVDA`
+- **Alignment:** synchronized shared-date / exact alignment
+- **Aligned observations:** 5,050
+- **Selected overlap units:** 11 partitions (`885810000` through `885910000`)
+- **p50 absolute cross-mid spread:** 4.36 bps
+- **p95 absolute cross-mid spread:** 8.16 bps
+- **p99 absolute cross-mid spread:** 9.21 bps
+- **Conservative no-arb band:** 57 bps
+- **p95 excess over no-arb band:** -48.84 bps
+- **p99 excess over no-arb band:** -47.79 bps
+- **Duplication sanity:** low risk; API symbols distinct (`cash:NVDA` vs `xyz:NVDA`) and mids differed in 98.6% of aligned observations
+- **Stale/dead-book diagnostics:** no dominant stale/dead-book confound detected
+- **Classification:** `HIP3_CROSS_DEX_NOARB_SPREAD_WITHIN_BAND`
+
+**Same-infra / co-archived partition caveat:** `cash:NVDA` and `xyz:NVDA` shared identical partition ranges (`885810000-886810000`). The within-band tightness is consistent with two distinct-but-co-located books on shared infrastructure, which is the expected efficient outcome rather than evidence of measurement duplication. The duplication sanity check did not support a collapsed-feed interpretation: API symbols were distinct, best bid/ask values differed, and the spread distribution was healthy (p50=4.36 bps, not near-zero).
+
+Interpretation: the synchronized NVDA cross-DEX spread was also far inside its conservative no-arb band.
+
+#### Important non-results and limitations
+
+This is not a global HIP-3 rejection.
+
+The following are not claimed:
+
+- No claim that all HIP-3 builder DEX mechanisms are dead.
+- No claim that all symbols are inside band.
+- No claim that every data source would produce the same result.
+- No claim that every fee schedule or future market state is covered.
+- No claim that this was a strategy, backtest, PnL result, or execution result.
+
+Specific limitations:
+
+- `cash:NVDA|km:NVDA` was not a market null. It did not overlap in the SonarX archive coverage available as of 2026-05-29; `km:NVDA` occupied a later partition range (`902750000-903830000`), so future archive loads may alter testability.
+- `flx:*` was excluded from passing any gate because prior `replica_cmds` oracle reconstruction found sample-backed stale/sparse oracle evidence (0 `flx` oracle updates in 55,000 decoded records across 8 files and 4 dates, while `cash`/`km`/`para` were actively updating).
+- The closure applies only to the tested anchor-free cross-DEX no-arb branch using synchronized SonarX L2 observations and conservative no-arb-band assumptions.
+- The result is Phase -1 diagnostic evidence only. It is not a Phase 0 precommitment, not paper eligible, and not execution eligible.
+
+#### Closure
+
+The tested anchor-free HIP-3 cross-DEX no-arb branch does not justify Phase 0.
+
+Both synchronized symbol tests were comfortably inside their conservative 57 bps no-arb band:
+
+- TSLA `cash|km`: p95 spread 8.17 bps vs 57 bps band.
+- NVDA `cash|xyz`: p95 spread 8.16 bps and p99 spread 9.21 bps vs 57 bps band.
+
+The specific branch is therefore closed as:
+
+`NULL / CROSS_DEX_SPREAD_WITHIN_CONSERVATIVE_NOARB_BAND`
+
+#### Reopen conditions
+
+This branch may be reopened only if at least one of the following changes:
+
+- verified public fee data materially lowers the conservative four-fill no-arb band
+- new overlapping archive coverage appears for previously blocked pairs such as `cash:NVDA|km:NVDA`
+- a new active non-`flx` DEX pair shows recurrent spread outside a correctly computed no-arb band
+- longer synchronized archive coverage shows liquid, non-concentrated, reverting tails outside band
+- a non-duplicated independent data source contradicts the SonarX synchronized L2 result
+- the mechanism changes from anchor-free cross-DEX no-arb spread to a materially different HIP-3 hypothesis
+
+#### Artifacts
+
+Primary artifacts:
+
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/registry_entry_self_consistency_audit.json`
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/20260529_084004_12e4e4d1/HIP3_CROSS_DEX_NOARB_SHARED_DATE_PHASE_MINUS1_REPORT.md`
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/20260529_084004_12e4e4d1/cross_dex_noarb_band_summary.json`
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/nvda_full_partition_intersection_audit.json`
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/20260529_090531_32f42bc3/cross_dex_noarb_band_summary.json`
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/20260529_090531_32f42bc3/nvda_cash_xyz_duplication_sanity_audit.json`
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/20260529_090531_32f42bc3/NVDA_CASH_XYZ_NOARB_PHASE_MINUS1_REPORT.md`
+- `reports/hip3_cross_dex_noarb_band_phase_minus1_v0/NVDA_CASH_XYZ_FINAL_AND_REGISTRY_DECISION_REPORT.md`
+- `reports/hip3_replica_cmds_setoracle_reconstruction_v0/20260529_054441_bf8cee/flx_frequency_confirmation_summary.json`
+- `reports/hip3_replica_cmds_setoracle_reconstruction_v0/20260529_054441_bf8cee/flx_stale_oracle_artifact_diagnostic.json`
+- `reports/hip3_replica_cmds_setoracle_reconstruction_v0/20260529_054441_bf8cee/oracle_basis_closure_or_pivot_recommendation.json`
+
+Final note: no broad scan, PnL, returns, signals, live, paper, conductor, or order/auth path was run.
