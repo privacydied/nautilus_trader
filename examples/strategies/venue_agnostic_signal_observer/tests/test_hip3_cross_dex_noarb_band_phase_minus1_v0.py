@@ -201,7 +201,7 @@ class TestDepthCalculations:
 
 
 # ===================================================================
-# 5. Alignment
+# 4. Alignment
 # ===================================================================
 
 class TestAlignment:
@@ -216,29 +216,55 @@ class TestAlignment:
             two_sided=True, parse_status="ok", source_key="test",
         )
 
-    def test_primary_alignment_within_5s(self):
+    def _noarb(self, pair):
+        return NoArbBandConfig(pair_id=pair.pair_id,
+                               left_fee_config=FeeMarginConfig(dex=pair.left_leg.dex, api_symbol=pair.left_leg.api_symbol),
+                               right_fee_config=FeeMarginConfig(dex=pair.right_leg.dex, api_symbol=pair.right_leg.api_symbol),
+                               left_funding_config=FundingConfig(dex=pair.left_leg.dex, api_symbol=pair.left_leg.api_symbol),
+                               right_funding_config=FundingConfig(dex=pair.right_leg.dex, api_symbol=pair.right_leg.api_symbol))
+
+    def test_exact_alignment_same_timestamp(self):
+        pair = parse_pair_string("cash:NVDA|km:NVDA")
+        left = [self._make_snap("cash:NVDA", "cash", 1000000.0)]
+        right = [self._make_snap("km:NVDA", "km", 1000000.0)]
+        obs, diag = align_snapshots(left, right, pair, self._noarb(pair), alignment_mode="exact")
+        assert len(obs) == 1
+        assert obs[0].timestamp_gap_seconds < 0.001
+        assert diag["exact_block_time_overlap_count"] == 1
+
+    def test_exact_alignment_different_timestamps(self):
         pair = parse_pair_string("cash:NVDA|km:NVDA")
         left = [self._make_snap("cash:NVDA", "cash", 1000000.0)]
         right = [self._make_snap("km:NVDA", "km", 1001000.0)]  # 1s gap
-        noarb = NoArbBandConfig(pair_id=pair.pair_id,
-                                left_fee_config=FeeMarginConfig(dex="cash", api_symbol="cash:NVDA"),
-                                right_fee_config=FeeMarginConfig(dex="km", api_symbol="km:NVDA"),
-                                left_funding_config=FundingConfig(dex="cash", api_symbol="cash:NVDA"),
-                                right_funding_config=FundingConfig(dex="km", api_symbol="km:NVDA"))
-        obs = align_snapshots(left, right, pair, noarb, primary_tol=5.0)
+        obs, diag = align_snapshots(left, right, pair, self._noarb(pair), alignment_mode="exact")
+        assert len(obs) == 0
+        assert diag["alignment_failure_reason"] == "exact_mode_no_matching_timestamps"
+
+    def test_nearest_alignment_within_tolerance(self):
+        pair = parse_pair_string("cash:NVDA|km:NVDA")
+        left = [self._make_snap("cash:NVDA", "cash", 1000000.0)]
+        right = [self._make_snap("km:NVDA", "km", 1001000.0)]  # 1s gap
+        obs, diag = align_snapshots(left, right, pair, self._noarb(pair),
+                                     alignment_mode="nearest", max_align_gap_seconds=5.0)
         assert len(obs) == 1
         assert obs[0].is_primary_alignment is True
+        assert diag["alignment_semantics"] == "diagnostic_nearest_neighbor"
+
+    def test_nearest_alignment_rejects_outside_tolerance(self):
+        pair = parse_pair_string("cash:NVDA|km:NVDA")
+        left = [self._make_snap("cash:NVDA", "cash", 1000000.0)]
+        right = [self._make_snap("km:NVDA", "km", 1050000.0)]  # 50s gap
+        obs, diag = align_snapshots(left, right, pair, self._noarb(pair),
+                                     alignment_mode="nearest", max_align_gap_seconds=5.0)
+        assert len(obs) == 0
+        assert diag["alignment_failure_reason"] is not None
 
     def test_diagnostic_alignment_5_to_30s(self):
         pair = parse_pair_string("cash:NVDA|km:NVDA")
         left = [self._make_snap("cash:NVDA", "cash", 1000000.0)]
         right = [self._make_snap("km:NVDA", "km", 1020000.0)]  # 20s gap
-        noarb = NoArbBandConfig(pair_id=pair.pair_id,
-                                left_fee_config=FeeMarginConfig(dex="cash", api_symbol="cash:NVDA"),
-                                right_fee_config=FeeMarginConfig(dex="km", api_symbol="km:NVDA"),
-                                left_funding_config=FundingConfig(dex="cash", api_symbol="cash:NVDA"),
-                                right_funding_config=FundingConfig(dex="km", api_symbol="km:NVDA"))
-        obs = align_snapshots(left, right, pair, noarb, primary_tol=5.0, diagnostic_tol=30.0)
+        obs, diag = align_snapshots(left, right, pair, self._noarb(pair),
+                                     primary_tol=5.0, alignment_mode="nearest", max_align_gap_seconds=30.0)
         assert len(obs) == 1
         assert obs[0].is_primary_alignment is False
 
@@ -246,26 +272,39 @@ class TestAlignment:
         pair = parse_pair_string("cash:NVDA|km:NVDA")
         left = [self._make_snap("cash:NVDA", "cash", 1000000.0)]
         right = [self._make_snap("km:NVDA", "km", 1050000.0)]  # 50s gap
-        noarb = NoArbBandConfig(pair_id=pair.pair_id,
-                                left_fee_config=FeeMarginConfig(dex="cash", api_symbol="cash:NVDA"),
-                                right_fee_config=FeeMarginConfig(dex="km", api_symbol="km:NVDA"),
-                                left_funding_config=FundingConfig(dex="cash", api_symbol="cash:NVDA"),
-                                right_funding_config=FundingConfig(dex="km", api_symbol="km:NVDA"))
-        obs = align_snapshots(left, right, pair, noarb, diagnostic_tol=30.0)
+        obs, diag = align_snapshots(left, right, pair, self._noarb(pair),
+                                     alignment_mode="nearest", max_align_gap_seconds=30.0)
         assert len(obs) == 0
 
     def test_same_block_flag(self):
         pair = parse_pair_string("cash:NVDA|km:NVDA")
         left = [self._make_snap("cash:NVDA", "cash", 1000000.0, bh=100)]
         right = [self._make_snap("km:NVDA", "km", 1000000.0, bh=100)]
-        noarb = NoArbBandConfig(pair_id=pair.pair_id,
-                                left_fee_config=FeeMarginConfig(dex="cash", api_symbol="cash:NVDA"),
-                                right_fee_config=FeeMarginConfig(dex="km", api_symbol="km:NVDA"),
-                                left_funding_config=FundingConfig(dex="cash", api_symbol="cash:NVDA"),
-                                right_funding_config=FundingConfig(dex="km", api_symbol="km:NVDA"))
-        obs = align_snapshots(left, right, pair, noarb)
+        obs, diag = align_snapshots(left, right, pair, self._noarb(pair))
         assert len(obs) == 1
         assert obs[0].same_block_height is True
+
+    def test_alignment_diagnostics_gap_quantiles(self):
+        pair = parse_pair_string("cash:NVDA|km:NVDA")
+        left = [self._make_snap("cash:NVDA", "cash", 1000000.0 + i * 1000) for i in range(5)]
+        right = [self._make_snap("km:NVDA", "km", 1000000.0 + i * 1000 + 200) for i in range(5)]
+        obs, diag = align_snapshots(left, right, pair, self._noarb(pair),
+                                     alignment_mode="nearest", max_align_gap_seconds=10.0)
+        assert len(obs) == 5
+        assert diag["median_nearest_gap_seconds"] is not None
+        assert diag["p90_nearest_gap_seconds"] is not None
+        assert diag["p99_nearest_gap_seconds"] is not None
+
+    def test_zero_alignment_pair_not_classified(self):
+        """A pair with zero aligned observations cannot be within-band or outside-band."""
+        pair = parse_pair_string("cash:NVDA|km:NVDA")
+        # Snapshots 10 minutes apart — too far for any tolerance
+        left = [self._make_snap("cash:NVDA", "cash", 1000000.0)]
+        right = [self._make_snap("km:NVDA", "km", 1600000.0)]
+        obs, diag = align_snapshots(left, right, pair, self._noarb(pair),
+                                     alignment_mode="nearest", max_align_gap_seconds=5.0)
+        assert len(obs) == 0
+        assert diag["alignment_failure_reason"] is not None
 
 
 # ===================================================================

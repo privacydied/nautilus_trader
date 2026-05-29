@@ -19,6 +19,7 @@ import gzip
 import hashlib
 import io
 import json
+import bisect
 import math
 import os
 import statistics
@@ -65,14 +66,19 @@ ALLOWED_STATUSES = frozenset({
     "HIP3_CROSS_DEX_NOARB_DECODE_FAILURE_BLOCKED",
     "HIP3_CROSS_DEX_NOARB_L2_UNDERPOWERED",
     "HIP3_CROSS_DEX_NOARB_ALIGNMENT_FAILED",
+    "HIP3_CROSS_DEX_NOARB_ALIGNMENT_UNAVAILABLE",
+    "HIP3_CROSS_DEX_NOARB_NEAREST_ALIGNMENT_DIAGNOSTIC",
     "HIP3_CROSS_DEX_NOARB_NO_TAIL",
     "HIP3_CROSS_DEX_NOARB_SPREAD_WITHIN_BAND",
+    "HIP3_CROSS_DEX_NOARB_SPREAD_OUTSIDE_BAND_DIAGNOSTIC",
     "HIP3_CROSS_DEX_NOARB_TAIL_PRESENT_BUT_ILLIQUID",
     "HIP3_CROSS_DEX_NOARB_TAIL_PRESENT_BUT_CONCENTRATED",
     "HIP3_CROSS_DEX_NOARB_PERSISTENT_LEVEL_OFFSET",
     "HIP3_CROSS_DEX_NOARB_REVERSION_UNDERPOWERED",
     "HIP3_CROSS_DEX_NOARB_FORWARD_RECORDER_VALIDATION_FAILED",
     "HIP3_CROSS_DEX_NOARB_TAIL_PRESENT_DIAGNOSTIC",
+    "HIP3_CROSS_DEX_NOARB_UNDERPOWERED",
+    "HIP3_CROSS_DEX_NOARB_NOT_ENOUGH_FOR_PRECOMMITMENT",
     "HIP3_CROSS_DEX_NOARB_NEXT_PRECOMMITMENT_REVIEW_ALLOWED",
 })
 
@@ -850,43 +856,129 @@ def align_snapshots(
     noarb_config: NoArbBandConfig,
     primary_tol: float = 5.0,
     diagnostic_tol: float = 30.0,
-) -> List[AlignedCrossDexObservation]:
-    """Align left/right snapshots by nearest timestamp within tolerance."""
-    # Filter to valid snapshots
+    alignment_mode: str = "nearest",
+    max_align_gap_seconds: float = 60.0,
+) -> Tuple[List[AlignedCrossDexObservation], dict]:
+    """Align left/right snapshots by timestamp.
+
+    Modes:
+      - "exact": only align snapshots with identical timestamp_ms (within 1ms)
+      - "nearest": align nearest snapshots within max_align_gap_seconds
+
+    Returns (observations, alignment_diagnostics_dict).
+    """
     left_valid = [s for s in left_snaps if s.parse_status == "ok" and s.two_sided]
     right_valid = [s for s in right_snaps if s.parse_status == "ok" and s.two_sided]
 
+    # Build diagnostics
+    diag: dict = {
+        "pair_id": pair.pair_id,
+        "left_api_symbol": pair.left_leg.api_symbol,
+        "right_api_symbol": pair.right_leg.api_symbol,
+        "left_snapshot_count": len(left_valid),
+        "right_snapshot_count": len(right_valid),
+        "alignment_mode_used": alignment_mode,
+        "max_align_gap_seconds": max_align_gap_seconds,
+    }
+
     if not left_valid or not right_valid:
-        return []
+        diag["alignment_failure_reason"] = "no_valid_snapshots"
+        diag["exact_block_time_overlap_count"] = 0
+        diag["nearest_time_overlap_count_by_tolerance"] = {"0s": 0, "1s": 0, "5s": 0, "10s": 0, "30s": 0, "60s": 0}
+        diag["median_nearest_gap_seconds"] = None
+        diag["p90_nearest_gap_seconds"] = None
+        diag["p99_nearest_gap_seconds"] = None
+        diag["unmatched_left_count"] = len(left_valid)
+        diag["unmatched_right_count"] = len(right_valid)
+        return [], diag
 
     # Sort by timestamp
     left_valid.sort(key=lambda s: s.timestamp_ms)
     right_valid.sort(key=lambda s: s.timestamp_ms)
 
+    # Build sorted right timestamp array for bisect
+    right_ts = [s.timestamp_ms / 1000.0 for s in right_valid]
+    right_used = set()
+
+    # Time range
+    diag["left_min_block_time"] = left_valid[0].timestamp_utc
+    diag["left_max_block_time"] = left_valid[-1].timestamp_utc
+    diag["right_min_block_time"] = right_valid[0].timestamp_utc
+    diag["right_max_block_time"] = right_valid[-1].timestamp_utc
+
     observations = []
-    right_idx = 0
+    all_gaps = []
+    exact_count = 0
+    tolerance_counts = {"0s": 0, "1s": 0, "5s": 0, "10s": 0, "30s": 0, "60s": 0}
+    unmatched_left = 0
 
     for lv in left_valid:
         lv_sec = lv.timestamp_ms / 1000.0
 
-        # Find closest right snapshot
-        best_delta = float("inf")
-        best_rv = None
-        for j in range(max(0, right_idx - 5), min(len(right_valid), right_idx + 10)):
-            rv = right_valid[j]
-            rv_sec = rv.timestamp_ms / 1000.0
-            delta = abs(lv_sec - rv_sec)
-            if delta < best_delta:
-                best_delta = delta
-                best_rv = rv
-                right_idx = j
+        if alignment_mode == "exact":
+            # Exact mode: find right snapshot with same timestamp (within 1ms)
+            best_delta = float("inf")
+            best_rv = None
+            best_j = -1
+            for j, rv in enumerate(right_valid):
+                if j in right_used:
+                    continue
+                rv_sec = rv.timestamp_ms / 1000.0
+                delta = abs(lv_sec - rv_sec)
+                if delta < best_delta:
+                    best_delta = delta
+                    best_rv = rv
+                    best_j = j
 
-        if best_rv is None:
-            continue
+            if best_rv is None or best_delta > 0.001:  # 1ms tolerance for exact
+                unmatched_left += 1
+                continue
+            right_used.add(best_j)
+            gap_s = best_delta
 
-        gap_s = best_delta
-        if gap_s > diagnostic_tol:
-            continue
+        else:
+            # Nearest mode: use bisect for proper nearest-neighbor search
+            pos = bisect.bisect_left(right_ts, lv_sec)
+            best_delta = float("inf")
+            best_rv = None
+            best_j = -1
+
+            # Check candidates at pos-1, pos, pos+1
+            for j in [pos - 1, pos, pos + 1]:
+                if j < 0 or j >= len(right_valid):
+                    continue
+                rv_sec = right_ts[j]
+                delta = abs(lv_sec - rv_sec)
+                if delta < best_delta:
+                    best_delta = delta
+                    best_rv = right_valid[j]
+                    best_j = j
+
+            if best_rv is None or best_delta > max_align_gap_seconds:
+                unmatched_left += 1
+                continue
+
+            gap_s = best_delta
+
+        all_gaps.append(gap_s)
+
+        # Tolerance counts
+        if gap_s <= 0.001:
+            tolerance_counts["0s"] += 1
+        if gap_s <= 1.0:
+            tolerance_counts["1s"] += 1
+        if gap_s <= 5.0:
+            tolerance_counts["5s"] += 1
+        if gap_s <= 10.0:
+            tolerance_counts["10s"] += 1
+        if gap_s <= 30.0:
+            tolerance_counts["30s"] += 1
+        if gap_s <= 60.0:
+            tolerance_counts["60s"] += 1
+
+        # Exact count for exact matches
+        if gap_s <= 0.001:
+            exact_count += 1
 
         is_primary = gap_s <= primary_tol
 
@@ -906,7 +998,6 @@ def align_snapshots(
         combined_visible = lv.quoted_spread_bps + best_rv.quoted_spread_bps
         noarb_band = noarb_config.conservative_noarb_band_bps
 
-        # Block height
         same_block = None
         if lv.block_height is not None and best_rv.block_height is not None:
             same_block = lv.block_height == best_rv.block_height
@@ -942,7 +1033,34 @@ def align_snapshots(
         )
         observations.append(obs)
 
-    return observations
+    # Fill diagnostics
+    diag["exact_block_time_overlap_count"] = exact_count
+    diag["nearest_time_overlap_count_by_tolerance"] = tolerance_counts
+    diag["unmatched_left_count"] = unmatched_left
+    diag["unmatched_right_count"] = len(right_valid) - len(right_used)
+    diag["recommendation"] = ""
+
+    if all_gaps:
+        all_gaps_sorted = sorted(all_gaps)
+        diag["median_nearest_gap_seconds"] = percentile(all_gaps_sorted, 50.0)
+        diag["p90_nearest_gap_seconds"] = percentile(all_gaps_sorted, 90.0)
+        diag["p99_nearest_gap_seconds"] = percentile(all_gaps_sorted, 99.0)
+    else:
+        diag["median_nearest_gap_seconds"] = None
+        diag["p90_nearest_gap_seconds"] = None
+        diag["p99_nearest_gap_seconds"] = None
+
+    if not observations and alignment_mode == "exact":
+        diag["alignment_failure_reason"] = "exact_mode_no_matching_timestamps"
+        diag["recommendation"] = "NVDA exact synchronization unavailable in sample; try nearest mode with gap tolerance"
+    elif not observations:
+        diag["alignment_failure_reason"] = f"no_snapshots_within_{max_align_gap_seconds}s_gap"
+        diag["recommendation"] = "Increase max_align_gap_seconds or check that both DEXes have overlapping time ranges"
+    elif alignment_mode == "nearest":
+        diag["alignment_semantics"] = "diagnostic_nearest_neighbor"
+        diag["recommendation"] = "Nearest-neighbor alignment is diagnostic only; not a synchronized book comparison"
+
+    return observations, diag
 
 
 # ---------------------------------------------------------------------------
@@ -1571,6 +1689,11 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
     pair_summaries = []
     reversion_results = {}
     all_obs_dicts = []
+    alignment_diagnostics = {}
+
+    alignment_mode = getattr(args, "alignment_mode", "nearest")
+    max_gap = getattr(args, "max_align_gap_seconds", 60.0)
+    min_aligned = getattr(args, "min_aligned_observations", 50)
 
     for pair in pairs:
         left_snaps = leg_snapshots.get(pair.left_leg.api_symbol, [])
@@ -1578,14 +1701,18 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
 
         if not left_snaps or not right_snaps:
             pair_summaries.append(PairSpreadSummary(pair_id=pair.pair_id, gate_status="NO_DATA"))
+            alignment_diagnostics[pair.pair_id] = {"alignment_failure_reason": "no_data_for_one_or_both_legs"}
             continue
 
         noarb = noarb_configs[pair.pair_id]
-        obs = align_snapshots(
+        obs, diag = align_snapshots(
             left_snaps, right_snaps, pair, noarb,
             primary_tol=args.primary_align_tolerance_seconds,
             diagnostic_tol=args.diagnostic_align_tolerance_seconds,
+            alignment_mode=alignment_mode,
+            max_align_gap_seconds=max_gap,
         )
+        alignment_diagnostics[pair.pair_id] = diag
 
         for o in obs:
             all_obs_dicts.append({
@@ -1607,10 +1734,15 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
         pair_summaries.append(ps)
         rev = compute_reversion_diagnostics(obs, pair.pair_id)
         reversion_results[pair.pair_id] = rev.to_dict()
-        print(f"PAIR {pair.pair_id}: {len(obs)} aligned, "
+
+        aligned_count = len(obs)
+        gap_info = ""
+        if diag.get("median_nearest_gap_seconds") is not None:
+            gap_info = f", median_gap={diag['median_nearest_gap_seconds']:.1f}s"
+        print(f"PAIR {pair.pair_id}: {aligned_count} aligned ({alignment_mode}), "
               f"p95_spread={ps.p95_abs_cross_mid_spread_bps:.1f}bps, "
               f"p95_excess={ps.p95_excess_over_noarb_band_bps:.1f}bps, "
-              f"rev={rev.classification}", flush=True)
+              f"rev={rev.classification}{gap_info}", flush=True)
 
     if all_obs_dicts:
         write_jsonl(out_root / "cross_dex_spread_observations.jsonl", all_obs_dicts)
@@ -1623,6 +1755,7 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
         s.pair_id: {"same_block_count": s.same_block_observation_count}
         for s in pair_summaries
     })
+    write_json(out_root / "cross_dex_alignment_diagnostics.json", alignment_diagnostics)
     write_json(out_root / "cross_dex_spread_pair_summaries.json", {
         s.pair_id: {"aligned": s.aligned_observation_count, "p95_excess": s.p95_excess_over_noarb_band_bps}
         for s in pair_summaries
@@ -1659,6 +1792,67 @@ def run_phase_minus1(args: argparse.Namespace) -> int:
         "no_pnl_no_returns_no_signals": True, "no_registry_mutation": True,
     }
     write_json(out_root / "summary.json", summary)
+
+    # No-arb band summary
+    all_abs = [o["abs_cross_mid_spread_bps"] for o in all_obs_dicts] if all_obs_dicts else [0.0]
+    all_excess = [o["excess_over_noarb_band_bps"] for o in all_obs_dicts] if all_obs_dicts else [0.0]
+    noarb_band_bps = list(noarb_configs.values())[0].conservative_noarb_band_bps if noarb_configs else 50.0
+
+    noarb_summary = {
+        "run_id": run_id,
+        "pairs_attempted": len(pairs),
+        "pairs_data_bearing": len([s for s in pair_summaries if s.aligned_observation_count > 0]),
+        "pairs_aligned": len([s for s in pair_summaries if s.aligned_observation_count >= min_aligned]),
+        "alignment_mode": alignment_mode,
+        "min_aligned_observations": min_aligned,
+        "conservative_noarb_band_bps": noarb_band_bps,
+        "fee_band_source": "fallback_conservative",
+        "p50_abs_cross_mid_spread_bps": percentile(sorted(all_abs), 50.0),
+        "p95_abs_cross_mid_spread_bps": percentile(sorted(all_abs), 95.0),
+        "p99_abs_cross_mid_spread_bps": percentile(sorted(all_abs), 99.0),
+        "p95_excess_over_noarb_band_bps": percentile(sorted(all_excess), 95.0),
+        "classification_by_pair": {},
+        "global_status": decision.final_status,
+        "limitations": decision.limitations,
+        "no_pnl_no_returns_no_signals_confirmation": True,
+    }
+    for ps in pair_summaries:
+        noarb_summary["classification_by_pair"][ps.pair_id] = {
+            "aligned": ps.aligned_observation_count,
+            "classification": ps.gate_status if ps.gate_status != "PENDING" else "evaluated",
+        }
+    write_json(out_root / "cross_dex_noarb_band_summary.json", noarb_summary)
+
+    # Pair diagnostics
+    pair_diag = {}
+    for ps in pair_summaries:
+        d = alignment_diagnostics.get(ps.pair_id, {})
+        pair_diag[ps.pair_id] = {
+            "pair_id": ps.pair_id,
+            "left_api_symbol": ps.pair_id.split("|")[0] if "|" in ps.pair_id else "",
+            "right_api_symbol": ps.pair_id.split("|")[1] if "|" in ps.pair_id else "",
+            "aligned_observations": ps.aligned_observation_count,
+            "alignment_mode": alignment_mode,
+            "alignment_gap_stats": {
+                "median": d.get("median_nearest_gap_seconds"),
+                "p90": d.get("p90_nearest_gap_seconds"),
+                "p99": d.get("p99_nearest_gap_seconds"),
+            },
+            "cross_mid_spread_bps_stats": {
+                "median": ps.median_abs_cross_mid_spread_bps,
+                "p95": ps.p95_abs_cross_mid_spread_bps,
+                "p99": ps.p99_abs_cross_mid_spread_bps,
+            },
+            "noarb_band_bps": noarb_band_bps,
+            "excess_over_noarb_band_stats": {
+                "median": ps.median_excess_over_noarb_band_bps,
+                "p95": ps.p95_excess_over_noarb_band_bps,
+                "p99": ps.p99_excess_over_noarb_band_bps,
+            },
+            "classification": "within_band" if ps.p95_excess_over_noarb_band_bps <= 0 else "outside_band_diagnostic",
+            "limitations": [],
+        }
+    write_json(out_root / "cross_dex_noarb_pair_diagnostics.json", pair_diag)
 
     # Summary markdown
     md = [f"# HIP-3 Cross-DEX No-Arb-Band Phase -1 Report", "",
@@ -1706,6 +1900,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--enable-forward-recorder-cross-validation", action="store_true")
     p.add_argument("--forward-recorder-root", default="reports/hip3_builder_dex_tradfi_forward_recorder_v0")
     p.add_argument("--allow-mismatched-display-symbols", action="store_true")
+    p.add_argument("--alignment-mode", choices=["exact", "nearest"], default="nearest",
+                    help="exact: only align identical timestamps; nearest: nearest-neighbor within gap")
+    p.add_argument("--max-align-gap-seconds", type=float, default=60.0,
+                    help="Max seconds gap for nearest-neighbor alignment")
+    p.add_argument("--write-alignment-diagnostics", action="store_true",
+                    help="Write detailed alignment diagnostic artifact")
+    p.add_argument("--min-aligned-observations", type=int, default=50,
+                    help="Minimum aligned observations for a pair to be considered data-bearing")
     return p
 
 
