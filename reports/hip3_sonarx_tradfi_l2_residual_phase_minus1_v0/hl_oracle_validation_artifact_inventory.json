@@ -1,0 +1,35 @@
+{
+  "branch": "feat/hip3-sonarx-tradfi-l2-residual-phase-minus1-v0",
+  "local_sha": "8f469160e783e9de5053fef31baf2470e9914743",
+  "remote_sha": null,
+  "module_exists": true,
+  "artifacts_present": [
+    "forward_recorder_oracle_context_audit.json",
+    "hl_oracle_baseline_state.json",
+    "hl_oracle_forward_residual_diagnostic.json",
+    "hl_oracle_forward_residual_diagnostic.md",
+    "hl_oracle_reatudit_final.json",
+    "hl_oracle_reaudit_baseline.json",
+    "HL_ORACLE_REAUDIT_REPORT.md",
+    "phase_minus1_reference_path_baseline.json"
+  ],
+  "artifacts_missing": [
+    "hl_oracle_validation_artifact_inventory.json",
+    "hl_oracle_forward_recorder_file_inventory.json",
+    "hl_oracle_raw_context_integrity_audit.json",
+    "hl_oracle_explicit_dex_api_mapping_audit.json",
+    "hl_oracle_independent_residual_recompute.json",
+    "hl_oracle_residual_reversion_vs_level_offset_audit.json",
+    "hl_oracle_residual_timeseries.jsonl",
+    "hl_oracle_residual_timeseries_summary.md",
+    "hl_oracle_residual_session_concentration_audit.json",
+    "hl_oracle_cross_dex_residual_audit.json",
+    "hl_oracle_residual_l2_tradeability_join.json",
+    "hl_oracle_forward_vs_sonarx_l2_consistency_audit.json"
+  ],
+  "forward_recorder_source_file": "/mnt/nasirjones/py/nautilus_trader/reports/hip3_builder_dex_tradfi_forward_recorder_v0/9b41ea53/asset_context_snapshots/20260528.jsonl",
+  "inspected_source_file_exists": true,
+  "source_file_size_bytes": null,
+  "source_file_line_count": null,
+  "validation_ready": true
+}

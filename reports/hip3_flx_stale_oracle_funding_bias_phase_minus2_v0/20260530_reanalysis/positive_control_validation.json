@@ -1,0 +1,27 @@
+{
+  "control_block": "/tmp/test_block.lz4",
+  "control_block_date": "2026-05-23",
+  "flx_btc_detected": true,
+  "flx_btc_count": 646,
+  "flx_tsla_count": 646,
+  "flx_nvda_count": 646,
+  "all_flx_keys": [
+    "BTC",
+    "COIN",
+    "COPPER",
+    "CRCL",
+    "GAS",
+    "GOLD",
+    "NVDA",
+    "OIL",
+    "PALLADIUM",
+    "PLATINUM",
+    "SILVER",
+    "TSLA",
+    "USA100",
+    "USA500",
+    "USDE",
+    "XMR"
+  ],
+  "positive_control_status": "HIP3_FLX_ORACLE_FREQUENCY_SCAN_POSITIVE_CONTROL_PASSED"
+}

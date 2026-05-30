@@ -1,0 +1,47 @@
+{
+  "study_id": "hip3_sonarx_tradfi_l2_residual_phase_minus1_v0",
+  "created_at_utc": "2026-05-28T23:30:00+00:00",
+  "branch": "feat/hip3-sonarx-tradfi-l2-residual-phase-minus1-v0",
+  "git_sha": "6b6456b9afb5293affb413793edc29d00285e04e",
+  "l2_data_bearing_confirmed": true,
+  "l2_snapshots_parsed": 3000,
+  "l2_markets_parsed": 12,
+  "l2_two_sided_book_rate": 1.0,
+  "l2_crossed_books": 0,
+  "l2_schema_violations": 0,
+  "l2_median_spread_bps_range": "0.25-13.7",
+  "candle_snapshot_available": true,
+  "winning_candle_format": "dex_qualified_req_wrapper",
+  "candle_request_template": "{\"type\":\"candleSnapshot\",\"req\":{\"coin\":\"dex:SYMBOL\",\"interval\":\"1h\",\"startTime\":epoch_ms,\"endTime\":epoch_ms}}",
+  "candle_bars_returned": 47,
+  "candle_tested_symbol": "cash:TSLA",
+  "candle_http_status": 200,
+  "candle_422_errors": 0,
+  "candle_429_rate_limit": false,
+  "anchor_available": false,
+  "anchor_blocker": "ANCHOR_REFERENCE_UNAVAILABLE_OR_STALE",
+  "anchor_details": {
+    "yahoo_status": "HTTP_429_RATE_LIMITED",
+    "stooq_status": "REQUIRES_API_KEY",
+    "tested_symbols": ["TSLA", "NVDA"]
+  },
+  "residual_available": false,
+  "residual_blocker": "ANCHOR_REFERENCE_UNAVAILABLE_OR_STALE",
+  "current_status": "SONARX_PHASE_MINUS1_NOT_ENOUGH_FOR_PRECOMMITMENT",
+  "statuses_accumulated": [
+    "SONARX_L2_HISTORY_PARSE_OK",
+    "SONARX_CANDLE_JOIN_AVAILABLE",
+    "CANDLE_SNAPSHOT_AVAILABLE",
+    "SONARX_ANCHOR_BLOCKED",
+    "SONARX_RESIDUAL_DIAGNOSTIC_UNDERPOWERED",
+    "SONARX_PHASE_MINUS1_NOT_ENOUGH_FOR_PRECOMMITMENT"
+  ],
+  "registry_unchanged": true,
+  "forward_recorder_untouched": true,
+  "safety_mode": "public_data_observer_only",
+  "no_orders_no_auth_no_live_confirmation": true,
+  "reference_run_ids": {
+    "candle_smoke": "a2b7da16",
+    "anchor_smoke": "4288e974"
+  }
+}

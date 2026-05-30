@@ -1,0 +1,16 @@
+{
+  "previous_frequency_scan_conclusion": "INVALIDATED_EXTRACTION_FALSE_NEGATIVE",
+  "positive_control_status": "HIP3_FLX_ORACLE_FREQUENCY_SCAN_POSITIVE_CONTROL_PASSED",
+  "root_cause": "multiSig payload.action perpDeploy envelope was not traversed",
+  "prior_zero_flx_counts_are_evidence": false,
+  "flx_stale_premise_requires_reevaluation": true,
+  "reevaluation_result": "HIP3_FLX_STALE_PREMISE_FALSIFIED_DECODER_ARTIFACT",
+  "evidence": [
+    "Prior scanner only traversed sa.action.setOracle.oraclePxs",
+    "Actual replica_cmds structure wraps perpDeploy in multiSig envelope: sa.action(type=multiSig).payload.action(type=perpDeploy).setOracle.oraclePxs",
+    "Positive control: flx:BTC=131 in /tmp/test_block.lz4",
+    "3-date reanalysis: flx:TSLA=646, flx:NVDA=646, flx:BTC=646 across 25000 records",
+    "flx update cadence: 16.18/hour (comparable to cash 28.07/hour, km ~11.5/hour, xyz ~13.8/hour)",
+    "16 unique flx keys detected: BTC, COIN, COPPER, CRCL, GAS, GOLD, NVDA, OIL, PALLADIUM, PLATINUM, SILVER, TSLA, USA100, USA500, USDE, XMR"
+  ]
+}

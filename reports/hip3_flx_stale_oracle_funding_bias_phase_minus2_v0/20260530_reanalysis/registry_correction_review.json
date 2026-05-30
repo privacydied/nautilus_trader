@@ -1,0 +1,10 @@
+{
+  "registry_correction_status": "HIP3_FLX_REGISTRY_CORRECTION_NOT_REQUIRED",
+  "reason": "REJECTED_RESEARCH.md had no FLX-specific entry. A B-slow closure note was appended (CLOSED_UPSTREAM / PREMISE_FALSIFIED_DECODER_ARTIFACT). This is a premise-falsification closure, not a correction of an existing rejected-research entry. The FLX stale oracle doc received an append-only correction section. No cross-DEX exclusion rationale citing stale FLX was found — flx:TSLA/flx:NVDA are included in forward-recorder and sonarx docs.",
+  "flx_stale_oracle_doc_premise_invalidated": true,
+  "doc_path": "examples/strategies/venue_agnostic_signal_observer/docs/HIP3_FLX_STALE_ORACLE_FUNDING_BIAS_PHASE_MINUS2_V0.md",
+  "closure_note_appended_to_rejected_research": true,
+  "closure_note_tag": "hip3-flx-stale-oracle-bslow-closed-upstream-decoder-artifact",
+  "cross_dex_exclusion_rationale_found": false,
+  "grep_evidence": "No matches for flx.*excluded, excluded.*flx, flx.*absent, flx.*sparse in REJECTED_RESEARCH.md"
+}

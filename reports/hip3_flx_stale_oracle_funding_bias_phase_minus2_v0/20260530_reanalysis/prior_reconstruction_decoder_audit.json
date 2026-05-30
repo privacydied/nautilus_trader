@@ -1,0 +1,18 @@
+{
+  "prior_decoder_found": true,
+  "prior_decoder_branch": "feat/hip3-replica-cmds-setoracle-reconstruction-v0",
+  "prior_decoder_path": "examples/strategies/venue_agnostic_signal_observer/hip3_replica_cmds_setoracle_reconstruction_v0.py",
+  "prior_decoder_unwrapped_multisig_payload_action": false,
+  "prior_flx_zero_finding_potentially_invalidated": true,
+  "evidence": [
+    "Prior decoder at line 1642: if action.get('type') != 'perpDeploy': continue",
+    "This checks only sa.action.type for 'perpDeploy'",
+    "Actual structure is sa.action(type=multiSig).payload.action(type=perpDeploy)",
+    "The multiSig type causes the continue, silently skipping all perpDeploy oracle updates",
+    "The histogram (line 1615) also only counts sa.action.type, showing 'multiSig' instead of 'perpDeploy'",
+    "Result: all flx:* oracle updates were dropped; cash/km/para updates that happened to use direct perpDeploy path were preserved",
+    "The 'flx absent while cash/km/para active' finding was a decoder artifact"
+  ],
+  "prior_decoder_had_same_bug_as_current_scanner": true,
+  "bug_description": "Both decoders traversed only sa.action.setOracle.oraclePxs without unwrapping the multiSig payload.action envelope"
+}

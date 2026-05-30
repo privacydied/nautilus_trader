@@ -1,0 +1,14 @@
+{
+  "study_id": "hip3_sonarx_tradfi_l2_residual_phase_minus1_v0",
+  "created_at_utc": "2026-05-29T01:00:00+00:00",
+  "branch": "feat/hip3-sonarx-tradfi-l2-residual-phase-minus1-v0",
+  "starting_sha": "4bf8bbbdf06cec3cd0a95db91a34b92d0514ec0c",
+  "prior_l2_status": "SONARX_L2_HISTORY_PARSE_OK",
+  "prior_candle_status": "CANDLE_SNAPSHOT_AVAILABLE",
+  "prior_external_anchor_status": "PUBLIC_ANCHOR_UNAVAILABLE",
+  "prior_hl_oracle_status_if_known": "HL_ORACLE_SOURCE_UNAVAILABLE (from run ff5c0627)",
+  "reason_for_reaudit": "The prior HL_ORACLE_SOURCE_UNAVAILABLE result is being rechecked because a default-dex query could falsely miss builder-DEX symbols; metaAndAssetCtxs must be queried with explicit builder dex values (xyz, flx, km, cash). The prior audit may have queried the default perp universe instead of builder DEXes.",
+  "registry_unchanged": true,
+  "forward_recorder_not_modified": true,
+  "prior_audit_flaw": "Queried metaAndAssetCtxs without explicit dex parameter, likely missing HIP-3 builder equity symbols that only exist in builder-specific universes"
+}

@@ -1270,3 +1270,34 @@ The frozen v0 representative real-strategy diagnostic failed validation calibrat
 - examples/strategies/venue_agnostic_signal_observer/docs/HYPERLIQUID_BTC_ETH_ML_ATR_REPRESENTATIVE_REAL_STRATEGY_V0_FINDINGS.md
 
 **Safety:** Observer-only research. No orders, auth, private keys, live trading, shadow executor, bot path, systemd, registry mutation, precommitment unlock, conductor promotion, or paper strategy promotion were used. No AWS/S3 downloads were performed during the representative real-strategy diagnostic. The diagnostic used existing representative bar and funding parquet files.
+
+---
+
+### FLX Stale-Oracle Funding Distortion B-slow — CLOSED_UPSTREAM / PREMISE_FALSIFIED_DECODER_ARTIFACT
+
+**Tag:** `hip3-flx-stale-oracle-bslow-closed-upstream-decoder-artifact`
+**Date:** 2026-05-30
+**Branch:** `feat/hip3-flx-stale-oracle-funding-bias-phase-minus2-v0`
+**Status:** `CLOSED_UPSTREAM` — not a strategy rejection; premise falsified by corrected decoder
+
+**Hypothesis:** FLX HIP-3 builder DEX oracle staleness creates a persistent, signed, lag-driven oracle bias versus active same-underlying builder DEX reference oracles, slow enough that a later funding-distortion Phase 0 may be worth drafting.
+
+**What happened:** The hypothesis was motivated by a reported absence/sparsity of `flx` oracle updates in `replica_cmds` decoded data. Positive-control validation found the extractor was dropping `flx:*` updates because it did not unwrap the `multiSig.payload.action.perpDeploy.setOracle.oraclePxs` envelope. The corrected reanalysis found `flx:TSLA` and `flx:NVDA` update actively at 16.18 updates/hour across a 3-date sample (646 updates each, comparable to `km` ~11.5/hour and `xyz` ~13.8/hour).
+
+**Decoder bug:** Both the Phase -2 scanner and the prior reconstruction decoder (`feat/hip3-replica-cmds-setoracle-reconstruction-v0`) traversed only `sa.action.setOracle.oraclePxs`. Actual data wraps perpDeploy inside `sa.action(type=multiSig).payload.action(type=perpDeploy).setOracle.oraclePxs`. Since `action.type` is `"multiSig"`, the direct perpDeploy check failed silently and all `flx:*` keys were dropped.
+
+**Why this is not a strategy rejection:** The stale-oracle premise was a data-plane observation, not a tested trading hypothesis. The alignment, bias, funding-clock proxy, and actual funding measurement were never run because the stale premise failed upstream. No forward returns, no cost model, no null test, no FDR, no holdout, no execution simulation were performed.
+
+**What this closes:** The B-slow stale-oracle funding-distortion hypothesis is closed upstream because its core premise (flx oracle is sparse/stale) is unsupported by corrected oracle-frequency evidence.
+
+**What this does NOT close:** FLX oracle methodology differences, reference basket differences, forward-recorder residuals, or any other FLX-related investigation not dependent on the stale-oracle premise.
+
+**Forward-recorder residual note:** The prior wide flx forward-recorder residual is not explained by absent/sparse oracle updates under the corrected decoder. Possible explanations include deployer oracle methodology differences, reference basket differences, anchor mismatch, forward-recorder parsing issues, or residual calculation artifact. This does not investigate that residual further.
+
+**Artifact paths:**
+- reports/hip3_flx_stale_oracle_funding_bias_phase_minus2_v0/20260530_reanalysis/ (corrected reanalysis)
+- examples/strategies/venue_agnostic_signal_observer/docs/HIP3_FLX_STALE_ORACLE_FUNDING_BIAS_PHASE_MINUS2_V0.md (closure section appended)
+
+**Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, bot path, systemd, registry mutation, precommitment unlock, conductor promotion, or paper strategy promotion were used. Actual funding was not measured. No PnL, basis, residual, or strategy evaluation was performed.
+
+>>>>>>> feat/hip3-flx-stale-oracle-funding-bias-phase-minus2-v0
