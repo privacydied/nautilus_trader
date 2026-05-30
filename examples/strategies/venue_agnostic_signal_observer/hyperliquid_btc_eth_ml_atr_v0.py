@@ -82,6 +82,7 @@ CSV_FLOAT_FMT = "%.8f"
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class SplitConfig:
+    train_start: str = "2024-01-01T00:00:00Z"
     train_end: str = "2024-12-31T23:59:59Z"
     validation_start: str = "2025-01-01T00:00:00Z"
     validation_end: str = "2025-06-30T23:59:59Z"
@@ -542,10 +543,11 @@ def assign_splits(
     df: pd.DataFrame, split_cfg: SplitConfig, feature_cfg: FeatureConfig
 ) -> Dict[str, pd.DataFrame]:
     """Assign rows to train/validation/test. Drop NaN features/labels."""
-    train_end = pd.Timestamp(split_cfg.train_end)
-    val_start = pd.Timestamp(split_cfg.validation_start)
-    val_end = pd.Timestamp(split_cfg.validation_end)
-    test_start = pd.Timestamp(split_cfg.test_start)
+    train_start = pd.Timestamp(split_cfg.train_start, tz="UTC")
+    train_end = pd.Timestamp(split_cfg.train_end, tz="UTC")
+    val_start = pd.Timestamp(split_cfg.validation_start, tz="UTC")
+    val_end = pd.Timestamp(split_cfg.validation_end, tz="UTC")
+    test_start = pd.Timestamp(split_cfg.test_start, tz="UTC")
 
     # Drop rows with NaN in any feature column or label
     feature_cols = list(feature_cfg.feature_names)
@@ -553,7 +555,9 @@ def assign_splits(
     df_clean = df.dropna(subset=drop_cols).copy()
 
     splits = {}
-    splits["train"] = df_clean[df_clean["timestamp"] <= train_end].copy()
+    splits["train"] = df_clean[
+        (df_clean["timestamp"] >= train_start) & (df_clean["timestamp"] <= train_end)
+    ].copy()
     splits["validation"] = df_clean[
         (df_clean["timestamp"] >= val_start) & (df_clean["timestamp"] <= val_end)
     ].copy()
