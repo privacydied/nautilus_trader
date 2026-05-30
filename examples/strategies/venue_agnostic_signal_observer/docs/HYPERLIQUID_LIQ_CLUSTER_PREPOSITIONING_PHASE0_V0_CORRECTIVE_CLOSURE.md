@@ -111,6 +111,22 @@ Registry rejection:      FORBIDDEN / NOT REJECTED
 Required unblocker:      Node fills archive access or public liquidation-price/margin-mode source
 ```
 
+## Post-Hoc Taxonomy Acknowledgement
+
+The corrective statuses `PROXY_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE` and `PHASE0B_BLOCKED_PHASE0A_NOT_RECONSTRUCTABLE` are **post-hoc additions** to the original frozen taxonomy defined in the precommitment. They are not new permissive outcomes. They are conservative refinements of the already-frozen blocked condition `LIQ_CLUSTER_PHASE_MINUS1_BLOCKED_LIQ_PRICE_NOT_RECONSTRUCTABLE` / reconstruction blocked. The original `PHASE0A_MECHANISM_RECONSTRUCTABLE` emission is invalidated for the proxy run.
+
+These statuses map directly to the frozen taxonomy as stricter descendants:
+- `PROXY_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE` → refinement of `LIQ_CLUSTER_PHASE_MINUS1_BLOCKED_LIQ_PRICE_NOT_RECONSTRUCTABLE` (blocked, with explicit non-promotable diagnostic label)
+- `PHASE0B_BLOCKED_PHASE0A_NOT_RECONSTRUCTABLE` → refinement of `LIQ_CLUSTER_PHASE_MINUS1_BLOCKED_LIQ_PRICE_NOT_RECONSTRUCTABLE` (Phase 0B cannot be treated as mechanism evidence when Phase 0A is proxy-only)
+
+Neither status unlocks promotion, v1, paper, shadow, live, conductor, bot, or registry rejection.
+
+**DIAGNOSTIC_COMPLETE means only that the proxy diagnostic artifact was written.** It does not mean the true liquidation-cluster mechanism completed Phase 0A/0B, passed gates, or became promotable.
+
+## Provenance — Proxy-Spreading Fix
+
+Commit `faf12a903b` ("fix(liq-cluster): spread proxy liq levels across leverage profiles; pass ctxs to run_phase0") was applied **after** the initial study commit (`f49b3d92aa`) but **before** the performance optimization (`a1452e9e40`) and the corrective closure (`088a9e8370`). The proxy-spreading fix was a benign proxy-shape fix and did not create a promotable or rejective mechanism result; after correction all proxy outputs are non-promotable and non-rejection.
+
 ## Do Not Use the Proxy Run as Evidence of a Tradable Edge
 
 The proxy run's negative result is not evidence that the liquidation-cluster mechanism does not exist. It is evidence that the aggregate-OI proxy map, under mark-return with 50 bps costs, produced negative returns. The true mechanism — per-address isolated-margin clusters with executable entries — was never tested.

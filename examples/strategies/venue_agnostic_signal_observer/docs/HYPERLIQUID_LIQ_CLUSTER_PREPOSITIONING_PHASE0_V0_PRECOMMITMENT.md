@@ -17,6 +17,8 @@ Because of these constraints, the reconstructed liquidation-price map is a **bia
 
 ### Corrected Classification
 
+**Post-hoc taxonomy note:** The statuses `PROXY_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE` and `PHASE0B_BLOCKED_PHASE0A_NOT_RECONSTRUCTABLE` are post-hoc additions to the original frozen taxonomy. They are not new permissive outcomes — they are conservative refinements of the already-frozen blocked condition `LIQ_CLUSTER_PHASE_MINUS1_BLOCKED_LIQ_PRICE_NOT_RECONSTRUCTABLE`. The original `PHASE0A_MECHANISM_RECONSTRUCTABLE` emission is invalidated for the proxy run. **DIAGNOSTIC_COMPLETE means only that the proxy diagnostic artifact was written; it does not mean the true mechanism completed Phase 0A/0B, passed gates, or became promotable.**
+
 | Field | Value |
 |-------|-------|
 | Original emitted status | `PHASE0A_MECHANISM_RECONSTRUCTABLE` |
