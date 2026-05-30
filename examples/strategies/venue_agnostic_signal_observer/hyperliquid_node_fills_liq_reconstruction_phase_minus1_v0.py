@@ -602,8 +602,17 @@ def list_s3_prefix(prefix: str, requester_pays: bool = True) -> list[dict]:
         if len(parts) < 3:
             continue
         try:
-            size = int(parts[-1])
-            key = " ".join(parts[2:])
+            # aws s3 ls --recursive format: DATE TIME SIZE KEY...
+            # aws s3 ls (non-recursive, directories): just date/time entries
+            # Try parsing size from third-to-last part (after date and time)
+            if len(parts) >= 4:
+                # Full object line: DATE TIME SIZE KEY
+                size = int(parts[2])
+                key = " ".join(parts[3:])
+            else:
+                # Minimal format: SIZE KEY (shouldn't happen with --recursive but handle it)
+                size = int(parts[-1])
+                key = " ".join(parts[:-1])
             objects.append({"key": key, "size": size})
         except (ValueError, IndexError):
             continue
@@ -1685,11 +1694,21 @@ class NodeFillsLiqReconstructionProbe:
                 )
                 return
 
-            # Check byte cap
-            total_bytes = sum(o.get("size", 0) for o in remote_objects[:config.max_hours * 24])
+            # Check byte cap — estimate bytes for the target fetch window
+            # For all-coin time-partitioned archives, each hour is one file (~25 MB).
+            # Shrink cost estimation to a single hour so we don't block on multi-hour sums.
+            if download_unit == DownloadUnit.ALL_COIN_HOUR_OBJECT:
+                total_bytes = sum(o.get("size", 0) for o in remote_objects[:1])
+            elif download_unit == DownloadUnit.SINGLE_COIN_HOUR_OBJECT:
+                total_bytes = sum(o.get("size", 0) for o in remote_objects[:config.max_hours])
+            else:
+                # Unknown partitioning: conservative estimate for 1 day (24 files)
+                total_bytes = sum(o.get("size", 0) for o in remote_objects[:min(24, len(remote_objects))])
             if total_bytes > config.max_download_bytes:
                 self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_COST_OR_SIZE_CAP.value
                 self.partitioning_inv = PartitioningInventory(
+                    partitioning=partitioning,
+                    smallest_download_unit=download_unit,
                     candidate_namespaces=CANDIDATE_NAMESPACES,
                     found_namespace=coverage_inv.namespace,
                     total_objects_listed=len(remote_objects),
