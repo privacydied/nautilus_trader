@@ -1,5 +1,47 @@
 # Hyperliquid Liquidation Cluster Prepositioning - Phase -1 + Phase 0 v0 Precommitment
 
+## Corrective Addendum — Proxy Reconstruction Invalidates Phase 0A Reconstructable Status
+
+**Date**: 2026-05-30 (corrective closure)
+**Branch**: `feat/hyperliquid-liq-cluster-prepositioning-phase0-v0` → corrective branch: `fix/liq-cluster-proxy-closure-v0`
+
+The Phase -1 implementation uses **aggregate-OI proxy reconstruction** rather than per-address isolated-margin liquidation-price reconstruction. Specifically:
+
+- It relies on aggregate open-interest snapshots, not per-address position state.
+- It assumes a 60/40 long/short split with no evidence for the true margin-mode distribution.
+- It uses hardcoded default leverage tiers (e.g., SOL=25x) rather than historical `meta` snapshots or node-fill-derived leverage profiles.
+- It cannot distinguish isolated-margin from cross-margin positions, and cross-margin/undetermined positions dominate the altcoin universe.
+- Leverage-tier history is unavailable; a single current snapshot is applied across all timestamps.
+
+Because of these constraints, the reconstructed liquidation-price map is a **biased fragment-map**, not the exact mechanism specified in this precommitment. The original run emitted `PHASE0A_MECHANISM_RECONSTRUCTABLE`, which was too strong.
+
+### Corrected Classification
+
+| Field | Value |
+|-------|-------|
+| Original emitted status | `PHASE0A_MECHANISM_RECONSTRUCTABLE` |
+| Corrected status | `LIQ_CLUSTER_PHASE_MINUS1_BLOCKED_PROXY_ONLY_RECONSTRUCTION` |
+| True hypothesis verdict | **NOT_TESTED** — archive reconstruction blocked |
+| Proxy diagnostic verdict | Negative proxy result, **not promotable**, not evidence against the true mechanism |
+| Phase 0B validity | Not valid for mechanism evaluation when Phase 0A is proxy-only |
+| Registry posture | Do **not** mark `REJECTED` |
+
+### Why aggregate OI is insufficient
+
+1. **Aggregate OI cannot distinguish isolated vs cross margin.** Cross-margin positions have liquidation prices that depend on total account equity, other positions, and unrealized PnL — they are not reconstructable from a single-symbol OI snapshot.
+2. **Hardcoded leverage defaults are insufficient.** The precommitment requires per-address leverage or enough position-level data to derive it. A default tier applied across all timestamps cannot capture historical leverage-tier changes.
+3. **No node fills / per-address state.** Without node fills archive access, there is no way to recover per-address margin mode, entry price, size, and leverage for the effective altcoin universe.
+4. **Mark-only returns are diagnostic only when L2 executable books are absent.** The true mechanism requires executable entries near the cluster; mark-return is secondary.
+
+### What this means
+
+- The negative proxy results (mean net50: -46.3 bps, median net50: -48.5 bps, win rate: 26.1%) are **diagnostic context only**.
+- They do **not** reject the true liquidation-cluster hypothesis — the true mechanism was never actually measured.
+- No v1, paper, shadow, live, or auto-promotion is unlocked.
+- The required future unblocker is: **node fills archive access** (per-address position state) or a public liquidation-price/margin-mode source.
+
+---
+
 ## Study ID
 `hyperliquid_liq_cluster_prepositioning_phase0_v0`
 

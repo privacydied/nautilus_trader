@@ -196,7 +196,7 @@ def main(argv=None):
     print("[Phase -1] Running reconstruction feasibility check...")
     t0 = time.time()
 
-    summary, coverage, tiers_dict, positions, liq_levels, excluded = run_phase_minus1(config)
+    summary, coverage, tiers_dict, positions, liq_levels, excluded, reconstruction_audit = run_phase_minus1(config)
 
     elapsed_minus1 = time.time() - t0
     print(f"[Phase -1] Status: {summary.status} ({elapsed_minus1:.1f}s)")
@@ -291,6 +291,25 @@ def main(argv=None):
             "excluded_symbols": excluded,
         }, f, indent=2)
 
+    # Also write the full reconstruction audit from Phase -1 if available
+    if reconstruction_audit is not None:
+        with open(str(out_dir / "reconstruction_audit_full.json"), "w") as f:
+            json.dump({
+                "study_id": STUDY_ID,
+                "run_id": run_id,
+                "reconstruction_mode": reconstruction_audit.reconstruction_mode,
+                "reconstruction_verdict": reconstruction_audit.reconstruction_verdict,
+                "exact_liquidation_map_available": reconstruction_audit.exact_liquidation_map_available,
+                "proxy_reconstruction_used": reconstruction_audit.proxy_reconstruction_used,
+                "proxy_promotable": reconstruction_audit.proxy_promotable,
+                "phase0b_valid_for_mechanism": reconstruction_audit.phase0b_valid_for_mechanism,
+                "margin_mode_undetermined": reconstruction_audit.margin_mode_undetermined,
+                "leverage_tier_history_unavailable": reconstruction_audit.leverage_tier_history_unavailable,
+                "coverage_fraction": reconstruction_audit.coverage_fraction,
+                "symbols_reconstructed": reconstruction_audit.symbols_reconstructed,
+                "reason": reconstruction_audit.reason,
+            }, f, indent=2)
+
     # Plan-only mode: stop after Phase -1
     if config.plan_only:
         print(f"[Plan] Plan-only mode. Stopping after Phase -1.")
@@ -322,7 +341,7 @@ def main(argv=None):
         l2_books = load_l2_books(config.data_root, config.symbols)
         print(f"[Phase 0] L2 books loaded for {len(l2_books)} symbols")
 
-    summary = run_phase0(config, positions, liq_levels, ctxs, l2_books)
+    summary = run_phase0(config, positions, liq_levels, ctxs, l2_books, reconstruction_audit=reconstruction_audit)
 
     elapsed_phase0 = time.time() - t0
     print(f"[Phase 0] Status: {summary.status} ({elapsed_phase0:.1f}s)")
@@ -331,6 +350,11 @@ def main(argv=None):
     print(f"[Phase 0] Mean net50: {summary.phase0b.get('mean_net50_bps', 0):.2f} bps")
     print(f"[Phase 0] Median net50: {summary.phase0b.get('median_net50_bps', 0):.2f} bps")
     print(f"[Phase 0] Win rate: {summary.phase0b.get('win_rate_net50', 0):.2%}")
+    if summary.reconstruction_audit:
+        ra = summary.reconstruction_audit
+        print(f"[Phase 0] Reconstruction mode: {ra.get('reconstruction_mode', 'unknown')}")
+        print(f"[Phase 0] Verdict: {ra.get('reconstruction_verdict', 'unknown')}")
+        print(f"[Phase 0] Proxy promotable: {ra.get('proxy_promotable', False)}")
 
     # Write all artifacts
     summary.git_sha = git_sha

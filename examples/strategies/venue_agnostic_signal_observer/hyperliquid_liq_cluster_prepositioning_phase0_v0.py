@@ -69,6 +69,22 @@ EGRESS_USD_PER_GB = 0.09
 # Statuses
 # ---------------------------------------------------------------------------
 
+class ReconstructionMode(Enum):
+    EXACT_ISOLATED_POSITION_STATE = "exact_isolated_position_state"
+    NODE_FILLS_POSITION_STATE = "node_fills_position_state"
+    AGGREGATE_OI_PROXY = "aggregate_oi_proxy"
+    UNAVAILABLE = "unavailable"
+
+
+class ReconstructionVerdict(Enum):
+    RECONSTRUCTABLE = "reconstructable"
+    PROXY_ONLY_NOT_RECONSTRUCTABLE = "proxy_only_not_reconstructable"
+    BLOCKED_MARGIN_MODE_UNDETERMINED = "blocked_margin_mode_undetermined"
+    BLOCKED_LEVERAGE_TIER_HISTORY_UNAVAILABLE = "blocked_leverage_tier_history_unavailable"
+    BLOCKED_COVERAGE_FRACTION_LOW = "blocked_coverage_fraction_low"
+    BLOCKED_SOURCE_MISSING = "blocked_source_missing"
+
+
 class StudyStatus(Enum):
     PHASE_MINUS1_READY = auto()
     PHASE_MINUS1_DRY_RUN_READY = auto()
@@ -76,6 +92,8 @@ class StudyStatus(Enum):
     PHASE_MINUS1_BLOCKED_COST_OR_SIZE_CAP = auto()
     PHASE_MINUS1_BLOCKED_SCHEMA_UNRECOGNIZED = auto()
     PHASE_MINUS1_BLOCKED_LIQ_PRICE_NOT_RECONSTRUCTABLE = auto()
+    PHASE_MINUS1_BLOCKED_MARGIN_MODE_UNDETERMINED = auto()
+    PHASE_MINUS1_BLOCKED_LEVERAGE_TIER_HISTORY_UNAVAILABLE = auto()
     PHASE_MINUS1_BLOCKED_RECONSTRUCTION_COVERAGE_FRACTION_LOW = auto()
     PHASE_MINUS1_BLOCKED_LOOKAHEAD_RISK = auto()
     PHASE_MINUS1_BLOCKED_INSUFFICIENT_COVERAGE = auto()
@@ -84,6 +102,7 @@ class StudyStatus(Enum):
     PHASE0A_TEMPORAL_CONCENTRATION_FAILED = auto()
     PHASE0A_SYMBOL_CONCENTRATION_FAILED = auto()
     PHASE0A_MECHANISM_RECONSTRUCTABLE = auto()
+    PHASE0B_BLOCKED_PHASE0A_NOT_RECONSTRUCTABLE = auto()
     PHASE0B_RETURN_DIAGNOSTIC_FAIL = auto()
     PHASE0B_RETURN_DIAGNOSTIC_PASS = auto()
     PHASE0C_CONTROL_FAILED = auto()
@@ -91,6 +110,8 @@ class StudyStatus(Enum):
     PHASE0C_HOLDOUT_FAILED = auto()
     PHASE0C_FDR_BLOCKED = auto()
     PHASE0C_DIAGNOSTIC_SURVIVED_REVIEW_ALLOWED = auto()
+    PROXY_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE = auto()
+    RUN_INVALIDATED_PROXY_USED_FOR_PHASE0A = auto()
     PHASE0_ERROR_INVALID_OUTPUT = auto()
     PHASE0_ERROR_PRECOMMITMENT_MISMATCH = auto()
 
@@ -219,6 +240,21 @@ class ClusterBucket:
     position_count: int
     normalized_density: float  # notional / OI
     is_dominant: bool = False
+
+
+@dataclass(frozen=True)
+class ReconstructionAudit:
+    reconstruction_mode: str = "aggregate_oi_proxy"
+    reconstruction_verdict: str = "proxy_only_not_reconstructable"
+    exact_liquidation_map_available: bool = False
+    proxy_reconstruction_used: bool = True
+    proxy_promotable: bool = False
+    phase0b_valid_for_mechanism: bool = False
+    margin_mode_undetermined: bool = True
+    leverage_tier_history_unavailable: bool = True
+    coverage_fraction: float = 0.0
+    symbols_reconstructed: list[str] = field(default_factory=list)
+    reason: str = "aggregate OI proxy cannot distinguish isolated/cross margin or per-address liquidation prices"
 
 
 @dataclass(frozen=True)
@@ -682,7 +718,7 @@ def reconstruct_positions_from_ctxs(
     start_date: str,
     end_date: str,
     burn_in_days: int,
-) -> tuple[dict[str, list[PositionState]], dict[str, list[LiquidationLevelEstimate]], dict[str, str]]:
+) -> tuple[dict[str, list[PositionState]], dict[str, list[LiquidationLevelEstimate]], dict[str, str], ReconstructionAudit]:
     """Reconstruct isolated-margin position states and liquidation levels from asset ctxs.
 
     Since asset ctxs only provide OI + price (no per-address position data),
@@ -697,7 +733,7 @@ def reconstruct_positions_from_ctxs(
     - Applies a leverage distribution: most positions use moderate leverage
       (4-8x), with a tail at higher leverage. This produces liquidation
       levels spread across 2-15% from entry, creating realistic clusters.
-    - Returns the reconstruction audit showing this is a proxy, not exact.
+    - Returns ReconstructionAudit documenting that this is a proxy, not exact.
     """
     positions: dict[str, list[PositionState]] = {}
     liq_levels: dict[str, list[LiquidationLevelEstimate]] = {}
@@ -808,7 +844,25 @@ def reconstruct_positions_from_ctxs(
         positions[sym] = sym_positions
         liq_levels[sym] = sym_liqs
 
-    return positions, liq_levels, excluded
+    # Determine audit fields based on leverage tier source and margin mode state
+    all_tier_sources = {leverage_tiers[s].source for s in leverage_tiers if s in ctxs}
+    has_inferred_leverage = "inferred_default" in all_tier_sources
+
+    audit = ReconstructionAudit(
+        reconstruction_mode=ReconstructionMode.AGGREGATE_OI_PROXY.value,
+        reconstruction_verdict=ReconstructionVerdict.PROXY_ONLY_NOT_RECONSTRUCTABLE.value,
+        exact_liquidation_map_available=False,
+        proxy_reconstruction_used=True,
+        proxy_promotable=False,
+        phase0b_valid_for_mechanism=False,
+        margin_mode_undetermined=True,
+        leverage_tier_history_unavailable=has_inferred_leverage,
+        coverage_fraction=len(positions) / max(len(ctxs), 1),
+        symbols_reconstructed=sorted(positions.keys()),
+        reason="aggregate OI proxy cannot distinguish isolated/cross margin or per-address liquidation prices",
+    )
+
+    return positions, liq_levels, excluded, audit
 
 
 # ---------------------------------------------------------------------------
@@ -1134,10 +1188,11 @@ def run_phase_minus1(
     config: StudyConfig,
 ) -> tuple[StudySummary, DataCoverage, dict[str, LeverageTierSnapshot],
            dict[str, list[PositionState]], dict[str, list[LiquidationLevelEstimate]],
-           dict[str, str]]:
+           dict[str, str], ReconstructionAudit]:
     """Run Phase -1: reconstruct isolated-margin liquidation levels from public data."""
     coverage = inventory_data_sources(config.data_root)
 
+    empty_audit = ReconstructionAudit()
     if not coverage.asset_ctxs_available:
         summary = StudySummary(
             study_id=STUDY_ID,
@@ -1151,7 +1206,7 @@ def run_phase_minus1(
             precommitment_sha256="",
             status=StudyStatus.PHASE_MINUS1_BLOCKED_NO_INPUT_DATA.name,
         )
-        return summary, coverage, {}, {}, {}, {}
+        return summary, coverage, {}, {}, {}, {}, empty_audit
 
     symbols = tuple(s for s in config.symbols if s in coverage.symbols_with_data)
     if not symbols:
@@ -1167,14 +1222,14 @@ def run_phase_minus1(
             precommitment_sha256="",
             status=StudyStatus.PHASE_MINUS1_BLOCKED_NO_INPUT_DATA.name,
         )
-        return summary, coverage, {}, {}, {}, {}
+        return summary, coverage, {}, {}, {}, {}, empty_audit
 
     tiers_list, tier_excluded = build_leverage_tiers(config.data_root, symbols)
     tiers_dict = {t.symbol: t for t in tiers_list}
 
     ctxs = load_asset_ctxs(config.data_root, symbols, config.start_date, config.end_date)
 
-    positions, liq_levels, recon_excluded = reconstruct_positions_from_ctxs(
+    positions, liq_levels, recon_excluded, audit = reconstruct_positions_from_ctxs(
         ctxs, tiers_dict, config.start_date, config.end_date, config.burn_in_days,
     )
 
@@ -1191,7 +1246,7 @@ def run_phase_minus1(
             precommitment_sha256="",
             status=StudyStatus.PHASE_MINUS1_BLOCKED_LIQ_PRICE_NOT_RECONSTRUCTABLE.name,
         )
-        return summary, coverage, tiers_dict, positions, liq_levels, recon_excluded
+        return summary, coverage, tiers_dict, positions, liq_levels, recon_excluded, audit
 
     all_excluded = {**tier_excluded, **recon_excluded}
     summary = StudySummary(
@@ -1217,7 +1272,7 @@ def run_phase_minus1(
         diagnostics=["proxy_reconstruction_from_oi_only"],
     )
 
-    return summary, coverage, tiers_dict, positions, liq_levels, recon_excluded
+    return summary, coverage, tiers_dict, positions, liq_levels, all_excluded, audit
 
 
 # ---------------------------------------------------------------------------
@@ -1230,8 +1285,25 @@ def run_phase0(
     liq_levels: dict[str, list[LiquidationLevelEstimate]],
     ctxs: dict[str, list[AssetCtxRecord]],
     l2_books: dict[str, list[BookSnapshot]],
+    reconstruction_audit: ReconstructionAudit | None = None,
 ) -> StudySummary:
-    """Run Phase 0: generate cluster maps, signals, compute returns, controls, nulls."""
+    """Run Phase 0: generate cluster maps, signals, compute returns, controls, nulls.
+
+    If reconstruction_audit is provided and indicates proxy-only reconstruction,
+    the emitted status will be a blocked/proxy-only status rather than
+    PHASE0A_MECHANISM_RECONSTRUCTABLE.
+    """
+    # Determine Phase 0A status based on reconstruction quality
+    if reconstruction_audit is not None:
+        if (reconstruction_audit.reconstruction_verdict == ReconstructionVerdict.PROXY_ONLY_NOT_RECONSTRUCTABLE.value or
+                reconstruction_audit.proxy_promotable is False):
+            phase0a_status = StudyStatus.PHASE0B_BLOCKED_PHASE0A_NOT_RECONSTRUCTABLE.name
+        else:
+            phase0a_status = StudyStatus.PHASE0A_MECHANISM_RECONSTRUCTABLE.name
+    else:
+        # Default to blocked since we don't know the reconstruction quality
+        phase0a_status = StudyStatus.PHASE0B_BLOCKED_PHASE0A_NOT_RECONSTRUCTABLE.name
+
     summary = StudySummary(
         study_id=STUDY_ID,
         run_id=datetime.now(UTC).strftime("%Y%m%d_%H%M%S") + "_phase0",
@@ -1242,7 +1314,7 @@ def run_phase0(
         repo_root=config.data_root,
         precommitment_path="",
         precommitment_sha256="",
-        status=StudyStatus.PHASE0A_MECHANISM_RECONSTRUCTABLE.name,
+        status=phase0a_status,
     )
 
     # Build cluster maps
@@ -1329,10 +1401,38 @@ def run_phase0(
         "holdout_count": len(holdout),
         "total_events": len(return_observations),
         "distinct_symbols": len(set(s.symbol for s in signals)),
-        "status": StudyStatus.PHASE0A_MECHANISM_RECONSTRUCTABLE.name,
+        "status": phase0a_status,
     }
 
-    # Phase 0B metrics
+    # Include reconstruction audit in summary
+    if reconstruction_audit is not None:
+        summary.reconstruction_audit = {
+            "reconstruction_mode": reconstruction_audit.reconstruction_mode,
+            "reconstruction_verdict": reconstruction_audit.reconstruction_verdict,
+            "exact_liquidation_map_available": reconstruction_audit.exact_liquidation_map_available,
+            "proxy_reconstruction_used": reconstruction_audit.proxy_reconstruction_used,
+            "proxy_promotable": reconstruction_audit.proxy_promotable,
+            "phase0b_valid_for_mechanism": reconstruction_audit.phase0b_valid_for_mechanism,
+            "margin_mode_undetermined": reconstruction_audit.margin_mode_undetermined,
+            "leverage_tier_history_unavailable": reconstruction_audit.leverage_tier_history_unavailable,
+            "coverage_fraction": reconstruction_audit.coverage_fraction,
+            "symbols_reconstructed": reconstruction_audit.symbols_reconstructed,
+            "reason": reconstruction_audit.reason,
+        }
+
+    # Phase 0B metrics — always compute but mark validity based on reconstruction quality
+    is_proxy_only = (
+        reconstruction_audit is not None
+        and reconstruction_audit.reconstruction_verdict == ReconstructionVerdict.PROXY_ONLY_NOT_RECONSTRUCTABLE.value
+    )
+
+    if is_proxy_only:
+        phase0b_valid_for_mechanism = False
+        # Demote status to indicate proxy diagnostic, not true mechanism evaluation
+        phase0a_status = StudyStatus.PROXY_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE.name
+    else:
+        phase0b_valid_for_mechanism = True
+
     net50_returns = []
     for ro in return_observations:
         cost_vals = ro.net_costs.get("net50", {})
@@ -1345,6 +1445,7 @@ def run_phase0(
         "mean_net50_bps": statistics.mean(net50_returns) if net50_returns else 0.0,
         "median_net50_bps": statistics.median(net50_returns) if net50_returns else 0.0,
         "win_rate_net50": sum(1 for r in net50_returns if r > 0) / max(len(net50_returns), 1),
+        "phase0b_valid_for_mechanism": phase0b_valid_for_mechanism,
     }
 
     # Phase 0C: controls and nulls

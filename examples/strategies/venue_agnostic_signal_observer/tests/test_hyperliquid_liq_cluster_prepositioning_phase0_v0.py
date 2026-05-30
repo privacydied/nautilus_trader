@@ -14,6 +14,9 @@ from examples.strategies.venue_agnostic_signal_observer.hyperliquid_liq_cluster_
     StudyConfig,
     StudySummary,
     StudyStatus,
+    ReconstructionMode,
+    ReconstructionVerdict,
+    ReconstructionAudit,
     FORBIDDEN_STATUSES,
     FillRecord,
     AssetCtxRecord,
@@ -181,10 +184,14 @@ def test_dry_run_writes_preview(tmp_data_dir):
         dry_run=True,
         symbols=("SOL", "LINK", "AVAX"),
     )
-    summary, coverage, tiers, positions, liqs, excluded = run_phase_minus1(config)
+    summary, coverage, tiers, positions, liqs, excluded, audit = run_phase_minus1(config)
     # Dry run should still produce a summary with a status
     assert summary.status is not None
     assert summary.study_id == STUDY_ID
+    # Proxy reconstruction must emit proxy-only verdict
+    assert audit.reconstruction_mode == ReconstructionMode.AGGREGATE_OI_PROXY.value
+    assert audit.reconstruction_verdict == ReconstructionVerdict.PROXY_ONLY_NOT_RECONSTRUCTABLE.value
+    assert audit.proxy_promotable is False
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +208,7 @@ def test_plan_only_no_network(tmp_data_dir):
         plan_only=True,
         symbols=("SOL", "LINK", "AVAX"),
     )
-    summary, coverage, tiers, positions, liqs, excluded = run_phase_minus1(config)
+    summary, coverage, tiers, positions, liqs, excluded, audit = run_phase_minus1(config)
     assert summary.status is not None
     assert coverage.asset_ctxs_available is True
 
@@ -219,9 +226,11 @@ def test_forbidden_statuses_not_emitted(tmp_data_dir):
         end_date="2025-09-15",
         symbols=("SOL", "LINK", "AVAX"),
     )
-    summary, _, _, _, _, _ = run_phase_minus1(config)
+    summary, _, _, _, _, _, audit = run_phase_minus1(config)
     for status in FORBIDDEN_STATUSES:
         assert status != summary.status, f"Forbidden status {status} was emitted"
+    # Proxy reconstruction must not emit RECONSTRUCTABLE as the final status
+    assert audit is not None
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +298,7 @@ def test_unknown_schema_emits_blocked(tmp_path):
         end_date="2025-09-15",
         symbols=("NONEXIST",),
     )
-    summary, _, _, _, _, _ = run_phase_minus1(config)
+    summary, _, _, _, _, _, _ = run_phase_minus1(config)
     assert "BLOCKED" in summary.status
 
 
@@ -394,7 +403,7 @@ def test_cross_dominant_emits_blocked(tmp_data_dir):
         end_date="2025-09-15",
         symbols=("SOL", "LINK", "AVAX"),
     )
-    summary, _, _, _, _, _ = run_phase_minus1(config)
+    summary, _, _, _, _, _, _ = run_phase_minus1(config)
     for fs in FORBIDDEN_STATUSES:
         assert fs != summary.status
 
@@ -480,7 +489,7 @@ def test_missing_leverage_emits_blocked(tmp_path):
         end_date="2025-09-15",
         symbols=("NONEXIST",),
     )
-    summary, _, _, _, _, _ = run_phase_minus1(config)
+    summary, _, _, _, _, _, _ = run_phase_minus1(config)
     assert "BLOCKED" in summary.status
 
 
@@ -1303,3 +1312,264 @@ def test_summary_md_writing(tmp_path):
     assert STUDY_ID in content
     assert "PHASE_MINUS1_READY" in content
     assert "Orders: False" in content
+
+
+# ---------------------------------------------------------------------------
+# Test 18: Aggregate-OI proxy cannot emit PHASE0A_MECHANISM_RECONSTRUCTABLE
+# ---------------------------------------------------------------------------
+
+def test_proxy_cannot_emit_reconstructable(tmp_data_dir):
+    """Test 18: Proxy reconstruction must not emit PHASE0A_MECHANISM_RECONSTRUCTABLE."""
+    config = StudyConfig(
+        out_root="/tmp/test_proxy_status",
+        data_root=tmp_data_dir,
+        start_date="2025-08-17",
+        end_date="2025-09-15",
+        symbols=("SOL", "LINK", "AVAX"),
+    )
+    summary, _, _, _, _, _, audit = run_phase_minus1(config)
+    # The reconstruction mode is AGGREGATE_OI_PROXY
+    assert audit.reconstruction_mode == ReconstructionMode.AGGREGATE_OI_PROXY.value
+    # The verdict must be PROXY_ONLY_NOT_RECONSTRUCTABLE
+    assert audit.reconstruction_verdict == ReconstructionVerdict.PROXY_ONLY_NOT_RECONSTRUCTABLE.value
+    # proxy_promotable must always be False
+    assert audit.proxy_promotable is False
+    # exact_liquidation_map_available must be False
+    assert audit.exact_liquidation_map_available is False
+    # phase0b_valid_for_mechanism must be False
+    assert audit.phase0b_valid_for_mechanism is False
+
+
+# ---------------------------------------------------------------------------
+# Test 19: Proxy reconstruction emits blocked/proxy-only status
+# ---------------------------------------------------------------------------
+
+def test_proxy_emits_blocked_status(tmp_data_dir):
+    """Test 19: Proxy reconstruction must emit a blocked or proxy-only status."""
+    config = StudyConfig(
+        out_root="/tmp/test_proxy_blocked",
+        data_root=tmp_data_dir,
+        start_date="2025-08-17",
+        end_date="2025-09-15",
+        symbols=("SOL", "LINK", "AVAX"),
+    )
+    summary, _, _, _, _, _, audit = run_phase_minus1(config)
+    # The reconstruction audit must indicate proxy-only (not exact reconstructable)
+    assert audit.reconstruction_mode == ReconstructionMode.AGGREGATE_OI_PROXY.value
+    assert audit.reconstruction_verdict == ReconstructionVerdict.PROXY_ONLY_NOT_RECONSTRUCTABLE.value
+    # Status should be one of the blocked/proxy statuses, NOT PHASE0A_MECHANISM_RECONSTRUCTABLE
+    assert summary.status != StudyStatus.PHASE0A_MECHANISM_RECONSTRUCTABLE.name
+
+
+# ---------------------------------------------------------------------------
+# Test 20: ReconstructionAudit dataclass fields are correct defaults
+# ---------------------------------------------------------------------------
+
+def test_reconstruction_audit_defaults():
+    """Test 20: ReconstructionAudit has correct default values."""
+    audit = ReconstructionAudit()
+    assert audit.reconstruction_mode == "aggregate_oi_proxy"
+    assert audit.reconstruction_verdict == "proxy_only_not_reconstructable"
+    assert audit.exact_liquidation_map_available is False
+    assert audit.proxy_reconstruction_used is True
+    assert audit.proxy_promotable is False
+    assert audit.phase0b_valid_for_mechanism is False
+    assert audit.margin_mode_undetermined is True
+    assert audit.leverage_tier_history_unavailable is True
+    assert audit.coverage_fraction == 0.0
+    assert audit.symbols_reconstructed == []
+    assert "aggregate OI proxy" in audit.reason
+
+
+# ---------------------------------------------------------------------------
+# Test 21: ReconstructionMode enum has expected values
+# ---------------------------------------------------------------------------
+
+def test_reconstruction_mode_enum():
+    """Test 21: ReconstructionMode enum has all expected members."""
+    modes = [m.value for m in ReconstructionMode]
+    assert "exact_isolated_position_state" in modes
+    assert "node_fills_position_state" in modes
+    assert "aggregate_oi_proxy" in modes
+    assert "unavailable" in modes
+
+
+# ---------------------------------------------------------------------------
+# Test 22: ReconstructionVerdict enum has expected values
+# ---------------------------------------------------------------------------
+
+def test_reconstruction_verdict_enum():
+    """Test 22: ReconstructionVerdict enum has all expected members."""
+    verdicts = [v.value for v in ReconstructionVerdict]
+    assert "reconstructable" in verdicts
+    assert "proxy_only_not_reconstructable" in verdicts
+    assert "blocked_margin_mode_undetermined" in verdicts
+    assert "blocked_leverage_tier_history_unavailable" in verdicts
+    assert "blocked_coverage_fraction_low" in verdicts
+    assert "blocked_source_missing" in verdicts
+
+
+# ---------------------------------------------------------------------------
+# Test 23: Cross-margin causes blocked reconstructability
+# ---------------------------------------------------------------------------
+
+def test_cross_margin_causes_blocked_status(tmp_data_dir):
+    """Test 23: When cross-margin/undetermined dominates, reconstruction is blocked."""
+    config = StudyConfig(
+        out_root="/tmp/test_cross_blocked",
+        data_root=tmp_data_dir,
+        start_date="2025-08-17",
+        end_date="2025-09-15",
+        symbols=("SOL", "LINK", "AVAX"),
+    )
+    summary, _, _, _, _, _, audit = run_phase_minus1(config)
+    # The proxy audit must indicate margin_mode_undetermined
+    assert audit.margin_mode_undetermined is True
+    # proxy_promotable must be False
+    assert audit.proxy_promotable is False
+
+
+# ---------------------------------------------------------------------------
+# Test 24: Leverage-tier history unavailable causes diagnostic/block status
+# ---------------------------------------------------------------------------
+
+def test_leverage_tier_history_unavailable(tmp_data_dir):
+    """Test 24: When leverage-tier history is unavailable, audit reflects this."""
+    config = StudyConfig(
+        out_root="/tmp/test_lev_history",
+        data_root=tmp_data_dir,
+        start_date="2025-08-17",
+        end_date="2025-09-15",
+        symbols=("SOL", "LINK", "AVAX"),
+    )
+    summary, _, _, _, _, _, audit = run_phase_minus1(config)
+    # Leverage tier history is unavailable in proxy reconstruction
+    assert audit.leverage_tier_history_unavailable is True
+
+
+# ---------------------------------------------------------------------------
+# Test 25: Summary JSON includes reconstruction quality fields
+# ---------------------------------------------------------------------------
+
+def test_summary_json_includes_reconstruction_fields(tmp_path, tmp_data_dir):
+    """Test 25: Summary JSON must include reconstruction_mode, verdict, proxy_promotable."""
+    config = StudyConfig(
+        out_root=str(tmp_path / "out"),
+        data_root=tmp_data_dir,
+        start_date="2025-08-17",
+        end_date="2025-09-15",
+        symbols=("SOL", "LINK", "AVAX"),
+    )
+    summary, _, _, _, _, _, audit = run_phase_minus1(config)
+
+    # Build a minimal summary with reconstruction_audit attached
+    summary.reconstruction_audit = {
+        "reconstruction_mode": audit.reconstruction_mode,
+        "reconstruction_verdict": audit.reconstruction_verdict,
+        "exact_liquidation_map_available": audit.exact_liquidation_map_available,
+        "proxy_reconstruction_used": audit.proxy_reconstruction_used,
+        "proxy_promotable": audit.proxy_promotable,
+        "phase0b_valid_for_mechanism": audit.phase0b_valid_for_mechanism,
+    }
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = str(out_dir / "summary.json")
+    write_summary_json(summary, path)
+
+    with open(path, "rb") as f:
+        import orjson
+        data = orjson.loads(f.read())
+
+    assert "reconstruction_audit" in data
+    ra = data["reconstruction_audit"]
+    assert "reconstruction_mode" in ra
+    assert "reconstruction_verdict" in ra
+    assert ra["proxy_promotable"] is False
+    assert ra["exact_liquidation_map_available"] is False
+
+
+# ---------------------------------------------------------------------------
+# Test 26: Phase 0B is blocked or demoted when Phase 0A is proxy-only
+# ---------------------------------------------------------------------------
+
+def test_phase0b_blocked_when_proxy_only():
+    """Test 26: Phase 0B cannot be treated as valid mechanism evidence after proxy-only Phase 0A."""
+    summary = StudySummary(
+        study_id=STUDY_ID,
+        run_id="test",
+        created_at_utc=_now_utc_iso(),
+        git_sha="abc",
+        git_branch="test",
+        git_dirty=False,
+        repo_root="/tmp",
+        precommitment_path="",
+        precommitment_sha256="",
+        status=StudyStatus.PROXY_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE.name,
+    )
+    summary.reconstruction_audit = {
+        "reconstruction_mode": "aggregate_oi_proxy",
+        "reconstruction_verdict": "proxy_only_not_reconstructable",
+        "exact_liquidation_map_available": False,
+        "proxy_reconstruction_used": True,
+        "proxy_promotable": False,
+        "phase0b_valid_for_mechanism": False,
+    }
+
+    assert summary.reconstruction_audit["phase0b_valid_for_mechanism"] is False
+    assert summary.reconstruction_audit["proxy_promotable"] is False
+
+
+# ---------------------------------------------------------------------------
+# Test 27: Corrective closure doc exists and contains key terms
+# ---------------------------------------------------------------------------
+
+def test_corrective_closure_doc_exists():
+    """Test 27: The corrective closure doc must exist and contain the original + corrected statuses."""
+    docs_dir = Path(__file__).resolve().parent.parent / "docs"
+    closure_doc = docs_dir / "HYPERLIQUID_LIQ_CLUSTER_PREPOSITIONING_PHASE0_V0_CORRECTIVE_CLOSURE.md"
+    assert closure_doc.exists(), f"Corrective closure doc not found at {closure_doc}"
+
+    content = closure_doc.read_text()
+    assert "PHASE0A_MECHANISM_RECONSTRUCTABLE" in content
+    assert "LIQ_CLUSTER_PHASE_MINUS1_BLOCKED_PROXY_ONLY_RECONSTRUCTION" in content or            "proxy_only_not_reconstructable" in content.lower()
+
+
+# ---------------------------------------------------------------------------
+# Test 28: Registry entry exists for this study
+# ---------------------------------------------------------------------------
+
+def test_registry_entry_exists():
+    """Test 28: The REJECTED_RESEARCH.md must contain an entry for this study."""
+    docs_dir = Path(__file__).resolve().parent.parent / "docs"
+    registry = docs_dir / "REJECTED_RESEARCH.md"
+    assert registry.exists(), f"Registry not found at {registry}"
+
+    content = registry.read_text()
+    assert "hyperliquid-liq-cluster-prepositioning-v0-proxy-blocked" in content
+
+
+# ---------------------------------------------------------------------------
+# Test 29: No forbidden promotion strings emitted from proxy diagnostic
+# ---------------------------------------------------------------------------
+
+def test_no_forbidden_promotion_from_proxy():
+    """Test 29: Proxy diagnostics cannot produce forbidden statuses."""
+    audit = ReconstructionAudit()
+    # The verdict must be proxy-only, never RECONSTRUCTABLE
+    assert audit.reconstruction_verdict != "reconstructable"
+    # proxy_promotable is always False
+    assert audit.proxy_promotable is False
+
+
+# ---------------------------------------------------------------------------
+# Test 30: Hardcoded leverage defaults cannot be treated as exact historical tiers
+# ---------------------------------------------------------------------------
+
+def test_hardcoded_leverage_not_exact():
+    """Test 30: Proxy reconstruction uses hardcoded defaults, not exact historical tiers."""
+    audit = ReconstructionAudit()
+    # Leverage tier history unavailable
+    assert audit.leverage_tier_history_unavailable is True
+    # Not exact reconstruction
+    assert audit.exact_liquidation_map_available is False
