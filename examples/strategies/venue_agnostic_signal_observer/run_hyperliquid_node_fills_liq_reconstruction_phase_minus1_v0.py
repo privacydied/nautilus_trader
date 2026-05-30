@@ -85,8 +85,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Treat S3 as requester-pays bucket")
 
     # Caching
-    parser.add_argument("--cache-only", action="store_true", default=True,
-                        help="Use only local cache (default: true)")
+    parser.add_argument("--cache-only", action="store_true", default=False,
+                        help="Use only local cache (default: false — S3 allowed)")
 
     # Limits
     parser.add_argument("--max-download-bytes", type=int, default=100_000_000,
