@@ -311,6 +311,10 @@ def main(argv=None):
     print("[Phase 0] Running return evaluation...")
     t0 = time.time()
 
+    # Load ctxs for forward return computation
+    ctxs = load_asset_ctxs(config.data_root, config.symbols, config.start_date, end_date)
+    print(f"[Phase 0] Loaded ctxs for {len(ctxs)} symbols")
+
     # Load L2 books (may be slow for large archives)
     l2_books = {}
     if coverage.l2book_available:
@@ -318,7 +322,7 @@ def main(argv=None):
         l2_books = load_l2_books(config.data_root, config.symbols)
         print(f"[Phase 0] L2 books loaded for {len(l2_books)} symbols")
 
-    summary = run_phase0(config, positions, liq_levels, {}, l2_books)
+    summary = run_phase0(config, positions, liq_levels, ctxs, l2_books)
 
     elapsed_phase0 = time.time() - t0
     print(f"[Phase 0] Status: {summary.status} ({elapsed_phase0:.1f}s)")
