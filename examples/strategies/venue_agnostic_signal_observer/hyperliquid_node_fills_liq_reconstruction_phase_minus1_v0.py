@@ -1795,12 +1795,19 @@ class NodeFillsLiqReconstructionProbe:
             self._write_artifacts(summary)
             return summary
 
-        # Dir mapping verification
-        print("Dir mapping verification", flush=True)
-        self.dir_audit = verify_dir_mapping([], limit=config.schema_sample_limit)  # will be populated with real data later
+        records_for_phases = getattr(self, '_parsed_records', [])
 
-        # Liquidation flag inventory
-        self.liq_flag_inv = LiquidationFlagInventory()
+        # Dir mapping verification (on real data if available)
+        print("Dir mapping verification", flush=True)
+        self.dir_audit = verify_dir_mapping(
+            records_for_phases, limit=config.schema_sample_limit
+        )
+
+        # Liquidation flag inventory (on real data if available)
+        print("Liquidation flag inventory", flush=True)
+        self.liq_flag_inv = inventory_liquidation_flags(
+            records_for_phases, limit=config.schema_sample_limit
+        )
 
         # Phase D — Leverage source discovery
         print("Phase D: Leverage-source discovery", flush=True)
@@ -1812,19 +1819,25 @@ class NodeFillsLiqReconstructionProbe:
             self._write_artifacts(summary)
             return summary
 
-        # Phase E — Position reconstruction
+        # Phase E — Position reconstruction (on real data if available)
         print("Phase E: Position reconstruction audit", flush=True)
-        # For dry-run/plan-only, use empty records
-        self.position_audit = PositionReconstructionAudit()
-        if not config.dry_run and not config.plan_only:
-            # Would reconstruct from parsed records here
-            pass
+        if not config.dry_run and not config.plan_only and records_for_phases:
+            self.position_audit, _, _ = reconstruct_positions(records_for_phases, config)
+        else:
+            # For dry-run/plan-only, use empty audit
+            self.position_audit = PositionReconstructionAudit()
 
-        # Phase F — Liquidation price reconstruction
+        # Phase F — Liquidation price reconstruction (stub for now, depends on Phase E results)
         print("Phase F: Isolated-only liquidation-price audit", flush=True)
-        self.liq_audit = LiquidationReconstructionAudit()
-        if config.bound_diagnostic:
-            self.liq_audit.bound_diagnostic_used = True
+        if records_for_phases and not config.dry_run and not config.plan_only:
+            self.liq_audit = LiquidationReconstructionAudit()
+            # Phase F will be implemented once Phase E position reconstruction is proven working
+            # For now, mark as diagnostic
+            self.liq_audit.bound_diagnostic_used = config.bound_diagnostic
+        else:
+            self.liq_audit = LiquidationReconstructionAudit()
+            if config.bound_diagnostic:
+                self.liq_audit.bound_diagnostic_used = True
 
         # Phase G — OI completeness
         print("Phase G: OI completeness diagnostic", flush=True)
@@ -1981,16 +1994,84 @@ class NodeFillsLiqReconstructionProbe:
             self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_REMOTE_PLAN_READY.value
 
     def _phase_b(self, config: StudyConfig) -> None:
-        """Phase B — Tiny measured-object fetch."""
+        """Phase B — Tiny measured-object fetch.
+
+        Downloads one hour of node_fills_by_block/hourly/ data from S3,
+        saves to local cache, parses fills into NodeFillRecord objects,
+        and records the download manifest (keys, sha256, sizes).
+        """
+        if not self.partitioning_inv or not self.coverage_inv:
+            # Nothing to fetch — no partitioning discovered yet
+            self.download_manifest = DownloadManifest()
+            return
+
         manifest = DownloadManifest()
-        # Placeholder — real implementation would download from S3 or local cache
+        parsed_records: list[NodeFillRecord] = []
+        data_root = Path(config.data_root) if config.data_root else None
+        cache_dir = (data_root / "node_fills_by_block" / "hourly") if data_root else None
+
+        # Select one hour object to download
+        sample_keys = self.partitioning_inv.sample_keys or []
+        if not sample_keys:
+            self.download_manifest = manifest
+            return
+
+        # Pick the first available key (one all-coin hour object)
+        target_key = sample_keys[0]
+        dest_path = None
+        downloaded_bytes = 0
+        sha256_hex = ""
+
+        if cache_dir and cache_dir.is_dir():
+            # Check local cache first
+            local_filename = target_key.split("/")[-1] if "/" in target_key else target_key
+            cached_file = cache_dir / local_filename
+            if cached_file.is_file():
+                dest_path = cached_file
+                downloaded_bytes = cached_file.stat().st_size
+                sha256_hex = hashlib.sha256(cached_file.read_bytes()).hexdigest()
+        elif self.config.allow_s3_archive_read:
+            # Download from S3
+            try:
+                if not cache_dir:
+                    cache_dir = data_root / "node_fills_by_block" / "hourly" if data_root else None
+                dest_path = cache_dir / target_key.split("/")[-1] if cache_dir else None
+                if dest_path:
+                    dest_path.parent.mkdir(parents=True, exist_ok=True)
+                downloaded_bytes, sha256_hex = fetch_s3_object(
+                    target_key, dest_path or Path("/dev/null"), requester_pays=config.requester_pays
+                )
+            except Exception as exc:
+                print(f"Phase B: S3 download failed for {target_key}: {exc}", flush=True)
+                downloaded_bytes = 0
+                sha256_hex = ""
+
+        manifest.objects.append({
+            "key": target_key,
+            "sha256": sha256_hex,
+            "size_bytes": downloaded_bytes,
+        })
         self.download_manifest = manifest
+
+        # Parse fills from the downloaded/cached file
+        if dest_path and dest_path.is_file() and dest_path.stat().st_size > 0:
+            try:
+                if dest_path.suffix == ".lz4":
+                    parsed_records = list(stream_fills_from_lz4(str(dest_path)))
+                else:
+                    parsed_records = list(stream_fills_from_jsonl(str(dest_path)))
+                print(f"Phase B: Parsed {len(parsed_records)} fill records from {target_key}", flush=True)
+            except Exception as exc:
+                print(f"Phase B: Parse failed for {dest_path}: {exc}", flush=True)
+                parsed_records = []
+
+        self._parsed_records = parsed_records
 
     def _phase_c(self, config: StudyConfig) -> None:
         """Phase C — Schema sufficiency gate.
 
-        In plan-only mode with no parsed records, returns NOT_EVALUATED_PLAN_ONLY
-        instead of falsely claiming PASS.
+        In plan-only/dry-run mode with no parsed records, returns NOT_EVALUATED_PLAN_ONLY.
+        Otherwise validates schema against real parsed records from Phase B.
         """
         self.schema_inventory = SchemaInventory()
 
@@ -2005,14 +2086,21 @@ class NodeFillsLiqReconstructionProbe:
             )
             return
 
-        # Normal mode: would validate from parsed records
-        # For now (no real download yet), also mark not_evaluated
-        self.schema_gate = SchemaGate(
-            verdict=SchemaVerdict.NOT_EVALUATED_PLAN_ONLY,
-            address_field_present=False,
-            symbol_field_present=False,
-            side_size_price_present=False,
-            start_position_present=False,
+        # Real mode: validate against parsed records from Phase B
+        records = getattr(self, '_parsed_records', [])
+        if not records:
+            self.schema_gate = SchemaGate(
+                verdict=SchemaVerdict.NOT_EVALUATED_PLAN_ONLY,
+                address_field_present=False,
+                symbol_field_present=False,
+                side_size_price_present=False,
+                start_position_present=False,
+            )
+            return
+
+        # Validate schema on actual records
+        self.schema_inventory, self.schema_gate = validate_schema(
+            records, limit=config.schema_sample_limit
         )
 
     def _write_artifacts(self, summary: StudySummary) -> None:
