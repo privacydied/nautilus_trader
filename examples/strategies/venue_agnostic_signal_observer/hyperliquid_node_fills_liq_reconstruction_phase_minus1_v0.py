@@ -598,7 +598,11 @@ def check_aws_credentials() -> bool:
 
 
 def list_s3_prefix(prefix: str, requester_pays: bool = True) -> list[dict]:
-    """List objects under a prefix via aws s3 ls. Returns [{key, size}]."""
+    """List objects under a prefix via aws s3 ls. Returns [{key, size}].
+
+    The returned keys are relative to the bucket root (aws s3 ls default).
+    Callers must prepend the namespace's bucket path when building full S3 URIs.
+    """
     s3_uri = f"s3://{prefix}" if not prefix.startswith("s3://") else prefix
     cmd = ["aws", "s3", "ls", s3_uri, "--recursive"]
     if requester_pays:
@@ -1080,11 +1084,11 @@ def discover_leverage_source(
                 plan.source_path = str(search_path)
                 break
 
-    # Check for updateLeverage pattern in any local data
+    # Check for updateLeverage pattern in any local data (skip .lz4 — compressed binary won't contain readable strings)
     if config.data_root:
         root = Path(config.data_root)
         for fpath in root.rglob("*"):
-            if fpath.is_file() and fpath.suffix in (".json", ".jsonl", ".lz4"):
+            if fpath.is_file() and fpath.suffix in (".json", ".jsonl"):
                 try:
                     file_content = fpath.read_bytes()[:1024]  # peek first KB
                     if b"updateLeverage" in file_content or b"leverage" in file_content.lower():
@@ -2017,14 +2021,33 @@ class NodeFillsLiqReconstructionProbe:
             return
 
         # Pick the first available key (one all-coin hour object)
-        target_key = sample_keys[0]
+        relative_key = sample_keys[0]
+        
+        # Build full S3 key by prepending the found namespace's bucket path.
+        # list_s3_prefix returns keys relative to bucket root, so we need:
+        #   <namespace_bucket_path>/<relative_key>
+        # e.g., "hl-mainnet-node-data/node_fills_by_block/hourly/20250727/10.lz4"
+        found_ns = self.coverage_inv.namespace if self.coverage_inv else ""
+        if found_ns and not relative_key.startswith(found_ns.split("/")[0] + "/"):
+            # Namespace is like "hl-mainnet-node-data/node_fills_by_block/hourly/"
+            # Key is like "node_fills_by_block/hourly/20250727/10.lz4"
+            # Full key = namespace + remaining path after namespace prefix
+            ns_parts = found_ns.rstrip("/").split("/")
+            key_parts = relative_key.split("/")
+            # Check if the key starts with a non-bucket component of the namespace
+            bucket_name = ns_parts[0]  # "hl-mainnet-node-data"
+            # Rebuild: bucket_name + everything from key that isn't already in namespace
+            full_key = f"{bucket_name}/{relative_key}"
+        else:
+            full_key = relative_key
+
         dest_path = None
         downloaded_bytes = 0
         sha256_hex = ""
 
         if cache_dir and cache_dir.is_dir():
             # Check local cache first
-            local_filename = target_key.split("/")[-1] if "/" in target_key else target_key
+            local_filename = relative_key.split("/")[-1] if "/" in relative_key else relative_key
             cached_file = cache_dir / local_filename
             if cached_file.is_file():
                 dest_path = cached_file
@@ -2035,19 +2058,19 @@ class NodeFillsLiqReconstructionProbe:
             try:
                 if not cache_dir:
                     cache_dir = data_root / "node_fills_by_block" / "hourly" if data_root else None
-                dest_path = cache_dir / target_key.split("/")[-1] if cache_dir else None
+                dest_path = cache_dir / relative_key.split("/")[-1] if cache_dir else None
                 if dest_path:
                     dest_path.parent.mkdir(parents=True, exist_ok=True)
                 downloaded_bytes, sha256_hex = fetch_s3_object(
-                    target_key, dest_path or Path("/dev/null"), requester_pays=config.requester_pays
+                    full_key, dest_path or Path("/dev/null"), requester_pays=config.requester_pays
                 )
             except Exception as exc:
-                print(f"Phase B: S3 download failed for {target_key}: {exc}", flush=True)
+                print(f"Phase B: S3 download failed for {full_key}: {exc}", flush=True)
                 downloaded_bytes = 0
                 sha256_hex = ""
 
         manifest.objects.append({
-            "key": target_key,
+            "key": full_key,
             "sha256": sha256_hex,
             "size_bytes": downloaded_bytes,
         })
@@ -2060,7 +2083,7 @@ class NodeFillsLiqReconstructionProbe:
                     parsed_records = list(stream_fills_from_lz4(str(dest_path)))
                 else:
                     parsed_records = list(stream_fills_from_jsonl(str(dest_path)))
-                print(f"Phase B: Parsed {len(parsed_records)} fill records from {target_key}", flush=True)
+                print(f"Phase B: Parsed {len(parsed_records)} fill records from {full_key}", flush=True)
             except Exception as exc:
                 print(f"Phase B: Parse failed for {dest_path}: {exc}", flush=True)
                 parsed_records = []
