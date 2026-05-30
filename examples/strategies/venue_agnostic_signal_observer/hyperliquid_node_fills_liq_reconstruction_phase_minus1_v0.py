@@ -2583,6 +2583,27 @@ class NodeFillsLiqReconstructionProbe:
         cache_dir = (data_root / "node_fills_by_block" / "hourly") if data_root else None
 
         sample_keys = self.partitioning_inv.sample_keys or []
+
+        # If no S3 sample_keys but local cache was found, pick a .lz4 file from the
+        # node_fills_by_block/hourly directory (the canonical location for hourly fills).
+        if not sample_keys and config.data_root:
+            lz4_dir = Path(config.data_root) / "node_fills_by_block" / "hourly"
+            if lz4_dir.is_dir():
+                candidates = sorted(lz4_dir.glob("*.lz4"))
+                for lz4_file in candidates:
+                    if lz4_file.stat().st_size > 0:
+                        sample_keys = [str(lz4_file)]
+                        cache_dir = lz4_dir
+                        break
+            else:
+                # Fallback: scan entire data_root for node_fills .lz4 files.
+                lz4_files = sorted(Path(config.data_root).rglob("*.lz4"))
+                for lz4_file in lz4_files:
+                    if "node_fills" in str(lz4_file).lower() and lz4_file.stat().st_size > 0:
+                        sample_keys = [str(lz4_file)]
+                        cache_dir = Path(config.data_root)
+                        break
+
         if not sample_keys:
             self.download_manifest = manifest
             return
