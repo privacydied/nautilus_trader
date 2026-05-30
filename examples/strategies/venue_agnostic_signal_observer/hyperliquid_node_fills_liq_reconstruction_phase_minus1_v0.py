@@ -1446,14 +1446,32 @@ def reconstruct_positions(
     Returns (audit, state_samples, errors).
     """
     def sort_key(rec):
-        if hasattr(rec, 'block_number') and rec.block_number is not None:
-            return (rec.block_number, 0)
-        if hasattr(rec, 'fill_time') and rec.fill_time is not None:
+        """Sort by block_number then start_position for correct intra-block ordering.
+
+        Within a single block, each fill's start_position equals the cumulative
+        position from all PREVIOUS fills in that same block (for the same user+coin).
+        Sorting by start_position within each block gives the correct fill sequence.
+        Between blocks, external fills not captured may change the total, so we use
+        start_position as the authoritative state reference.
+        """
+        bn = getattr(rec, 'block_number', None) or 0
+        sp_val = getattr(rec, 'start_position', None)
+        if sp_val is not None:
             try:
-                return (int(rec.fill_time.timestamp() * 1e9), 0)
-            except Exception:
-                return (0, 0)
-        return (0, 0)
+                sp_sort = float(sp_val)
+            except (ValueError, TypeError):
+                sp_sort = 0.0
+        else:
+            sp_sort = 0.0
+        tid_val = getattr(rec, 'tid', None)
+        if tid_val is not None:
+            try:
+                tid_sort = int(tid_val)
+            except (ValueError, TypeError):
+                tid_sort = 0
+        else:
+            tid_sort = 0
+        return (bn, sp_sort, tid_sort)
 
     sorted_records = sorted(records, key=sort_key)
 
@@ -1581,9 +1599,13 @@ def reconstruct_positions(
                         "transition_type": transition_type,
                     })
 
-        # Update position (only if not cold-start which already seeded)
-        if not _is_cold_start(prev_pos, getattr(rec, 'start_position', None)):
-            ps.signed_position = new_pos
+        # Update position: use startPosition as authoritative reference.
+        sp_val = getattr(rec, 'start_position', None)
+        if sp_val is not None:
+            try:
+                ps.signed_position = _try_parse_start_position(sp_val)
+            except Exception:
+                pass
 
         # Classify as known/cold-start
         if prev_pos == Decimal("0") and delta != Decimal("0"):
@@ -1780,7 +1802,7 @@ def reconstruct_positions_full_audit(
                 else:
                     convention_audit.ambiguous_count += 1
 
-                if pre_match:
+                if pre_match or post_match:
                     consistency_audit.transitions_reconciled += 1
                 else:
                     consistency_audit.transitions_mismatched += 1
