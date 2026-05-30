@@ -51,10 +51,15 @@ except ImportError:
 
 def _json_dumps(obj: Any) -> bytes:
     if _orjson_module is not None:
-        return _orjson_module.dumps(
-            obj, option=_orjson_module.OPT_INDENT_2 | _orjson_module.OPT_SORT_KEYS
-        )
-    return json.dumps(obj, indent=2, sort_keys=True).encode()
+        # Handle Decimal types that orjson doesn't support natively
+        try:
+            return _orjson_module.dumps(
+                obj, option=_orjson_module.OPT_INDENT_2 | _orjson_module.OPT_SORT_KEYS
+            )
+        except TypeError:
+            # Fall back to stdlib json for objects with Decimal/non-serializable types
+            pass
+    return json.dumps(obj, indent=2, sort_keys=True, default=str).encode()
 
 
 def _json_loads(data: bytes) -> Any:
@@ -138,6 +143,7 @@ class StudyStatus(str, Enum):
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_NO_LOCAL_CACHE = "BLOCKED_NO_LOCAL_CACHE"
 
     # Schema blocked
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_SCHEMA_NO_RECORDS = "BLOCKED_SCHEMA_NO_RECORDS"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_SCHEMA_MISSING_REQUIRED_FIELDS = "BLOCKED_SCHEMA_MISSING_REQUIRED_FIELDS"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ADDRESS_FIELD_MISSING = "BLOCKED_ADDRESS_FIELD_MISSING"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_POSITION_FIELD_MISSING = "BLOCKED_POSITION_FIELD_MISSING"
@@ -154,6 +160,9 @@ class StudyStatus(str, Enum):
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_OI_CONTEXT_UNAVAILABLE = "BLOCKED_OI_CONTEXT_UNAVAILABLE"
     NODE_FILLS_LIQ_PHASE_MINUS1_COMPLETENESS_DIAGNOSTIC_LOW_ZERO_BURNIN = "COMPLETENESS_DIAGNOSTIC_LOW_ZERO_BURNIN"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_RECONSTRUCTION_COVERAGE_LOW_BURNIN = "BLOCKED_RECONSTRUCTION_COVERAGE_LOW_BURNIN"
+
+    # Leverage source plan ready (raw action namespace discovered but not sampled)
+    NODE_FILLS_LIQ_PHASE_MINUS1_LEVERAGE_SOURCE_PLAN_READY = "LEVERAGE_SOURCE_PLAN_READY"
 
     # Passed / diagnostic
     NODE_FILLS_LIQ_PHASE_MINUS1_THIN_SLICE_SCHEMA_AND_POSITION_MECHANICS_PASSED = "THIN_SLICE_SCHEMA_AND_POSITION_MECHANICS_PASSED"
@@ -194,6 +203,7 @@ class SchemaVerdict(str, Enum):
     FAIL_SYMBOL_MISSING = "FAIL_SYMBOL_MISSING"
     FAIL_POSITION_FIELD_MISSING = "FAIL_POSITION_FIELD_MISSING"
     FAIL_DIR_MAPPING_UNVERIFIED = "FAIL_DIR_MAPPING_UNVERIFIED"
+    NOT_EVALUATED_PLAN_ONLY = "NOT_EVALUATED_PLAN_ONLY"
 
 
 class LeverageMode(str, Enum):
@@ -234,6 +244,7 @@ class StudyConfig:
     burn_in_days: int = 0
     leverage_mode: str = "exact_required"
     bound_diagnostic: bool = False
+    leverage_source_plan_only: bool = False
 
     def effective_leverage_mode(self) -> LeverageMode:
         if self.bound_diagnostic:
@@ -931,6 +942,120 @@ def inventory_liquidation_flags(records: list[NodeFillRecord], limit: int = 10_0
 # Phase D — Leverage-source discovery
 # ---------------------------------------------------------------------------
 
+RAW_ACTION_NAMESPACE_CANDIDATES = [
+    # Tidy prefixes (already tried)
+    "node_fills_by_block/actions/updateLeverage",
+    "hyperliquid/node_actions/leverage/",
+    "hl-mainnet-node-data/actions/updateLeverage/",
+    "market_data/user_leverage_history/",
+    # Raw action/transaction namespaces
+    "hl-mainnet-node-data/replica_cmds/",
+    "hl-mainnet-node-data/replica_cmds/hourly/",
+    "hl-mainnet-node-data/actions/",
+    "hl-mainnet-node-data/actions/hourly/",
+    "hl-mainnet-node-data/blocks/",
+    "hl-mainnet-node-data/blocks/hourly/",
+    "hl-mainnet-node-data/l1_actions/",
+    "hl-mainnet-node-data/l1_actions/hourly/",
+    "hl-mainnet-node-data/txs/",
+    "hl-mainnet-node-data/txs/hourly/",
+    "hl-mainnet-node-data/raw_actions/",
+    "hl-mainnet-node-data/raw_actions/hourly/",
+]
+
+ACTION_SEARCH_STRINGS = [
+    "updateLeverage",
+    "leverage",
+    "margin",
+    "isCross",
+    "cross",
+    "isolated",
+    "setReferrer",
+    "perpDeploy",
+    "action",
+    "payload",
+    "multiSig",
+]
+
+
+def _decode_action_envelope(obj: Any, depth: int = 0, path: str = "") -> list[str]:
+    """Recursively decode action names from nested envelopes.
+
+    Looks for action-like keys and string values at any nesting level.
+    Returns a flat list of all action-type strings found.
+    """
+    found_actions: list[str] = []
+    prefix = path + "." if path else ""
+
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            kp = prefix + k
+            if any(s in k.lower() for s in ACTION_SEARCH_STRINGS):
+                found_actions.append(kp)
+            # Also check string values for action names (e.g., "type": "updateLeverage")
+            if isinstance(v, str):
+                for s in ACTION_SEARCH_STRINGS:
+                    if s in v.lower():
+                        # Include the matched value in the path so callers can find it
+                        vp = f"{kp}.value={v}"
+                        found_actions.append(vp)
+                        break
+            # Recurse into nested dicts/lists
+            if isinstance(v, (dict, list)):
+                found_actions.extend(_decode_action_envelope(v, depth + 1, kp))
+    elif isinstance(obj, list):
+        for i, item in enumerate(obj):
+            ip = f"{prefix}[{i}]"
+            if isinstance(item, (dict, list)):
+                found_actions.extend(_decode_action_envelope(item, depth + 1, ip))
+
+    return found_actions
+
+
+def _recursive_string_search(data: bytes) -> set[str]:
+    """Search raw bytes for action-like strings."""
+    found: set[str] = set()
+    try:
+        text = data.decode("utf-8", errors="replace")
+    except Exception:
+        return found
+    for s in ACTION_SEARCH_STRINGS:
+        if s.lower() in text.lower():
+            found.add(s)
+    return found
+
+
+def decode_raw_action_sample(raw_bytes: bytes) -> dict:
+    """Decode a raw action sample and report action names/envelopes found."""
+    result = {
+        "bytes_size": len(raw_bytes),
+        "action_strings_found": sorted(_recursive_string_search(raw_bytes)),
+        "nested_envelopes": [],
+        "updateLeverage_found": False,
+        "margin_mode_action_found": False,
+        "multiSig_payload_unwrapped": False,
+    }
+
+    # Try to parse as JSON for nested inspection
+    try:
+        parsed = _json_loads(raw_bytes) if isinstance(raw_bytes, (str, bytes)) else raw_bytes
+        if isinstance(parsed, dict):
+            actions = _decode_action_envelope(parsed)
+            result["nested_envelopes"] = actions[:100]  # cap for artifact size
+            result["updateLeverage_found"] = any("updateLeverage" in a for a in actions)
+            result["margin_mode_action_found"] = any(
+                "margin" in a.lower() or "cross" in a.lower() or "isolated" in a.lower()
+                for a in actions
+            )
+            result["multiSig_payload_unwrapped"] = any(
+                "multiSig" in a and "payload" in a for a in actions
+            )
+    except Exception:
+        pass
+
+    return result
+
+
 def discover_leverage_source(
     config: StudyConfig,
     local_paths: list[str],
@@ -961,8 +1086,8 @@ def discover_leverage_source(
         for fpath in root.rglob("*"):
             if fpath.is_file() and fpath.suffix in (".json", ".jsonl", ".lz4"):
                 try:
-                    content = fpath.read_bytes()[:1024]  # peek first KB
-                    if b"updateLeverage" in content or b"leverage" in content.lower():
+                    file_content = fpath.read_bytes()[:1024]  # peek first KB
+                    if b"updateLeverage" in file_content or b"leverage" in file_content.lower():
                         plan.has_update_leverage = True
                         break
                 except Exception:
@@ -975,6 +1100,76 @@ def discover_leverage_source(
     )
 
     return plan, audit
+
+
+def discover_raw_action_namespaces(
+    config: StudyConfig,
+) -> tuple[dict, bool]:
+    """Discover raw action namespaces via S3 listing.
+
+    Returns (inventory_dict, namespace_found).
+    Inventory contains per-candidate metadata.
+    """
+    inventory = {
+        "candidates": [],
+        "raw_action_namespace_found": False,
+        "namespaces_discovered": [],
+    }
+
+    if not (config.include_remote_plan and config.allow_s3_archive_read):
+        return inventory, False
+
+    creds_ok = check_aws_credentials()
+    if not creds_ok:
+        return inventory, False
+
+    for candidate in RAW_ACTION_NAMESPACE_CANDIDATES:
+        obj_info = {
+            "candidate": candidate,
+            "listed": False,
+            "coverage_start": "",
+            "coverage_end": "",
+            "partitioning": "",
+            "smallest_download_unit": "",
+            "estimated_single_object_bytes": 0,
+            "sampled": False,
+        }
+
+        try:
+            objects = list_s3_prefix(candidate, requester_pays=config.requester_pays)
+            if objects:
+                obj_info["listed"] = True
+                sizes = [o.get("size", 0) for o in objects]
+                obj_info["estimated_single_object_bytes"] = max(sizes) if sizes else 0
+
+                # Discover coverage from keys
+                dates = set()
+                for obj in objects:
+                    key = obj["key"]
+                    m = re.search(r"(\d{4}-\d{2}-\d{2})", key)
+                    if not m:
+                        m = re.search(r"(\d{8})", key)
+                        if m:
+                            d = m.group(1)
+                            dates.add(f"{d[:4]}-{d[4:6]}-{d[6:8]}")
+                    else:
+                        dates.add(m.group(1))
+
+                sorted_dates = sorted(dates)
+                obj_info["coverage_start"] = sorted_dates[0] if sorted_dates else ""
+                obj_info["coverage_end"] = sorted_dates[-1] if sorted_dates else ""
+                obj_info["partitioning"] = "hourly" if objects and "/" in objects[0]["key"].split("/")[-1] else ""
+
+                if not inventory["raw_action_namespace_found"]:
+                    inventory["raw_action_namespace_found"] = True
+                    inventory["namespaces_discovered"].append(candidate)
+
+        except Exception:
+            pass
+
+        inventory["candidates"].append(obj_info)
+
+    return inventory, inventory["raw_action_namespace_found"]
 
 
 # ---------------------------------------------------------------------------
@@ -1565,6 +1760,25 @@ class NodeFillsLiqReconstructionProbe:
             self._write_artifacts(summary)
             return summary
 
+        # Leverage-source discovery (before any download, even in plan-only mode)
+        if config.leverage_source_plan_only or True:  # always run to populate artifacts
+            print("Phase D: Leverage-source discovery", flush=True)
+            local_found_lev, local_paths_lev = discover_local_cache(config.data_root)
+            self.leverage_plan, self.leverage_audit = discover_leverage_source(config, local_paths_lev)
+
+            # If leverage_source_plan_only is set, do raw action namespace listing and stop
+            if config.leverage_source_plan_only:
+                raw_inv, raw_found = discover_raw_action_namespaces(config)
+                atomic_write_json(self.out_root / "raw_action_namespace_inventory.json", raw_inv)
+                summary.status = self.status or (
+                    StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_REMOTE_PLAN_READY.value if raw_found
+                    else StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_LEVERAGE_SOURCE_PLAN_READY.value
+                )
+                if not self.status:
+                    self.status = summary.status
+                self._write_artifacts(summary)
+                return summary
+
         # Phase B — Tiny fetch (if not plan-only/dry-run)
         if not config.dry_run and not config.plan_only:
             print("Phase B: Tiny measured-object fetch", flush=True)
@@ -1619,19 +1833,41 @@ class NodeFillsLiqReconstructionProbe:
         # Phase H — Terminal decision
         print("Phase H: Terminal decision", flush=True)
         if not self.status or not self.status.startswith("BLOCKED"):
-            self.schema_gate = SchemaGate(verdict=SchemaVerdict.PASS, address_field_present=True,
-                                          symbol_field_present=True, side_size_price_present=True,
-                                          start_position_present=True)
-            self.dir_audit = DirMappingAudit(verified_against_start_position=True)
-            if not self.leverage_plan:
-                self.leverage_plan = LeverageSourcePlan(source_found=False)
-            if not self.leverage_audit:
-                self.leverage_audit = LeverageJoinAudit()
-
-            self.status = determine_terminal_status(
-                self.schema_gate, self.dir_audit, self.leverage_plan, self.leverage_audit,
-                self.position_audit, self.liq_audit, self.completeness, config,
+            # Only fabricate PASS results if we actually have parsed records
+            has_real_records = (
+                self.schema_gate is not None
+                and self.schema_gate.verdict != SchemaVerdict.NOT_EVALUATED_PLAN_ONLY
             )
+
+            if config.dry_run:
+                # Dry run: always return DRY_RUN_READY
+                self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_DRY_RUN_READY.value
+            elif config.plan_only:
+                # Plan-only: stop at acquisition planning, do not fabricate downstream results
+                if config.include_remote_plan:
+                    self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_REMOTE_PLAN_READY.value
+                else:
+                    self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_PLAN_READY.value
+            elif has_real_records:
+                # Real data was parsed — run full terminal decision
+                if not self.schema_gate:
+                    self.schema_gate = SchemaGate(verdict=SchemaVerdict.PASS, address_field_present=True,
+                                                  symbol_field_present=True, side_size_price_present=True,
+                                                  start_position_present=True)
+                if not self.dir_audit:
+                    self.dir_audit = DirMappingAudit(verified_against_start_position=True)
+                if not self.leverage_plan:
+                    self.leverage_plan = LeverageSourcePlan(source_found=False)
+                if not self.leverage_audit:
+                    self.leverage_audit = LeverageJoinAudit()
+
+                self.status = determine_terminal_status(
+                    self.schema_gate, self.dir_audit, self.leverage_plan, self.leverage_audit,
+                    self.position_audit, self.liq_audit, self.completeness, config,
+                )
+            else:
+                # No real records and not plan-only — should not happen normally
+                self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_SCHEMA_NO_RECORDS.value
 
         summary.status = self.status
         self._write_artifacts(summary)
@@ -1732,7 +1968,17 @@ class NodeFillsLiqReconstructionProbe:
         )
 
         if not local_found and not remote_objects:
-            self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_NO_LOCAL_CACHE.value
+            if config.dry_run:
+                # Dry run with no cache and no remote plan is still a valid dry run
+                self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_DRY_RUN_READY.value
+            elif config.plan_only:
+                # Plan-only without any data is still planning — treat as ready
+                self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_PLAN_READY.value
+            else:
+                self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_NO_LOCAL_CACHE.value
+        elif config.plan_only and remote_objects and self.coverage_inv.start_date:
+            # Successful remote plan discovery — stop here
+            self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_REMOTE_PLAN_READY.value
 
     def _phase_b(self, config: StudyConfig) -> None:
         """Phase B — Tiny measured-object fetch."""
@@ -1741,15 +1987,32 @@ class NodeFillsLiqReconstructionProbe:
         self.download_manifest = manifest
 
     def _phase_c(self, config: StudyConfig) -> None:
-        """Phase C — Schema sufficiency gate."""
-        # For dry-run/plan-only with no records, mark as passed but note it
+        """Phase C — Schema sufficiency gate.
+
+        In plan-only mode with no parsed records, returns NOT_EVALUATED_PLAN_ONLY
+        instead of falsely claiming PASS.
+        """
         self.schema_inventory = SchemaInventory()
+
+        if config.plan_only or config.dry_run:
+            # No records parsed yet — cannot validate schema
+            self.schema_gate = SchemaGate(
+                verdict=SchemaVerdict.NOT_EVALUATED_PLAN_ONLY,
+                address_field_present=False,
+                symbol_field_present=False,
+                side_size_price_present=False,
+                start_position_present=False,
+            )
+            return
+
+        # Normal mode: would validate from parsed records
+        # For now (no real download yet), also mark not_evaluated
         self.schema_gate = SchemaGate(
-            verdict=SchemaVerdict.PASS,
-            address_field_present=True,
-            symbol_field_present=True,
-            side_size_price_present=True,
-            start_position_present=True,
+            verdict=SchemaVerdict.NOT_EVALUATED_PLAN_ONLY,
+            address_field_present=False,
+            symbol_field_present=False,
+            side_size_price_present=False,
+            start_position_present=False,
         )
 
     def _write_artifacts(self, summary: StudySummary) -> None:
@@ -1915,7 +2178,7 @@ class NodeFillsLiqReconstructionProbe:
         atomic_write_json(out / "summary.json", summary_obj)
 
         # Generate summary.md (always written so tests can verify)
-        blocked = (self.status and (self.status.startswith("BLOCKED") or self.status.startswith("COMPLETENESS_DIAGNOSTIC")))
+        blocked = bool(self.status and (self.status.startswith("BLOCKED") or self.status.startswith("COMPLETENESS_DIAGNOSTIC")))
         md = generate_summary_md(
             self.config, self.source_plan or SourcePlan(),
             self.schema_gate or SchemaGate(), self.dir_audit or DirMappingAudit(),

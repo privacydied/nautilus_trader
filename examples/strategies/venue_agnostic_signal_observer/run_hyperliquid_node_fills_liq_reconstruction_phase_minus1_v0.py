@@ -75,6 +75,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--plan-only", action="store_true", help="Plan only — list but do not download")
     parser.add_argument("--include-remote-plan", action="store_true",
                         help="Include remote S3 listing in plan phase")
+    parser.add_argument("--leverage-source-plan-only", action="store_true",
+                        help="Run leverage-source discovery without downloading fills")
 
     # S3 / requester-pays
     parser.add_argument("--allow-s3-archive-read", action="store_true",
@@ -91,8 +93,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Hard cap on download bytes (default: 100MB)")
     parser.add_argument("--schema-sample-limit", type=int, default=10_000,
                         help="Max fill records to sample for schema validation")
-    parser.add_argument("--max-hours", type=int, default=6,
-                        help="Max hours of data to download in thin slice")
+    parser.add_argument("--max-hours", type=int, default=1,
+                        help="Max hours of data to download in thin slice (default: 1)")
 
     # OI completeness
     parser.add_argument("--min-oi-coverage-fraction", type=float, default=0.40,
@@ -138,6 +140,7 @@ def build_config(args: argparse.Namespace) -> probe_mod.StudyConfig:
         burn_in_days=args.burn_in_days,
         leverage_mode=args.leverage_mode,
         bound_diagnostic=args.bound_diagnostic,
+        leverage_source_plan_only=args.leverage_source_plan_only,
     )
 
 

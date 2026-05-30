@@ -35,7 +35,7 @@ class TestCLIArguments:
         assert args.preferred_symbol == "SOL"
         assert args.max_download_bytes == 100_000_000
         assert args.schema_sample_limit == 10_000
-        assert args.max_hours == 6
+        assert args.max_hours == 1
         assert not args.dry_run
         assert not args.plan_only
 
