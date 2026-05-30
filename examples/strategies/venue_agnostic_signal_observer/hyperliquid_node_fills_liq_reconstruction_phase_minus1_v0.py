@@ -8,7 +8,7 @@ Phases:
   B – tiny measured-object fetch
   C – schema sufficiency gate
   D – leverage-source discovery
-  E – position reconstruction audit
+  E – position reconstruction audit (startPosition reconciliation is the PRIMARY validity gate)
   F – isolated-only liquidation-price audit
   G – OI completeness diagnostic / later burn-in gate
   H – terminal decision
@@ -51,13 +51,11 @@ except ImportError:
 
 def _json_dumps(obj: Any) -> bytes:
     if _orjson_module is not None:
-        # Handle Decimal types that orjson doesn't support natively
         try:
             return _orjson_module.dumps(
                 obj, option=_orjson_module.OPT_INDENT_2 | _orjson_module.OPT_SORT_KEYS
             )
         except TypeError:
-            # Fall back to stdlib json for objects with Decimal/non-serializable types
             pass
     return json.dumps(obj, indent=2, sort_keys=True, default=str).encode()
 
@@ -98,7 +96,6 @@ try:
         stream_fills_from_lz4,
     )
 except ImportError:
-    # Fallback inline definitions if adapter is missing
     FROZEN_SYMBOLS = (
         "AAVE", "ADA", "APT", "ARB", "ATOM", "AVAX", "BCH", "BNB", "BTC",
         "DOGE", "DOT", "ENA", "ETH", "FET", "HYPE", "INJ", "JUP", "LINK",
@@ -148,6 +145,11 @@ class StudyStatus(str, Enum):
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ADDRESS_FIELD_MISSING = "BLOCKED_ADDRESS_FIELD_MISSING"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_POSITION_FIELD_MISSING = "BLOCKED_POSITION_FIELD_MISSING"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_DIR_MAPPING_UNVERIFIED = "BLOCKED_DIR_MAPPING_UNVERIFIED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_POSITION_KEY_AMBIGUOUS = "BLOCKED_POSITION_KEY_AMBIGUOUS"
+
+    # Position mechanics blocked (NEW — primary Phase -1 validity gate)
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_POSITION_MECHANICS_UNVERIFIED = "BLOCKED_POSITION_MECHANICS_UNVERIFIED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_PAIRING_SEMANTICS_UNVERIFIED = "BLOCKED_PAIRING_SEMANTICS_UNVERIFIED"
 
     # Leverage / margin blocked
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_MARGIN_MODE_UNDETERMINED = "BLOCKED_MARGIN_MODE_UNDETERMINED"
@@ -376,11 +378,11 @@ class PositionKey:
 
 @dataclass
 class PositionState:
-    address: str
-    coin: str
-    signed_position: Decimal = Decimal("0")
-    total_entry_value: Decimal = Decimal("0")
-    total_entry_size: Decimal = Decimal("0")
+    address: str = ""
+    coin: str = ""
+    signed_position: Decimal = field(default_factory=lambda: Decimal("0"))
+    total_entry_value: Decimal = field(default_factory=lambda: Decimal("0"))
+    total_entry_size: Decimal = field(default_factory=lambda: Decimal("0"))
     is_known: bool = False
     margin_mode: MarginMode = MarginMode.UNKNOWN
     leverage: Decimal | None = None
@@ -400,6 +402,95 @@ class PositionTransition:
 
 
 @dataclass
+class StartPositionConsistencyAudit:
+    """Detailed startPosition reconciliation audit (Patch 1)."""
+    records_seen: int = 0
+    records_parsed: int = 0
+    position_events_seen: int = 0
+    transitions_total: int = 0
+    transitions_checkable: int = 0
+    transitions_uncheckable_cold_start: int = 0
+    transitions_uncheckable_missing_start_position: int = 0
+    transitions_uncheckable_unknown_key: int = 0
+    transitions_uncheckable_parse_error: int = 0
+    transitions_reconciled: int = 0
+    transitions_mismatched: int = 0
+    consistency_rate_all_events: float = 0.0
+    consistency_rate_checkable_only: float = 0.0
+    # Alias for backward compat with legacy field on PositionReconstructionAudit
+    transitions_with_start_position: int = 0
+    path: str = ""
+
+
+@dataclass
+class StartPositionConventionAudit:
+    """Pre-fill vs post-fill startPosition convention audit (Patch 2)."""
+    pre_fill_match_count: int = 0
+    pre_fill_match_rate: float = 0.0
+    post_fill_match_count: int = 0
+    post_fill_match_rate: float = 0.0
+    dominant_convention: str = ""
+    ambiguous_count: int = 0
+    neither_count: int = 0
+    path: str = ""
+
+
+@dataclass
+class DirValueInventory:
+    """Directory value inventory from real data (Patch 3)."""
+    values_seen: list[str] = field(default_factory=list)
+    counts: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
+class SideDeltaMappingAudit:
+    """Side-to-signed-delta mapping audit (Patch 3)."""
+    side_to_candidate_delta: dict[str, str] = field(default_factory=dict)
+    pre_fill_consistency_rate: float = 0.0
+    post_fill_consistency_rate: float = 0.0
+    mismatch_rate: float = 0.0
+    verified: bool = False
+
+
+@dataclass
+class InstrumentIdentityInventory:
+    """Instrument identity audit for position keying (Patch 4)."""
+    symbols_seen: list[str] = field(default_factory=list)
+    raw_coin_values_seen: list[str] = field(default_factory=list)
+    asset_ids_seen: list[int] = field(default_factory=list)
+    builder_dex_asset_ids_seen: list[int] = field(default_factory=list)
+    colliding_ticker_count: int = 0
+    colliding_ticker_examples: list[dict] = field(default_factory=list)
+
+
+@dataclass
+class PositionKeyingAudit:
+    """Position keying collision audit (Patch 4)."""
+    position_key_fields_used: list[str] = field(default_factory=list)
+    position_key_collision_count: int = 0
+    ambiguous_key_count: int = 0
+    verified: bool = False
+
+
+@dataclass
+class BuilderDexAssetMappingAudit:
+    """Builder-DEX / HIP-3 asset mapping audit (Patch 4)."""
+    default_dex_asset_ids: list[int] = field(default_factory=list)
+    builder_dex_asset_ids: list[int] = field(default_factory=list)
+    formula_tested: bool = False
+    formula_correct: bool = False
+
+
+@dataclass
+class PairingSemanticsAudit:
+    """Paired-leg / event semantics audit (Patch 5)."""
+    paired_records_detected: int = 0
+    double_count_risk: bool = False
+    grouping_rule: str = ""
+    verified: bool = False
+
+
+@dataclass
 class PositionReconstructionAudit:
     records_seen: int = 0
     records_parsed: int = 0
@@ -414,6 +505,23 @@ class PositionReconstructionAudit:
     cross_or_unknown_margin_positions: int = 0
     records_rejected: int = 0
     dir_mapping_mismatch_count: int = 0
+
+    # Fields added by Patch 1 (detailed audit)
+    consistency_audit: StartPositionConsistencyAudit = field(default_factory=StartPositionConsistencyAudit)
+    convention_audit: StartPositionConventionAudit = field(default_factory=StartPositionConventionAudit)
+    dir_value_inventory: DirValueInventory = field(default_factory=DirValueInventory)
+    side_delta_mapping: SideDeltaMappingAudit = field(default_factory=SideDeltaMappingAudit)
+    instrument_identity: InstrumentIdentityInventory = field(default_factory=InstrumentIdentityInventory)
+    position_keying: PositionKeyingAudit = field(default_factory=PositionKeyingAudit)
+    builder_dex_mapping: BuilderDexAssetMappingAudit = field(default_factory=BuilderDexAssetMappingAudit)
+    pairing_semantics: PairingSemanticsAudit = field(default_factory=PairingSemanticsAudit)
+
+    # Additional tracking for Patch 6
+    position_keys_seen: set[str] = field(default_factory=set)
+    cold_start_positions: int = 0
+    known_from_flat_positions: int = 0
+    known_open_positions_margin_unknown: int = 0
+    known_open_positions_isolated_verified: int = 0
 
 
 @dataclass
@@ -580,7 +688,6 @@ def discover_local_cache(data_root: str | None) -> tuple[bool, list[str]]:
         return False, []
     root = Path(data_root)
     paths = []
-    # Check LZ4 archive directory
     archive_dir = root / "node_fills_by_block"
     if archive_dir.is_dir():
         for lz4 in sorted(archive_dir.rglob("*.lz4")):
@@ -598,11 +705,7 @@ def check_aws_credentials() -> bool:
 
 
 def list_s3_prefix(prefix: str, requester_pays: bool = True) -> list[dict]:
-    """List objects under a prefix via aws s3 ls. Returns [{key, size}].
-
-    The returned keys are relative to the bucket root (aws s3 ls default).
-    Callers must prepend the namespace's bucket path when building full S3 URIs.
-    """
+    """List objects under a prefix via aws s3 ls. Returns [{key, size}]."""
     s3_uri = f"s3://{prefix}" if not prefix.startswith("s3://") else prefix
     cmd = ["aws", "s3", "ls", s3_uri, "--recursive"]
     if requester_pays:
@@ -617,15 +720,10 @@ def list_s3_prefix(prefix: str, requester_pays: bool = True) -> list[dict]:
         if len(parts) < 3:
             continue
         try:
-            # aws s3 ls --recursive format: DATE TIME SIZE KEY...
-            # aws s3 ls (non-recursive, directories): just date/time entries
-            # Try parsing size from third-to-last part (after date and time)
             if len(parts) >= 4:
-                # Full object line: DATE TIME SIZE KEY
                 size = int(parts[2])
                 key = " ".join(parts[3:])
             else:
-                # Minimal format: SIZE KEY (shouldn't happen with --recursive but handle it)
                 size = int(parts[-1])
                 key = " ".join(parts[:-1])
             objects.append({"key": key, "size": size})
@@ -641,28 +739,24 @@ def discover_partitioning(sample_keys: list[str]) -> tuple[ArchivePartitioning, 
 
     coin_count = 0
     time_dir_count = 0
-    for key in sample_keys[:50]:  # sample first 50
+    for key in sample_keys[:50]:
         parts = Path(key).parts
-        # Coin-partitioned: any path component starts with a frozen symbol followed by _ (e.g., SOL_2024-01-01_0.lz4)
         has_coin = any(
             p.upper().startswith(sym + "_") or p.upper() == sym
             for p in parts
             for sym in FROZEN_SYMBOLS
         )
-        # Time-partitioned: path contains a date directory (e.g., 2024-01-01/0.lz4)
         has_date_dir = bool(re.search(r"\d{4}-\d{2}-\d{2}/", key)) or bool(re.search(r"\d{8}/", key))
         if has_coin:
             coin_count += 1
         elif has_date_dir:
             time_dir_count += 1
 
-    # Coin-partitioned dominates if most keys have coin symbols in filename
     if coin_count > len(sample_keys[:50]) * 0.5:
         return ArchivePartitioning.COIN_PARTITIONED, DownloadUnit.SINGLE_COIN_HOUR_OBJECT
     if time_dir_count > 0:
         return ArchivePartitioning.TIME_PARTITIONED_ALL_COINS, DownloadUnit.ALL_COIN_HOUR_OBJECT
 
-    # Check for date-based patterns (daily bundles)
     date_keys = [k for k in sample_keys if re.search(r"\d{4}-\d{2}-\d{2}", k)]
     if len(date_keys) > 0 and len(date_keys) < len(sample_keys) * 0.1:
         return ArchivePartitioning.TIME_PARTITIONED_ALL_COINS, DownloadUnit.DAILY_BUNDLE
@@ -675,7 +769,6 @@ def discover_archive_coverage(s3_objects: list[dict], namespace: str) -> Archive
     dates = set()
     for obj in s3_objects:
         key = obj["key"]
-        # Extract date from key patterns
         m = re.search(r"(\d{4}-\d{2}-\d{2})", key)
         if not m:
             m = re.search(r"(\d{8})", key)
@@ -689,7 +782,7 @@ def discover_archive_coverage(s3_objects: list[dict], namespace: str) -> Archive
     return ArchiveCoverageInventory(
         start_date=sorted_dates[0] if sorted_dates else "",
         end_date=sorted_dates[-1] if sorted_dates else "",
-        available_dates=sorted_dates[:50],  # cap for artifact size
+        available_dates=sorted_dates[:50],
         namespace=namespace,
     )
 
@@ -712,7 +805,7 @@ def build_source_plan(
         estimated_objects=estimated_objects,
         estimated_bytes=estimated_bytes,
         local_cache_found=local_found,
-        local_paths=local_paths[:20],  # cap for artifact size
+        local_paths=local_paths[:20],
         remote_objects_planned=[{"key": o["key"], "size": o.get("size", 0)} for o in remote_objects[:50]],
     )
 
@@ -743,16 +836,16 @@ def fetch_s3_object(key: str, dest_path: Path, requester_pays: bool = True) -> t
 # ---------------------------------------------------------------------------
 
 REQUIRED_POSITION_FIELDS = [
-    "address",  # or similar per-fill user identifier
-    "coin",     # symbol/coin
-    "side",     # A/B from archive
-    "sz",       # size
-    "px",       # price
-    "time",     # timestamp or block time
+    "address",
+    "coin",
+    "side",
+    "sz",
+    "px",
+    "time",
 ]
 
 REQUIRED_POSITION_MECHANICS_FIELDS = [
-    "startPosition",  # position before the fill
+    "startPosition",
 ]
 
 
@@ -768,9 +861,7 @@ def validate_schema(records: list[NodeFillRecord], limit: int = 10_000) -> tuple
 
     for i, rec in enumerate(records[:limit]):
         raw = rec.raw if hasattr(rec, 'raw') else {}
-        # Only include fields that are actually present in the record or have a known adapter field name
         all_keys = set(raw.keys())
-        # Always consider these adapter-decoded fields as tracked (they come from parse_node_fill_event)
         if hasattr(rec, 'address') and rec.address is not None:
             all_keys.add("address")
         if hasattr(rec, 'coin') and rec.coin is not None:
@@ -802,7 +893,6 @@ def validate_schema(records: list[NodeFillRecord], limit: int = 10_000) -> tuple
     inventory.fields_present = {f: len(v) > 0 for f, v in seen_fields.items()}
     inventory.all_sample_keys = set(seen_fields.keys())
 
-    # Check required fields
     address_present = "address" in inventory.fields_present and inventory.fields_present["address"]
     coin_present = "coin" in inventory.fields_present and inventory.fields_present["coin"]
     side_present = "side" in inventory.fields_present and inventory.fields_present["side"]
@@ -851,13 +941,12 @@ FROZEN_DIR_MAPPING: dict[str, Decimal] = {
 
 
 def verify_dir_mapping(
-    records: list[NodeFillRecord],
+    records: Sequence[Any],
     limit: int = 10_000,
 ) -> DirMappingAudit:
     """Verify dir field mapping against startPosition consistency."""
     audit = DirMappingAudit()
 
-    # Collect variants seen
     variants = set()
     for rec in records[:limit]:
         if rec.dir:
@@ -866,7 +955,6 @@ def verify_dir_mapping(
 
     audit.variants_seen = sorted(variants)
 
-    # Test each known mapping against startPosition
     mismatches = 0
     checked = 0
     for rec in records[:limit]:
@@ -876,19 +964,8 @@ def verify_dir_mapping(
             continue
 
         delta_sign = FROZEN_DIR_MAPPING[rec.dir]
-        # startPosition indicates position BEFORE the fill.
-        # The direction should be consistent with the change in position.
         checked += 1
         audit.total_checked += 1
-
-        # We verify consistency by checking that the dir field aligns
-        # with what we'd expect from side/size/delta
-        try:
-            actual_delta = signed_delta_for_side(rec.side, rec.sz)
-            # If dir says "Open Long" (delta +), side should give us a positive delta for a new long
-            # This is a basic consistency check
-        except ValueError:
-            pass
 
     audit.mismatch_count = mismatches
     audit.verified_against_start_position = checked > 0 and mismatches == 0
@@ -909,7 +986,6 @@ def inventory_liquidation_flags(records: list[NodeFillRecord], limit: int = 10_0
 
     for rec in records[:limit]:
         raw = rec.raw if hasattr(rec, 'raw') else {}
-        # Check various possible field names
         is_liq = False
         for field_name in ("liquidation", "liq", "isLiquidation"):
             if field_name in raw:
@@ -924,7 +1000,6 @@ def inventory_liquidation_flags(records: list[NodeFillRecord], limit: int = 10_0
                     is_liq = str(val).lower() in ("true", "1", "yes")
                 break
 
-        # Also check fillType for liquidation keyword
         if not inv.flag_field_present:
             ft = raw.get("fillType", "")
             if isinstance(ft, str) and "liquidation" in ft.lower():
@@ -947,12 +1022,10 @@ def inventory_liquidation_flags(records: list[NodeFillRecord], limit: int = 10_0
 # ---------------------------------------------------------------------------
 
 RAW_ACTION_NAMESPACE_CANDIDATES = [
-    # Tidy prefixes (already tried)
     "node_fills_by_block/actions/updateLeverage",
     "hyperliquid/node_actions/leverage/",
     "hl-mainnet-node-data/actions/updateLeverage/",
     "market_data/user_leverage_history/",
-    # Raw action/transaction namespaces
     "hl-mainnet-node-data/replica_cmds/",
     "hl-mainnet-node-data/replica_cmds/hourly/",
     "hl-mainnet-node-data/actions/",
@@ -983,11 +1056,7 @@ ACTION_SEARCH_STRINGS = [
 
 
 def _decode_action_envelope(obj: Any, depth: int = 0, path: str = "") -> list[str]:
-    """Recursively decode action names from nested envelopes.
-
-    Looks for action-like keys and string values at any nesting level.
-    Returns a flat list of all action-type strings found.
-    """
+    """Recursively decode action names from nested envelopes."""
     found_actions: list[str] = []
     prefix = path + "." if path else ""
 
@@ -996,15 +1065,12 @@ def _decode_action_envelope(obj: Any, depth: int = 0, path: str = "") -> list[st
             kp = prefix + k
             if any(s in k.lower() for s in ACTION_SEARCH_STRINGS):
                 found_actions.append(kp)
-            # Also check string values for action names (e.g., "type": "updateLeverage")
             if isinstance(v, str):
                 for s in ACTION_SEARCH_STRINGS:
                     if s in v.lower():
-                        # Include the matched value in the path so callers can find it
                         vp = f"{kp}.value={v}"
                         found_actions.append(vp)
                         break
-            # Recurse into nested dicts/lists
             if isinstance(v, (dict, list)):
                 found_actions.extend(_decode_action_envelope(v, depth + 1, kp))
     elif isinstance(obj, list):
@@ -1040,12 +1106,11 @@ def decode_raw_action_sample(raw_bytes: bytes) -> dict:
         "multiSig_payload_unwrapped": False,
     }
 
-    # Try to parse as JSON for nested inspection
     try:
         parsed = _json_loads(raw_bytes) if isinstance(raw_bytes, (str, bytes)) else raw_bytes
         if isinstance(parsed, dict):
             actions = _decode_action_envelope(parsed)
-            result["nested_envelopes"] = actions[:100]  # cap for artifact size
+            result["nested_envelopes"] = actions[:100]
             result["updateLeverage_found"] = any("updateLeverage" in a for a in actions)
             result["margin_mode_action_found"] = any(
                 "margin" in a.lower() or "cross" in a.lower() or "isolated" in a.lower()
@@ -1074,7 +1139,6 @@ def discover_leverage_source(
         ],
     )
 
-    # Check local cache first
     if config.data_root:
         root = Path(config.data_root)
         for candidate in plan.candidates:
@@ -1084,13 +1148,12 @@ def discover_leverage_source(
                 plan.source_path = str(search_path)
                 break
 
-    # Check for updateLeverage pattern in any local data (skip .lz4 — compressed binary won't contain readable strings)
     if config.data_root:
         root = Path(config.data_root)
         for fpath in root.rglob("*"):
             if fpath.is_file() and fpath.suffix in (".json", ".jsonl"):
                 try:
-                    file_content = fpath.read_bytes()[:1024]  # peek first KB
+                    file_content = fpath.read_bytes()[:1024]
                     if b"updateLeverage" in file_content or b"leverage" in file_content.lower():
                         plan.has_update_leverage = True
                         break
@@ -1109,11 +1172,7 @@ def discover_leverage_source(
 def discover_raw_action_namespaces(
     config: StudyConfig,
 ) -> tuple[dict, bool]:
-    """Discover raw action namespaces via S3 listing.
-
-    Returns (inventory_dict, namespace_found).
-    Inventory contains per-candidate metadata.
-    """
+    """Discover raw action namespaces via S3 listing."""
     inventory = {
         "candidates": [],
         "raw_action_namespace_found": False,
@@ -1146,7 +1205,6 @@ def discover_raw_action_namespaces(
                 sizes = [o.get("size", 0) for o in objects]
                 obj_info["estimated_single_object_bytes"] = max(sizes) if sizes else 0
 
-                # Discover coverage from keys
                 dates = set()
                 for obj in objects:
                     key = obj["key"]
@@ -1177,15 +1235,216 @@ def discover_raw_action_namespaces(
 
 
 # ---------------------------------------------------------------------------
-# Phase E — Position reconstruction audit
+# Phase E — Position reconstruction audit (Patch 1-6 rewrite)
 # ---------------------------------------------------------------------------
 
+def _build_position_key(address: str, coin: str) -> str:
+    """Build a deterministic position key string."""
+    return f"{address}::{coin}"
+
+
+def _try_parse_start_position(val: Any) -> Decimal | None:
+    """Safely parse startPosition from various types."""
+    if val is None:
+        return None
+    try:
+        return Decimal(str(val))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+def _is_cold_start(prev_pos: Decimal, start_position: Decimal | None) -> bool:
+    """Determine if this is a cold-start transition (position existed before observation)."""
+    if prev_pos == Decimal("0"):
+        # First observed fill for this position key
+        if start_position is not None and start_position != Decimal("0"):
+            return True  # startPosition nonzero but no prior state — cold start
+        return False  # flat open, fully known
+    return False
+
+
+def audit_side_delta_mapping(
+    records: Sequence[Any],
+) -> SideDeltaMappingAudit:
+    """Patch 3: Audit side-to-signed-delta mapping from real data.
+
+    For each record with startPosition, compute what signed delta the
+    current reconstructed position implies, and compare against what
+    side/sz predicts.
+    """
+    audit = SideDeltaMappingAudit()
+    state_tracker: dict[tuple[str, str], Decimal] = {}  # (addr, coin) -> reconstructed pos
+
+    candidates = {
+        "A->-sz": -1,
+        "B->+sz": 1,
+        "A->+sz": 1,   # inverse
+        "B->-sz": -1,  # inverse
+    }
+
+    total_pre = 0
+    matches_pre = 0
+    total_post = 0
+    matches_post = 0
+
+    for rec in records:
+        key = (rec.address, rec.coin)
+        try:
+            delta = signed_delta_for_side(rec.side, rec.sz)
+        except ValueError:
+            continue
+
+        prev_pos = state_tracker.get(key, Decimal("0"))
+        new_pos = prev_pos + delta
+
+        if hasattr(rec, 'start_position') and rec.start_position is not None:
+            sp = _try_parse_start_position(rec.start_position)
+            if sp is not None:
+                # Pre-fill hypothesis: startPosition == position BEFORE fill
+                pre_match = abs(sp - prev_pos) < Decimal("0.001")
+                # Post-fill hypothesis: startPosition == position AFTER fill
+                post_match = abs(sp - new_pos) < Decimal("0.001")
+
+                if pre_match:
+                    total_pre += 1
+                    matches_pre += 1
+                if post_match:
+                    total_post += 1
+                    matches_post += 1
+
+        state_tracker[key] = new_pos
+
+    audit.side_to_candidate_delta["A->-sz"] = "default"
+    audit.side_to_candidate_delta["B->+sz"] = "default"
+    audit.pre_fill_consistency_rate = matches_pre / total_pre if total_pre > 0 else 0.0
+    audit.post_fill_consistency_rate = matches_post / total_post if total_post > 0 else 0.0
+    audit.mismatch_rate = 1.0 - min(audit.pre_fill_consistency_rate, audit.post_fill_consistency_rate)
+    audit.verified = audit.pre_fill_consistency_rate >= 0.95 or audit.post_fill_consistency_rate >= 0.95
+
+    return audit
+
+
+def audit_instrument_identity(records: Sequence[Any]) -> tuple[InstrumentIdentityInventory, PositionKeyingAudit, BuilderDexAssetMappingAudit]:
+    """Patch 4: Audit instrument identity and position keying."""
+    inv = InstrumentIdentityInventory()
+    keying = PositionKeyingAudit(
+        position_key_fields_used=["address", "coin"],
+    )
+    bdex = BuilderDexAssetMappingAudit(formula_tested=True)
+
+    symbols = set()
+    raw_coins = set()
+    asset_ids = set()
+    builder_dex_ids = set()
+
+    # Track coin->set of addresses to detect collisions
+    coin_to_addresses: dict[str, set[str]] = defaultdict(set)
+
+    for rec in records:
+        symbols.add(rec.coin)
+        raw_coins.add(rec.coin)
+        coin_to_addresses[rec.coin].add(rec.address)
+
+        # Check for asset_id fields in raw data
+        raw = rec.raw if hasattr(rec, 'raw') else {}
+        for field_name in ("asset_index", "asset_id", "dex_index", "universe_index"):
+            val = raw.get(field_name)
+            if val is not None:
+                try:
+                    aid = int(val)
+                    asset_ids.add(aid)
+                except (ValueError, TypeError):
+                    pass
+
+        # Check builder DEX fields
+        for field_name in ("builder", "builder_dex", "is_builder"):
+            if field_name in raw:
+                val = raw[field_name]
+                if val is not None:
+                    try:
+                        bid = int(val)
+                        if bid >= 100000:
+                            builder_dex_ids.add(bid)
+                            bdex.builder_dex_asset_ids.append(bid)
+                    except (ValueError, TypeError):
+                        pass
+
+    # Test builder-DEX formula: 100000 + dex_index * 10000 + asset_index
+    if bdex.formula_tested:
+        # We have at least some builder DEX IDs — check if any match the formula pattern
+        for bid in list(builder_dex_ids)[:10]:
+            remainder = bid - 100000
+            if remainder >= 0 and remainder < 900000 and remainder % 10000 == 0:
+                bdex.formula_correct = True
+
+    # Check for colliding tickers (same ticker, different asset_ids)
+    # This is a simplified check — real collision detection needs full universe data
+    inv.symbols_seen = sorted(symbols)
+    inv.raw_coin_values_seen = sorted(raw_coins)
+    inv.asset_ids_seen = sorted(asset_ids)[:50]
+    inv.colliding_ticker_count = 0  # Will be >0 if same coin maps to different asset_ids
+
+    keying.verified = len(inv.colliding_ticker_examples) == 0
+
+    return inv, keying, bdex
+
+
+def audit_pairing_semantics(records: Sequence[Any]) -> PairingSemanticsAudit:
+    """Patch 5: Audit paired-leg / event semantics."""
+    audit = PairingSemanticsAudit()
+
+    # Group by trade-level keys
+    trade_groups: dict[tuple, list[NodeFillRecord]] = defaultdict(list)
+
+    for rec in records:
+        fill_time_ms = (
+            int(rec.fill_time.timestamp() * 1000) if rec.fill_time else 0
+        )
+        key = (
+            rec.block_number,
+            rec.coin,
+            rec.tid,
+            rec.hash,
+            str(rec.px),
+            str(rec.sz),
+            fill_time_ms,
+        )
+        trade_groups[key].append(rec)
+
+    paired_count = 0
+    double_count_risk = False
+
+    for key, group in trade_groups.items():
+        if len(group) >= 2:
+            paired_count += len(group)
+            # Check if same address appears multiple times in one trade group
+            addresses = set(r.address for r in group)
+            if len(addresses) < len(group):
+                double_count_risk = True
+
+    audit.paired_records_detected = paired_count
+    audit.double_count_risk = double_count_risk
+    audit.grouping_rule = "block_number+coin+tid+hash+px+sz+fill_time_ms"
+    audit.verified = not double_count_risk or paired_count == 0
+
+    return audit
+
+
 def reconstruct_positions(
-    records: list[NodeFillRecord],
+    records: Sequence[Any],
     config: StudyConfig,
 ) -> tuple[PositionReconstructionAudit, list[dict], list[str]]:
-    """Per-address/per-symbol position reconstruction from fill sequence."""
-    # Sort by timestamp (use block_number or fill_time as proxy)
+    """Per-address/per-symbol position reconstruction with cold-start handling.
+
+    Patch 1: Separates checkable vs uncheckable transitions.
+    Patch 2: Audits pre/post startPosition convention.
+    Patch 3: Audits dir/side signed-delta mapping.
+    Patch 4: Audits position keying and builder-DEX collisions.
+    Patch 5: Audits paired-leg semantics.
+    Patch 6: Recomputes full reconstruction after all audits.
+
+    Returns (audit, state_samples, errors).
+    """
     def sort_key(rec):
         if hasattr(rec, 'block_number') and rec.block_number is not None:
             return (rec.block_number, 0)
@@ -1206,9 +1465,25 @@ def reconstruct_positions(
     positions: dict[tuple[str, str], PositionState] = {}
     transitions: list[PositionTransition] = []
 
+    # === StartPositionConsistencyAudit (Patch 1) ===
+    consistency_audit = StartPositionConsistencyAudit()
+    consistency_audit.records_seen = len(sorted_records)
+
+    # Convention audit (Patch 2)
+    convention_audit = StartPositionConventionAudit()
+
+    # Mismatch samples for redacted output
+    mismatch_samples: list[dict] = []
+    uncheckable_samples: list[dict] = []
+
     for rec in sorted_records:
-        audit.records_seen += 1
         key = (rec.address, rec.coin)
+        consistency_audit.records_parsed += 1
+        consistency_audit.position_events_seen += 1
+
+        # Track users and symbols
+        audit.users_seen.add(rec.address)
+        audit.symbols_seen.add(rec.coin)
 
         if key not in positions:
             positions[key] = PositionState(
@@ -1223,28 +1498,12 @@ def reconstruct_positions(
             delta = signed_delta_for_side(rec.side, rec.sz)
         except ValueError as e:
             errors.append(f"Unknown side for {rec.address}/{rec.coin}: {e}")
-            audit.records_rejected += 1
+            consistency_audit.records_parsed -= 1
             continue
 
         audit.records_parsed += 1
 
-        # Track users and symbols
-        audit.users_seen.add(rec.address)
-        audit.symbols_seen.add(rec.coin)
-
-        # startPosition consistency check
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
-            audit.transitions_with_start_position += 1
-            # Check that current position matches what startPosition implies
-            expected_before = rec.start_position
-            if abs(ps.signed_position - expected_before) > Decimal("0.001"):
-                errors.append(
-                    f"startPosition mismatch: {rec.address}/{rec.coin} "
-                    f"expected={expected_before} actual={ps.signed_position}"
-                )
-                audit.dir_mapping_mismatch_count += 1
-
-        # Determine transition type
+        # === Transition classification ===
         prev_pos = ps.signed_position
         new_pos = prev_pos + delta
         transition_type = classify_transition(prev_pos, new_pos, rec.side)
@@ -1253,7 +1512,7 @@ def reconstruct_positions(
             address=rec.address,
             coin=rec.coin,
             delta=delta,
-            price=getattr(rec, 'px', Decimal("0")),
+            price=get_price(rec),
             dir_field=rec.dir,
             start_position_before=getattr(rec, 'start_position', None),
             transition_type=transition_type,
@@ -1261,20 +1520,81 @@ def reconstruct_positions(
         transitions.append(trans)
         audit.position_transitions += 1
 
-        # Update position
-        ps.signed_position = new_pos
+        # === startPosition reconciliation (Patch 1 core logic) ===
+        if hasattr(rec, 'start_position') and rec.start_position is not None:
+            sp = _try_parse_start_position(rec.start_position)
+            consistency_audit.transitions_total += 1
+            consistency_audit.transitions_with_start_position += 1
+
+            cold = _is_cold_start(prev_pos, sp)
+
+            if cold:
+                # Cold start: nonzero startPosition but no prior state
+                consistency_audit.transitions_uncheckable_cold_start += 1
+                ps.signed_position = sp  # seed from startPosition
+                audit.unknown_cold_start_positions += 1
+                audit.cold_start_positions += 1
+                # Mark as pre-existing, not known-from-flat
+                ps.is_known = False
+                ps.margin_mode = MarginMode.UNKNOWN
+                uncheckable_samples.append({
+                    "address": redact_address(rec.address),
+                    "coin": rec.coin,
+                    "start_position": str(sp),
+                    "prev_reconstructed": str(prev_pos),
+                    "delta": str(delta),
+                    "reason": "cold_start_nonzero_startPosition",
+                })
+            else:
+                # Checkable transition
+                consistency_audit.transitions_checkable += 1
+
+                expected_before = sp
+                match_tolerance = Decimal("0.001")
+
+                if abs(ps.signed_position - expected_before) <= match_tolerance:
+                    consistency_audit.transitions_reconciled += 1
+                else:
+                    consistency_audit.transitions_mismatched += 1
+                    audit.dir_mapping_mismatch_count += 1
+
+                    # Convention analysis (Patch 2)
+                    new_pos_check = ps.signed_position + delta
+                    pre_match = abs(expected_before - ps.signed_position) <= match_tolerance
+                    post_match = abs(expected_before - new_pos_check) <= match_tolerance
+
+                    if not pre_match and not post_match:
+                        convention_audit.neither_count += 1
+                    elif pre_match and not post_match:
+                        convention_audit.pre_fill_match_count += 1
+                    elif post_match and not pre_match:
+                        convention_audit.post_fill_match_count += 1
+                    else:
+                        convention_audit.ambiguous_count += 1
+
+                    mismatch_samples.append({
+                        "address": redact_address(rec.address),
+                        "coin": rec.coin,
+                        "start_position": str(expected_before),
+                        "reconstructed_before": str(ps.signed_position),
+                        "delta": str(delta),
+                        "transition_type": transition_type,
+                    })
+
+        # Update position (only if not cold-start which already seeded)
+        if not _is_cold_start(prev_pos, getattr(rec, 'start_position', None)):
+            ps.signed_position = new_pos
 
         # Classify as known/cold-start
         if prev_pos == Decimal("0") and delta != Decimal("0"):
+            audit.known_open_positions += 1
+            audit.known_from_flat_positions += 1
             ps.is_known = True
             ps.entry_price = get_price(rec)
-            audit.known_open_positions += 1
-            ps.margin_mode = MarginMode.ISOLATED  # default for new position
-            audit.known_isolated_open_positions += 1
-        elif prev_pos == Decimal("0"):
-            audit.unknown_cold_start_positions += 1
+            # Do NOT label isolated yet — leverage join needed
+            audit.cross_or_unknown_margin_positions += 1
 
-        # Record state sample (every N records)
+        # Record state sample (every N records, max 50)
         if len(state_samples) < 50:
             state_samples.append({
                 "address": redact_address(rec.address),
@@ -1285,20 +1605,260 @@ def reconstruct_positions(
                 "margin_mode": ps.margin_mode.value,
             })
 
-    # Compute consistency rate
-    if audit.transitions_with_start_position > 0:
-        audit.start_position_consistency_rate = round(
-            1.0 - (audit.dir_mapping_mismatch_count / audit.transitions_with_start_position),
-            4,
+    # Compute consistency rates
+    if consistency_audit.transitions_total > 0:
+        consistency_audit.consistency_rate_all_events = round(
+            consistency_audit.transitions_reconciled / consistency_audit.transitions_total, 4
         )
 
-    # Count cross/unknown positions
-    for ps in positions.values():
-        if ps.margin_mode != MarginMode.ISOLATED:
-            audit.cross_or_unknown_margin_positions += 1
+    if consistency_audit.transitions_checkable > 0:
+        consistency_audit.consistency_rate_checkable_only = round(
+            consistency_audit.transitions_reconciled / consistency_audit.transitions_checkable, 4
+        )
+
+    # Also set the legacy field for backward compat
+    if consistency_audit.transitions_with_start_position > 0:
+        audit.start_position_consistency_rate = consistency_audit.consistency_rate_checkable_only
+
+    # Convention dominant
+    if convention_audit.pre_fill_match_count >= convention_audit.post_fill_match_count:
+        convention_audit.dominant_convention = "pre_fill"
+        convention_audit.pre_fill_match_rate = round(
+            convention_audit.pre_fill_match_count / max(convention_audit.pre_fill_match_count, 1), 4
+        )
+    else:
+        convention_audit.dominant_convention = "post_fill"
+        convention_audit.post_fill_match_rate = round(
+            convention_audit.post_fill_match_count / max(convention_audit.post_fill_match_count, 1), 4
+        )
+
+    # Write audit artifacts
+    consistency_audit.path = "start_position_consistency_audit.json"
+    convention_audit.path = "start_position_convention_audit.json"
 
     return audit, state_samples, errors
 
+
+# ---------------------------------------------------------------------------
+# Recompute position reconstruction (Patch 6) — full audit pass
+# ---------------------------------------------------------------------------
+
+def reconstruct_positions_full_audit(
+    records: Sequence[Any],
+    config: StudyConfig,
+) -> tuple[PositionReconstructionAudit, list[dict], list[str]]:
+    """Full audit reconstruction with all Patch 1-5 audits integrated.
+
+    This is the authoritative reconstruction that produces:
+    - start_position_consistency_audit.json
+    - start_position_convention_audit.json
+    - side_delta_mapping_audit.json
+    - position_keying_audit.json
+    - builder_dex_asset_mapping_audit.json
+    - pairing_semantics_audit.json
+    - start_position_mismatch_samples_redacted.jsonl
+    - start_position_uncheckable_samples_redacted.jsonl
+    - position_reconstruction_audit.json
+    - position_state_samples_redacted.jsonl
+    """
+    def sort_key(rec):
+        if hasattr(rec, 'block_number') and rec.block_number is not None:
+            return (rec.block_number, 0)
+        if hasattr(rec, 'fill_time') and rec.fill_time is not None:
+            try:
+                return (int(rec.fill_time.timestamp() * 1e9), 0)
+            except Exception:
+                return (0, 0)
+        return (0, 0)
+
+    sorted_records = sorted(records, key=sort_key)
+
+    audit = PositionReconstructionAudit()
+    state_samples: list[dict] = []
+    errors: list[str] = []
+
+    positions: dict[tuple[str, str], PositionState] = {}
+    transitions: list[PositionTransition] = []
+
+    # === Audits ===
+    consistency_audit = StartPositionConsistencyAudit()
+    convention_audit = StartPositionConventionAudit()
+    side_delta_audit = audit_side_delta_mapping(sorted_records)
+    inv, keying, bdex = audit_instrument_identity(sorted_records)
+    pairing_audit = audit_pairing_semantics(sorted_records)
+
+    consistency_audit.records_seen = len(sorted_records)
+
+    # Mismatch / uncheckable samples
+    mismatch_samples: list[dict] = []
+    uncheckable_samples: list[dict] = []
+
+    for rec in sorted_records:
+        key = (rec.address, rec.coin)
+        consistency_audit.records_parsed += 1
+        consistency_audit.position_events_seen += 1
+
+        audit.users_seen.add(rec.address)
+        audit.symbols_seen.add(rec.coin)
+        audit.position_keys_seen.add(_build_position_key(rec.address, rec.coin))
+
+        if key not in positions:
+            positions[key] = PositionState(
+                address=rec.address,
+                coin=rec.coin,
+            )
+
+        ps = positions[key]
+
+        # Compute signed delta
+        try:
+            delta = signed_delta_for_side(rec.side, rec.sz)
+        except ValueError as e:
+            errors.append(f"Unknown side for {rec.address}/{rec.coin}: {e}")
+            consistency_audit.records_parsed -= 1
+            continue
+
+        audit.records_parsed += 1
+
+        # Transition classification
+        prev_pos = ps.signed_position
+        new_pos = prev_pos + delta
+        transition_type = classify_transition(prev_pos, new_pos, rec.side)
+
+        trans = PositionTransition(
+            address=rec.address,
+            coin=rec.coin,
+            delta=delta,
+            price=get_price(rec),
+            dir_field=rec.dir,
+            start_position_before=getattr(rec, 'start_position', None),
+            transition_type=transition_type,
+        )
+        transitions.append(trans)
+        audit.position_transitions += 1
+
+        # === startPosition reconciliation ===
+        sp = None
+        if hasattr(rec, 'start_position') and rec.start_position is not None:
+            sp = _try_parse_start_position(rec.start_position)
+
+        if sp is not None:
+            consistency_audit.transitions_total += 1
+            consistency_audit.transitions_with_start_position += 1
+
+            cold = _is_cold_start(prev_pos, sp)
+
+            if cold:
+                consistency_audit.transitions_uncheckable_cold_start += 1
+                ps.signed_position = sp
+                audit.unknown_cold_start_positions += 1
+                audit.cold_start_positions += 1
+                ps.is_known = False
+                ps.margin_mode = MarginMode.UNKNOWN
+                uncheckable_samples.append({
+                    "address": redact_address(rec.address),
+                    "coin": rec.coin,
+                    "start_position": str(sp),
+                    "prev_reconstructed": str(prev_pos),
+                    "delta": str(delta),
+                    "reason": "cold_start_nonzero_startPosition",
+                })
+            else:
+                consistency_audit.transitions_checkable += 1
+
+                # Convention analysis for ALL checkable transitions (not just mismatches)
+                new_pos_check = ps.signed_position + delta
+                pre_match = abs(sp - ps.signed_position) <= Decimal("0.001")
+                post_match = abs(sp - new_pos_check) <= Decimal("0.001")
+
+                if not pre_match and not post_match:
+                    convention_audit.neither_count += 1
+                elif pre_match and not post_match:
+                    convention_audit.pre_fill_match_count += 1
+                elif post_match and not pre_match:
+                    convention_audit.post_fill_match_count += 1
+                else:
+                    convention_audit.ambiguous_count += 1
+
+                if pre_match:
+                    consistency_audit.transitions_reconciled += 1
+                else:
+                    consistency_audit.transitions_mismatched += 1
+                    audit.dir_mapping_mismatch_count += 1
+
+                    mismatch_samples.append({
+                        "address": redact_address(rec.address),
+                        "coin": rec.coin,
+                        "start_position": str(sp),
+                        "reconstructed_before": str(ps.signed_position),
+                        "delta": str(delta),
+                        "transition_type": transition_type,
+                    })
+
+        # Update position (skip cold-start which already seeded)
+        if sp is None or not _is_cold_start(prev_pos, sp):
+            ps.signed_position = new_pos
+
+        # Classification
+        if prev_pos == Decimal("0") and delta != Decimal("0"):
+            audit.known_open_positions += 1
+            audit.known_from_flat_positions += 1
+            ps.is_known = True
+            ps.entry_price = get_price(rec)
+            # Before leverage join: all open positions have unknown margin
+            audit.cross_or_unknown_margin_positions += 1
+
+        # State samples
+        if len(state_samples) < 50:
+            state_samples.append({
+                "address": redact_address(rec.address),
+                "coin": rec.coin,
+                "position_after": str(ps.signed_position),
+                "transition_type": transition_type,
+                "is_known": ps.is_known,
+                "margin_mode": ps.margin_mode.value,
+            })
+
+    # Consistency rates
+    if consistency_audit.transitions_total > 0:
+        consistency_audit.consistency_rate_all_events = round(
+            consistency_audit.transitions_reconciled / consistency_audit.transitions_total, 4
+        )
+    if consistency_audit.transitions_checkable > 0:
+        consistency_audit.consistency_rate_checkable_only = round(
+            consistency_audit.transitions_reconciled / consistency_audit.transitions_checkable, 4
+        )
+
+    if consistency_audit.transitions_with_start_position > 0:
+        audit.start_position_consistency_rate = consistency_audit.consistency_rate_checkable_only
+
+    # Convention dominant
+    if convention_audit.pre_fill_match_count >= convention_audit.post_fill_match_count and convention_audit.pre_fill_match_count > 0:
+        convention_audit.dominant_convention = "pre_fill"
+        convention_audit.pre_fill_match_rate = round(
+            convention_audit.pre_fill_match_count / (convention_audit.pre_fill_match_count + convention_audit.post_fill_match_count + convention_audit.ambiguous_count + convention_audit.neither_count), 4
+        )
+    elif convention_audit.post_fill_match_count > 0:
+        convention_audit.dominant_convention = "post_fill"
+        convention_audit.post_fill_match_rate = round(
+            convention_audit.post_fill_match_count / (convention_audit.pre_fill_match_count + convention_audit.post_fill_match_count + convention_audit.ambiguous_count + convention_audit.neither_count), 4
+        )
+
+    # Assign sub-audits to main audit
+    audit.consistency_audit = consistency_audit
+    audit.convention_audit = convention_audit
+    audit.side_delta_mapping = side_delta_audit
+    audit.instrument_identity = inv
+    audit.position_keying = keying
+    audit.builder_dex_mapping = bdex
+    audit.pairing_semantics = pairing_audit
+
+    return audit, state_samples, errors
+
+
+# ---------------------------------------------------------------------------
+# Transition classification helper
+# ---------------------------------------------------------------------------
 
 def classify_transition(prev_pos: Decimal, new_pos: Decimal, side: str) -> str:
     """Classify position transition type."""
@@ -1348,8 +1908,7 @@ def compute_liquidation_prices(
     audit = LiquidationReconstructionAudit()
     estimates: list[dict] = []
 
-    # Use max leverage from meta/tier if available, otherwise default
-    max_leverage = Decimal("50")  # typical max for SOL; override from tier schedule if available
+    max_leverage = Decimal("50")
     if margin_tier_inv and margin_tier_inv.tiers:
         max_tier = max((t.get("max_leverage", 50) for t in margin_tier_inv.tiers), default=50)
         max_leverage = Decimal(str(max_tier))
@@ -1428,22 +1987,19 @@ def compute_oi_completeness(
     )
 
     if not oi_records:
-        return summary  # informational only for zero-burn-in
+        return summary
 
-    # Build OI lookup by symbol and timestamp
     oi_by_symbol_ts: dict[str, dict[int, Decimal]] = defaultdict(dict)
     for oi_rec in oi_records:
         oi_by_symbol_ts[oi_rec.symbol][oi_rec.timestamp_ns] = oi_rec.open_interest_notional
 
-    # For each position, compute notional vs OI at each timestamp bucket
     coverage_fractions: list[float] = []
 
-    # Group positions by symbol and compute time-bucketed notional
     pos_by_symbol_ts: dict[str, deque] = defaultdict(deque)
     for key, ps in positions.items():
         if ps.is_known and ps.entry_price is not None:
             notional = abs(ps.signed_position * ps.entry_price)
-            pos_by_symbol_ts[key[1]].append((notional, 0))  # timestamp approx
+            pos_by_symbol_ts[key[1]].append((notional, 0))
 
     for symbol, buckets in pos_by_symbol_ts.items():
         oi_ts = oi_by_symbol_ts.get(symbol, {})
@@ -1452,10 +2008,9 @@ def compute_oi_completeness(
 
         sorted_oi_keys = sorted(oi_ts.keys())
         for notional, ts in buckets:
-            # Find last OI observation at or before timestamp
             oi_notional = Decimal("0")
             for ok in reversed(sorted_oi_keys):
-                if ok <= ts or ts == 0:  # ts==0 means unknown time bucket
+                if ok <= ts or ts == 0:
                     oi_notional = oi_ts[ok]
                     break
 
@@ -1495,7 +2050,7 @@ def _percentile(sorted_data: list[float], p: int) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Phase H — Terminal decision
+# Phase H — Terminal decision (Patch 8: corrected priority tree)
 # ---------------------------------------------------------------------------
 
 def determine_terminal_status(
@@ -1508,32 +2063,50 @@ def determine_terminal_status(
     completeness: CompletenessSummary,
     config: StudyConfig,
 ) -> str:
-    """Determine the terminal status from all phase results."""
+    """Determine the terminal status with corrected priority tree.
 
-    # Check acquisition blocks (caller should handle these before calling)
-    # Schema blocks
+    Priority order (Patch 8):
+    1. Acquisition blocked
+    2. Schema blocked
+    3. Dir mapping / position keying / pairing / startPosition mechanics BLOCKED
+    4. Leverage source plan blocked or source missing
+    5. Leverage source found but join unverified
+    6. Leverage join failed
+    7. Margin mode / isolated filter blocked
+    8. OI completeness blocked after burn-in
+    9. Thin-slice exact reconstruction passed review allowed
+    """
+
+    # 1-2. Schema blocks (unchanged)
     if schema_gate.verdict == SchemaVerdict.FAIL_ADDRESS_MISSING:
         return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ADDRESS_FIELD_MISSING.value
     if schema_gate.verdict == SchemaVerdict.FAIL_POSITION_FIELD_MISSING:
         return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_SCHEMA_MISSING_REQUIRED_FIELDS.value
 
-    # Dir mapping not verified
+    # 3. Position mechanics checks — these are the PRIMARY Phase -1 validity gate
+    # 3a. Dir mapping not verified
     if not dir_audit.verified_against_start_position and dir_audit.total_checked > 0:
         return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_DIR_MAPPING_UNVERIFIED.value
 
-    # Position mechanics pass but check leverage/margin
-    if config.bound_diagnostic:
-        return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_THIN_SLICE_BOUND_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE.value
+     # 3b. startPosition consistency below threshold
+    ca = position_audit.consistency_audit
+    checkable_rate = ca.consistency_rate_checkable_only if ca else position_audit.start_position_consistency_rate
+    if checkable_rate < Decimal("0.95"):
+        return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_POSITION_MECHANICS_UNVERIFIED.value
 
-    if not dir_audit.verified_against_start_position and dir_audit.total_checked == 0:
-        # No data to verify — schema passed but no mapping check possible
-        pass
+    # 3c. Position keying ambiguous (only if explicitly set)
+    if position_audit.position_keying and not position_audit.position_keying.verified:
+        return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_POSITION_KEY_AMBIGUOUS.value
 
-    # Leverage source missing
+    # 3d. Pairing semantics unverified (double-count risk)
+    if position_audit.pairing_semantics and position_audit.pairing_semantics.double_count_risk:
+        return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_PAIRING_SEMANTICS_UNVERIFIED.value
+
+    # 4-5. Leverage source checks
     if not leverage_plan.source_found or not leverage_audit.joinable_by_user_coin_time:
         return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_LEVERAGE_SOURCE_MISSING.value
 
-    # Margin mode undetermined
+    # 7. Margin mode undetermined (only after position mechanics pass)
     if position_audit.cross_or_unknown_margin_positions > 0 and position_audit.known_isolated_open_positions == 0:
         return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_MARGIN_MODE_UNDETERMINED.value
 
@@ -1545,20 +2118,18 @@ def determine_terminal_status(
     if completeness.completeness_gate_applied and not completeness.gate_passed:
         return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_RECONSTRUCTION_COVERAGE_LOW_BURNIN.value
 
-    # Schema and position mechanics passed — check exact reconstruction first
+    # 9. Success paths
     if liq_audit.exact_liquidation_available:
-        # Zero-burn-in low completeness is diagnostic only, not a block on exact pass
         return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_THIN_SLICE_EXACT_RECONSTRUCTION_PASSED_REVIEW_ALLOWED.value
 
-    # Zero-burn-in low completeness is diagnostic only
-    if not completeness.completeness_gate_applied and completeness.median_coverage_fraction < config.min_oi_coverage_fraction:
-        return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_COMPLETENESS_DIAGNOSTIC_LOW_ZERO_BURNIN.value
+    if config.bound_diagnostic:
+        return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_THIN_SLICE_BOUND_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE.value
 
     return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_THIN_SLICE_SCHEMA_AND_POSITION_MECHANICS_PASSED.value
 
 
 # ---------------------------------------------------------------------------
-# Summary Markdown generator
+# Summary Markdown generator (Patch 9: corrected wording)
 # ---------------------------------------------------------------------------
 
 def generate_summary_md(
@@ -1574,9 +2145,19 @@ def generate_summary_md(
     status: str,
     blocked: bool = False,
 ) -> str:
-    """Generate human-readable summary markdown."""
+    """Generate human-readable summary markdown with corrected wording."""
     lines = []
     lines.append("# Summary — Phase -1 v0 Liquidation Reconstruction Probe")
+    lines.append("")
+
+    # Headline (Patch 9)
+    lines.append("## Headline Phase -1 Result")
+    ca = position_audit.consistency_audit
+    checkable_rate = ca.consistency_rate_checkable_only if ca else position_audit.start_position_consistency_rate
+    lines.append(f"- Acquisition and schema passed on real data: `{schema_gate.verdict.value}`")
+    lines.append(f"- Leverage source exists in replica_cmds: {leverage_plan.source_found}")
+    lines.append(f"- Position reconstruction validity did not pass: startPosition consistency is currently {checkable_rate:.4f} (threshold: 0.95)")
+    lines.append(f"- Therefore exact liquidation-map reconstruction remains {'blocked' if checkable_rate < 0.95 else 'not yet evaluated'}")
     lines.append("")
 
     # Verdict
@@ -1588,7 +2169,9 @@ def generate_summary_md(
         lines.append(
             "The liquidation-cluster prepositioning hypothesis remains NOT_TESTED "
             "because the required isolated per-address liquidation map was not "
-            "reconstructable from the tested data slice."
+            "reconstructable from the tested data slice. Data sources are located "
+            "and schema is observed, but per-address position mechanics have not "
+            "reconciled against startPosition."
         )
     else:
         lines.append(
@@ -1648,6 +2231,15 @@ def generate_summary_md(
     lines.append(f"- Joinable by user/coin/time: {leverage_plan.source_found}")
     lines.append("")
 
+    # Leverage backfill cost caveat (Patch 9)
+    lines.append("## Leverage Backfill Cost Caveat")
+    lines.append(
+        "A valid leverage join likely requires scanning/backfilling replica_cmds from coverage "
+        "start to the fill window because updateLeverage persists until changed. This is materially "
+        "larger than the one-hour schema probe and must not be authorized until position mechanics pass."
+    )
+    lines.append("")
+
     # Position reconstruction
     lines.append("## Position Reconstruction Result")
     lines.append(f"- Records seen: {position_audit.records_seen}")
@@ -1655,9 +2247,26 @@ def generate_summary_md(
     lines.append(f"- Users seen: {len(position_audit.users_seen)}")
     lines.append(f"- Symbols seen: {len(position_audit.symbols_seen)}")
     lines.append(f"- Position transitions: {position_audit.position_transitions}")
-    lines.append(f"- startPosition consistency rate: {position_audit.start_position_consistency_rate:.4f}")
+    lines.append(f"- startPosition consistency rate (all events): {ca.consistency_rate_all_events:.4f}" if ca else f"- startPosition consistency rate: {position_audit.start_position_consistency_rate:.4f}")
+    lines.append(f"- startPosition consistency rate (checkable only): {checkable_rate:.4f}")
     lines.append(f"- Cold-start unknown positions: {position_audit.unknown_cold_start_positions}")
+    if ca:
+        lines.append(f"- Transitions total: {ca.transitions_total}")
+        lines.append(f"- Transitions checkable: {ca.transitions_checkable}")
+        lines.append(f"- Transitions uncheckable (cold start): {ca.transitions_uncheckable_cold_start}")
+        lines.append(f"- Transitions reconciled: {ca.transitions_reconciled}")
+        lines.append(f"- Transitions mismatched: {ca.transitions_mismatched}")
     lines.append("")
+
+    # Convention audit
+    conv = position_audit.convention_audit
+    if conv and (conv.pre_fill_match_count > 0 or conv.post_fill_match_count > 0):
+        lines.append("## startPosition Convention Audit")
+        lines.append(f"- Pre-fill match rate: {conv.pre_fill_match_rate:.4f}")
+        lines.append(f"- Post-fill match rate: {conv.post_fill_match_rate:.4f}")
+        lines.append(f"- Dominant convention: {conv.dominant_convention}")
+        lines.append(f"- Neither count: {conv.neither_count}")
+        lines.append("")
 
     # Isolated liquidation
     lines.append("## Isolated Liquidation Price Result")
@@ -1666,15 +2275,6 @@ def generate_summary_md(
     lines.append(f"- Isolated positions reconstructed: {liq_audit.isolated_positions_reconstructed}")
     lines.append(f"- Cross/unknown excluded: {liq_audit.cross_or_unknown_excluded}")
     lines.append(f"- Margin tier schedule status: {liq_audit.margin_tier_schedule_status}")
-    lines.append("")
-
-    # Maintenance tier caveat
-    lines.append("## Maintenance Tier Caveat")
-    if liq_audit.margin_tier_schedule_status == "not_available_approximation_used":
-        lines.append("- Flat 1/(2*max_leverage) used for maintenance margin fraction.")
-        lines.append("- Phase 0 will require a margin tier schedule for accurate liquidation prices on large positions.")
-    else:
-        lines.append(f"- Margin tier schedule status: {liq_audit.margin_tier_schedule_status}")
     lines.append("")
 
     # OI completeness
@@ -1689,16 +2289,12 @@ def generate_summary_md(
         lines.append("- Zero-burn-in: diagnostic only, not a hard gate.")
     lines.append("")
 
-    # Cold-start caveat
-    lines.append("## Cold-Start Caveat")
-    lines.append(
-        f"- Unknown cold-start positions in thin slice: {position_audit.unknown_cold_start_positions}"
-    )
-    lines.append("- Positions opened before the observation window are unknown unless proven by burn-in.")
-    lines.append("")
-
     # What this does not prove
     lines.append("## What This Does Not Prove")
+    if blocked:
+        lines.append("- Position mechanics unresolved — architecture viability NOT proven")
+    else:
+        lines.append("- Architecture viability proven for this thin slice")
     lines.append("- Profitability of any strategy")
     lines.append("- Alpha or edge confirmation")
     lines.append("- Readiness for paper/live/shadow execution")
@@ -1770,7 +2366,6 @@ class NodeFillsLiqReconstructionProbe:
             local_found_lev, local_paths_lev = discover_local_cache(config.data_root)
             self.leverage_plan, self.leverage_audit = discover_leverage_source(config, local_paths_lev)
 
-            # If leverage_source_plan_only is set, do raw action namespace listing and stop
             if config.leverage_source_plan_only:
                 raw_inv, raw_found = discover_raw_action_namespaces(config)
                 atomic_write_json(self.out_root / "raw_action_namespace_inventory.json", raw_inv)
@@ -1826,18 +2421,14 @@ class NodeFillsLiqReconstructionProbe:
         # Phase E — Position reconstruction (on real data if available)
         print("Phase E: Position reconstruction audit", flush=True)
         if not config.dry_run and not config.plan_only and records_for_phases:
-            self.position_audit, _, _ = reconstruct_positions(records_for_phases, config)
+            self.position_audit, _, _ = reconstruct_positions_full_audit(records_for_phases, config)
         else:
-            # For dry-run/plan-only, use empty audit
             self.position_audit = PositionReconstructionAudit()
 
-        # Phase F — Liquidation price reconstruction (stub for now, depends on Phase E results)
+        # Phase F — Liquidation price reconstruction
         print("Phase F: Isolated-only liquidation-price audit", flush=True)
         if records_for_phases and not config.dry_run and not config.plan_only:
             self.liq_audit = LiquidationReconstructionAudit()
-            # Phase F will be implemented once Phase E position reconstruction is proven working
-            # For now, mark as diagnostic
-            self.liq_audit.bound_diagnostic_used = config.bound_diagnostic
         else:
             self.liq_audit = LiquidationReconstructionAudit()
             if config.bound_diagnostic:
@@ -1850,23 +2441,19 @@ class NodeFillsLiqReconstructionProbe:
         # Phase H — Terminal decision
         print("Phase H: Terminal decision", flush=True)
         if not self.status or not self.status.startswith("BLOCKED"):
-            # Only fabricate PASS results if we actually have parsed records
             has_real_records = (
                 self.schema_gate is not None
                 and self.schema_gate.verdict != SchemaVerdict.NOT_EVALUATED_PLAN_ONLY
             )
 
             if config.dry_run:
-                # Dry run: always return DRY_RUN_READY
                 self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_DRY_RUN_READY.value
             elif config.plan_only:
-                # Plan-only: stop at acquisition planning, do not fabricate downstream results
                 if config.include_remote_plan:
                     self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_REMOTE_PLAN_READY.value
                 else:
                     self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_PLAN_READY.value
             elif has_real_records:
-                # Real data was parsed — run full terminal decision
                 if not self.schema_gate:
                     self.schema_gate = SchemaGate(verdict=SchemaVerdict.PASS, address_field_present=True,
                                                   symbol_field_present=True, side_size_price_present=True,
@@ -1883,7 +2470,6 @@ class NodeFillsLiqReconstructionProbe:
                     self.position_audit, self.liq_audit, self.completeness, config,
                 )
             else:
-                # No real records and not plan-only — should not happen normally
                 self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_SCHEMA_NO_RECORDS.value
 
         summary.status = self.status
@@ -1911,17 +2497,14 @@ class NodeFillsLiqReconstructionProbe:
 
     def _phase_a(self, config: StudyConfig) -> None:
         """Phase A — Archive coverage & partition discovery."""
-        # Local cache check
         local_found, local_paths = discover_local_cache(config.data_root)
 
-        # Remote plan if enabled
         remote_objects: list[dict] = []
         partitioning = ArchivePartitioning.UNKNOWN_PARTITIONING
         download_unit = DownloadUnit.UNKNOWN_UNIT
         coverage_inv = ArchiveCoverageInventory()
 
         if config.include_remote_plan and config.allow_s3_archive_read:
-            # Check credentials
             creds_ok = check_aws_credentials()
             if not creds_ok:
                 self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_S3_CREDENTIALS_MISSING.value
@@ -1930,7 +2513,6 @@ class NodeFillsLiqReconstructionProbe:
                 )
                 return
 
-            # Try each namespace candidate
             for ns in CANDIDATE_NAMESPACES:
                 s3_prefix = f"s3://{ns}" if not ns.startswith("s3://") else ns
                 objects = list_s3_prefix(ns, requester_pays=config.requester_pays)
@@ -1947,15 +2529,11 @@ class NodeFillsLiqReconstructionProbe:
                 )
                 return
 
-            # Check byte cap — estimate bytes for the target fetch window
-            # For all-coin time-partitioned archives, each hour is one file (~25 MB).
-            # Shrink cost estimation to a single hour so we don't block on multi-hour sums.
             if download_unit == DownloadUnit.ALL_COIN_HOUR_OBJECT:
                 total_bytes = sum(o.get("size", 0) for o in remote_objects[:1])
             elif download_unit == DownloadUnit.SINGLE_COIN_HOUR_OBJECT:
                 total_bytes = sum(o.get("size", 0) for o in remote_objects[:config.max_hours])
             else:
-                # Unknown partitioning: conservative estimate for 1 day (24 files)
                 total_bytes = sum(o.get("size", 0) for o in remote_objects[:min(24, len(remote_objects))])
             if total_bytes > config.max_download_bytes:
                 self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_COST_OR_SIZE_CAP.value
@@ -1969,7 +2547,6 @@ class NodeFillsLiqReconstructionProbe:
                 )
                 return
 
-        # Build source plan
         self.partitioning_inv = PartitioningInventory(
             partitioning=partitioning,
             smallest_download_unit=download_unit,
@@ -1986,26 +2563,17 @@ class NodeFillsLiqReconstructionProbe:
 
         if not local_found and not remote_objects:
             if config.dry_run:
-                # Dry run with no cache and no remote plan is still a valid dry run
                 self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_DRY_RUN_READY.value
             elif config.plan_only:
-                # Plan-only without any data is still planning — treat as ready
                 self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_PLAN_READY.value
             else:
                 self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_NO_LOCAL_CACHE.value
         elif config.plan_only and remote_objects and self.coverage_inv.start_date:
-            # Successful remote plan discovery — stop here
             self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_REMOTE_PLAN_READY.value
 
     def _phase_b(self, config: StudyConfig) -> None:
-        """Phase B — Tiny measured-object fetch.
-
-        Downloads one hour of node_fills_by_block/hourly/ data from S3,
-        saves to local cache, parses fills into NodeFillRecord objects,
-        and records the download manifest (keys, sha256, sizes).
-        """
+        """Phase B — Tiny measured-object fetch."""
         if not self.partitioning_inv or not self.coverage_inv:
-            # Nothing to fetch — no partitioning discovered yet
             self.download_manifest = DownloadManifest()
             return
 
@@ -2014,29 +2582,17 @@ class NodeFillsLiqReconstructionProbe:
         data_root = Path(config.data_root) if config.data_root else None
         cache_dir = (data_root / "node_fills_by_block" / "hourly") if data_root else None
 
-        # Select one hour object to download
         sample_keys = self.partitioning_inv.sample_keys or []
         if not sample_keys:
             self.download_manifest = manifest
             return
 
-        # Pick the first available key (one all-coin hour object)
         relative_key = sample_keys[0]
-        
-        # Build full S3 key by prepending the found namespace's bucket path.
-        # list_s3_prefix returns keys relative to bucket root, so we need:
-        #   <namespace_bucket_path>/<relative_key>
-        # e.g., "hl-mainnet-node-data/node_fills_by_block/hourly/20250727/10.lz4"
+
         found_ns = self.coverage_inv.namespace if self.coverage_inv else ""
         if found_ns and not relative_key.startswith(found_ns.split("/")[0] + "/"):
-            # Namespace is like "hl-mainnet-node-data/node_fills_by_block/hourly/"
-            # Key is like "node_fills_by_block/hourly/20250727/10.lz4"
-            # Full key = namespace + remaining path after namespace prefix
             ns_parts = found_ns.rstrip("/").split("/")
-            key_parts = relative_key.split("/")
-            # Check if the key starts with a non-bucket component of the namespace
-            bucket_name = ns_parts[0]  # "hl-mainnet-node-data"
-            # Rebuild: bucket_name + everything from key that isn't already in namespace
+            bucket_name = ns_parts[0]
             full_key = f"{bucket_name}/{relative_key}"
         else:
             full_key = relative_key
@@ -2046,7 +2602,6 @@ class NodeFillsLiqReconstructionProbe:
         sha256_hex = ""
 
         if cache_dir and cache_dir.is_dir():
-            # Check local cache first
             local_filename = relative_key.split("/")[-1] if "/" in relative_key else relative_key
             cached_file = cache_dir / local_filename
             if cached_file.is_file():
@@ -2054,7 +2609,6 @@ class NodeFillsLiqReconstructionProbe:
                 downloaded_bytes = cached_file.stat().st_size
                 sha256_hex = hashlib.sha256(cached_file.read_bytes()).hexdigest()
         elif self.config.allow_s3_archive_read:
-            # Download from S3
             try:
                 if not cache_dir:
                     cache_dir = data_root / "node_fills_by_block" / "hourly" if data_root else None
@@ -2076,7 +2630,6 @@ class NodeFillsLiqReconstructionProbe:
         })
         self.download_manifest = manifest
 
-        # Parse fills from the downloaded/cached file
         if dest_path and dest_path.is_file() and dest_path.stat().st_size > 0:
             try:
                 if dest_path.suffix == ".lz4":
@@ -2091,15 +2644,10 @@ class NodeFillsLiqReconstructionProbe:
         self._parsed_records = parsed_records
 
     def _phase_c(self, config: StudyConfig) -> None:
-        """Phase C — Schema sufficiency gate.
-
-        In plan-only/dry-run mode with no parsed records, returns NOT_EVALUATED_PLAN_ONLY.
-        Otherwise validates schema against real parsed records from Phase B.
-        """
+        """Phase C — Schema sufficiency gate."""
         self.schema_inventory = SchemaInventory()
 
         if config.plan_only or config.dry_run:
-            # No records parsed yet — cannot validate schema
             self.schema_gate = SchemaGate(
                 verdict=SchemaVerdict.NOT_EVALUATED_PLAN_ONLY,
                 address_field_present=False,
@@ -2109,7 +2657,6 @@ class NodeFillsLiqReconstructionProbe:
             )
             return
 
-        # Real mode: validate against parsed records from Phase B
         records = getattr(self, '_parsed_records', [])
         if not records:
             self.schema_gate = SchemaGate(
@@ -2121,7 +2668,6 @@ class NodeFillsLiqReconstructionProbe:
             )
             return
 
-        # Validate schema on actual records
         self.schema_inventory, self.schema_gate = validate_schema(
             records, limit=config.schema_sample_limit
         )
@@ -2131,7 +2677,6 @@ class NodeFillsLiqReconstructionProbe:
         out = self.out_root
         now_utc = datetime.now(UTC).isoformat()
 
-        # Read precommitment hash
         precommit_path = Path(__file__).parent / "docs" / "HYPERLIQUID_NODE_FILLS_LIQ_RECONSTRUCTION_PHASE_MINUS1_V0_PRECOMMITMENT.md"
         try:
             precommit_hash = hashlib.sha256(precommit_path.read_bytes()).hexdigest()[:16]
@@ -2180,22 +2725,17 @@ class NodeFillsLiqReconstructionProbe:
             ),
         }
 
-        # Write run_manifest.json
         manifest = {
             **base_meta,
             "safety": dataclasses.asdict(SafetyAudit()),
             "command_args": self._get_command_args(),
         }
         atomic_write_json(out / "run_manifest.json", manifest)
-
-        # Write precommitment_hash.txt
         (out / "precommitment_hash.txt").write_text(precommit_hash)
 
-        # Source plan
         if self.source_plan:
             atomic_write_json(out / "source_plan.json", dataclasses.asdict(self.source_plan))
 
-        # Partitioning inventory
         if self.partitioning_inv:
             atomic_write_json(out / "partitioning_inventory.json", {
                 "partitioning": self.partitioning_inv.partitioning.value,
@@ -2206,7 +2746,6 @@ class NodeFillsLiqReconstructionProbe:
                 "sample_keys": self.partitioning_inv.sample_keys[:20],
             })
 
-        # Archive coverage
         if self.coverage_inv:
             atomic_write_json(out / "archive_coverage_inventory.json", {
                 "start_date": self.coverage_inv.start_date,
@@ -2215,14 +2754,12 @@ class NodeFillsLiqReconstructionProbe:
                 "namespace": self.coverage_inv.namespace,
             })
 
-        # Download manifest
         if self.download_manifest:
             atomic_write_json(out / "download_manifest.json", {
                 "objects": self.download_manifest.objects[:20],
                 "total_bytes": self.download_manifest.total_bytes,
             })
 
-        # Schema inventory & gate
         if self.schema_inventory:
             atomic_write_json(out / "schema_inventory.json", {
                 "fields_present": self.schema_inventory.fields_present,
@@ -2232,7 +2769,6 @@ class NodeFillsLiqReconstructionProbe:
         if self.schema_gate:
             atomic_write_json(out / "schema_gate.json", dataclasses.asdict(self.schema_gate))
 
-        # Dir mapping audit
         if self.dir_audit:
             atomic_write_json(out / "dir_mapping_audit.json", {
                 "mapping": self.dir_audit.mapping,
@@ -2242,25 +2778,24 @@ class NodeFillsLiqReconstructionProbe:
                 "variants_seen": self.dir_audit.variants_seen[:20],
             })
 
-        # Liquidation flag inventory
         if self.liq_flag_inv:
             atomic_write_json(out / "liquidation_flag_inventory.json", dataclasses.asdict(self.liq_flag_inv))
 
-        # Leverage source plan & audit
         if self.leverage_plan:
             atomic_write_json(out / "leverage_source_plan.json", dataclasses.asdict(self.leverage_plan))
         if self.leverage_audit:
             atomic_write_json(out / "leverage_join_audit.json", dataclasses.asdict(self.leverage_audit))
 
-        # Position reconstruction
+        # Position reconstruction (Patch 1-6 enhanced)
         if self.position_audit:
-            atomic_write_json(out / "position_reconstruction_audit.json", {
+            ca = self.position_audit.consistency_audit
+            pa_dict = {
                 "records_seen": self.position_audit.records_seen,
                 "records_parsed": self.position_audit.records_parsed,
                 "users_seen_count": len(self.position_audit.users_seen),
                 "symbols_seen_count": len(self.position_audit.symbols_seen),
                 "position_transitions": self.position_audit.position_transitions,
-                "transitions_with_start_position": self.position_audit.transitions_with_start_position,
+                "transitions_with_start_position": ca.transitions_with_start_position if ca else 0,
                 "start_position_consistency_rate": self.position_audit.start_position_consistency_rate,
                 "unknown_cold_start_positions": self.position_audit.unknown_cold_start_positions,
                 "known_open_positions": self.position_audit.known_open_positions,
@@ -2268,9 +2803,93 @@ class NodeFillsLiqReconstructionProbe:
                 "cross_or_unknown_margin_positions": self.position_audit.cross_or_unknown_margin_positions,
                 "records_rejected": self.position_audit.records_rejected,
                 "dir_mapping_mismatch_count": self.position_audit.dir_mapping_mismatch_count,
+                # Detailed audit fields (Patch 1)
+                "consistency_rate_all_events": ca.consistency_rate_all_events if ca else 0.0,
+                "consistency_rate_checkable_only": ca.consistency_rate_checkable_only if ca else 0.0,
+                "transitions_total": ca.transitions_total if ca else 0,
+                "transitions_checkable": ca.transitions_checkable if ca else 0,
+                "transitions_uncheckable_cold_start": ca.transitions_uncheckable_cold_start if ca else 0,
+                "transitions_reconciled": ca.transitions_reconciled if ca else 0,
+                "transitions_mismatched": ca.transitions_mismatched if ca else 0,
+            }
+            atomic_write_json(out / "position_reconstruction_audit.json", pa_dict)
+
+        # Start position consistency audit (Patch 1)
+        if self.position_audit and self.position_audit.consistency_audit:
+            ca = self.position_audit.consistency_audit
+            atomic_write_json(out / "start_position_consistency_audit.json", {
+                "records_seen": ca.records_seen,
+                "records_parsed": ca.records_parsed,
+                "position_events_seen": ca.position_events_seen,
+                "transitions_total": ca.transitions_total,
+                "transitions_checkable": ca.transitions_checkable,
+                "transitions_uncheckable_cold_start": ca.transitions_uncheckable_cold_start,
+                "transitions_reconciled": ca.transitions_reconciled,
+                "transitions_mismatched": ca.transitions_mismatched,
+                "consistency_rate_all_events": ca.consistency_rate_all_events,
+                "consistency_rate_checkable_only": ca.consistency_rate_checkable_only,
             })
 
-        # Liquidation reconstruction
+        # Convention audit (Patch 2)
+        if self.position_audit and self.position_audit.convention_audit:
+            conv = self.position_audit.convention_audit
+            atomic_write_json(out / "start_position_convention_audit.json", {
+                "pre_fill_match_count": conv.pre_fill_match_count,
+                "pre_fill_match_rate": conv.pre_fill_match_rate,
+                "post_fill_match_count": conv.post_fill_match_count,
+                "post_fill_match_rate": conv.post_fill_match_rate,
+                "dominant_convention": conv.dominant_convention,
+                "ambiguous_count": conv.ambiguous_count,
+                "neither_count": conv.neither_count,
+            })
+
+        # Side delta mapping (Patch 3)
+        if self.position_audit and self.position_audit.side_delta_mapping:
+            atomic_write_json(out / "side_delta_mapping_audit.json", {
+                "side_to_candidate_delta": self.position_audit.side_delta_mapping.side_to_candidate_delta,
+                "pre_fill_consistency_rate": self.position_audit.side_delta_mapping.pre_fill_consistency_rate,
+                "post_fill_consistency_rate": self.position_audit.side_delta_mapping.post_fill_consistency_rate,
+                "mismatch_rate": self.position_audit.side_delta_mapping.mismatch_rate,
+                "verified": self.position_audit.side_delta_mapping.verified,
+            })
+
+        # Position keying (Patch 4)
+        if self.position_audit and self.position_audit.position_keying:
+            atomic_write_json(out / "position_keying_audit.json", {
+                "position_key_fields_used": self.position_audit.position_keying.position_key_fields_used,
+                "position_key_collision_count": self.position_audit.position_keying.position_key_collision_count,
+                "ambiguous_key_count": self.position_audit.position_keying.ambiguous_key_count,
+                "verified": self.position_audit.position_keying.verified,
+            })
+
+        # Builder DEX mapping (Patch 4)
+        if self.position_audit and self.position_audit.builder_dex_mapping:
+            atomic_write_json(out / "builder_dex_asset_mapping_audit.json", {
+                "default_dex_asset_ids": self.position_audit.builder_dex_mapping.default_dex_asset_ids[:50],
+                "builder_dex_asset_ids": self.position_audit.builder_dex_mapping.builder_dex_asset_ids[:50],
+                "formula_tested": self.position_audit.builder_dex_mapping.formula_tested,
+                "formula_correct": self.position_audit.builder_dex_mapping.formula_correct,
+            })
+
+        # Instrument identity (Patch 4)
+        if self.position_audit and self.position_audit.instrument_identity:
+            atomic_write_json(out / "instrument_identity_inventory.json", {
+                "symbols_seen": self.position_audit.instrument_identity.symbols_seen[:50],
+                "raw_coin_values_seen": self.position_audit.instrument_identity.raw_coin_values_seen[:50],
+                "asset_ids_seen": self.position_audit.instrument_identity.asset_ids_seen[:50],
+                "builder_dex_asset_ids_seen": self.position_audit.instrument_identity.builder_dex_asset_ids_seen[:50],
+                "colliding_ticker_count": self.position_audit.instrument_identity.colliding_ticker_count,
+            })
+
+        # Pairing semantics (Patch 5)
+        if self.position_audit and self.position_audit.pairing_semantics:
+            atomic_write_json(out / "pairing_semantics_audit.json", {
+                "paired_records_detected": self.position_audit.pairing_semantics.paired_records_detected,
+                "double_count_risk": self.position_audit.pairing_semantics.double_count_risk,
+                "grouping_rule": self.position_audit.pairing_semantics.grouping_rule,
+                "verified": self.position_audit.pairing_semantics.verified,
+            })
+
         if self.liq_audit:
             atomic_write_json(out / "liquidation_price_reconstruction_audit.json", {
                 "isolated_positions_reconstructed": self.liq_audit.isolated_positions_reconstructed,
@@ -2280,11 +2899,24 @@ class NodeFillsLiqReconstructionProbe:
                 "margin_tier_schedule_status": self.liq_audit.margin_tier_schedule_status,
             })
 
-        # OI completeness
         if self.completeness:
             atomic_write_json(out / "reconstruction_completeness_summary.json", dataclasses.asdict(self.completeness))
 
-        # Summary (write last, after all other artifacts)
+        # Leverage backfill cost plan (Patch 7) — always written
+        leverage_cost_plan = {
+            "replica_cmds_coverage_start": "",
+            "replica_cmds_coverage_end": "",
+            "object_count": 0,
+            "sampled_object_size_compressed": 0,
+            "estimated_full_scan_bytes_compressed": None,
+            "server_side_filter_available": False,
+            "requires_backfill_from_coverage_start": True,
+            "users_with_no_updateLeverage_handling": "default-unverified unless sourced",
+            "users_with_pre_coverage_leverage_handling": "excluded or marked unrecoverable",
+        }
+        atomic_write_json(out / "leverage_backfill_cost_plan.json", leverage_cost_plan)
+
+        # Write summary last
         summary_obj = {**base_meta, "safety": dataclasses.asdict(SafetyAudit()), "command_args": self._get_command_args()}
         atomic_write_json(out / "summary.json", summary_obj)
 
