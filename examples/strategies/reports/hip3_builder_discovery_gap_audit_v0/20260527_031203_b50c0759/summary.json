@@ -1,0 +1,22 @@
+{
+  "study_id": "hip3_builder_discovery_gap_audit_v0",
+  "run_id": "20260527_031203_b50c0759",
+  "created_at_utc": "2026-05-27T03:12:03.490619Z",
+  "git_sha": "unknown",
+  "git_dirty": false,
+  "repo_root": "/mnt/nasirjones/py/nautilus_trader",
+  "status": "HIP3_PRIOR_SPX_NOT_BUILDER_DEPLOYED",
+  "safety_mode": "public_data_observer_only",
+  "schema_version": "1.0.0",
+  "symbols_scanned": 230,
+  "builder_symbols_found": [],
+  "deployer_namespaces_observed": [],
+  "archive_paths_checked": [
+    "asset_ctxs",
+    "market_data"
+  ],
+  "builder_archive_paths_found": [],
+  "spx_classification": "legacy_validator_operated",
+  "hip3_hypothesis_status": "NOT_TESTED_WRONG_INSTRUMENT",
+  "next_steps_recommendation": "The prior scout (hip3_offhours_oracle_basis_residual_scout_v0) tested SPX, which appears to be a legacy validator-operated perp, not a builder-deployed HIP-3 perp. The HIP-3 builder-deployed hypothesis remains untested. Future work should: (1) identify actual builder-deployed symbols via non-public channels or Hyperliquid documentation, (2) verify whether builder-deployed perps have different metadata schemas or archive paths, (3) re-run the off-hours basis scout on confirmed builder-deployed symbols only. Recommended registry posture: NEEDS_MORE_DATA (not REJECTED)."
+}

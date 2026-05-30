@@ -217,3 +217,4 @@ reports/derivatives_spot_lead_lag_v2_*/
 reports/stage2_gate_watcher_status.json
 reports/cross_asset_beta_lag_watcher.lock
 reports/cross_asset_beta_lag_watcher_state.json
+.worktrees/

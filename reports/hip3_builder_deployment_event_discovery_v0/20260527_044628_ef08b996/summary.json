@@ -1,0 +1,26 @@
+{
+  "action_types_inventoried": [],
+  "archive_visibility": {},
+  "bytes_downloaded_by_source": {},
+  "bytes_downloaded_total": 0,
+  "candidate_events": [],
+  "candidate_symbols": [],
+  "created_at_utc": "2026-05-27T04:46:28.161790+00:00",
+  "download_budget_bytes": 5000000000,
+  "explorer_block_budget_bytes": 1000000000,
+  "explorer_block_date_range": [
+    "2025-10-13",
+    ""
+  ],
+  "git_dirty": false,
+  "git_sha": "unknown",
+  "helpers_reused": [],
+  "public_info_cross_reference": {},
+  "repo_root": "/mnt/nasirjones",
+  "run_id": "20260527_044628_ef08b996",
+  "s3_requester_pays_acknowledged": false,
+  "safety_mode": "public_data_observer_only",
+  "schema_version": "1.0.0",
+  "status": "ScoutStatus.HIP3_DEPLOYMENT_DISCOVERY_READY",
+  "study_id": "hip3_builder_deployment_event_discovery_v0"
+}

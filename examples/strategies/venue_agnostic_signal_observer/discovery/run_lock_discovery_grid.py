@@ -60,8 +60,9 @@ def main() -> int:
     # Write
     lock_path_obj = Path(lock_path)
     if lock_path_obj.exists():
-        from .grid_lock import lock_file_is_semantically_identical
-        if lock_file_is_semantically_identical(lock, lock_path_obj):
+        from .grid_lock import load_grid_lock, locks_are_semantically_identical
+        existing = load_grid_lock(lock_path_obj)
+        if locks_are_semantically_identical(lock, existing):
             print(f"Already locked (semantically identical): {lock_path}")
             print(f"  grid_hash: {ghash}")
             print(f"  primary_cell_count: {primary}")

@@ -18,9 +18,10 @@ changing something structural.
 
 ## Mined Status
 
-The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 49 study groups:
-- **37 REJECTED**
+The full mined status table is at [reports/research_status_table.csv](../reports/research_status_table.csv) with 50 study groups:
+- **38 REJECTED**
 - **11 NEEDS_MORE_DATA** (insufficient events / zero signals / no tail / market availability blocked)
+- **1 NEEDS_MORE_DATA / PUBLIC_BUILDER_DISCOVERY_UNRESOLVED** (HIP-3 builder deployment public discovery unresolved)
 - **1 MARKET_MODERATE_DIAGNOSTIC** (quiet/moderate capture, below volatility gate)
 - **1 PHASE0_CLOSED_INDICATOR_FAMILY_DIAGNOSTIC** (scoped Phase 0 diagnostic family closure; not counted as a broad venue or strategy-family rejection)
 - **1 UNKNOWN**
@@ -1026,3 +1027,246 @@ Safety: public-data observer/research only. No orders, auth, private keys, live 
 
 ---
 
+### Generic Altcoin Price-Stress Reversion Extension — REJECTED / TEMPORAL_CONCENTRATION_FAILED
+
+**Tag:** `generic-altcoin-stress-extension-present-day-concentration-failed`
+
+**Verdict:** `GENERIC_STRESS_EXTENSION_TEMPORAL_CONCENTRATION_FAILED`
+
+**Phase 0C unlocked:** No
+**Phase 0D/v1 unlocked:** No
+
+**Hypothesis:** Generic price-only altcoin downside stress (trailing 1h return ≤ −300 bps, trailing 6h realized vol percentile ≥ 0.80), followed by 24h long mean reversion, using Hyperliquid public asset_ctxs archive data. No OI, liquidation, funding, or flush-side conditioning is used in this generic variant.
+
+**Prior motivation:** The liquidation/OI venue-age-aware detector failed its Phase 0C circular-shift clustering null (p≈0.974) and was closed with survivorship ambiguity. Diagnostic ablation (generic stress comparison audit) suggested the price-only stress variant recovered comparable or larger returns without OI/liquidation inputs — but that comparison was Phase 0B diagnostic only, not a validated edge claim. This extension test was triggered by the prior generic stress ablation's temporal concentration gate and does not address the OI-conditioning question, which remains separately closed/unresolved by its own registry entry.
+
+**Prior bug:** A previous "full extended window" field was mislabeled — it only represented a limited 45-day lookback + extension diagnostic subset (69 events from late 2025 + 2026), not a true full-window union that includes the 558 prior accepted events from 2024–2025. This was fixed in commit `86b5f2d501` by loading prior accepted events and merging them into the full-union cohort, and by reloading the complete price series for return computation.
+
+**Corrected evidence:**
+
+| Metric | Value |
+|---|---|
+| Full-union evaluated events | 616 |
+| Full-union net50 mean | +362.56 bps |
+| Year distribution | 2024: 419, 2025: 139, 2026: 58 |
+| 2024 share | 68.0% (419/616) |
+| Extension-only events | 58 |
+| Extension-only net50 mean | +552 bps |
+| Extension-only win rate | 0.776 |
+| Prior reproduction | Passed (558 events, net50 mean +342.86 bps, reproduced within 5 bps tolerance) |
+
+**Negative controls:** Boring non-stress control (mean −63.74 bps) and random timestamp control (mean −53.53 bps) were directionally supportive — both were clearly negative. Controls cannot override temporal concentration gates.
+
+**Final blocker:** 2024 share (68.0%) remains above the precommitted 50% concentration gate. Extension-only events (58) are below the 100-event minimum and entirely contained in a single year (2026), independently triggering `GENERIC_STRESS_EXTENSION_TEMPORAL_CONCENTRATION_FAILED` and `GENERIC_STRESS_EXTENSION_UNDERPOWERED`. Full-window 2024 share (68.0%) independently triggers `FULL_WINDOW_TEMPORAL_CONCENTRATION_STILL_FAILED`.
+
+**Secondary finding (OI conditioning):** The prior liquidation/OI-conditioned detector did not demonstrate validated incremental value over the generic price-only stress variant in the audited ablation under this archive and these frozen gates. This is a narrow finding: in this archive and under these frozen precommitted gates, OI/liquidation conditioning did not add validated incremental value over price-only stress. It is not a universal proof that OI can never matter in any formulation.
+
+**Registry interpretation:** The effect may be a real regime-dependent altcoin mean-reversion phenomenon, but under this precommitment it is not a validated durable edge. The 2024 concentration prevents generalization. The price-only stress signal remains economically large (including in the 2026 extension), but the experiment fails the precommitted temporal concentration gate and cannot be treated as validated.
+
+**Boundary — what this closes:**
+- Generic price-only altcoin stress mean reversion on the Hyperliquid public archive under the frozen 50 bps cost, trailing-return thresholds, 48h cooldown, and primary 24h horizon.
+- The specific precommitted temporal concentration gates (50% max year share, 100 minimum events).
+
+**Boundary — what this does NOT close:**
+- A future "non-2024 alt mean reversion" study with a new precommitment and materially different design (e.g., out-of-2024-only validation, alternative universe, modified vol threshold). Any such future attempt requires a new precommitment and cannot reuse this failed gate by tweaking thresholds post hoc.
+- The broader question of whether altcoin mean reversion can be traded under any conditions.
+- Whether OI or other signals could incrementally add value in a differently formulated detector (e.g., different venue, threshold set, or cost model).
+- Different cost tiers (maker/rebate below 50 bps) — not tested.
+- Non-Hyperliquid venues — not tested.
+
+**Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, bot path, or Phase 0C execution were used.
+
+
+
+### HLP Backstop Absorption Reversal — ARCHIVE_INFEASIBLE / BACKSTOP_INSEPARABLE
+
+**Tag:** `hlp-backstop-absorption-reversal-archive-infeasible-backstop-inseparable`
+
+**Verdict:** `HLP_BACKSTOP_ABSORPTION_ARCHIVE_INFEASIBLE_BACKSTOP_INSEPARABLE`
+
+**Date closed:** 2026-05-26
+
+**Phase 0A* diagnostic branch:** `feat/hlp-backstop-absorption-phase0a-star-coverage`
+**Starting SHA:** `30c5693e9bc058c80198e5af068ff3c70107df87`
+**Final SHA:** `1c12eeb0cfd802e39e4fe68e4c24ebc00e9d82f8`
+**Phase 0C/v1 unlocked:** No
+**Paper/shadow/live promoted:** No
+
+**Hypothesis:** Hyperliquid HLP/liquidator-vault backstop inventory shocks might identify forced-flow absorption after liquidation events and predict slower multi-hour reversal. The archive-only prerequisite was that HLP/liquidator-vault backstop inventory changes must be reconstructable historically at hourly-or-better cadence and separable from MM/Earn vault activity.
+
+**Frozen kill question:** Can Hyperliquid HLP / liquidator-vault per-symbol backstop inventory changes be reconstructed historically, at hourly-or-better cadence, from public archive data, with the backstop component separable from market-making / Earn vault activity, without lookahead, live recording, auth, or private endpoints?
+
+**Full probe sequence:**
+
+| Probe | Source | Date/Hour | Key Finding |
+|---|---|---|---|
+| 1. Initial local archive run | NAS data-root | — | Local archive lacked node_fills_by_block, vault metadata, Artemis balances. Initial verdict: ARCHIVE_INFEASIBLE |
+| 2. S3 archive availability probe | node_fills_by_block/hourly/ | 2026-05-24, hour 0 | 304 dates available, 24 hourly LZ4 files, real schema is pair/event based. Schema verdict: SCHEMA_READY |
+| 3. Real schema integration | node_fills_by_block adapter | — | Per-address signed inventory deltas parsable. 321,347 fills sampled, 99.33% pairable, side mapping stable |
+| 4. Misc events probe | misc_events_by_block/hourly/ | 2026-05-24, hour 0 | No liquidation/backstop markers. Only funding, deposits, withdrawals, staking |
+| 5. Explorer blocks source probe | explorer_blocks/ | Block range ~1,008,112,033 | NetChildVaultPositionsAction discovered 2 vault-like addresses. No BACKSTOP role labels. vaultDetails returned HTTP 422 |
+| 6. Child vault role classification | node_fills_by_block hours 0,14 | 2026-05-24 | Both addresses classified as MM_PARENT (inferred_high). 180 coins each, net delta ratio ~0.004-0.032. No backstop behavior |
+| 7. Stress-window attribution probe | node_fills_by_block/hourly/20251010/ hours 15-20 | 2025-10-10 | 2.4x normal volume (1,420 MiB). 4.9M fills. MM addresses stayed balanced (ndr 0.02-0.05). 139 one-sided addresses but none distinct from vaults. Verdict: MM_ONLY |
+
+**Key findings:**
+
+1. Archive schema: Node_fills_by_block is parseable. Real schema is pair/event based with [address, fill_detail] per block. Per-address signed inventory delta mapping: side == "B" -> +sz, side == "A" -> -sz. Pairability high (99.33%).
+
+2. No liquidation/backstop marker: No explicit liquidation, backstop, clearinghouse, deleverage, ADL, forced-close, or vault-takeover marker was found in any sampled public archive source:
+   - node_fills_by_block: no liquidation field in fill detail keys
+   - misc_events_by_block: only funding, deposits, withdrawals, staking
+   - explorer_blocks: NetChildVaultPositionsAction exposes addresses but not role labels
+
+3. MM-dominated vault addresses: Two vault-like addresses discovered via NetChildVaultPositionsAction in explorer_blocks. Both classified as broad continuous MM (180 coins each, net delta ratio < 0.04, high pairability > 0.9). Neither showed backstop-like one-sided behavior even during a verified stress window (2025-10-10, 2.4x normal volume).
+
+4. Parent vault unresolved: vaultDetails API returned HTTP 422 for both discovered addresses, regardless of field name (user or vaultAddress). Parent HLP vault address not discoverable from public archive/API path.
+
+5. Stress window confirms MM-only: During the largest sampled volume day (2025-10-10, 1,420 MiB vs ~600 MiB baseline), both known MM addresses maintained balanced inventory (net delta ratio 0.051 and 0.019). 139 other one-sided addresses appeared but were random market participants closing/absorbing positions — not vault addresses.
+
+**Final verdict:** HLP_BACKSTOP_ABSORPTION_ARCHIVE_INFEASIBLE_BACKSTOP_INSEPARABLE
+
+**Why this is not a profitability rejection:** The economic mechanism (backstop absorption after liquidations producing a reversal) was never evaluated because the prerequisite data-layer condition — separable HLP backstop child-vault inventory at hourly cadence — could not be satisfied from public archive data. The rejection is data-layer / attribution / separability based, not a test of the economic hypothesis under a documented backstop address or labelled dataset.
+
+**Boundary statement:** The result blocks the archive-only HLP backstop absorption formulation because public archive data did not provide a separable BACKSTOP child-vault role or explicit liquidation/backstop attribution. It does not reject the underlying economic mechanism if a future documented backstop child address or labelled liquidation/backstop dataset becomes available.
+
+**What this closes:**
+- The archive-only HLP backstop absorption formulation that requires reconstructing HLP/liquidator-vault backstop inventory at hourly-or-better cadence with separable BACKSTOP attribution, using only public S3 archive data (node_fills_by_block, misc_events_by_block, explorer_blocks, replica_cmds) and the Hyperliquid public info API.
+- The specific Phase 0A* coverage/mechanism diagnostic on feat/hlp-backstop-absorption-phase0a-star-coverage.
+
+**What this does NOT close:**
+- HLP/vault ideas using a documented external backstop child address.
+- A future labelled liquidation/backstop dataset (public or private).
+- A future live-recorded backstop dataset, separately precommitted before collection.
+- A private/documented API endpoint that exposes liquidation/backstop attribution.
+- Non-backstop HLP/MM inventory hypotheses.
+- A different parent vault source that exposes documented child roles including BACKSTOP/MM/EARN.
+- Heuristic-only liquidation absorption studies if separately precommitted as lower-confidence and not called HLP BACKSTOP.
+
+**Reopen conditions:**
+This closure may be revisited only if at least one of the following becomes available:
+1. A documented HLP backstop child address from an official or high-confidence external source.
+2. A public archive field that explicitly marks liquidation/backstop fills.
+3. A public archive source that maps HLP parent vault to child roles including BACKSTOP/MM/EARN.
+4. A live-recorded dataset, separately precommitted before collection, that captures backstop attribution without lookahead.
+5. A different formulation that explicitly studies MM inventory rather than backstop absorption.
+
+**Artifact paths:**
+- reports/hlp_backstop_absorption_phase0a_star_coverage/20260526_192344_6b0de8af/ (initial local archive run)
+- reports/hlp_backstop_archive_availability_probe/20260526_194643_1aeaecc3/ (S3 availability)
+- reports/hlp_backstop_archive_availability_probe/20260526_203913_2374474e/ (explorer_blocks probe)
+- reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/ (child vault role classification)
+- reports/hlp_backstop_stress_window_attribution_probe/20260526_215948_b41aa859/ (stress-window probe)
+
+**Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, bot path, systemd, registry mutation, precommitment unlock, conductor promotion, or REJECTED_RESEARCH.md mutation prior to this entry. No userFillsByTime was used. All S3 reads were bounded requester-pays behind --allow-s3-archive-read. All API calls were behind --allow-public-metadata-api. Total S3 data downloaded across all probes: ~476 MiB (node_fills_by_block), ~21 MiB (misc_events), ~2.7 MiB (explorer_blocks), all well under 5 GB hard cap.
+
+---
+
+### HIP-3 Builder-Deployed Off-Hours Oracle-Basis Residual — Public Discovery Unresolved
+
+**Tag:** `hip3-builder-offhours-oracle-basis-public-discovery-unresolved-v0`
+
+**Verdict:** `NEEDS_MORE_DATA / PUBLIC_BUILDER_DISCOVERY_UNRESOLVED`
+
+**Date closed:** 2026-05-27
+
+**This is NOT a REJECTED entry.** The HIP-3 off-hours oracle-basis hypothesis remains untested because no confirmed builder-deployed equity/index/commodity symbols were discovered through the public routes tested. No Phase 0 drafting is permitted. No paper/conductor/live promotion is permitted. No PnL/basis/residual/strategy evaluation was run.
+
+**Discovery branches and results:**
+
+| Branch | Commit | Route | Result |
+|---|---|---|---|
+| `feat/hip3-universe-delta-discovery-v0` | `c9056978aa` | `asset_ctxs` universe delta | 13 post-launch additions found (DASH, ICP, XMR + 10 unknown). No equity/index/commodity-like candidates. No builder-deployed symbols confirmed. |
+| `feat/hip3-builder-deployment-event-discovery-v0` P2 | `36098aa0f6` | Explorer-block deployment-event search | 20 files, ~51.5 MB, 1,600 blocks, 623,756 actions. 50 candidates preserved. Justified P3 but did not confirm builder deployments. |
+| `feat/hip3-builder-deployment-event-discovery-v0` P3 | `010333f8be` | P3 candidate confirmation | Status: `HIP3_P3_CANDIDATES_SYMBOL_EXTRACTED`. Extracted symbols: AAVE, ACE, ADA, AI16Z, AIXBT (all crypto_like external-perp universe updates). Confirmed builder-deployed: 0. Deployers extracted: 0. P4 not warranted. |
+| `feat/hip3-builder-deployment-event-discovery-v0` P3E | `b8c7882181` | P3E opaque EVM decode | Status: `HIP3_P3E_EVM_NON_DEPLOYMENT`. 1 payload decoded (49 bytes, truncated RLP). No deployment/config evidence. No deployers/symbols extracted. |
+
+**Core interpretation:**
+
+The HIP-3 off-hours oracle-basis hypothesis remains untested because no confirmed builder-deployed equity/index/commodity symbols were discovered through the public routes tested.
+
+The completed work narrows the public discovery route:
+- `asset_ctxs` universe delta did not surface equity/index/commodity-like post-launch candidates.
+- Explorer-block P2/P3/P3E did not confirm builder-deployed symbols or deployers.
+- P3 extracted only crypto_like external-perp universe update symbols (AAVE, ACE, ADA, AI16Z, AIXBT).
+- The one opaque EVM payload decoded as non-deployment / not useful for builder confirmation.
+
+**This does NOT prove that HIP-3 builder-deployed markets do not exist.** It only says the tested public archive/API discovery routes did not produce confirmed builder symbols suitable for the off-hours basis scout.
+
+**Registry posture:** `NEEDS_MORE_DATA / PUBLIC_BUILDER_DISCOVERY_UNRESOLVED`
+
+**Boundary — what this closes:**
+- The current public `asset_ctxs` universe-delta route as a source of equity/index/commodity candidate symbols.
+- The current P2/P3/P3E explorer-block candidate-confirmation route as a source of confirmed builder-deployed symbols.
+- P4 symbol-specific archive/fee scouting for the extracted P3 symbols (AAVE, ACE, ADA, AI16Z, AIXBT) because they were crypto_like external-perp universe/config updates, not builder-deployed equity/index/commodity perps.
+
+**Boundary — what this does NOT close:**
+- HIP-3 builder-deployed markets generally.
+- TradeXYZ or other deployer-specific markets if a reliable concrete symbol/deployer is later found.
+- Off-hours basis residual hypotheses on confirmed builder-deployed equity/index/commodity perps.
+- A future investigation using official HIP-3 metadata, deployer documentation, or a reliable no-auth public source.
+
+**Does NOT:**
+- Prove absence of builder deployments.
+- Prove lack of profitability.
+- Authorize Phase 0.
+- Permit paper/conductor/live promotion.
+
+**Reopen conditions:**
+
+Reopen only if at least one of the following is available:
+1. A concrete builder-deployed symbol and deployer/namespace from a reliable public source.
+2. Public metadata exposing builder/deployer identity for a symbol.
+3. Public archive evidence tying a symbol to a builder deployment event with extractable deployer/symbol/config fields.
+4. Confirmed archive/L2 visibility plus fee/deployer surcharge information for a builder-deployed equity/index/commodity-like symbol.
+
+If reopened, the next step must be a symbol-specific builder-confirmation/archive/fee scout, not an off-hours basis evaluator.
+
+**Artifact paths:**
+- reports/hip3_universe_delta_discovery_v0/ (universe-delta probe)
+- reports/hip3_builder_deployment_event_discovery_v0/20260527_185632_p2_3946ca64/ (P2 explorer-block search)
+- reports/hip3_builder_deployment_event_discovery_v0/20260527_194831_p3_43bb00d0_p3_confirmation/ (P3 candidate confirmation)
+- reports/hip3_builder_deployment_event_discovery_v0/20260527_194944_p3_validation_audit/ (P3 validation audit)
+- reports/hip3_builder_deployment_event_discovery_v0/20260527_200820_p3e_eb753afd_p3e_evm_decode/ (P3E EVM decode)
+
+**Safety:** Public-data observer/research only. No orders, auth, private keys, live trading, shadow executor, bot path, systemd, registry mutation, precommitment unlock, conductor promotion, or paper strategy promotion were used. All S3 reads were bounded requester-pays behind --allow-s3-archive-read. No PnL, basis, residual, or strategy evaluation was performed.
+
+
+---
+
+## Hyperliquid BTC/ETH ML+ATR Representative Real-Strategy v0
+
+**Date:** 2026-05-30 UTC
+**Branch:** feat/rep-real-strategy-diagnostic
+**Ending SHA:** a4419581707849d7388ec8c7d3db1f8da59c3ff2
+**Diagnostic status:** ML_ATR_REPRESENTATIVE_REAL_STRATEGY_V0_VALIDATION_CALIBRATION_FAILED
+**Split audit:** REPRESENTATIVE_SPLIT_ROW_AUDIT_EXPLAINED
+**721 train rows explained by:** 24-bar feature warmup
+**Validation rows:** 721
+**Test rows:** 744
+**Validation AUC:** < 0.51
+**Model trained successfully:** Yes
+**Frozen gate failed:** Yes
+**No paper/live/shadow/bot eligibility:** Confirmed
+**No strategy tuning after result:** Confirmed
+**Not original v0:** Confirmed
+**Not full 2025-window diagnostic:** Confirmed
+**Full-window pull not justified as rescue action for this v0 failure:** Confirmed
+**Any v1 needs a fresh precommitment:** Confirmed
+
+**Summary:**
+The frozen ML+ATR representative real-strategy diagnostic ran on real Hyperliquid BTC/ETH data with frozen features (ret_1h, ret_4h, ret_24h, realized_vol_24h, atr_norm_14h, funding_current, funding_mean_24h, rsi_14h), logistic regression, Platt calibration, 24h horizon, and thresholds (long >= 0.55, short <= 0.40). The model trained successfully but failed validation calibration because validation AUC < 0.51. The split audit confirmed the 721-row train count was from legitimate 24-bar feature warmup, not row-index partitioning or representative-mode bypass.
+
+**Interpretation:**
+The frozen v0 representative real-strategy diagnostic failed validation calibration. The pipeline worked. The gate caught lack of edge before promotion. The frozen feature set + logistic regression + Platt calibration + 24h horizon had no detectable directional predictive power on this representative Hyperliquid BTC/ETH sample.
+
+**Verdict:** VALIDATION_CALIBRATION_FAILED_NOT_PROMOTED
+
+**Registry tag:** hyperliquid-btc-eth-ml-atr-representative-real-strategy-v0-validation-failed
+
+**Artifact paths:**
+- reports/hyperliquid_btc_eth_ml_atr_representative_real_strategy_v0/real_representative_strategy_20260530T003811Z/split_row_audit.json
+- reports/hyperliquid_btc_eth_ml_atr_representative_real_strategy_v0/real_representative_strategy_20260530T003811Z/split_row_audit.md
+- reports/hyperliquid_btc_eth_ml_atr_representative_real_strategy_v0/representative_strategy_audit_20260529T161029Z/input_summary.json
+- examples/strategies/venue_agnostic_signal_observer/docs/HYPERLIQUID_BTC_ETH_ML_ATR_REPRESENTATIVE_REAL_STRATEGY_V0_FINDINGS.md
+
+**Safety:** Observer-only research. No orders, auth, private keys, live trading, shadow executor, bot path, systemd, registry mutation, precommitment unlock, conductor promotion, or paper strategy promotion were used. No AWS/S3 downloads were performed during the representative real-strategy diagnostic. The diagnostic used existing representative bar and funding parquet files.

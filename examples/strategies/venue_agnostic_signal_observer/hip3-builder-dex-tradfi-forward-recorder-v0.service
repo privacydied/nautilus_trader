@@ -1,0 +1,17 @@
+[Unit]
+Description=HIP-3 Builder-DEX TradFi Forward Recorder v0 (7-day capture)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env bash -c '/mnt/nasirjones/py/nautilus_trader/.venv/bin/python -m examples.strategies.venue_agnostic_signal_observer.run_hip3_builder_dex_tradfi_forward_recorder_v0 --out-root /mnt/nasirjones/py/nautilus_trader/reports/hip3_builder_dex_tradfi_forward_recorder_v0 --symbols TSLA,AAPL,MSFT,NVDA --poll-seconds 60 --resolution-policy capture_all --allow-network-public --enable-anchors --anchor-source yahoo --duration-minutes 10080'
+WorkingDirectory=/mnt/nasirjones/py/nautilus_trader
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hip3-forward-recorder
+
+[Install]
+WantedBy=default.target

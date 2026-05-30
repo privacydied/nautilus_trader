@@ -1,0 +1,141 @@
+{
+  "source_s3": "s3://hl-mainnet-node-data/explorer_blocks/1000000000/1008000000/1008000100.rmp.lz4",
+  "compressed_size_bytes": 2863730,
+  "compressed_size_human": "2.7 MiB",
+  "decompressed_size_bytes": 17997025,
+  "download_seconds": 4.74,
+  "parse_seconds": 2.41,
+  "total_blocks": 100,
+  "blocks_sampled": 100,
+  "total_txs_sampled": 40905,
+  "total_actions_sampled": 136342,
+  "action_types": {
+    "order": 104624,
+    "cancelByCloid": 20211,
+    "cancel": 9483,
+    "batchModify": 1242,
+    "modify": 301,
+    "noop": 179,
+    "scheduleCancel": 126,
+    "updateLeverage": 82,
+    "evmRawTx": 20,
+    "perpDeploy": 19,
+    "setReferrer": 17,
+    "updateIsolatedMargin": 10,
+    "ValidatorSignWithdrawalAction": 8,
+    "approveBuilderFee": 5,
+    "approveAgent": 4,
+    "SetGlobalAction": 2,
+    "sendAsset": 2,
+    "agentSetAbstraction": 2,
+    "NetChildVaultPositionsAction": 1,
+    "agentEnableDexAbstraction": 1,
+    "SystemSpotSendAction": 1,
+    "twapOrder": 1,
+    "withdraw3": 1
+  },
+  "vault_addresses": [
+    "0x010461c14e146ac35fe42271bdc1134ee31c703a",
+    "0x31ca8395cf837de08b24da3f660e77761dfb974b"
+  ],
+  "vault_address_count": 2,
+  "has_net_child_vault_action": true,
+  "all_action_keys": [
+    "abstraction",
+    "agentAddress",
+    "agentName",
+    "amount",
+    "asset",
+    "assets",
+    "builder",
+    "cancels",
+    "childVaultAddresses",
+    "code",
+    "data",
+    "destination",
+    "destinationDex",
+    "externalPerpPxs",
+    "fromSubAccount",
+    "grouping",
+    "hyperliquidChain",
+    "isBuy",
+    "isCross",
+    "leverage",
+    "maxFeeRate",
+    "modifies",
+    "nativePx",
+    "nonce",
+    "ntli",
+    "oid",
+    "order",
+    "orders",
+    "pxs",
+    "setOracle",
+    "signature",
+    "signatureChainId",
+    "sourceDex",
+    "time",
+    "token",
+    "twap",
+    "type",
+    "usd",
+    "usdtUsdcPx",
+    "user",
+    "wei"
+  ],
+  "join_keys_found": [
+    "asset",
+    "oid",
+    "order",
+    "orders",
+    "time",
+    "user"
+  ],
+  "liquidation_terms_found": [
+    "liq",
+    "margin",
+    "vault"
+  ],
+  "has_liquidation_marker": true,
+  "sample_actions": {
+    "evmRawTx": {
+      "data": "b'\\x02\\xf9\\x01\\xf5\\x82\\x03\\xe7\\x82.\\x15\\x84\\x04\\xe4\\xd5\\xd9\\x84\\x1d]\\x03\\x19\\x83\\x16\\xefJ\\x94\\xbe\\x17:\\xf9\\x8c\\x1b\\x97\\x06\\xaf7\\x7f\\xdd\\x10M>\\x19^\\x8dh\\xf4\\x80\\xb9\\x01\\x84\\x16\\xf5\\n\\x1e\\x00\\x00\\x00\\x0"
+    },
+    "order": {
+      "orders": "[{'a': 0, 'b': False, 'p': '76720', 's': '0.56975', 'r': False, 't': {'limit': {'tif': 'Alo'}}, 'c': '0xb480e43cbd03fbecf151ed9c68080100'}]",
+      "grouping": "na"
+    },
+    "batchModify": {
+      "modifies": "[{'oid': 439430464692, 'order': {'a': 1, 'b': False, 'p': '2115.1', 's': '14.186', 'r': False, 't': {'limit': {'tif': 'Alo'}}, 'c': '0xfcb22552a90b4e83b0e3be0371675d9a'}}]"
+    },
+    "cancelByCloid": {
+      "cancels": "[{'asset': 5, 'cloid': '0x000000000000000018b1985e588bfd33'}]"
+    },
+    "cancel": {
+      "cancels": "[{'a': 162, 'o': 439430512339}]"
+    },
+    "modify": {
+      "oid": "0x00000000000000000000019e4f887173",
+      "order": "{'a': 110031, 'b': False, 'p': '3.0328', 's': '168.6', 'r': False, 't': {'limit': {'tif': 'Ioc'}}, 'c': '0x00000000000000000000019e4f887173'}"
+    },
+    "scheduleCancel": {
+      "time": "1779573155304"
+    },
+    "NetChildVaultPositionsAction": {
+      "childVaultAddresses": "['0x010461c14e146ac35fe42271bdc1134ee31c703a', '0x31ca8395cf837de08b24da3f660e77761dfb974b']",
+      "assets": "[22, 34, 52, 57, 168, 179]"
+    },
+    "noop": {},
+    "setReferrer": {
+      "code": "FASTER100"
+    }
+  },
+  "format": "rmp_msgpack",
+  "block_header_keys": [
+    "block_time",
+    "height",
+    "hash",
+    "proposer"
+  ],
+  "verdict": "EXPLORER_BLOCKS_SCHEMA_READY_WITH_LIQUIDATION_MARKERS"
+}

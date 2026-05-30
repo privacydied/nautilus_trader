@@ -1,0 +1,18 @@
+{
+  "study_id": "hlp_child_vault_role_probe",
+  "run_id": "20260526_210440_9b032dea",
+  "s3_bucket": "hl-mainnet-node-data",
+  "date_probed": "20260524",
+  "hours_probed": [
+    0,
+    14
+  ],
+  "s3_sources_touched": [
+    "explorer_blocks",
+    "node_fills_by_block/hourly/20260524/0.lz4",
+    "node_fills_by_block/hourly/20260524/14.lz4"
+  ],
+  "api_sources_touched": [],
+  "child_candidates_count": 2,
+  "total_download_bytes": 83147875
+}

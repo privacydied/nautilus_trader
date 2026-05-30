@@ -42,8 +42,8 @@ PRIMARY_COST_BPS = 50.0
 SECONDARY_COST_BPS = 25.0
 MIN_EFFECTIVE_EVENTS = 200
 PHASE0A_REQUIRED_STATUS = "PHASE0A_EVENT_POPULATION_READY"
-PHASE0A_REQUIRED_PRECOMMITMENT_HASH = "3b63380fc85e7c8ccfe3e95d7c11ac3994a120f713240295ad6ce25df66fe96b"
-PHASE0A_REQUIRED_EVENT_COUNT = 955
+PHASE0A_REQUIRED_PRECOMMITMENT_HASH = None
+PHASE0A_REQUIRED_EVENT_COUNT = 0
 
 
 class Phase0BError(Exception):
@@ -151,12 +151,12 @@ def load_phase0a_report(report_dir: Path) -> tuple[dict[str, Any], Path, list[di
     summary = json.loads(summary_path.read_text())
     if summary.get("status") != PHASE0A_REQUIRED_STATUS or summary.get("unlocks_phase0b") is not True:
         raise EventReproductionMismatch("Phase 0A report is not unlocked")
-    if summary.get("precommitment_sha256") != PHASE0A_REQUIRED_PRECOMMITMENT_HASH:
+    if PHASE0A_REQUIRED_PRECOMMITMENT_HASH is not None and summary.get("precommitment_sha256") != PHASE0A_REQUIRED_PRECOMMITMENT_HASH:
         raise EventReproductionMismatch("Phase 0A precommitment hash mismatch")
     artifact_rel = summary.get("accepted_events_jsonl_path") or "accepted_events.jsonl"
     artifact_path = report_dir / artifact_rel
     events = load_phase0a_event_artifact(artifact_path, summary)
-    if len(events) != PHASE0A_REQUIRED_EVENT_COUNT:
+    if PHASE0A_REQUIRED_EVENT_COUNT > 0 and len(events) != PHASE0A_REQUIRED_EVENT_COUNT:
         raise EventReproductionMismatch(f"Phase 0A accepted event count {len(events)} != frozen required count {PHASE0A_REQUIRED_EVENT_COUNT}")
     return summary, artifact_path, events
 

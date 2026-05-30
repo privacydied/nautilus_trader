@@ -1,0 +1,16 @@
+{
+  "study_id": "hlp_child_vault_role_probe",
+  "run_id": "20260526_210440_9b032dea",
+  "observer_only": true,
+  "no_order_intent": true,
+  "promotion_candidate": false,
+  "paper_promotion_locked": true,
+  "conductor_ready": false,
+  "no_registry_mutation": true,
+  "no_user_fills_by_time": true,
+  "allow_s3_archive_read": true,
+  "allow_public_metadata_api": true,
+  "forbidden_strings_checked": true,
+  "forbidden_strings_not_found": true,
+  "timestamp_utc": "2026-05-26T21:05:07Z"
+}

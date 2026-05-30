@@ -1,0 +1,26 @@
+{
+  "study_id": "hlp_backstop_stress_window_attribution_probe",
+  "run_id": "20260526_213914_0baf67bb",
+  "date": "20251010",
+  "hours": [
+    15,
+    16,
+    17,
+    18,
+    19,
+    20
+  ],
+  "total_download_bytes": 386482699,
+  "total_download_human": "368.6 MiB",
+  "s3_sources": [
+    "node_fills_by_block/hourly/20251010/15.lz4",
+    "node_fills_by_block/hourly/20251010/16.lz4",
+    "node_fills_by_block/hourly/20251010/17.lz4",
+    "node_fills_by_block/hourly/20251010/18.lz4",
+    "node_fills_by_block/hourly/20251010/19.lz4",
+    "node_fills_by_block/hourly/20251010/20.lz4"
+  ],
+  "api_sources": [
+    "vaultDetails_api"
+  ]
+}

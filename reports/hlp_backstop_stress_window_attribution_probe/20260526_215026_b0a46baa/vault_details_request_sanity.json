@@ -1,0 +1,35 @@
+{
+  "requests_tested": 4,
+  "results": [
+    {
+      "address": "0x010461c14e146ac35f...",
+      "field_name": "user",
+      "status": 422,
+      "is_vault": false,
+      "redacted_response": "HTTP Error 422: Unprocessable Entity"
+    },
+    {
+      "address": "0x010461c14e146ac35f...",
+      "field_name": "vaultAddress",
+      "status": 200,
+      "is_vault": true,
+      "redacted_response": "{\"name\":\"HLP Strategy A\",\"vaultAddress\":\"0x010461c14e146ac35fe42271bdc1134ee31c703a\",\"leader\":\"0xdfc24b077bc1425ad1dea75bcb6f8158e10df303\",\"description\":\"A component market making strategy included in"
+    },
+    {
+      "address": "0x31ca8395cf837de08b...",
+      "field_name": "user",
+      "status": 422,
+      "is_vault": false,
+      "redacted_response": "HTTP Error 422: Unprocessable Entity"
+    },
+    {
+      "address": "0x31ca8395cf837de08b...",
+      "field_name": "vaultAddress",
+      "status": 200,
+      "is_vault": true,
+      "redacted_response": "{\"name\":\"HLP Strategy B\",\"vaultAddress\":\"0x31ca8395cf837de08b24da3f660e77761dfb974b\",\"leader\":\"0xdfc24b077bc1425ad1dea75bcb6f8158e10df303\",\"description\":\"A component market making strategy included in"
+    }
+  ],
+  "conclusion": "vault_details_works_with_this_format",
+  "error": null
+}

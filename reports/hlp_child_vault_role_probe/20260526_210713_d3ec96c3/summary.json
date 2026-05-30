@@ -1,0 +1,44 @@
+{
+  "study_id": "hlp_child_vault_role_probe",
+  "run_id": "20260526_210713_d3ec96c3",
+  "started_utc": "2026-05-26T21:07:13Z",
+  "finished_utc": "2026-05-26T21:07:48Z",
+  "branch_if_available": "feat/hlp-backstop-absorption-phase0a-star-coverage",
+  "git_sha_if_available": "7cfd7bc65bdedfb08c5ba2fb1e5163c01466d332",
+  "role_probe_verdict": "HLP_CHILD_ROLE_MM_DOMINATED_NO_BACKSTOP",
+  "parent_vault_verdict": "HLP_PARENT_VAULT_NOT_FOUND",
+  "backstop_role_candidate_found": false,
+  "backstop_role_candidate_address": null,
+  "child_roles_inseparable": false,
+  "full_hlp_diagnostic_runnable_now": false,
+  "exact_blocker_if_not_runnable": "Discovered addresses appear MM/Earn dominated \u2014 backstop not separable",
+  "download_bytes": 83147875,
+  "listed_bytes_estimate": 83147875,
+  "s3_sources_touched": [
+    "explorer_blocks",
+    "node_fills_by_block/hourly/20260524/0.lz4",
+    "node_fills_by_block/hourly/20260524/14.lz4"
+  ],
+  "api_sources_touched": [],
+  "artifact_paths": {
+    "child_vault_candidates": "reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/child_vault_candidates.json",
+    "parent_vault_search": "reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/parent_vault_search.json",
+    "role_classification": "reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/role_classification.json",
+    "per_address_fill_profile": "reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/per_address_fill_profile.csv",
+    "per_address_inventory_profile": "reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/per_address_inventory_profile.csv",
+    "per_address_coin_profile": "reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/per_address_coin_profile.csv",
+    "net_child_vault_positions_actions": "reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/net_child_vault_positions_actions.json",
+    "download_manifest": "reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/download_manifest.json",
+    "source_inventory": "reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/source_inventory.json",
+    "safety_audit": "reports/hlp_child_vault_role_probe/20260526_210713_d3ec96c3/safety_audit.json"
+  },
+  "safety": {
+    "observer_only": true,
+    "no_order_intent": true,
+    "promotion_candidate": false,
+    "paper_promotion_locked": true,
+    "conductor_ready": false,
+    "no_registry_mutation": true,
+    "no_user_fills_by_time": true
+  }
+}

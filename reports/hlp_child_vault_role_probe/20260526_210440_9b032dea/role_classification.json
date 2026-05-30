@@ -1,0 +1,152 @@
+{
+  "study_id": "hlp_child_vault_role_probe",
+  "verdict": "HLP_CHILD_ROLE_BACKSTOP_INFERRED_HIGH_CONFIDENCE",
+  "parent_vault_verdict": "HLP_PARENT_VAULT_NOT_FOUND",
+  "parent_vault_address": null,
+  "children": [
+    {
+      "address": "0x010461c14e146ac35fe42271bdc1134ee31c703a",
+      "source": "explorer_blocks",
+      "role_label": "BACKSTOP_INFERRED",
+      "confidence": "inferred_high",
+      "usable_for_backstop_diagnostic": true,
+      "evidence": {
+        "explorer_blocks": {
+          "address": "0x010461c14e146ac35fe42271bdc1134ee31c703a",
+          "count_occurrences": 1,
+          "first_block_seen": 1008000001,
+          "last_block_seen": 1008000001,
+          "assets_touched": [
+            "168",
+            "179",
+            "22",
+            "34",
+            "52",
+            "57"
+          ],
+          "source": "explorer_blocks"
+        },
+        "fill_profile": {
+          "total_fills": 21396,
+          "unique_coins": 180,
+          "frozen_coins_count": 33,
+          "non_frozen_coins_count": 147,
+          "total_gross_turnover": 3758828.92613,
+          "total_net_signed_delta": 6336319.77569,
+          "pairability_rate": 0.9493363245466442,
+          "side_distribution": {
+            "A": 11240,
+            "B": 10156
+          },
+          "top_coins_by_fill": [
+            [
+              "ZEC",
+              735
+            ],
+            [
+              "LIT",
+              627
+            ],
+            [
+              "NEAR",
+              530
+            ],
+            [
+              "VVV",
+              527
+            ],
+            [
+              "TAO",
+              474
+            ]
+          ]
+        },
+        "heuristic_scores": {
+          "net_delta_ratio": 1.685716455899929,
+          "one_sided_burst_score": 0.05066367545335577,
+          "concentration_score": 0.034352215367358385,
+          "is_mm_like": false,
+          "is_earn_like": false,
+          "is_backstop_like": true
+        },
+        "warnings": []
+      }
+    },
+    {
+      "address": "0x31ca8395cf837de08b24da3f660e77761dfb974b",
+      "source": "explorer_blocks",
+      "role_label": "BACKSTOP_INFERRED",
+      "confidence": "inferred_high",
+      "usable_for_backstop_diagnostic": true,
+      "evidence": {
+        "explorer_blocks": {
+          "address": "0x31ca8395cf837de08b24da3f660e77761dfb974b",
+          "count_occurrences": 1,
+          "first_block_seen": 1008000001,
+          "last_block_seen": 1008000001,
+          "assets_touched": [
+            "168",
+            "179",
+            "22",
+            "34",
+            "52",
+            "57"
+          ],
+          "source": "explorer_blocks"
+        },
+        "fill_profile": {
+          "total_fills": 20062,
+          "unique_coins": 180,
+          "frozen_coins_count": 33,
+          "non_frozen_coins_count": 147,
+          "total_gross_turnover": 3528930.653185,
+          "total_net_signed_delta": 6423902.12575,
+          "pairability_rate": 0.9204466154919749,
+          "side_distribution": {
+            "A": 10829,
+            "B": 9233
+          },
+          "top_coins_by_fill": [
+            [
+              "ZEC",
+              745
+            ],
+            [
+              "LIT",
+              644
+            ],
+            [
+              "NEAR",
+              552
+            ],
+            [
+              "VVV",
+              531
+            ],
+            [
+              "TAO",
+              419
+            ]
+          ]
+        },
+        "heuristic_scores": {
+          "net_delta_ratio": 1.8203537436906483,
+          "one_sided_burst_score": 0.07955338450802513,
+          "concentration_score": 0.03713488186621473,
+          "is_mm_like": false,
+          "is_earn_like": false,
+          "is_backstop_like": true
+        },
+        "warnings": []
+      }
+    }
+  ],
+  "download_bytes": 83147875,
+  "listed_bytes_estimate": 83147875,
+  "source_paths": [
+    "explorer_blocks",
+    "node_fills_by_block/hourly/20260524/0.lz4",
+    "node_fills_by_block/hourly/20260524/14.lz4"
+  ],
+  "warnings": []
+}

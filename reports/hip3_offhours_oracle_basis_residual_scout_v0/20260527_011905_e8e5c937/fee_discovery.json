@@ -1,0 +1,17 @@
+{
+  "fee_discovery": [
+    {
+      "base_user_fee_bps": null,
+      "deployer_fee_share_bps": null,
+      "deployer_namespace": null,
+      "estimated_round_trip_bps": 25.0,
+      "fee_source": "conservative_unknown",
+      "stress_cost_100bps": 100.0,
+      "stress_cost_25bps": 25.0,
+      "stress_cost_50bps": 50.0,
+      "symbol": "SPX",
+      "total_maker_bps": null,
+      "total_taker_bps": null
+    }
+  ]
+}
