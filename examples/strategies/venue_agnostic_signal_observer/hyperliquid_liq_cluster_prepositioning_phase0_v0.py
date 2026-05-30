@@ -1246,6 +1246,10 @@ def run_phase0(
     )
 
     # Build cluster maps
+    # Optimization: only build cluster maps for timestamps where a dominant
+    # cluster exists within the approach distance window. This avoids building
+    # millions of empty cluster maps.
+    APPROACH_WINDOW = APPROACH_DISTANCE_BPS
     cluster_maps: list[ClusterMapSnapshot] = []
     for sym, liqs in liq_levels.items():
         if not liqs:
@@ -1254,20 +1258,35 @@ def run_phase0(
         for liq in liqs:
             by_ts[liq.timestamp_ns].append(liq)
 
+        # Sort ctxs by timestamp for efficient lookup
+        sym_ctxs = sorted(ctxs.get(sym, []), key=lambda c: c.ts_event)
+        ctx_idx = 0
+
         for ts_ns, ts_liqs in sorted(by_ts.items()):
-            sym_ctxs = ctxs.get(sym, [])
-            mark_price = 0.0
-            oi = 0.0
-            for ctx in sym_ctxs:
-                if ctx.ts_event <= ts_ns:
-                    mark_price = ctx.mark_price
-                    oi = ctx.open_interest
-                else:
-                    break
+            # Advance ctx index to find the latest ctx at-or-before ts_ns
+            while ctx_idx < len(sym_ctxs) and sym_ctxs[ctx_idx].ts_event <= ts_ns:
+                ctx_idx += 1
+            # ctx_idx now points to first ctx AFTER ts_ns, so ctx_idx-1 is the latest at-or-before
+            if ctx_idx > 0:
+                mark_price = sym_ctxs[ctx_idx - 1].mark_price
+                oi = sym_ctxs[ctx_idx - 1].open_interest
+            else:
+                continue
 
             if mark_price <= 0:
                 continue
 
+            # Quick check: find the closest liq level to mark price
+            closest_dist = float("inf")
+            for liq in ts_liqs:
+                d = abs(_bps(mark_price, liq.liq_price))
+                if d < closest_dist:
+                    closest_dist = d
+            # If no liq level is within approach window, skip cluster map build
+            if closest_dist > APPROACH_WINDOW:
+                continue
+
+            # Build full cluster map
             buckets = build_cluster_map(ts_liqs, mark_price)
             buckets = mark_dominant_clusters(buckets, oi)
             dominant = min(
