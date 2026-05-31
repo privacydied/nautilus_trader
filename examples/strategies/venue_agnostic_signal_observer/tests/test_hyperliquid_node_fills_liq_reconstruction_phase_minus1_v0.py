@@ -1551,6 +1551,72 @@ def test_source_probe_does_not_run_full_backfill(monkeypatch, tmp_path):
     assert '"approval_required_before_backfill": true' in plan_path.read_text()
 
 
+def test_locate_replica_cmds_namespace_records_prefix_when_units_exceed_cap(monkeypatch):
+    monkeypatch.setattr(probe_mod, "_sample_remote_replica_cmds_objects", lambda prefix, max_dates=3, max_download_bytes=100_000_000: [
+        {"key": "hl-mainnet-node-data/replica_cmds/2026-01-01T00:00:00Z/20260101/1.lz4", "size": 250_000_000, "source": "s3", "date": "2026-01-01"},
+        {"key": "hl-mainnet-node-data/replica_cmds/2026-01-02T00:00:00Z/20260102/2.lz4", "size": 260_000_000, "source": "s3", "date": "2026-01-02"},
+    ])
+    monkeypatch.setattr(probe_mod, "_list_s3api_objects", lambda prefix, max_keys=100: [])
+    cfg = probe_mod.StudyConfig(data_root="/nonexistent", max_download_bytes=100_000_000)
+    plan = probe_mod.locate_replica_cmds_namespace(cfg)
+    assert plan.raw_replica_cmds_prefix_found == "hl-mainnet-node-data/replica_cmds/"
+    assert plan.objects_available_for_sampling == []
+
+
+def test_sample_remote_replica_cmds_objects_scans_all_dates_and_chooses_smallest_under_cumulative_cap(monkeypatch):
+    prefixes = [f"replica_cmds/2026-01-{day:02d}/" for day in range(1, 6)]
+    listed_by_prefix = {
+        "replica_cmds/2026-01-01/": [
+            {"key": "hl-mainnet-node-data/replica_cmds/2026-01-01/big.lz4", "size": 90_000_000},
+            {"key": "hl-mainnet-node-data/replica_cmds/2026-01-01/small.lz4", "size": 35_400_000},
+        ],
+        "replica_cmds/2026-01-02/": [
+            {"key": "hl-mainnet-node-data/replica_cmds/2026-01-02/small.lz4", "size": 18_400_000},
+        ],
+        "replica_cmds/2026-01-03/": [
+            {"key": "hl-mainnet-node-data/replica_cmds/2026-01-03/small.lz4", "size": 20_500_000},
+        ],
+        "replica_cmds/2026-01-04/": [
+            {"key": "hl-mainnet-node-data/replica_cmds/2026-01-04/too_big.lz4", "size": 101_000_000},
+        ],
+        "replica_cmds/2026-01-05/": [
+            {"key": "hl-mainnet-node-data/replica_cmds/2026-01-05/would_exceed_cumulative.lz4", "size": 40_000_000},
+        ],
+    }
+    calls = []
+    monkeypatch.setattr(probe_mod, "_list_s3api_common_prefixes", lambda prefix, max_keys=100: prefixes)
+
+    def fake_list(prefix, max_keys=20):
+        calls.append(prefix)
+        return listed_by_prefix[prefix]
+
+    monkeypatch.setattr(probe_mod, "_list_s3api_objects", fake_list)
+    selected = probe_mod._sample_remote_replica_cmds_objects(
+        "hl-mainnet-node-data/replica_cmds/",
+        max_dates=3,
+        max_download_bytes=100_000_000,
+    )
+    assert calls == prefixes
+    assert [obj["date"] for obj in selected] == ["2026-01-02", "2026-01-03", "2026-01-01"]
+    assert sum(obj["size"] for obj in selected) == 74_300_000
+    assert len({obj["date"] for obj in selected}) == 3
+
+
+def test_locate_replica_cmds_namespace_passes_download_cap_to_remote_sampler(monkeypatch):
+    seen = {}
+
+    def fake_sample(prefix, max_dates=3, max_download_bytes=100_000_000):
+        seen["max_download_bytes"] = max_download_bytes
+        return [{"key": "hl-mainnet-node-data/replica_cmds/2026-01-01/small.lz4", "size": 18_400_000, "source": "s3", "date": "2026-01-01"}]
+
+    monkeypatch.setattr(probe_mod, "_sample_remote_replica_cmds_objects", fake_sample)
+    monkeypatch.setattr(probe_mod, "_list_s3api_objects", lambda prefix, max_keys=100: [])
+    cfg = probe_mod.StudyConfig(data_root="/nonexistent", max_download_bytes=42_000_000)
+    plan = probe_mod.locate_replica_cmds_namespace(cfg)
+    assert seen["max_download_bytes"] == 42_000_000
+    assert plan.objects_available_for_sampling[0]["size"] == 18_400_000
+
+
 def test_rejected_research_mutation_guard_accounting_exists():
     text = probe_mod.build_test_count_and_registry_guard_accounting_text()
     assert "REJECTED_RESEARCH_mutation_guard_exists: true" in text

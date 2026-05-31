@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import io
 import json
 import math
 import os
@@ -1407,7 +1408,7 @@ def fetch_s3_object(key: str, dest_path: Path, requester_pays: bool = True) -> t
         cmd_parts.extend(["--request-payer", "requester"])
 
     import subprocess
-    result = subprocess.run(cmd_parts, capture_output=True, text=True, timeout=120)
+    result = subprocess.run(cmd_parts, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
         raise RuntimeError(f"S3 download failed: {result.stderr.strip()}")
 
@@ -3953,6 +3954,8 @@ class NodeFillsLiqReconstructionProbe:
             terminal = self.run_wall2_update_leverage_source_probe(config)
             self.status = terminal
             summary.status = self.status
+            if self.replica_cmds_density_probe:
+                summary.download_bytes_actual = self.replica_cmds_density_probe.total_compressed_bytes
             self._write_artifacts(summary)
             md = generate_summary_md(
                 config, self.source_plan or SourcePlan(),
@@ -4472,6 +4475,11 @@ class NodeFillsLiqReconstructionProbe:
             "safety": dataclasses.asdict(SafetyAudit()),
             "command_args": self._get_command_args(),
         }
+        if self.replica_cmds_density_probe:
+            base_meta["download_bytes_actual"] = self.replica_cmds_density_probe.total_compressed_bytes
+            manifest["download_bytes_actual"] = self.replica_cmds_density_probe.total_compressed_bytes
+            manifest["wall2_update_leverage_source_probe"] = dataclasses.asdict(self.replica_cmds_density_probe)
+            summary.download_bytes_actual = self.replica_cmds_density_probe.total_compressed_bytes
         atomic_write_json(out / "run_manifest.json", manifest)
         (out / "precommitment_hash.txt").write_text(precommit_hash)
 
@@ -5159,7 +5167,9 @@ class NodeFillsLiqReconstructionProbe:
         if conf == "LOW":
             return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED.value
         if density.source_existence_pass_fail == "PASS":
-            # Source exists. Do not run margin-mode classification inside the source-only probe.
+            # Source exists, but the source-only probe intentionally does not run
+            # the margin-mode kill-test or any full history backfill. The user must
+            # approve the next bounded kill-test/backfill decision separately.
             plan = LeverageHistoryFullBackfillPlan(
                 objects_required_estimate="source_density_passed_full_history_not_executed",
                 compressed_bytes_required_estimate="unknown_requires_user_approved_backfill",
@@ -5169,9 +5179,11 @@ class NodeFillsLiqReconstructionProbe:
             )
             atomic_write_json(self.out_root / "leverage_history_full_backfill_plan.json", dataclasses.asdict(plan))
             return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_LEVERAGE_MARGIN_SAMPLE_PASSED_FULL_BACKFILL_REQUIRED.value
-        if density.total_updateLeverage_count > 0:
+        if density.source_existence_pass_fail == "SPARSE" or density.total_updateLeverage_count > 0:
             return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_SOURCE_TOO_SPARSE_SAMPLE.value
-        return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_NOT_OBSERVED_IN_REPLICA_CMDS_SAMPLE.value
+        if density.source_existence_pass_fail == "ZERO_OBSERVED":
+            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_NOT_OBSERVED_IN_REPLICA_CMDS_SAMPLE.value
+        return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED.value
 
 
 # ---------------------------------------------------------------------------
@@ -5388,8 +5400,48 @@ def _redact_error(text: str, limit: int = 500) -> str:
     return text.strip()[:limit]
 
 
+def _derive_source_probe_input_from_prior_reports() -> dict[str, Any]:
+    """Best-effort reuse of prior Wall 1 / open-position artifacts."""
+    root = Path("reports/hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0")
+    out: dict[str, Any] = {}
+    if not root.exists():
+        return out
+    for gate_path in sorted(root.glob("*/frozen_named_reconciliation_gate.json"), reverse=True):
+        try:
+            gate = _json_loads(gate_path.read_bytes())
+        except Exception:
+            continue
+        if gate.get("mismatched_frozen_named", 0) != 0:
+            raise RuntimeError("Wall 1 regression: frozen named predecessor-present mismatches nonzero")
+        pred = int(gate.get("predecessor_present_frozen_named") or 0)
+        out["wall1_predecessor_present_reconciled"] = f"{pred}/{pred}"
+        out["wall1_predecessor_present_mismatched"] = int(gate.get("mismatched_frozen_named") or 0)
+        out["wall1_predecessor_present_consistency"] = float(gate.get("consistency_predecessor_present_frozen_named") or 0.0)
+        break
+    for pos_path in sorted(root.glob("*/wall2_open_named_position_set_summary.json"), reverse=True):
+        try:
+            pos = _json_loads(pos_path.read_bytes())
+        except Exception:
+            continue
+        out["open_named_position_pairs"] = int(pos.get("active_nonzero_address_symbol_pairs") or 0)
+        out["open_named_notional_total"] = str(pos.get("active_notional_total") or "")
+        by_symbol = pos.get("active_notional_by_symbol") or {}
+        if by_symbol:
+            top = sorted(by_symbol.items(), key=lambda kv: Decimal(str(kv[1])), reverse=True)[:5]
+            out["top_symbols_by_notional"] = {k: str(v) for k, v in top}
+        break
+    return out
+
+
 def build_wall2_source_probe_input_audit() -> Wall2SourceProbeInputAudit:
-    return Wall2SourceProbeInputAudit(branch=_git_branch(), starting_sha=_git_sha()[:10])
+    audit = Wall2SourceProbeInputAudit(branch=_git_branch(), starting_sha=_git_sha()[:10])
+    try:
+        for k, v in _derive_source_probe_input_from_prior_reports().items():
+            setattr(audit, k, v)
+    except Exception:
+        # Keep the frozen user-supplied audit constants if prior artifacts are absent.
+        pass
+    return audit
 
 
 def check_aws_requester_pays_access(config: StudyConfig) -> AwsRequesterPaysAccessAudit:
@@ -5482,6 +5534,73 @@ def _list_s3api_objects(prefix: str, max_keys: int = 100) -> list[dict]:
     return out
 
 
+def _list_s3api_common_prefixes(prefix: str, max_keys: int = 100) -> list[str]:
+    """List raw replica_cmds date prefixes without downloading any objects."""
+    key_prefix = prefix
+    bucket = "hl-mainnet-node-data"
+    if prefix.startswith("hl-mainnet-node-data/"):
+        key_prefix = prefix[len("hl-mainnet-node-data/"):]
+    res = _run_aws([
+        "aws", "s3api", "list-objects-v2",
+        "--bucket", bucket,
+        "--prefix", key_prefix,
+        "--delimiter", "/",
+        "--max-keys", str(max_keys),
+        "--request-payer", "requester",
+    ], timeout=60)
+    if res.returncode != 0:
+        return []
+    try:
+        data = _json_loads((res.stdout or "{}").encode())
+    except Exception:
+        return []
+    return [p.get("Prefix", "") for p in data.get("CommonPrefixes") or [] if p.get("Prefix")]
+
+
+def _sample_remote_replica_cmds_objects(
+    root_prefix: str,
+    max_dates: int = 3,
+    max_download_bytes: int = 100_000_000,
+) -> list[dict]:
+    """Pick smallest per-date replica_cmds objects under the cumulative cap.
+
+    The source-existence probe is a bounded sample, not a backfill. Enumerate
+    every listed date prefix, inspect only a small number of keys per date, keep
+    the smallest object for each distinct date, then choose the smallest 2-3
+    distinct dates whose cumulative compressed bytes fit under the task cap.
+    Oversized date units are not downloaded.
+    """
+    root_key = root_prefix[len("hl-mainnet-node-data/"):] if root_prefix.startswith("hl-mainnet-node-data/") else root_prefix
+    date_prefixes = _list_s3api_common_prefixes(root_key, max_keys=100)
+    if not date_prefixes:
+        return []
+
+    smallest_by_date: dict[str, dict] = {}
+    for date_prefix in sorted(date_prefixes):
+        objs = [o for o in _list_s3api_objects(date_prefix, max_keys=20) if o.get("size", 0) > 0]
+        if not objs:
+            continue
+        smallest = min(objs, key=lambda x: x.get("size", 0))
+        date = _date_bucket_from_key(smallest["key"])
+        current = smallest_by_date.get(date)
+        if current is None or smallest.get("size", 0) < current.get("size", 0):
+            smallest_by_date[date] = {**smallest, "source": "s3", "date": date}
+
+    selected: list[dict] = []
+    cumulative_bytes = 0
+    for obj in sorted(smallest_by_date.values(), key=lambda x: (x.get("size", 0), x.get("date") or "")):
+        size = int(obj.get("size", 0) or 0)
+        if size <= 0 or size > max_download_bytes:
+            continue
+        if cumulative_bytes + size > max_download_bytes:
+            continue
+        selected.append(obj)
+        cumulative_bytes += size
+        if len(selected) >= max_dates:
+            break
+    return selected
+
+
 def locate_replica_cmds_namespace(config: StudyConfig) -> ReplicaCmdsSourceExistencePlan:
     plan = ReplicaCmdsSourceExistencePlan(remote_prefixes_checked=list(RAW_REPLICA_CMDS_NAMESPACE_CANDIDATES))
     local_root = Path(config.data_root) if config.data_root else Path(".local_data")
@@ -5497,7 +5616,21 @@ def locate_replica_cmds_namespace(config: StudyConfig) -> ReplicaCmdsSourceExist
                 local_objs.append({"key": str(pth), "size": size, "source": "local_cache", "date": _date_bucket_from_key(str(pth))})
         plan.objects_available_for_sampling.extend(local_objs[:20])
     for prefix in RAW_REPLICA_CMDS_NAMESPACE_CANDIDATES:
-        objs = _list_s3api_objects(prefix, max_keys=100)
+        objs = _sample_remote_replica_cmds_objects(
+            prefix,
+            max_dates=3,
+            max_download_bytes=config.max_download_bytes,
+        ) if "replica_cmds" in prefix else []
+        listed_objs = _list_s3api_objects(prefix, max_keys=100)
+        if listed_objs:
+            if not objs:
+                objs = listed_objs
+            else:
+                plan.remote_objects_total_estimate = max(plan.remote_objects_total_estimate, len(listed_objs))
+                plan.remote_bytes_total_estimate = max(
+                    plan.remote_bytes_total_estimate,
+                    sum(o.get("size", 0) for o in listed_objs),
+                )
         if objs:
             plan.raw_replica_cmds_prefix_found = prefix
             plan.remote_objects_total_estimate = max(plan.remote_objects_total_estimate, len(objs))
@@ -5506,17 +5639,28 @@ def locate_replica_cmds_namespace(config: StudyConfig) -> ReplicaCmdsSourceExist
             plan.coverage_start_estimate = dates[0] if dates else ""
             plan.coverage_end_estimate = dates[-1] if dates else ""
             for obj in objs:
-                if obj.get("size", 0) <= config.max_download_bytes:
-                    plan.objects_available_for_sampling.append({**obj, "source": "s3", "date": _date_bucket_from_key(obj["key"])})
+                # Sampling enforces the cumulative hard cap later. Oversized
+                # objects are retained here so the run can report that a raw
+                # namespace exists even if the available units are over cap.
+                plan.objects_available_for_sampling.append({**obj, "source": obj.get("source", "s3"), "date": _date_bucket_from_key(obj["key"])})
             break
     # Deterministic diverse-date sample candidates, smallest first per date.
     by_date: dict[str, list[dict]] = defaultdict(list)
     for obj in plan.objects_available_for_sampling:
         by_date[obj.get("date") or "unknown"].append(obj)
     selected = []
-    for date in sorted(by_date)[:3]:
-        selected.append(sorted(by_date[date], key=lambda x: x.get("size", 0))[0])
-    plan.objects_available_for_sampling = selected or sorted(plan.objects_available_for_sampling, key=lambda x: x.get("size", 0))[:3]
+    local_dates = {obj.get("date") for obj in plan.objects_available_for_sampling if obj.get("source") == "local_cache" and obj.get("date")}
+    for date in sorted(by_date):
+        if len(selected) >= 3:
+            break
+        candidates = by_date[date]
+        under_cap = [o for o in candidates if o.get("source") == "local_cache" or o.get("size", 0) <= config.max_download_bytes]
+        if under_cap:
+            selected.append(sorted(under_cap, key=lambda x: x.get("size", 0))[0])
+    if not selected and local_dates:
+        for date in sorted(local_dates)[:3]:
+            selected.append(sorted(by_date[date], key=lambda x: x.get("size", 0))[0])
+    plan.objects_available_for_sampling = selected
     return plan
 
 
@@ -5538,21 +5682,70 @@ def _read_or_download_object(obj: dict, config: StudyConfig, cache_dir: Path) ->
         return None, "", "s3_error"
 
 
+def _decompress_lz4_best_effort(raw: bytes) -> tuple[bytes, str]:
+    """Decompress a full or truncated lz4 frame, keeping recovered bytes.
+
+    The source probe never treats truncated-range bytes as a full object sample,
+    but this helper lets tests and local diagnostics verify the recursive
+    decoder against partial cached bytes without silently declaring source
+    absence.
+    """
+    try:
+        import lz4.frame as lz4_frame
+    except Exception:
+        return raw, "lz4_unavailable"
+    try:
+        return lz4_frame.decompress(raw), "lz4_full"
+    except Exception:
+        chunks: list[Any] = []
+        try:
+            with lz4_frame.open(io.BytesIO(raw), "rb") as f:
+                while True:
+                    chunk = f.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+        except Exception:
+            pass
+        if chunks:
+            return b"".join(chunks), "lz4_partial"
+        return raw, "lz4_error"
+
+
+def _maybe_decompress_replica_cmds(raw: bytes, key: str) -> tuple[bytes, str]:
+    if key.endswith(".lz4") or raw.startswith(b"\x04\x22\x4d\x18"):
+        return _decompress_lz4_best_effort(raw)
+    return raw, "plain"
+
+
 def extract_replica_cmds_actions(obj: Any, path: str = "", depth: int = 0) -> tuple[list[dict], ReplicaCmdsDecoderEnvelopeAudit]:
     audit = ReplicaCmdsDecoderEnvelopeAudit()
     actions: list[dict] = []
+    def action_type_from_dict(x: dict) -> str | None:
+        raw_action = x.get("action")
+        if isinstance(raw_action, str):
+            return raw_action
+        for key in ("type", "actionType"):
+            val = x.get(key)
+            if isinstance(val, str):
+                return val
+        return None
+
     def rec(x: Any, p: str, d: int) -> None:
         if d > 16:
             return
         if isinstance(x, list):
+            # signed_action_bundles entries are frequently [signature/hash, payload].
+            # Decode the payload side while retaining the envelope path.
+            if len(x) == 2 and isinstance(x[1], dict):
+                rec(x[1], f"{p}[payload]", d + 1)
+                return
             for i, item in enumerate(x):
                 rec(item, f"{p}[{i}]", d + 1)
             return
         if not isinstance(x, dict):
             return
-        t = x.get("type") or x.get("actionType")
-        if isinstance(x.get("action"), str):
-            t = x.get("action")
+        t = action_type_from_dict(x)
         if isinstance(t, str):
             audit.actions_with_type_field += 1
             audit.action_type_counts[t] = audit.action_type_counts.get(t, 0) + 1
@@ -5642,7 +5835,11 @@ def sample_update_leverage_density(config: StudyConfig, plan: ReplicaCmdsSourceE
             probe.samples.append(sample)
             continue
         bytes_used += len(raw)
-        actions, audit, errors = _parse_replica_cmds_bytes(raw)
+        decoded_raw, compression_status = _maybe_decompress_replica_cmds(raw, obj.get("key", ""))
+        actions, audit, errors = _parse_replica_cmds_bytes(decoded_raw)
+        if compression_status in {"lz4_partial", "lz4_error", "lz4_unavailable"}:
+            errors = [compression_status, *errors]
+            audit.decode_error_count += 1
         _merge_decoder_audit(merged_audit, audit)
         uls = [a for a in actions if (a.get("action_type") == "updateLeverage" or a.get("type") == "updateLeverage")]
         identities = {str(a.get("identity") or a.get("user") or a.get("address")) for a in uls if a.get("identity") or a.get("user") or a.get("address")}
@@ -5678,6 +5875,12 @@ def sample_update_leverage_density(config: StudyConfig, plan: ReplicaCmdsSourceE
         probe.source_existence_pass_fail = "ZERO_OBSERVED"
     else:
         probe.source_existence_pass_fail = "UNINFORMATIVE"
+    if probe.total_updateLeverage_count == 0 and any(
+        any(err in {"lz4_partial", "lz4_error", "lz4_unavailable", "read_or_download_failed"} for err in s.decode_errors)
+        for s in probe.samples
+    ):
+        probe.source_existence_pass_fail = "UNINFORMATIVE"
+        merged_audit.decoder_confidence = "LOW"
     return probe, merged_audit
 
 
@@ -5955,7 +6158,7 @@ def build_test_count_and_registry_guard_accounting_text() -> str:
     return "\n".join([
         "# Test-count / registry guard accounting",
         "",
-        "focused_probe_runner_collected_count: 96",
+        "focused_probe_runner_collected_count: 99",
         "registry_guard_collected_count: 2",
         "prior_registry_guard_count: 3",
         "reason_registry_guard_is_2_instead_of_3: the remaining guard module contains two focused registry-presence tests; Wall 2 source-existence coverage adds explicit accounting/status-safety tests in the probe/runner tests rather than restoring a redundant third registry-file test.",
