@@ -4876,6 +4876,13 @@ class NodeFillsLiqReconstructionProbe:
             target_notional_resolved_fraction=classification_summary.target_notional_resolved_fraction,
             coverage_start_reached_for_unresolved_pairs=coverage_start_reached,
             source_or_decoder_blocked=source_or_decoder_blocked,
+            # Listing audit fields (mirrors scan plan for cross-reference)
+            objects_listed_total=scan_plan.objects_listed_total,
+            objects_skipped_over_cap=scan_plan.objects_skipped_over_cap,
+            objects_skipped_missing_size=scan_plan.objects_skipped_missing_size,
+            objects_skipped_non_data=scan_plan.objects_skipped_non_data,
+            smallest_listed_object_size=scan_plan.smallest_listed_object_size,
+            largest_listed_object_size=scan_plan.largest_listed_object_size,
         )
         self.targeted_backward_lookup_matches = list(match_lookup.values())
 
