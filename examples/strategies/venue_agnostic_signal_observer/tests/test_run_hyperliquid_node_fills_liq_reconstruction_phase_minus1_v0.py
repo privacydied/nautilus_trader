@@ -103,6 +103,17 @@ def test_wall2_cli_flag_maps_to_config():
     assert config.wall2_margin_mode_killtest is True
 
 
+def test_wall2_source_probe_cli_flag_maps_to_config():
+    """--wall2-update-leverage-source-probe maps onto StudyConfig."""
+    args = runner.parse_args([
+        "--out-root", "/tmp/out",
+        "--data-root", "/tmp/data",
+        "--wall2-update-leverage-source-probe",
+    ])
+    config = runner.build_config(args)
+    assert config.wall2_update_leverage_source_probe is True
+
+
 def test_runner_writes_audit_artifacts(tmp_path: Path):
     """Runner should write audit artifacts when data is available.
 

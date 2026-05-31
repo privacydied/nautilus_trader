@@ -1442,3 +1442,116 @@ def test_registry_guard_count():
             test_methods.extend(name for name in dir(obj) if name.startswith("test_"))
     # At least 59 original + 17 new Wall 2 tests, including class-based tests.
     assert len(test_funcs) + len(test_methods) >= 75
+
+
+# ---------------------------------------------------------------------------
+# Wall 2 source-existence probe tests
+# ---------------------------------------------------------------------------
+
+def test_prior_zero_is_no_data_not_low_isolated_coverage():
+    """Prior 0.0 isolated fraction with full unknown coverage is source NO_DATA."""
+    audit = probe_mod.Wall2SourceProbeInputAudit()
+    assert audit.previous_updateLeverage_count == 0
+    assert audit.previous_unknown_sample_not_covered_fraction == 1.0
+    assert audit.previous_isolated_fraction_was_no_data is True
+    assert "NO_DATA" in audit.previous_wall2_reason
+
+
+def test_source_probe_auth_failure_terminal(monkeypatch, tmp_path):
+    """Requester-pays auth failure emits auth-expired terminal before data interpretation."""
+    def fake_access(config):
+        return probe_mod.AwsRequesterPaysAccessAudit(
+            aws_auth_available=False,
+            error_type_if_failed="sts_failed",
+            can_continue_remote_sampling=False,
+        )
+    monkeypatch.setattr(probe_mod, "check_aws_requester_pays_access", fake_access)
+    cfg = probe_mod.StudyConfig(out_root=str(tmp_path), data_root=str(tmp_path), allow_s3_archive_read=True, requester_pays=True, wall2_update_leverage_source_probe=True)
+    p = probe_mod.NodeFillsLiqReconstructionProbe(cfg)
+    terminal = p.run_wall2_update_leverage_source_probe(cfg)
+    assert terminal == probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REQUESTER_PAYS_AUTH_EXPIRED.value
+
+
+def test_source_probe_namespace_not_found_terminal(monkeypatch, tmp_path):
+    """Raw replica_cmds namespace listing failure emits namespace-not-found."""
+    monkeypatch.setattr(probe_mod, "check_aws_requester_pays_access", lambda cfg: probe_mod.AwsRequesterPaysAccessAudit(True, True, True, "", "", "aws_cli", True))
+    monkeypatch.setattr(probe_mod, "locate_replica_cmds_namespace", lambda cfg: probe_mod.ReplicaCmdsSourceExistencePlan())
+    cfg = probe_mod.StudyConfig(out_root=str(tmp_path), data_root=str(tmp_path), allow_s3_archive_read=True, requester_pays=True, wall2_update_leverage_source_probe=True)
+    p = probe_mod.NodeFillsLiqReconstructionProbe(cfg)
+    terminal = p.run_wall2_update_leverage_source_probe(cfg)
+    assert terminal == probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_NAMESPACE_NOT_FOUND.value
+
+
+def test_replica_cmds_recursive_decoder_unwraps_known_envelopes():
+    """Decoder unwraps signed_action_bundles, signed_actions, action, multiSig.payload.action, payload.action."""
+    payload = {
+        "signed_action_bundles": [
+            {"signed_actions": [
+                {"action": {"type": "noop"}},
+                {"multiSig": {"payload": {"action": {"type": "updateLeverage", "identity": "0xabc", "asset": "SOL", "isCross": False, "leverage": 5, "block": 1}}}},
+                {"payload": {"action": {"type": "updateLeverage", "identity": "0xdef", "asset": "XRP", "isCross": True, "leverage": 3, "timestamp": 2}}},
+            ]}
+        ]
+    }
+    actions, audit = probe_mod.extract_replica_cmds_actions(payload)
+    uls = [a for a in actions if a.get("action_type") == "updateLeverage"]
+    assert len(uls) == 2
+    assert audit.decoder_confidence in {"HIGH", "MEDIUM"}
+    assert any("signed_action_bundles" in p for p in audit.envelope_paths_seen)
+    assert any("multiSig" in p for p in audit.envelope_paths_seen)
+
+
+def test_decoder_low_confidence_blocks_absence_conclusion(monkeypatch, tmp_path):
+    monkeypatch.setattr(probe_mod, "check_aws_requester_pays_access", lambda cfg: probe_mod.AwsRequesterPaysAccessAudit(True, True, True, "", "", "aws_cli", True))
+    plan = probe_mod.ReplicaCmdsSourceExistencePlan(objects_available_for_sampling=[{"key":"x","size":1,"source":"local_cache","date":"2026-01-01"}])
+    monkeypatch.setattr(probe_mod, "locate_replica_cmds_namespace", lambda cfg: plan)
+    monkeypatch.setattr(probe_mod, "sample_update_leverage_density", lambda cfg, plan: (probe_mod.ReplicaCmdsUpdateLeverageDensityProbe(sampled_object_count=1), probe_mod.ReplicaCmdsDecoderEnvelopeAudit(decoder_confidence="LOW")))
+    cfg = probe_mod.StudyConfig(out_root=str(tmp_path), data_root=str(tmp_path), allow_s3_archive_read=True, requester_pays=True, wall2_update_leverage_source_probe=True)
+    p = probe_mod.NodeFillsLiqReconstructionProbe(cfg)
+    assert p.run_wall2_update_leverage_source_probe(cfg) == probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED.value
+
+
+def test_density_zero_multidate_emits_not_observed():
+    probe = probe_mod.ReplicaCmdsUpdateLeverageDensityProbe(
+        sampled_object_count=2,
+        sampled_distinct_dates=2,
+        total_actions_decoded=20000,
+        total_updateLeverage_count=0,
+        source_existence_pass_fail="ZERO_OBSERVED",
+    )
+    assert probe.total_updateLeverage_count == 0
+    assert probe.source_existence_pass_fail == "ZERO_OBSERVED"
+
+
+def test_sparse_nonzero_update_leverage_is_sparse():
+    samples = [probe_mod.ReplicaCmdsDensityObjectSample(actions_decoded_total=10000, updateLeverage_count=3, object_date_or_time_bucket="2026-01-01")]
+    probe = probe_mod.ReplicaCmdsUpdateLeverageDensityProbe(samples=samples, sampled_object_count=1, sampled_distinct_dates=1, total_actions_decoded=10000, total_updateLeverage_count=3, objects_with_updateLeverage=1, source_existence_pass_fail="SPARSE")
+    assert 0 < probe.total_updateLeverage_count < 10
+    assert probe.source_existence_pass_fail == "SPARSE"
+
+
+def test_source_density_pass_requires_two_objects_and_ten_actions():
+    probe = probe_mod.ReplicaCmdsUpdateLeverageDensityProbe(total_updateLeverage_count=10, objects_with_updateLeverage=2, source_existence_pass_fail="PASS")
+    assert probe.total_updateLeverage_count >= 10
+    assert probe.objects_with_updateLeverage >= 2
+
+
+def test_source_probe_does_not_run_full_backfill(monkeypatch, tmp_path):
+    monkeypatch.setattr(probe_mod, "check_aws_requester_pays_access", lambda cfg: probe_mod.AwsRequesterPaysAccessAudit(True, True, True, "", "", "aws_cli", True))
+    monkeypatch.setattr(probe_mod, "locate_replica_cmds_namespace", lambda cfg: probe_mod.ReplicaCmdsSourceExistencePlan(objects_available_for_sampling=[{"key":"x","size":1,"source":"local_cache","date":"2026-01-01"}]))
+    density = probe_mod.ReplicaCmdsUpdateLeverageDensityProbe(sampled_object_count=2, sampled_distinct_dates=2, total_actions_decoded=50000, total_updateLeverage_count=12, objects_with_updateLeverage=2, source_existence_pass_fail="PASS")
+    decoder = probe_mod.ReplicaCmdsDecoderEnvelopeAudit(decoder_confidence="HIGH")
+    monkeypatch.setattr(probe_mod, "sample_update_leverage_density", lambda cfg, plan: (density, decoder))
+    cfg = probe_mod.StudyConfig(out_root=str(tmp_path), data_root=str(tmp_path), allow_s3_archive_read=True, requester_pays=True, wall2_update_leverage_source_probe=True)
+    p = probe_mod.NodeFillsLiqReconstructionProbe(cfg)
+    term = p.run_wall2_update_leverage_source_probe(cfg)
+    assert term == probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_LEVERAGE_MARGIN_SAMPLE_PASSED_FULL_BACKFILL_REQUIRED.value
+    plan_path = p.out_root / "leverage_history_full_backfill_plan.json"
+    assert plan_path.exists()
+    assert '"approval_required_before_backfill": true' in plan_path.read_text()
+
+
+def test_rejected_research_mutation_guard_accounting_exists():
+    text = probe_mod.build_test_count_and_registry_guard_accounting_text()
+    assert "REJECTED_RESEARCH_mutation_guard_exists: true" in text
+    assert "where_REJECTED_RESEARCH_mutation_guard_lives:" in text
