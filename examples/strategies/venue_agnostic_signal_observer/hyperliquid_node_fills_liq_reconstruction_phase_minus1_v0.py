@@ -1803,9 +1803,13 @@ def load_adjacent_hours(
     data_root: str | None,
     primary_size_bytes: int = 0,
     max_adjacent_bytes: int = 100_000_000,
+    primary_date_str: str = "",
+    allow_s3: bool = False,
+    requester_pays: bool = True,
 ) -> tuple[AdjacentHourContextAudit, list[Any]]:
     """Attempt to load adjacent hour files for warm-start context.
 
+    Checks local cache first, then downloads from S3 if not found.
     Returns the audit and any successfully loaded adjacent records.
     Only loads if total adjacent bytes would be under the cap.
     """
@@ -1816,14 +1820,32 @@ def load_adjacent_hours(
 
     hourly_dir = Path(data_root) / "node_fills_by_block" / "hourly"
     if not hourly_dir.is_dir():
-        return audit, []
+        hourly_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check for adjacent hours
+    # Check for adjacent hours — local first, then S3
     adjacent_hours = []
     for h in [primary_hour - 1, primary_hour + 1]:
         candidate = hourly_dir / f"{h}.lz4"
         if candidate.is_file():
             adjacent_hours.append((h, candidate))
+        elif allow_s3 and primary_date_str:
+            # Try S3 download
+            s3_key = f"hl-mainnet-node-data/node_fills_by_block/hourly/{primary_date_str}/{h}.lz4"
+            print(f"  Downloading adjacent hour {h} from S3: {s3_key}", flush=True)
+            try:
+                dest = hourly_dir / f"{h}.lz4"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                downloaded_bytes, sha = fetch_s3_object(
+                    s3_key, dest, requester_pays=requester_pays,
+                )
+                if downloaded_bytes > 0:
+                    adjacent_hours.append((h, dest))
+                    audit.adjacent_loaded.append(f"s3://{s3_key} -> {dest} ({downloaded_bytes} bytes)")
+                    print(f"  Downloaded {h}.lz4: {downloaded_bytes} bytes", flush=True)
+                else:
+                    audit.adjacent_missing.append(f"s3://{s3_key} (0 bytes)")
+            except Exception as exc:
+                audit.adjacent_missing.append(f"s3://{s3_key}: {exc}")
         else:
             audit.adjacent_missing.append(f"{h}.lz4")
 
@@ -1841,16 +1863,21 @@ def load_adjacent_hours(
         audit.adjacent_skipped_over_cap = [str(c[1]) for c in adjacent_hours]
         return audit, []
 
-    # Load adjacent records
+    # Load adjacent records (skip if already loaded from S3 above)
     all_adjacent_records = []
     for h, path in adjacent_hours:
+        # Skip if already loaded
+        already_loaded = any(path.name in entry for entry in audit.adjacent_loaded if "s3://" in entry)
+        if already_loaded and all_adjacent_records:
+            continue
         try:
             if path.suffix == ".lz4":
                 adj_records = list(stream_fills_from_lz4(str(path)))
             else:
                 adj_records = list(stream_fills_from_jsonl(str(path)))
             all_adjacent_records.extend(adj_records)
-            audit.adjacent_loaded.append(str(path))
+            if not already_loaded:
+                audit.adjacent_loaded.append(str(path))
         except Exception as exc:
             audit.adjacent_skipped_over_cap.append(f"{path}: {exc}")
 
@@ -3388,8 +3415,18 @@ class NodeFillsLiqReconstructionProbe:
             primary_size = 0
             if self.download_manifest and self.download_manifest.objects:
                 primary_size = self.download_manifest.objects[0].get("size_bytes", 0)
+            # Determine primary date string from records for S3 key
+            primary_date_str = ""
+            if records_for_phases:
+                first_rec = records_for_phases[0]
+                ft = getattr(first_rec, 'fill_time', None)
+                if ft is not None:
+                    primary_date_str = ft.strftime("%Y%m%d")
             self.adjacent_hour_audit, self.adjacent_records = load_adjacent_hours(
                 primary_hour, config.data_root, primary_size, config.max_download_bytes,
+                primary_date_str=primary_date_str,
+                allow_s3=config.allow_s3_archive_read,
+                requester_pays=config.requester_pays,
             )
 
         # Phase E.4 — Predecessor-present recompute gate
