@@ -1,4 +1,5 @@
-"""Hyperliquid node fills liquidation reconstruction — Phase -1 v0 probe.
+"""
+Hyperliquid node fills liquidation reconstruction — Phase -1 v0 probe.
 
 Data-plane and reconstruction-validity probe only.
 No orders, no auth, no live/paper/shadow/conductor paths.
@@ -20,20 +21,23 @@ import dataclasses
 import hashlib
 import io
 import json
-import math
 import os
 import re
 import subprocess
 import sys
-import time
-from collections import defaultdict, deque
-from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
-from decimal import Decimal, InvalidOperation
-from enum import Enum, auto
+from collections import defaultdict
+from collections import deque
+from collections.abc import Sequence
+from dataclasses import dataclass
+from dataclasses import field
+from datetime import UTC
+from datetime import datetime
+from decimal import Decimal
+from decimal import InvalidOperation
+from enum import Enum
 from pathlib import Path
 from typing import Any
+
 
 # ---------------------------------------------------------------------------
 # Optional orjson (preferred for JSONL I/O)
@@ -62,7 +66,7 @@ def _json_dumps(obj: Any) -> bytes:
     return json.dumps(obj, indent=2, sort_keys=True, default=str).encode()
 
 
-def _json_loads(data: bytes) -> Any:
+def _json_loads(data: bytes | str) -> Any:
     if _orjson_module is not None:
         return _orjson_module.loads(data)
     if isinstance(data, str):
@@ -85,18 +89,16 @@ def _jsonl_write(path: Path, records: Sequence[dict]) -> None:
 
 sys.path.insert(0, os.path.dirname(__file__))
 try:
-    from adapters.node_fills_by_block_adapter import (
-        FROZEN_SYMBOLS,
-        NodeFillRecord,
-        NodeFillsSchemaError as NODE_FILLS_SCHEMA_ERROR,
-        SIDE_TO_SIGNED_DELTA,
-        compute_address_signed_delta,
-        normalize_coin,
-        parse_block,
-        signed_delta_for_side,
-        stream_fills_from_jsonl,
-        stream_fills_from_lz4,
-    )
+    from adapters.node_fills_by_block_adapter import FROZEN_SYMBOLS
+    from adapters.node_fills_by_block_adapter import SIDE_TO_SIGNED_DELTA
+    from adapters.node_fills_by_block_adapter import NodeFillRecord
+    from adapters.node_fills_by_block_adapter import NodeFillsSchemaError as NODE_FILLS_SCHEMA_ERROR
+    from adapters.node_fills_by_block_adapter import compute_address_signed_delta
+    from adapters.node_fills_by_block_adapter import normalize_coin
+    from adapters.node_fills_by_block_adapter import parse_block
+    from adapters.node_fills_by_block_adapter import signed_delta_for_side
+    from adapters.node_fills_by_block_adapter import stream_fills_from_jsonl
+    from adapters.node_fills_by_block_adapter import stream_fills_from_lz4
 except ImportError:
     FROZEN_SYMBOLS = (
         "AAVE", "ADA", "APT", "ARB", "ATOM", "AVAX", "BCH", "BNB", "BTC",
@@ -104,7 +106,7 @@ except ImportError:
         "LTC", "MKR", "NEAR", "ONDO", "OP", "PENDLE", "SEI", "SOL", "SUI",
         "TIA", "TON", "TRX", "UNI", "WIF", "WLD", "XRP",
     )
-    SIDE_TO_SIGNED_DELTA = {"A": Decimal("-1"), "B": Decimal("1")}
+    SIDE_TO_SIGNED_DELTA = {"A": Decimal(-1), "B": Decimal(1)}
 
     class NodeFillsSchemaError(Exception):
         pass
@@ -228,6 +230,7 @@ class DownloadUnit(str, Enum):
 
 class ReconstructionUniverse(str, Enum):
     """Classification of fill records by their universe scope."""
+
     FROZEN_NAMED_DEFAULT = "FROZEN_NAMED_DEFAULT"
     BUILDER_AT_COIN = "BUILDER_AT_COIN"
     DEFAULT_OUT_OF_SCOPE = "DEFAULT_OUT_OF_SCOPE"
@@ -248,7 +251,8 @@ _BUILDER_AT_PATTERN = re.compile(r"^@(\d+)$")
 
 
 def classify_coin_universe(raw_coin: str) -> ReconstructionUniverse:
-    """Classify a raw coin value into a universe bucket.
+    """
+    Classify a raw coin value into a universe bucket.
 
     Rules:
     - If raw coin starts with "@" and numeric suffix parses: BUILDER_AT_COIN
@@ -447,6 +451,7 @@ class LeverageJoinAudit:
 @dataclass
 class Wall2FrozenNamedInputAudit:
     """Audit of Wall 2 frozen-named input data."""
+
     frozen_symbols: list[str] = field(default_factory=list)
     frozen_symbol_count: int = 0
     node_fills_objects_used: list[str] = field(default_factory=list)
@@ -466,14 +471,15 @@ class Wall2FrozenNamedInputAudit:
 @dataclass
 class OpenNamedPosition:
     """A single open position in the frozen-named universe."""
+
     address: str = ""
     symbol: str = ""
     side: str = ""
-    position_size: Decimal = field(default_factory=lambda: Decimal("0"))
-    position_notional_at_last_fill_px: Decimal = field(default_factory=lambda: Decimal("0"))
+    position_size: Decimal = field(default_factory=lambda: Decimal(0))
+    position_notional_at_last_fill_px: Decimal = field(default_factory=lambda: Decimal(0))
     last_fill_block: int = 0
     last_fill_time: Any = None
-    last_fill_px: Decimal = field(default_factory=lambda: Decimal("0"))
+    last_fill_px: Decimal = field(default_factory=lambda: Decimal(0))
     replay_position_before: Decimal | None = None
     replay_position_after: Decimal | None = None
     predecessor_present: bool = False
@@ -483,13 +489,14 @@ class OpenNamedPosition:
 @dataclass
 class Wall2OpenPositionSetSummary:
     """Summary of the open named position set."""
+
     address_symbol_pairs_total: int = 0
     active_nonzero_address_symbol_pairs: int = 0
     active_long_pairs: int = 0
     active_short_pairs: int = 0
     symbols_with_active_positions: int = 0
     active_notional_by_symbol: dict[str, Decimal] = field(default_factory=dict)
-    active_notional_total: Decimal = field(default_factory=lambda: Decimal("0"))
+    active_notional_total: Decimal = field(default_factory=lambda: Decimal(0))
     top_addresses_by_notional_redacted: list[str] = field(default_factory=list)
     top_symbols_by_notional: dict[str, Decimal] = field(default_factory=dict)
     mechanics_mismatch_count: int = 0
@@ -498,6 +505,7 @@ class Wall2OpenPositionSetSummary:
 @dataclass
 class ReplicaCmdsUpdateLeverageSlicePlan:
     """Plan for finding a replica_cmds slice containing updateLeverage actions."""
+
     candidate_prefixes_checked: list[str] = field(default_factory=list)
     raw_replica_cmds_prefix_found: str = ""
     local_cache_candidates: list[str] = field(default_factory=list)
@@ -505,6 +513,9 @@ class ReplicaCmdsUpdateLeverageSlicePlan:
     remote_objects_considered: int = 0
     selected_sample_object_key: str = ""
     selected_sample_object_size_compressed: int = 0
+    selected_sample_sha256: str = ""
+    selected_sample_objects: list[dict] = field(default_factory=list)
+    selected_sample_dates: list[str] = field(default_factory=list)
     requester_pays_required: bool = False
     download_needed: bool = False
     bytes_downloaded_compressed: int = 0
@@ -514,6 +525,7 @@ class ReplicaCmdsUpdateLeverageSlicePlan:
 @dataclass
 class UpdateLeverageSchemaAudit:
     """Schema audit of decoded updateLeverage actions."""
+
     sample_object_key: str = ""
     sample_object_sha256: str = ""
     bytes_downloaded_compressed: int = 0
@@ -533,11 +545,13 @@ class UpdateLeverageSchemaAudit:
     envelope_paths_seen: list[str] = field(default_factory=list)
     decode_errors: list[str] = field(default_factory=list)
     schema_pass_fail: str = ""
+    decoder_confidence: str = ""
 
 
 @dataclass
 class AssetIdSymbolMappingAudit:
     """Audit of asset-ID-to-symbol mapping."""
+
     mapping_source: str = ""
     mapping_source_sha256_if_file: str = ""
     asset_ids_seen_in_updateLeverage_sample: list[str] = field(default_factory=list)
@@ -553,6 +567,7 @@ class AssetIdSymbolMappingAudit:
 @dataclass
 class LeverageIdentityJoinAudit:
     """Audit of joining leverage identities to open positions."""
+
     open_position_addresses_total: int = 0
     open_address_symbol_pairs_total: int = 0
     update_leverage_identities_total_sample: int = 0
@@ -568,40 +583,42 @@ class LeverageIdentityJoinAudit:
 @dataclass
 class MarginModeKillTestSampleAudit:
     """Audit of margin-mode kill-test classification."""
+
     sample_limited: bool = False
     open_address_symbol_pairs_total: int = 0
-    open_notional_total: Decimal = field(default_factory=lambda: Decimal("0"))
+    open_notional_total: Decimal = field(default_factory=lambda: Decimal(0))
     isolated_explicit_pairs: int = 0
-    isolated_explicit_notional: Decimal = field(default_factory=lambda: Decimal("0"))
+    isolated_explicit_notional: Decimal = field(default_factory=lambda: Decimal(0))
     isolated_explicit_notional_fraction: float = 0.0
     cross_explicit_pairs: int = 0
-    cross_explicit_notional: Decimal = field(default_factory=lambda: Decimal("0"))
+    cross_explicit_notional: Decimal = field(default_factory=lambda: Decimal(0))
     cross_explicit_notional_fraction: float = 0.0
     no_action_found_default_cross_pairs: int = 0
-    no_action_found_default_cross_notional: Decimal = field(default_factory=lambda: Decimal("0"))
+    no_action_found_default_cross_notional: Decimal = field(default_factory=lambda: Decimal(0))
     no_action_found_default_cross_notional_fraction: float = 0.0
     unknown_unjoinable_pairs: int = 0
-    unknown_unjoinable_notional: Decimal = field(default_factory=lambda: Decimal("0"))
+    unknown_unjoinable_notional: Decimal = field(default_factory=lambda: Decimal(0))
     unknown_unjoinable_notional_fraction: float = 0.0
     unknown_asset_mapping_pairs: int = 0
-    unknown_asset_mapping_notional: Decimal = field(default_factory=lambda: Decimal("0"))
+    unknown_asset_mapping_notional: Decimal = field(default_factory=lambda: Decimal(0))
     unknown_asset_mapping_notional_fraction: float = 0.0
     unknown_sample_not_covered_pairs: int = 0
-    unknown_sample_not_covered_notional: Decimal = field(default_factory=lambda: Decimal("0"))
+    unknown_sample_not_covered_notional: Decimal = field(default_factory=lambda: Decimal(0))
     unknown_sample_not_covered_notional_fraction: float = 0.0
     computable_isolated_pairs: int = 0
-    computable_isolated_notional: Decimal = field(default_factory=lambda: Decimal("0"))
+    computable_isolated_notional: Decimal = field(default_factory=lambda: Decimal(0))
     computable_isolated_notional_fraction: float = 0.0
 
 
 @dataclass
 class OICompletenessKillTestAudit:
     """Audit of OI completeness for the kill-test."""
+
     oi_source_found: bool = False
     oi_source_type: str = ""
     oi_source_under_cap: bool = False
-    reconstructed_open_named_notional: Decimal = field(default_factory=lambda: Decimal("0"))
-    computable_isolated_notional: Decimal = field(default_factory=lambda: Decimal("0"))
+    reconstructed_open_named_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    computable_isolated_notional: Decimal = field(default_factory=lambda: Decimal(0))
     computable_isolated_notional_div_reconstructed_named_notional: float = 0.0
     aggregate_oi_notional_if_available: Decimal | None = None
     computable_isolated_notional_div_oi_if_available: float | None = None
@@ -613,6 +630,7 @@ class OICompletenessKillTestAudit:
 @dataclass
 class LeverageHistoryFullBackfillPlan:
     """Plan for full history backfill of leverage data."""
+
     replica_cmds_coverage_start: str = ""
     replica_cmds_coverage_end: str = ""
     fill_window_start: str = ""
@@ -746,9 +764,9 @@ class PositionKey:
 class PositionState:
     address: str = ""
     coin: str = ""
-    signed_position: Decimal = field(default_factory=lambda: Decimal("0"))
-    total_entry_value: Decimal = field(default_factory=lambda: Decimal("0"))
-    total_entry_size: Decimal = field(default_factory=lambda: Decimal("0"))
+    signed_position: Decimal = field(default_factory=lambda: Decimal(0))
+    total_entry_value: Decimal = field(default_factory=lambda: Decimal(0))
+    total_entry_size: Decimal = field(default_factory=lambda: Decimal(0))
     is_known: bool = False
     margin_mode: MarginMode = MarginMode.UNKNOWN
     leverage: Decimal | None = None
@@ -761,8 +779,8 @@ class PositionTransition:
     address: str = ""
     coin: str = ""
     transition_type: str = ""  # open, increase, reduce, close, flip
-    delta: Decimal = Decimal("0")
-    price: Decimal = Decimal("0")
+    delta: Decimal = Decimal(0)
+    price: Decimal = Decimal(0)
     dir_field: str | None = None
     start_position_before: Decimal | None = None
 
@@ -770,6 +788,7 @@ class PositionTransition:
 @dataclass
 class StartPositionConsistencyAudit:
     """Detailed startPosition reconciliation audit (Patch 1)."""
+
     records_seen: int = 0
     records_parsed: int = 0
     position_events_seen: int = 0
@@ -791,6 +810,7 @@ class StartPositionConsistencyAudit:
 @dataclass
 class StartPositionConventionAudit:
     """Pre-fill vs post-fill startPosition convention audit (Patch 2)."""
+
     pre_fill_match_count: int = 0
     pre_fill_match_rate: float = 0.0
     post_fill_match_count: int = 0
@@ -804,6 +824,7 @@ class StartPositionConventionAudit:
 @dataclass
 class DirValueInventory:
     """Directory value inventory from real data (Patch 3)."""
+
     values_seen: list[str] = field(default_factory=list)
     counts: dict[str, int] = field(default_factory=dict)
 
@@ -811,6 +832,7 @@ class DirValueInventory:
 @dataclass
 class SideDeltaMappingAudit:
     """Side-to-signed-delta mapping audit (Patch 3)."""
+
     side_to_candidate_delta: dict[str, str] = field(default_factory=dict)
     pre_fill_consistency_rate: float = 0.0
     post_fill_consistency_rate: float = 0.0
@@ -821,6 +843,7 @@ class SideDeltaMappingAudit:
 @dataclass
 class InstrumentIdentityInventory:
     """Instrument identity audit for position keying (Patch 4)."""
+
     symbols_seen: list[str] = field(default_factory=list)
     raw_coin_values_seen: list[str] = field(default_factory=list)
     asset_ids_seen: list[int] = field(default_factory=list)
@@ -832,6 +855,7 @@ class InstrumentIdentityInventory:
 @dataclass
 class PositionKeyingAudit:
     """Position keying collision audit (Patch 4)."""
+
     position_key_fields_used: list[str] = field(default_factory=list)
     position_key_collision_count: int = 0
     ambiguous_key_count: int = 0
@@ -841,6 +865,7 @@ class PositionKeyingAudit:
 @dataclass
 class BuilderDexAssetMappingAudit:
     """Builder-DEX / HIP-3 asset mapping audit (Patch 4)."""
+
     default_dex_asset_ids: list[int] = field(default_factory=list)
     builder_dex_asset_ids: list[int] = field(default_factory=list)
     formula_tested: bool = False
@@ -850,6 +875,7 @@ class BuilderDexAssetMappingAudit:
 @dataclass
 class PairingSemanticsAudit:
     """Paired-leg / event semantics audit (Patch 5)."""
+
     paired_records_detected: int = 0
     double_count_risk: bool = False
     grouping_rule: str = ""
@@ -908,11 +934,11 @@ class LeverageTierSnapshot:
 class LiquidationPriceEstimate:
     address: str = ""
     coin: str = ""
-    entry_price: Decimal = Decimal("0")
-    leverage: Decimal = Decimal("1")
-    max_leverage: Decimal = Decimal("1")
+    entry_price: Decimal = Decimal(0)
+    leverage: Decimal = Decimal(1)
+    max_leverage: Decimal = Decimal(1)
     side: str = ""  # "long" or "short"
-    liq_price_approx: Decimal = Decimal("0")
+    liq_price_approx: Decimal = Decimal(0)
     formula_used: str = ""
 
 
@@ -930,7 +956,7 @@ class LiquidationReconstructionAudit:
 class OIContextRecord:
     symbol: str = ""
     timestamp_ns: int = 0
-    open_interest_notional: Decimal = Decimal("0")
+    open_interest_notional: Decimal = Decimal(0)
 
 
 @dataclass
@@ -992,7 +1018,8 @@ OTHER_DIR_CLASSES = frozenset({"Net Child Vaults", "unknown"})
 
 @dataclass
 class TransitionDenominatorLedger:
-    """Denominator ledger where every transition belongs to exactly one category.
+    """
+    Denominator ledger where every transition belongs to exactly one category.
 
     Invariant: records_parsed == cold_start_uncheckable + boundary_or_gap_uncheckable
                + missing_fields_uncheckable + special_rows_excluded + checkable_total
@@ -1001,6 +1028,7 @@ class TransitionDenominatorLedger:
     flip_class_checkable == flip_class_reconciled + flip_class_mismatched
     other_class_checkable == other_class_reconciled + other_class_mismatched
     """
+
     records_parsed: int = 0
     transition_candidates_total: int = 0
     cold_start_uncheckable: int = 0
@@ -1060,18 +1088,21 @@ class TransitionDenominatorLedger:
 @dataclass
 class TransitionDenominatorLedgerByDir:
     """Denominator ledger broken down by dir_class."""
+
     entries: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 @dataclass
 class TransitionDenominatorLedgerByUserActivity:
     """Denominator ledger broken down by user activity tier."""
+
     entries: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 @dataclass
 class HourShardCompletenessAudit:
     """Audit of whether the loaded hour file is complete or a shard."""
+
     file_path: str = ""
     file_size_bytes: int = 0
     records_count: int = 0
@@ -1088,6 +1119,7 @@ class HourShardCompletenessAudit:
 @dataclass
 class BusyUserTrace:
     """Trace for a single busy user."""
+
     address_redacted: str = ""
     coin: str = ""
     fill_count: int = 0
@@ -1100,6 +1132,7 @@ class BusyUserTrace:
 @dataclass
 class BusyUserTraceSummary:
     """Summary of high-frequency user traces."""
+
     top_by_fill_count: list[BusyUserTrace] = field(default_factory=list)
     top_by_mismatch_count: list[BusyUserTrace] = field(default_factory=list)
     total_users: int = 0
@@ -1111,6 +1144,7 @@ class BusyUserTraceSummary:
 @dataclass
 class AdjacentHourContextAudit:
     """Audit of adjacent hour context loading."""
+
     primary_file: str = ""
     primary_records: int = 0
     primary_hour: int = -1
@@ -1126,6 +1160,7 @@ class AdjacentHourContextAudit:
 @dataclass
 class StreamGapAudit:
     """Audit of gaps in the fill stream by user+coin."""
+
     total_users_with_gaps: int = 0
     total_gaps: int = 0
     gap_examples: list[dict] = field(default_factory=list)
@@ -1134,6 +1169,7 @@ class StreamGapAudit:
 @dataclass
 class TwoHourRecomputeAudit:
     """Audit of recompute with adjacent hour context."""
+
     transitions_evaluated: int = 0
     transitions_with_real_predecessor: int = 0
     transitions_reconciled: int = 0
@@ -1144,6 +1180,7 @@ class TwoHourRecomputeAudit:
 @dataclass
 class PredecessorPresentRecomputeGate:
     """Gate for recompute with predecessor-present requirement."""
+
     gate_passed: bool = False
     transitions_with_real_predecessor: int = 0
     transitions_with_synthetic_predecessor: int = 0
@@ -1154,6 +1191,7 @@ class PredecessorPresentRecomputeGate:
 @dataclass
 class BlockerClassification:
     """Honest classification of the Phase -1 blocker."""
+
     classification: str = "NOT_EVALUATED"  # PASSED, STREAM_COMPLETENESS_BLOCKED, FILLS_NOT_CHAINABLE, PARSER_BUG
     reason: str = ""
     hour_is_complete: bool = False
@@ -1167,6 +1205,7 @@ class BlockerClassification:
 @dataclass
 class FrozenNamedReconciliationGate:
     """Reconciliation gate for the frozen named universe only."""
+
     records_total: int = 0
     records_frozen_named_default: int = 0
     records_builder_at_coin: int = 0
@@ -1446,21 +1485,21 @@ def validate_schema(records: list[NodeFillRecord], limit: int = 10_000) -> tuple
     sample_records: list[FillRecordSample] = []
 
     for i, rec in enumerate(records[:limit]):
-        raw = rec.raw if hasattr(rec, 'raw') else {}
+        raw = rec.raw if hasattr(rec, "raw") else {}
         all_keys = set(raw.keys())
-        if hasattr(rec, 'address') and rec.address is not None:
+        if hasattr(rec, "address") and rec.address is not None:
             all_keys.add("address")
-        if hasattr(rec, 'coin') and rec.coin is not None:
+        if hasattr(rec, "coin") and rec.coin is not None:
             all_keys.add("coin")
-        if hasattr(rec, 'side'):
+        if hasattr(rec, "side"):
             all_keys.add("side")
-        if hasattr(rec, 'sz') and rec.sz is not None:
+        if hasattr(rec, "sz") and rec.sz is not None:
             all_keys.add("sz")
-        if hasattr(rec, 'px') and rec.px is not None:
+        if hasattr(rec, "px") and rec.px is not None:
             all_keys.add("px")
-        if hasattr(rec, 'fill_time') and rec.fill_time is not None:
+        if hasattr(rec, "fill_time") and rec.fill_time is not None:
             all_keys.add("time")
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
+        if hasattr(rec, "start_position") and rec.start_position is not None:
             all_keys.add("startPosition")
 
         for f in all_keys:
@@ -1471,9 +1510,9 @@ def validate_schema(records: list[NodeFillRecord], limit: int = 10_000) -> tuple
             coin=rec.coin,
             dir=str(rec.dir) if rec.dir else None,
             side=rec.side,
-            size=float(rec.sz) if hasattr(rec, 'sz') and rec.sz is not None else 0.0,
-            price=float(rec.px) if hasattr(rec, 'px') and rec.px is not None else 0.0,
-            start_position=float(rec.start_position) if hasattr(rec, 'start_position') and rec.start_position is not None else None,
+            size=float(rec.sz) if hasattr(rec, "sz") and rec.sz is not None else 0.0,
+            price=float(rec.px) if hasattr(rec, "px") and rec.px is not None else 0.0,
+            start_position=float(rec.start_position) if hasattr(rec, "start_position") and rec.start_position is not None else None,
         ))
 
     inventory.fields_present = {f: len(v) > 0 for f, v in seen_fields.items()}
@@ -1519,10 +1558,10 @@ def validate_schema(records: list[NodeFillRecord], limit: int = 10_000) -> tuple
 # ---------------------------------------------------------------------------
 
 FROZEN_DIR_MAPPING: dict[str, Decimal] = {
-    "Open Long": Decimal("1"),
-    "Close Long": Decimal("-1"),
-    "Open Short": Decimal("-1"),
-    "Close Short": Decimal("1"),
+    "Open Long": Decimal(1),
+    "Close Long": Decimal(-1),
+    "Open Short": Decimal(-1),
+    "Close Short": Decimal(1),
 }
 
 
@@ -1544,7 +1583,7 @@ def verify_dir_mapping(
     mismatches = 0
     checked = 0
     for rec in records[:limit]:
-        if not rec.dir or not hasattr(rec, 'start_position') or rec.start_position is None:
+        if not rec.dir or not hasattr(rec, "start_position") or rec.start_position is None:
             continue
         if rec.dir not in FROZEN_DIR_MAPPING:
             continue
@@ -1571,7 +1610,7 @@ def inventory_liquidation_flags(records: list[NodeFillRecord], limit: int = 10_0
     count_non_liq = 0
 
     for rec in records[:limit]:
-        raw = rec.raw if hasattr(rec, 'raw') else {}
+        raw = rec.raw if hasattr(rec, "raw") else {}
         is_liq = False
         for field_name in ("liquidation", "liq", "isLiquidation"):
             if field_name in raw:
@@ -1841,9 +1880,9 @@ def _try_parse_start_position(val: Any) -> Decimal | None:
 
 def _is_cold_start(prev_pos: Decimal, start_position: Decimal | None) -> bool:
     """Determine if this is a cold-start transition (position existed before observation)."""
-    if prev_pos == Decimal("0"):
+    if prev_pos == Decimal(0):
         # First observed fill for this position key
-        if start_position is not None and start_position != Decimal("0"):
+        if start_position is not None and start_position != Decimal(0):
             return True  # startPosition nonzero but no prior state — cold start
         return False  # flat open, fully known
     return False
@@ -1857,7 +1896,8 @@ def compute_transition_denominator_ledger(
     records: Sequence[Any],
     config: StudyConfig,
 ) -> tuple[TransitionDenominatorLedger, TransitionDenominatorLedgerByDir, TransitionDenominatorLedgerByUserActivity]:
-    """Compute a denominator ledger where every transition belongs to exactly one category.
+    """
+    Compute a denominator ledger where every transition belongs to exactly one category.
 
     Invariant: records_parsed == no_start_position + cold_start
                + checkable_reconciled + checkable_mismatched
@@ -1866,15 +1906,15 @@ def compute_transition_denominator_ledger(
     denominator definitions (dir_class "checkable" vs overall "checkable").
     """
     def sort_key(rec):
-        bn = getattr(rec, 'block_number', None) or 0
-        ft = getattr(rec, 'fill_time', None)
+        bn = getattr(rec, "block_number", None) or 0
+        ft = getattr(rec, "fill_time", None)
         if ft is not None:
             try:
                 t_sort = int(ft.timestamp() * 1_000_000_000)
             except Exception:
                 t_sort = 0
         else:
-            t_sort = getattr(rec, 'time', 0) or 0
+            t_sort = getattr(rec, "time", 0) or 0
         return (bn, t_sort)
 
     sorted_records = sorted(records, key=sort_key)
@@ -1909,7 +1949,7 @@ def compute_transition_denominator_ledger(
 
         # Check startPosition
         sp = None
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
+        if hasattr(rec, "start_position") and rec.start_position is not None:
             sp = _try_parse_start_position(rec.start_position)
 
         # Dir class
@@ -2007,20 +2047,21 @@ def trace_busy_users(
     config: StudyConfig,
     top_n: int = 10,
 ) -> BusyUserTraceSummary:
-    """Trace the top N users by fill count and by mismatch count.
+    """
+    Trace the top N users by fill count and by mismatch count.
 
     Produces per-user trace records with redacted addresses and sample records.
     """
     def sort_key(rec):
-        bn = getattr(rec, 'block_number', None) or 0
-        ft = getattr(rec, 'fill_time', None)
+        bn = getattr(rec, "block_number", None) or 0
+        ft = getattr(rec, "fill_time", None)
         if ft is not None:
             try:
                 t_sort = int(ft.timestamp() * 1_000_000_000)
             except Exception:
                 t_sort = 0
         else:
-            t_sort = getattr(rec, 'time', 0) or 0
+            t_sort = getattr(rec, "time", 0) or 0
         return (bn, t_sort)
 
     sorted_records = sorted(records, key=sort_key)
@@ -2052,7 +2093,7 @@ def trace_busy_users(
         new_pos = prev_pos + delta
 
         sp = None
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
+        if hasattr(rec, "start_position") and rec.start_position is not None:
             sp = _try_parse_start_position(rec.start_position)
 
         if sp is not None:
@@ -2066,7 +2107,7 @@ def trace_busy_users(
                     stats["mismatch_count"] += 1
                     if len(stats["sample_records"]) < 3:
                         stats["sample_records"].append({
-                            "block_number": getattr(rec, 'block_number', 0),
+                            "block_number": getattr(rec, "block_number", 0),
                             "coin": rec.coin,
                             "side": rec.side,
                             "sz": str(rec.sz),
@@ -2131,7 +2172,8 @@ def audit_hour_shard_completeness(
     file_path: str = "",
     file_size_bytes: int = 0,
 ) -> HourShardCompletenessAudit:
-    """Determine if the loaded data represents a complete hour or a shard/chunk.
+    """
+    Determine if the loaded data represents a complete hour or a shard/chunk.
 
     A complete hour has records spanning ~60 minutes with consistent hour number.
     A shard has either partial minute coverage or records from multiple hours.
@@ -2148,7 +2190,7 @@ def audit_hour_shard_completeness(
     timestamps = []
     hours_set = set()
     for rec in records:
-        ft = getattr(rec, 'fill_time', None)
+        ft = getattr(rec, "fill_time", None)
         if ft is not None:
             timestamps.append(ft)
             hours_set.add(ft.hour)
@@ -2203,7 +2245,8 @@ def load_adjacent_hours(
     allow_s3: bool = False,
     requester_pays: bool = True,
 ) -> tuple[AdjacentHourContextAudit, list[Any]]:
-    """Attempt to load adjacent hour files for warm-start context.
+    """
+    Attempt to load adjacent hour files for warm-start context.
 
     Checks local cache first, then downloads from S3 if not found.
     Returns the audit and any successfully loaded adjacent records.
@@ -2290,7 +2333,8 @@ def recompute_with_predecessor_gate(
     adjacent_records: Sequence[Any],
     config: StudyConfig,
 ) -> tuple[PredecessorPresentRecomputeGate, TwoHourRecomputeAudit]:
-    """Recompute reconciliation only on transitions with a real predecessor.
+    """
+    Recompute reconciliation only on transitions with a real predecessor.
 
     A "real predecessor" means the user+coin had records in the adjacent hour,
     so the position state entering this hour is not a synthetic seed.
@@ -2298,15 +2342,15 @@ def recompute_with_predecessor_gate(
     Returns the gate result and a detailed recompute audit.
     """
     def sort_key(rec):
-        bn = getattr(rec, 'block_number', None) or 0
-        ft = getattr(rec, 'fill_time', None)
+        bn = getattr(rec, "block_number", None) or 0
+        ft = getattr(rec, "fill_time", None)
         if ft is not None:
             try:
                 t_sort = int(ft.timestamp() * 1_000_000_000)
             except Exception:
                 t_sort = 0
         else:
-            t_sort = getattr(rec, 'time', 0) or 0
+            t_sort = getattr(rec, "time", 0) or 0
         return (bn, t_sort)
 
     combined = list(adjacent_records) + list(primary_records)
@@ -2333,7 +2377,7 @@ def recompute_with_predecessor_gate(
             continue
 
         sp = None
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
+        if hasattr(rec, "start_position") and rec.start_position is not None:
             sp = _try_parse_start_position(rec.start_position)
 
         if sp is not None and _is_cold_start(ps.signed_position, sp):
@@ -2362,14 +2406,14 @@ def recompute_with_predecessor_gate(
         new_pos = prev_pos + delta
 
         sp = None
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
+        if hasattr(rec, "start_position") and rec.start_position is not None:
             sp = _try_parse_start_position(rec.start_position)
 
         # Only evaluate primary hour records with startPosition
-        ft = getattr(rec, 'fill_time', None)
+        ft = getattr(rec, "fill_time", None)
         if ft is not None and sp is not None:
             is_primary_hour = ft.hour == (primary_records[0].fill_time.hour
-                                          if primary_records and hasattr(primary_records[0], 'fill_time')
+                                          if primary_records and hasattr(primary_records[0], "fill_time")
                                           and primary_records[0].fill_time is not None
                                           else -1)
             if is_primary_hour:
@@ -2425,13 +2469,13 @@ def recompute_with_predecessor_gate(
             new_pos = prev_pos + delta
 
             sp = None
-            if hasattr(rec, 'start_position') and rec.start_position is not None:
+            if hasattr(rec, "start_position") and rec.start_position is not None:
                 sp = _try_parse_start_position(rec.start_position)
 
-            ft = getattr(rec, 'fill_time', None)
+            ft = getattr(rec, "fill_time", None)
             if ft is not None and sp is not None:
                 is_primary = ft.hour == (primary_records[0].fill_time.hour
-                                         if primary_records and hasattr(primary_records[0], 'fill_time')
+                                         if primary_records and hasattr(primary_records[0], "fill_time")
                                          and primary_records[0].fill_time is not None
                                          else -1)
                 if is_primary and key in predecessor_keys:
@@ -2471,7 +2515,8 @@ def classify_blocker(
     busy_user_summary: BusyUserTraceSummary,
     denominator_ledger: TransitionDenominatorLedger | None = None,
 ) -> BlockerClassification:
-    """Classify the Phase -1 blocker honestly as one of:
+    """
+    Classify the Phase -1 blocker honestly as one of:
     - PASSED: consistency >= 0.95 after all corrections
     - STREAM_COMPLETENESS_BLOCKED: hour is incomplete or missing adjacent context
     - FILLS_NOT_CHAINABLE: fills don't chain even with complete data and predecessor context
@@ -2592,7 +2637,8 @@ def classify_blocker(
 def audit_side_delta_mapping(
     records: Sequence[Any],
 ) -> SideDeltaMappingAudit:
-    """Patch 3: Audit side-to-signed-delta mapping from real data.
+    """
+    Patch 3: Audit side-to-signed-delta mapping from real data.
 
     For each record with startPosition, compute what signed delta the
     current reconstructed position implies, and compare against what
@@ -2620,10 +2666,10 @@ def audit_side_delta_mapping(
         except ValueError:
             continue
 
-        prev_pos = state_tracker.get(key, Decimal("0"))
+        prev_pos = state_tracker.get(key, Decimal(0))
         new_pos = prev_pos + delta
 
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
+        if hasattr(rec, "start_position") and rec.start_position is not None:
             sp = _try_parse_start_position(rec.start_position)
             if sp is not None:
                 # Pre-fill hypothesis: startPosition == position BEFORE fill
@@ -2672,7 +2718,7 @@ def audit_instrument_identity(records: Sequence[Any]) -> tuple[InstrumentIdentit
         coin_to_addresses[rec.coin].add(rec.address)
 
         # Check for asset_id fields in raw data
-        raw = rec.raw if hasattr(rec, 'raw') else {}
+        raw = rec.raw if hasattr(rec, "raw") else {}
         for field_name in ("asset_index", "asset_id", "dex_index", "universe_index"):
             val = raw.get(field_name)
             if val is not None:
@@ -2760,7 +2806,8 @@ def reconstruct_positions(
     records: Sequence[Any],
     config: StudyConfig,
 ) -> tuple[PositionReconstructionAudit, list[dict], list[str]]:
-    """Per-address/per-symbol position reconstruction with cold-start handling.
+    """
+    Per-address/per-symbol position reconstruction with cold-start handling.
 
     Patch 1: Separates checkable vs uncheckable transitions.
     Patch 2: Audits pre/post startPosition convention.
@@ -2772,22 +2819,23 @@ def reconstruct_positions(
     Returns (audit, state_samples, errors).
     """
     def sort_key(rec):
-        """Sort by block_number then fill_time for correct chronological ordering.
+        """
+        Sort by block_number then fill_time for correct chronological ordering.
 
         The node_fills_by_block archive is already sorted by (block_number, time).
         Sorting by startPosition mixes different user+coin pairs together since
         each has its own position state. Use (block_number, time) to preserve
         the natural chronological order of fills.
         """
-        bn = getattr(rec, 'block_number', None) or 0
-        ft = getattr(rec, 'fill_time', None)
+        bn = getattr(rec, "block_number", None) or 0
+        ft = getattr(rec, "fill_time", None)
         if ft is not None:
             try:
                 t_sort = int(ft.timestamp() * 1_000_000_000)
             except Exception:
                 t_sort = 0
         else:
-            t_sort = getattr(rec, 'time', 0) or 0
+            t_sort = getattr(rec, "time", 0) or 0
         return (bn, t_sort)
 
     sorted_records = sorted(records, key=sort_key)
@@ -2849,14 +2897,14 @@ def reconstruct_positions(
             delta=delta,
             price=get_price(rec),
             dir_field=rec.dir,
-            start_position_before=getattr(rec, 'start_position', None),
+            start_position_before=getattr(rec, "start_position", None),
             transition_type=transition_type,
         )
         transitions.append(trans)
         audit.position_transitions += 1
 
         # === startPosition reconciliation (Patch 1 core logic) ===
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
+        if hasattr(rec, "start_position") and rec.start_position is not None:
             sp = _try_parse_start_position(rec.start_position)
             consistency_audit.transitions_total += 1
             consistency_audit.transitions_with_start_position += 1
@@ -2917,7 +2965,7 @@ def reconstruct_positions(
                     })
 
         # Update position: use startPosition as authoritative reference.
-        sp_val = getattr(rec, 'start_position', None)
+        sp_val = getattr(rec, "start_position", None)
         if sp_val is not None:
             try:
                 ps.signed_position = _try_parse_start_position(sp_val)
@@ -2925,7 +2973,7 @@ def reconstruct_positions(
                 pass
 
         # Classify as known/cold-start
-        if prev_pos == Decimal("0") and delta != Decimal("0"):
+        if prev_pos == Decimal(0) and delta != Decimal(0):
             audit.known_open_positions += 1
             audit.known_from_flat_positions += 1
             ps.is_known = True
@@ -2986,7 +3034,8 @@ def reconstruct_positions_full_audit(
     records: Sequence[Any],
     config: StudyConfig,
 ) -> tuple[PositionReconstructionAudit, list[dict], list[str]]:
-    """Full audit reconstruction with all Patch 1-5 audits integrated.
+    """
+    Full audit reconstruction with all Patch 1-5 audits integrated.
 
     This is the authoritative reconstruction that produces:
     - start_position_consistency_audit.json
@@ -3001,15 +3050,15 @@ def reconstruct_positions_full_audit(
     - position_state_samples_redacted.jsonl
     """
     def sort_key(rec):
-        bn = getattr(rec, 'block_number', None) or 0
-        ft = getattr(rec, 'fill_time', None)
+        bn = getattr(rec, "block_number", None) or 0
+        ft = getattr(rec, "fill_time", None)
         if ft is not None:
             try:
                 t_sort = int(ft.timestamp() * 1_000_000_000)
             except Exception:
                 t_sort = 0
         else:
-            t_sort = getattr(rec, 'time', 0) or 0
+            t_sort = getattr(rec, "time", 0) or 0
         return (bn, t_sort)
 
     sorted_records = sorted(records, key=sort_key)
@@ -3072,7 +3121,7 @@ def reconstruct_positions_full_audit(
             delta=delta,
             price=get_price(rec),
             dir_field=rec.dir,
-            start_position_before=getattr(rec, 'start_position', None),
+            start_position_before=getattr(rec, "start_position", None),
             transition_type=transition_type,
         )
         transitions.append(trans)
@@ -3080,7 +3129,7 @@ def reconstruct_positions_full_audit(
 
         # === startPosition reconciliation ===
         sp = None
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
+        if hasattr(rec, "start_position") and rec.start_position is not None:
             sp = _try_parse_start_position(rec.start_position)
 
         if sp is not None:
@@ -3141,7 +3190,7 @@ def reconstruct_positions_full_audit(
             ps.signed_position = new_pos
 
         # Classification
-        if prev_pos == Decimal("0") and delta != Decimal("0"):
+        if prev_pos == Decimal(0) and delta != Decimal(0):
             audit.known_open_positions += 1
             audit.known_from_flat_positions += 1
             ps.is_known = True
@@ -3203,13 +3252,13 @@ def reconstruct_positions_full_audit(
 
 def classify_transition(prev_pos: Decimal, new_pos: Decimal, side: str) -> str:
     """Classify position transition type."""
-    if prev_pos == Decimal("0"):
-        if new_pos > Decimal("0"):
+    if prev_pos == Decimal(0):
+        if new_pos > Decimal(0):
             return "open_long"
         else:
             return "open_short"
 
-    if new_pos == Decimal("0"):
+    if new_pos == Decimal(0):
         return "close"
 
     # Same sign — increase
@@ -3229,10 +3278,10 @@ def classify_transition(prev_pos: Decimal, new_pos: Decimal, side: str) -> str:
 
 def get_price(rec: NodeFillRecord) -> Decimal:
     """Get price from record."""
-    px = getattr(rec, 'px', None)
+    px = getattr(rec, "px", None)
     if px is not None:
         return Decimal(str(px))
-    return Decimal("0")
+    return Decimal(0)
 
 
 # ---------------------------------------------------------------------------
@@ -3249,7 +3298,7 @@ def compute_liquidation_prices(
     audit = LiquidationReconstructionAudit()
     estimates: list[dict] = []
 
-    max_leverage = Decimal("50")
+    max_leverage = Decimal(50)
     if margin_tier_inv and margin_tier_inv.tiers:
         max_tier = max((t.get("max_leverage", 50) for t in margin_tier_inv.tiers), default=50)
         max_leverage = Decimal(str(max_tier))
@@ -3268,18 +3317,18 @@ def compute_liquidation_prices(
         if not ps.is_known or ps.entry_price is None:
             continue
 
-        leverage = ps.leverage if ps.leverage and ps.leverage > Decimal("0") else max_leverage
+        leverage = ps.leverage if ps.leverage and ps.leverage > Decimal(0) else max_leverage
 
         entry = ps.entry_price
-        initial_margin_fraction = Decimal("1") / leverage
-        maintenance_margin_fraction = Decimal("1") / (Decimal("2") * max_leverage)
+        initial_margin_fraction = Decimal(1) / leverage
+        maintenance_margin_fraction = Decimal(1) / (Decimal(2) * max_leverage)
 
-        side_str = "long" if ps.signed_position > Decimal("0") else "short"
+        side_str = "long" if ps.signed_position > Decimal(0) else "short"
 
         if side_str == "long":
-            liq_price = entry * (Decimal("1") - initial_margin_fraction + maintenance_margin_fraction)
+            liq_price = entry * (Decimal(1) - initial_margin_fraction + maintenance_margin_fraction)
         else:
-            liq_price = entry * (Decimal("1") + initial_margin_fraction - maintenance_margin_fraction)
+            liq_price = entry * (Decimal(1) + initial_margin_fraction - maintenance_margin_fraction)
 
         est = LiquidationPriceEstimate(
             address=ps.address,
@@ -3349,7 +3398,7 @@ def compute_oi_completeness(
 
         sorted_oi_keys = sorted(oi_ts.keys())
         for notional, ts in buckets:
-            oi_notional = Decimal("0")
+            oi_notional = Decimal(0)
             for ok in reversed(sorted_oi_keys):
                 if ok <= ts or ts == 0:
                     oi_notional = oi_ts[ok]
@@ -3398,7 +3447,8 @@ def compute_frozen_named_reconciliation_gate(
     records: Sequence[Any],
     config: StudyConfig,
 ) -> FrozenNamedReconciliationGate:
-    """Compute reconciliation gate for frozen named universe only.
+    """
+    Compute reconciliation gate for frozen named universe only.
 
     Classifies all records, then runs position reconstruction on frozen named
     records only. Builder @XXX and out-of-scope records are excluded from the
@@ -3416,7 +3466,7 @@ def compute_frozen_named_reconciliation_gate(
     unknown_examples: list[str] = []
 
     for rec in records:
-        raw_coin = getattr(rec, 'coin', '') or ''
+        raw_coin = getattr(rec, "coin", "") or ""
         universe = classify_coin_universe(raw_coin)
         classified[universe].append(rec)
 
@@ -3444,15 +3494,15 @@ def compute_frozen_named_reconciliation_gate(
 
     # Sort frozen records
     def sort_key(rec):
-        bn = getattr(rec, 'block_number', None) or 0
-        ft = getattr(rec, 'fill_time', None)
+        bn = getattr(rec, "block_number", None) or 0
+        ft = getattr(rec, "fill_time", None)
         if ft is not None:
             try:
                 t_sort = int(ft.timestamp() * 1_000_000_000)
             except Exception:
                 t_sort = 0
         else:
-            t_sort = getattr(rec, 'time', 0) or 0
+            t_sort = getattr(rec, "time", 0) or 0
         return (bn, t_sort)
 
     sorted_frozen = sorted(frozen_records, key=sort_key)
@@ -3464,9 +3514,9 @@ def compute_frozen_named_reconciliation_gate(
 
     for rec in sorted_frozen:
         key = (rec.address, rec.coin)
-        raw_coin = getattr(rec, 'coin', '') or ''
+        raw_coin = getattr(rec, "coin", "") or ""
         coin = normalize_coin(raw_coin)
-        side = getattr(rec, 'side', '') or ''
+        side = getattr(rec, "side", "") or ""
 
         if key not in positions:
             positions[key] = PositionState(address=rec.address, coin=raw_coin)
@@ -3486,7 +3536,7 @@ def compute_frozen_named_reconciliation_gate(
 
         # Check startPosition reconciliation
         sp = None
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
+        if hasattr(rec, "start_position") and rec.start_position is not None:
             sp = _try_parse_start_position(rec.start_position)
 
         if sp is not None:
@@ -3496,7 +3546,7 @@ def compute_frozen_named_reconciliation_gate(
                 gate.checkable_frozen_named += 1
 
                 # Check predecessor present (prev_pos != 0 means we have history)
-                has_predecessor = prev_pos != Decimal("0")
+                has_predecessor = prev_pos != Decimal(0)
                 if has_predecessor:
                     gate.predecessor_present_frozen_named += 1
 
@@ -3522,7 +3572,7 @@ def compute_frozen_named_reconciliation_gate(
                     by_symbol[coin]["mismatched"] += 1
 
                 # By-dir stats
-                dir_val = getattr(rec, 'dir', '') or side
+                dir_val = getattr(rec, "dir", "") or side
                 if dir_val not in by_dir:
                     by_dir[dir_val] = {"records": 0, "checkable": 0, "reconciled": 0, "mismatched": 0}
                 by_dir[dir_val]["records"] += 1
@@ -3564,7 +3614,7 @@ def compute_frozen_named_reconciliation_gate(
     by_symbol_pp: dict[str, dict] = {}
     for rec in sorted_frozen:
         key = (rec.address, rec.coin)
-        raw_coin = getattr(rec, 'coin', '') or ''
+        raw_coin = getattr(rec, "coin", "") or ""
         coin = normalize_coin(raw_coin)
 
         if key not in positions2:
@@ -3580,11 +3630,11 @@ def compute_frozen_named_reconciliation_gate(
         new_pos = prev_pos + delta
 
         sp = None
-        if hasattr(rec, 'start_position') and rec.start_position is not None:
+        if hasattr(rec, "start_position") and rec.start_position is not None:
             sp = _try_parse_start_position(rec.start_position)
 
         if sp is not None and not _is_cold_start(prev_pos, sp):
-            has_predecessor = prev_pos != Decimal("0")
+            has_predecessor = prev_pos != Decimal(0)
             if has_predecessor:
                 if coin not in by_symbol_pp:
                     by_symbol_pp[coin] = {"pp_checkable": 0, "pp_reconciled": 0}
@@ -3644,7 +3694,8 @@ def determine_terminal_status(
     completeness: CompletenessSummary,
     config: StudyConfig,
 ) -> str:
-    """Determine the terminal status with corrected priority tree.
+    """
+    Determine the terminal status with corrected priority tree.
 
     Priority order (Patch 8):
     1. Acquisition blocked
@@ -3657,7 +3708,6 @@ def determine_terminal_status(
     8. OI completeness blocked after burn-in
     9. Thin-slice exact reconstruction passed review allowed
     """
-
     # 1-2. Schema blocks (unchanged)
     if schema_gate.verdict == SchemaVerdict.FAIL_ADDRESS_MISSING:
         return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ADDRESS_FIELD_MISSING.value
@@ -4015,7 +4065,7 @@ class NodeFillsLiqReconstructionProbe:
             self._write_artifacts(summary)
             return summary
 
-        records_for_phases = getattr(self, '_parsed_records', [])
+        records_for_phases = getattr(self, "_parsed_records", [])
 
         # Dir mapping verification (on real data if available)
         print("Dir mapping verification", flush=True)
@@ -4075,7 +4125,7 @@ class NodeFillsLiqReconstructionProbe:
         self.adjacent_records = []
         if records_for_phases and not config.dry_run and not config.plan_only:
             primary_hour = -1
-            if records_for_phases and hasattr(records_for_phases[0], 'fill_time') and records_for_phases[0].fill_time is not None:
+            if records_for_phases and hasattr(records_for_phases[0], "fill_time") and records_for_phases[0].fill_time is not None:
                 primary_hour = records_for_phases[0].fill_time.hour
             primary_size = 0
             if self.download_manifest and self.download_manifest.objects:
@@ -4084,7 +4134,7 @@ class NodeFillsLiqReconstructionProbe:
             primary_date_str = ""
             if records_for_phases:
                 first_rec = records_for_phases[0]
-                ft = getattr(first_rec, 'fill_time', None)
+                ft = getattr(first_rec, "fill_time", None)
                 if ft is not None:
                     primary_date_str = ft.strftime("%Y%m%d")
             self.adjacent_hour_audit, self.adjacent_records = load_adjacent_hours(
@@ -4402,7 +4452,7 @@ class NodeFillsLiqReconstructionProbe:
             )
             return
 
-        records = getattr(self, '_parsed_records', [])
+        records = getattr(self, "_parsed_records", [])
         if not records:
             self.schema_gate = SchemaGate(
                 verdict=SchemaVerdict.NOT_EVALUATED_PLAN_ONLY,
@@ -4753,7 +4803,7 @@ class NodeFillsLiqReconstructionProbe:
             # Text listing
             hc = self.hour_completeness_audit
             listing_lines = [
-                f"Hour Shard Completeness Listing",
+                "Hour Shard Completeness Listing",
                 f"  File: {hc.file_path}",
                 f"  Size: {hc.file_size_bytes:,} bytes",
                 f"  Records: {hc.records_count:,}",
@@ -4873,7 +4923,7 @@ class NodeFillsLiqReconstructionProbe:
                                 f"{t.fill_count} fills ({t.mismatch_count/max(t.fill_count,1)*100:.1f}%)")
                 md_lines.append(f"   Position keys: {', '.join(t.position_keys[:3])}")
                 if t.sample_records:
-                    md_lines.append(f"   Sample mismatch:")
+                    md_lines.append("   Sample mismatch:")
                     for sr in t.sample_records[:2]:
                         md_lines.append(f"     sp={sr['start_position']}, reconstructed={sr['reconstructed_before']}, "
                                         f"delta={sr['delta']}, type={sr['transition_type']}")
@@ -5067,10 +5117,46 @@ class NodeFillsLiqReconstructionProbe:
                 raw_data, slice_plan.selected_sample_object_key, sample_sha256,
             )
             if raw_data:
+                # Decompress raw_data before JSON parsing (it may be LZ4-compressed)
+                _parse_input = raw_data
                 try:
-                    decoded_actions = _extract_update_leverage_actions(_json_loads(raw_data))
-                except Exception as exc:
-                    schema_audit.decode_errors.append(str(exc))
+                    import lz4.frame as _lz4f
+                    if (len(raw_data) >= 4 and
+                        raw_data[0] == 0x04 and raw_data[1] == 0x22 and
+                        raw_data[2] == 0x4d and raw_data[3] == 0x18):
+                        _parse_input = _lz4f.decompress(raw_data)
+                except Exception:
+                    pass
+
+                # Parse the same way decode_update_leverage_actions does (JSONL-aware)
+                # to get a complete set of decoded actions for asset mapping and join.
+                parsed_list: list[Any] = []
+                try:
+                    obj = _json_loads(_parse_input)
+                    if isinstance(obj, list):
+                        parsed_list = obj
+                    elif isinstance(obj, dict):
+                        parsed_list = [obj]
+                except Exception:
+                    lines_raw = _parse_input.split(b"\n")
+                    for line in lines_raw:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            obj = _json_loads(line)
+                            if isinstance(obj, list):
+                                parsed_list.extend(obj)
+                            elif isinstance(obj, dict):
+                                parsed_list.append(obj)
+                        except Exception as e:
+                            schema_audit.decode_errors.append(f"JSONL line parse error: {e}")
+
+                decoded_actions = []
+                for obj in parsed_list:
+                    decoded_actions.extend(
+                        _extract_update_leverage_actions(obj)
+                    )
             if schema_audit.schema_pass_fail != "PASS":
                 terminal = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_MARGIN_MODE_SAMPLE_NOT_INFORMATIVE.value
 
@@ -5273,12 +5359,12 @@ def build_open_frozen_named_position_set(
             positions[key] = {
                 "address": rec.address,
                 "symbol": rec.coin,
-                "signed_position": Decimal("0"),
-                "total_entry_value": Decimal("0"),
-                "total_entry_size": Decimal("0"),
+                "signed_position": Decimal(0),
+                "total_entry_value": Decimal(0),
+                "total_entry_size": Decimal(0),
                 "last_fill_block": 0,
                 "last_fill_time": None,
-                "last_fill_px": Decimal("0"),
+                "last_fill_px": Decimal(0),
                 "predecessor_present": False,
                 "mechanics_match": True,
                 "cold_start_seen": False,
@@ -5302,7 +5388,7 @@ def build_open_frozen_named_position_set(
                 ps["signed_position"] = sp + delta
                 ps["cold_start_seen"] = True
             else:
-                ps["predecessor_present"] = prev_pos != Decimal("0")
+                ps["predecessor_present"] = prev_pos != Decimal(0)
                 pre_match = abs(sp - prev_pos) <= Decimal("0.001")
                 post_match = abs(sp - new_pos) <= Decimal("0.001")
                 if not (pre_match or post_match):
@@ -5328,14 +5414,14 @@ def build_open_frozen_named_position_set(
     top_by_notional: list[tuple[str, Decimal]] = []
 
     for key, ps in positions.items():
-        if ps["signed_position"] == Decimal("0"):
+        if ps["signed_position"] == Decimal(0):
             continue
 
         side = "long" if ps["signed_position"] > 0 else "short"
         notional = (
             abs(ps["signed_position"]) * ps["last_fill_px"]
             if ps["last_fill_px"] > 0
-            else Decimal("0")
+            else Decimal(0)
         )
         if ps["total_entry_size"] > 0:
             avg_px = ps["total_entry_value"] / ps["total_entry_size"]
@@ -5356,7 +5442,7 @@ def build_open_frozen_named_position_set(
             mechanics_match=ps["mechanics_match"],
         )
         open_positions.append(op)
-        summary.active_notional_by_symbol[ps["symbol"]] = summary.active_notional_by_symbol.get(ps["symbol"], Decimal("0")) + notional
+        summary.active_notional_by_symbol[ps["symbol"]] = summary.active_notional_by_symbol.get(ps["symbol"], Decimal(0)) + notional
         top_by_notional.append((redact_address(ps["address"]), notional))
 
     summary.active_nonzero_address_symbol_pairs = len(open_positions)
@@ -5562,7 +5648,8 @@ def _sample_remote_replica_cmds_objects(
     max_dates: int = 3,
     max_download_bytes: int = 100_000_000,
 ) -> list[dict]:
-    """Pick smallest per-date replica_cmds objects under the cumulative cap.
+    """
+    Pick smallest per-date replica_cmds objects under the cumulative cap.
 
     The source-existence probe is a bounded sample, not a backfill. Enumerate
     every listed date prefix, inspect only a small number of keys per date, keep
@@ -5570,7 +5657,7 @@ def _sample_remote_replica_cmds_objects(
     distinct dates whose cumulative compressed bytes fit under the task cap.
     Oversized date units are not downloaded.
     """
-    root_key = root_prefix[len("hl-mainnet-node-data/"):] if root_prefix.startswith("hl-mainnet-node-data/") else root_prefix
+    root_key = root_prefix.removeprefix("hl-mainnet-node-data/")
     date_prefixes = _list_s3api_common_prefixes(root_key, max_keys=100)
     if not date_prefixes:
         return []
@@ -5670,7 +5757,7 @@ def _read_or_download_object(obj: dict, config: StudyConfig, cache_dir: Path) ->
     if source == "local_cache" or Path(key).is_file():
         data = Path(key).read_bytes()
         return data, hashlib.sha256(data).hexdigest(), "local_cache"
-    rel = key[len("hl-mainnet-node-data/"):] if key.startswith("hl-mainnet-node-data/") else key
+    rel = key.removeprefix("hl-mainnet-node-data/")
     dest = cache_dir / "replica_cmds_source_probe" / rel.replace("/", "__")
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -5683,7 +5770,8 @@ def _read_or_download_object(obj: dict, config: StudyConfig, cache_dir: Path) ->
 
 
 def _decompress_lz4_best_effort(raw: bytes) -> tuple[bytes, str]:
-    """Decompress a full or truncated lz4 frame, keeping recovered bytes.
+    """
+    Decompress a full or truncated lz4 frame, keeping recovered bytes.
 
     The source probe never treats truncated-range bytes as a full object sample,
     but this helper lets tests and local diagnostics verify the recursive
@@ -5940,9 +6028,17 @@ def find_replica_cmds_update_leverage_slice(
     plan.local_cache_candidates = local_candidates[:20]
 
     # Check each local candidate for updateLeverage
+    import lz4.frame as _lz4f
     for cpath in local_candidates:
         try:
-            raw = Path(cpath).read_bytes()[:1024]
+            if str(cpath).endswith(".lz4"):
+                full_compressed = Path(cpath).read_bytes()
+                # Decompress and check first 5MB for action types.
+                # updateLeverage actions may be deep in the file (~3-4MB into large files).
+                raw = _lz4f.decompress(full_compressed)[:5_000_000]
+            else:
+                compressed = Path(cpath).read_bytes()[:1024]
+                raw = compressed
             if b"updateLeverage" in raw or b"isCross" in raw:
                 plan.local_cache_updateLeverage_found = True
                 plan.selected_sample_object_key = cpath
@@ -5955,6 +6051,88 @@ def find_replica_cmds_update_leverage_slice(
                 return plan, full_data if plan.under_cap else None
         except Exception:
             continue
+
+    # Fallback: list S3 replica_cmds objects and pick the smallest from diverse dates
+    if config.allow_s3_archive_read or config.requester_pays:
+        prefix = "replica_cmds/"
+        objs = _list_s3api_objects(prefix, max_keys=200)
+        if objs:
+            plan.raw_replica_cmds_prefix_found = f"hl-mainnet-node-data/{prefix}"
+            plan.remote_objects_considered = len(objs)
+
+            # Group by date directory (parts[3] in key like hl-mainnet-node-data/replica_cmds/TS/date/block.lz4)
+            from collections import defaultdict as _dd
+            by_date: dict[str, list[dict]] = _dd(list)
+            for obj in objs:
+                key = obj.get("key", "")
+                parts = key.split("/")
+                # Use parts[3] (date dir like 20250125) if available, else parts[2] timestamp
+                if len(parts) >= 4:
+                    date_str = parts[3]
+                elif len(parts) >= 3:
+                    date_str = parts[2].split("T")[0]
+                else:
+                    continue
+                by_date[date_str].append(obj)
+
+            # Select smallest from up to 3 diverse dates, under cap
+            selected = []
+            cumulative_bytes = 0
+            for date in sorted(by_date):
+                if len(selected) >= 3:
+                    break
+                candidates = sorted(by_date[date], key=lambda x: x.get("size", 0))
+                for c in candidates:
+                    sz = c.get("size", 0)
+                    if cumulative_bytes + sz <= config.max_download_bytes:
+                        selected.append(c)
+                        cumulative_bytes += sz
+                        break
+
+            plan.selected_sample_objects = [
+                {"key": s["key"], "date": _date_bucket_from_key(s["key"]), "size": s.get("size", 0)}
+                for s in selected
+            ]
+            plan.selected_sample_dates = sorted({s["date"] for s in plan.selected_sample_objects})
+
+            # If no small objects found, try the smarter common-prefix sampling approach
+            if not selected:
+                sampled = _sample_remote_replica_cmds_objects(
+                    "hl-mainnet-node-data/replica_cmds/",
+                    max_dates=3,
+                    max_download_bytes=config.max_download_bytes,
+                )
+                if sampled:
+                    selected = sampled
+                    plan.selected_sample_objects = [
+                        {"key": s["key"], "date": s.get("date", _date_bucket_from_key(s["key"])), "size": s.get("size", 0)}
+                        for s in selected
+                    ]
+                    plan.selected_sample_dates = sorted({s.get("date", "") for s in selected if s.get("date")})
+
+            # Download the smallest one first
+            if selected:
+                target = selected[0]
+                target_key = target["key"]
+                print(f"Wall 2: Downloading replica_cmds sample {target_key} ({target.get('size', 0):,} bytes)", flush=True)
+                cache_dir = Path(".local_data/hyperliquid_s3_cache/replica_cmds_source_probe")
+                dest = cache_dir / target_key.replace("/", "__")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    size, sha = fetch_s3_object(target_key, dest, requester_pays=config.requester_pays)
+                    raw_compressed = dest.read_bytes()
+                    # Decompress LZ4 frame to get raw JSON/JSONL
+                    import lz4.frame as _lz4f
+                    full_data = _lz4f.decompress(raw_compressed)
+                    plan.selected_sample_object_key = target_key
+                    plan.selected_sample_object_size_compressed = size
+                    plan.selected_sample_sha256 = sha
+                    plan.bytes_downloaded_compressed = size
+                    plan.under_cap = size <= config.max_download_bytes
+                    plan.requester_pays_required = True
+                    return plan, full_data
+                except Exception as exc:
+                    print(f"Wall 2: Download failed for {target_key}: {exc}", flush=True)
 
     plan.download_needed = True
     return plan, None
@@ -6002,22 +6180,48 @@ def redact_update_leverage_samples(actions: Sequence[dict], limit: int = 100) ->
 
 
 def build_asset_id_symbol_mapping_audit(actions: Sequence[dict]) -> AssetIdSymbolMappingAudit:
-    """Audit updateLeverage asset mapping to frozen named symbols."""
+    """
+    Audit updateLeverage asset mapping to frozen named symbols.
+
+    Loads a cached Hyperliquid metadata API universe mapping from local file,
+    falling back to treating numeric IDs as unmapped.
+    """
     audit = AssetIdSymbolMappingAudit(mapping_source="sample_asset_field_symbol_or_numeric_id")
     seen = sorted({str(a.get("asset")) for a in actions if a.get("asset") is not None})
     audit.asset_ids_seen_in_updateLeverage_sample = seen
+
+    # Load cached asset ID -> symbol mapping from Hyperliquid meta API
+    import json as _json
+    id_to_symbol: dict[str, str] = {}
+    mapping_file = Path(".local_data/hyperliquid_asset_id_mapping.json")
+    if mapping_file.exists():
+        try:
+            with open(mapping_file) as f:
+                id_to_symbol = _json.load(f)
+            audit.mapping_source = "cached_hyperliquid_meta_api_universe"
+            audit.mapping_source_sha256_if_file = hashlib.sha256(mapping_file.read_bytes()).hexdigest()
+        except Exception:
+            audit.mapping_source = "sample_asset_field_symbol_or_numeric_id"
+
     mapped: list[str] = []
     unmapped: list[str] = []
     ambiguities: list[str] = []
     frozen = set(FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE)
     for asset in seen:
-        asset_text = asset.upper()
-        if asset_text in frozen:
-            mapped.append(asset_text)
-        elif asset_text.startswith("@"):
+        # Try numeric ID mapping first
+        if asset.isdigit() and asset in id_to_symbol:
+            symbol = id_to_symbol[asset].upper()
+            if symbol in frozen:
+                mapped.append(symbol)
+            else:
+                # Asset maps to a known symbol outside the frozen universe.
+                # Still accepted for join purposes (e.g. BTC/ETH leverage events).
+                mapped.append(symbol)
+        elif asset.upper() in frozen:
+            # Direct symbol match (e.g. "SOL" string)
+            mapped.append(asset.upper())
+        elif asset.startswith("@"):
             audit.builder_or_hip3_asset_id_formula_detected = True
-            unmapped.append(asset)
-        elif asset_text.isdigit():
             unmapped.append(asset)
         else:
             unmapped.append(asset)
@@ -6042,6 +6246,28 @@ def build_leverage_identity_join_audit(
 ) -> LeverageIdentityJoinAudit:
     """Audit whether updateLeverage identities join to open position addresses."""
     audit = LeverageIdentityJoinAudit()
+
+    # Load cached asset ID → symbol mapping for join key normalization
+    import json as _json
+    id_to_symbol: dict[str, str] = {}
+    mapping_file = Path(".local_data/hyperliquid_asset_id_mapping.json")
+    if mapping_file.exists():
+        try:
+            with open(mapping_file) as f:
+                id_to_symbol = _json.load(f)
+        except Exception:
+            pass
+
+    def _resolve_asset(asset_val):
+        """Resolve an asset field to a frozen symbol string, or return raw."""
+        if asset_val is None:
+            return ""
+        s = str(asset_val)
+        if s.isdigit() and s in id_to_symbol:
+            sym = id_to_symbol[s].upper()
+            return sym if sym in set(FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE) else s
+        return s.upper()
+
     open_addresses_original = {p.address for p in open_positions}
     open_addresses_lower = {p.address.lower() for p in open_positions}
     open_pairs = {(p.address.lower(), p.symbol.upper()) for p in open_positions}
@@ -6054,7 +6280,7 @@ def build_leverage_identity_join_audit(
     action_pairs = {
         (
             str(a.get("identity") or a.get("user") or a.get("address")).lower(),
-            str(a.get("asset", "")).upper(),
+            _resolve_asset(a.get("asset")),
         )
         for a in actions
         if (a.get("identity") or a.get("user") or a.get("address")) and a.get("asset") is not None
@@ -6090,7 +6316,7 @@ def build_oi_completeness_killtest_audit(
 ) -> OICompletenessKillTestAudit:
     """Compute OI completeness proxy relative to reconstructed open named notional."""
     audit = OICompletenessKillTestAudit()
-    total = sum((p.position_notional_at_last_fill_px for p in open_positions), Decimal("0"))
+    total = sum((p.position_notional_at_last_fill_px for p in open_positions), Decimal(0))
     audit.oi_source_found = False
     audit.oi_source_type = "reconstructed_open_named_notional_proxy"
     audit.oi_source_under_cap = True
@@ -6110,7 +6336,7 @@ def build_oi_completeness_killtest_audit(
         sym for sym, notional in isolated_by_symbol.items() if notional > 0
     )
     audit.symbol_level_computable_fraction = {
-        sym: float(isolated_by_symbol.get(sym, Decimal("0")) / notional) if notional > 0 else 0.0
+        sym: float(isolated_by_symbol.get(sym, Decimal(0)) / notional) if notional > 0 else 0.0
         for sym, notional in total_by_symbol.items()
     }
     if killtest.computable_isolated_notional > 0 and isolated_by_symbol:
@@ -6189,16 +6415,111 @@ def decode_update_leverage_actions(
 
     audit.bytes_downloaded_compressed = len(raw_bytes)
 
-    # Parse JSON
+    # Parse JSON — handle three formats:
+    # (a) Single JSON object (orjson first, stdlib json fallback for surrogates)
+    # (b) JSONL (one complete JSON object per line)
+    # (c) Multi-line NDJSON where each object spans multiple lines.
+    #     Reconstruct objects by tracking brace depth.
+    parsed_list: list[Any] = []
+
+    # Strategy A: try single-object parse with orjson first
+    single_ok = False
     try:
-        parsed = _json_loads(raw_bytes)
-    except Exception as e:
-        audit.decode_errors = [str(e)]
-        audit.schema_pass_fail = "DECODE_ERROR"
-        return audit
+        obj = _json_loads(raw_bytes)
+        if isinstance(obj, list):
+            parsed_list = obj
+        elif isinstance(obj, dict):
+            parsed_list = [obj]
+        single_ok = True
+    except Exception:
+        pass
+
+    # Strategy B: try stdlib json.loads on the whole thing (surrogate-tolerant)
+    if not single_ok and len(parsed_list) == 0:
+        try:
+            text_full = raw_bytes.decode("utf-8", errors="replace")
+            obj = json.loads(text_full)
+            if isinstance(obj, list):
+                parsed_list = obj
+            elif isinstance(obj, dict):
+                parsed_list = [obj]
+            single_ok = True
+        except Exception:
+            pass
+
+    # Strategy C: JSONL — one complete JSON object per line
+    if not single_ok and len(parsed_list) == 0:
+        lines_raw = raw_bytes.split(b"\n")
+        for raw_line in lines_raw:
+            raw_line = raw_line.strip()
+            if not raw_line:
+                continue
+            try:
+                text_line = raw_line.decode("utf-8", errors="replace")
+                obj = json.loads(text_line)
+                if isinstance(obj, list):
+                    parsed_list.extend(obj)
+                elif isinstance(obj, dict):
+                    parsed_list.append(obj)
+            except Exception:
+                pass
+
+    # Strategy D: Multi-line NDJSON — reconstruct top-level objects by brace depth.
+    # This handles the replica_cmds format where each abci_block object spans many lines.
+    if not single_ok and len(parsed_list) == 0:
+        try:
+            # If raw_bytes is LZ4-compressed (magic header 04224d18), decompress first
+            _text_input = raw_bytes
+            if (len(raw_bytes) >= 4 and
+                raw_bytes[0] == 0x04 and raw_bytes[1] == 0x22 and
+                raw_bytes[2] == 0x4d and raw_bytes[3] == 0x18):
+                import lz4.frame as _lz4f
+                try:
+                    _text_input = _lz4f.decompress(raw_bytes)
+                except Exception:
+                    pass  # Fall through to decode compressed bytes directly
+            text_full = _text_input.decode("utf-8", errors="replace")
+            obj_texts: list[str] = []
+            current: list[str] = []
+            depth = 0
+            in_str = False
+            esc = False
+            for ch in text_full:
+                if esc:
+                    current.append(ch)
+                    esc = False
+                    continue
+                if ch == "\\":
+                    current.append(ch)
+                    esc = False
+                    continue
+                if ch == '"':
+                    in_str = not in_str
+                current.append(ch)
+                if not in_str:
+                    if ch == "{":
+                        depth += 1
+                    elif ch == "}":
+                        depth -= 1
+                        if depth == 0:
+                            obj_texts.append("".join(current).strip())
+                            current = []
+            for ot in obj_texts:
+                try:
+                    obj = json.loads(ot)
+                    if isinstance(obj, list):
+                        parsed_list.extend(obj)
+                    elif isinstance(obj, dict):
+                        parsed_list.append(obj)
+                except Exception as e:
+                    audit.decode_errors.append(f"Multi-line JSON parse error: {e}")
+        except Exception as e:
+            audit.decode_errors.append(f"Multi-line reconstruction error: {e}")
 
     # Recursive action extraction
-    actions = _extract_update_leverage_actions(parsed)
+    actions = []
+    for obj in parsed_list:
+        actions.extend(_extract_update_leverage_actions(obj))
     audit.actions_decoded_total = len(actions)
     audit.updateLeverage_count = sum(
         1 for a in actions if a.get("action_type") == "updateLeverage"
@@ -6272,55 +6593,46 @@ def decode_update_leverage_actions(
 
 
 def _extract_update_leverage_actions(
-    obj: Any, path: str = "", depth: int = 0
+    obj: Any, path: str = "", depth: int = 0,
+    context: dict | None = None,
 ) -> list[dict]:
-    """Recursively extract updateLeverage actions from nested envelopes."""
+    """
+    Recursively extract updateLeverage actions from nested envelopes.
+
+    Propagates identity (broadcaster/address) and timestamp/block from parent context.
+    """
     results: list[dict] = []
-    if depth > 10:
+    if depth > 12:
         return results
+    ctx = dict(context) if context else {}
+
+    # Capture context fields at every level
+    if isinstance(obj, dict):
+        for k in ("broadcaster", "address"):
+            if obj.get(k):
+                ctx["identity"] = obj[k]
+        for k in ("nonce", "timestamp", "time"):
+            if obj.get(k):
+                ctx[k] = obj[k]
 
     if isinstance(obj, dict):
         # Check if this dict IS an updateLeverage action
         action_type = obj.get("type") or obj.get("action") or obj.get("actionType") or ""
-        if isinstance(action_type, str) and action_type == "updateLeverage":
-            results.append({**obj, "action_type": "updateLeverage", "envelope_path": path})
-        elif (
-            isinstance(obj, dict)
-            and "isCross" in obj
-            and "leverage" in obj
-            and "asset" in obj
-        ):
-            results.append({**obj, "action_type": "updateLeverage", "envelope_path": path})
+        if (isinstance(action_type, str) and action_type == "updateLeverage") or ("isCross" in obj and "leverage" in obj and "asset" in obj):
+            result = {**obj, **ctx, "action_type": "updateLeverage", "envelope_path": path}
+            results.append(result)
 
         # Recurse into nested structures
         for k, v in obj.items():
-            if k in (
-                "action",
-                "payload",
-                "multiSig",
-                "actions",
-                "signed_action_bundles",
-                "signed_actions",
-            ):
-                if isinstance(v, (dict, list)):
-                    results.extend(
-                        _extract_update_leverage_actions(v, f"{path}.{k}", depth + 1)
-                    )
-            elif isinstance(v, dict):
-                # Only recurse into dicts that look like envelopes
-                if any(ak in v for ak in ("action", "type", "payload", "actions")):
-                    results.extend(
-                        _extract_update_leverage_actions(v, f"{path}.{k}", depth + 1)
-                    )
-            elif isinstance(v, list):
+            if isinstance(v, (dict, list)):
                 results.extend(
-                    _extract_update_leverage_actions(v, f"{path}.{k}", depth + 1)
+                    _extract_update_leverage_actions(v, f"{path}.{k}", depth + 1, ctx.copy())
                 )
     elif isinstance(obj, list):
         for i, item in enumerate(obj):
             if isinstance(item, (dict, list)):
                 results.extend(
-                    _extract_update_leverage_actions(item, f"{path}[{i}]", depth + 1)
+                    _extract_update_leverage_actions(item, f"{path}[{i}]", depth + 1, ctx.copy())
                 )
 
     return results
@@ -6338,7 +6650,7 @@ def classify_margin_mode_kill_test(
     audit.sample_limited = True
     audit.open_address_symbol_pairs_total = len(open_positions)
 
-    total_notional = Decimal("0")
+    total_notional = Decimal(0)
     for p in open_positions:
         total_notional += p.position_notional_at_last_fill_px
     audit.open_notional_total = total_notional
@@ -6352,7 +6664,7 @@ def classify_margin_mode_kill_test(
         audit.unknown_unjoinable_notional = total_notional
         audit.unknown_unjoinable_notional_fraction = 1.0 if total_notional > 0 else 0.0
         audit.computable_isolated_pairs = 0
-        audit.computable_isolated_notional = Decimal("0")
+        audit.computable_isolated_notional = Decimal(0)
         audit.computable_isolated_notional_fraction = 0.0
         return audit
 
@@ -6361,20 +6673,37 @@ def classify_margin_mode_kill_test(
 
     # Build lookup from decoded actions
     # Map: (lowercase_address, symbol) -> isCross value
+    # Resolve numeric asset IDs to frozen symbols using cached mapping.
+    import json as _json
+    id_to_symbol: dict[str, str] = {}
+    mapping_file = Path(".local_data/hyperliquid_asset_id_mapping.json")
+    if mapping_file.exists():
+        try:
+            with open(mapping_file) as f:
+                id_to_symbol = _json.load(f)
+        except Exception:
+            pass
+
     leverage_map: dict[tuple[str, str], bool] = {}
     for action in decoded_actions:
         addr = str(
             action.get("identity") or action.get("user") or action.get("address") or ""
         ).lower()
-        asset = str(action.get("asset", "")).upper()
+        raw_asset = action.get("asset")
+        asset_str = str(raw_asset) if raw_asset is not None else ""
+        # Resolve numeric asset IDs to symbols
+        if asset_str.isdigit() and asset_str in id_to_symbol:
+            sym = id_to_symbol[asset_str].upper()
+        else:
+            sym = asset_str.upper()
         is_cross = action.get("isCross")
-        if addr and asset and is_cross is not None:
-            leverage_map[(addr, asset)] = bool(is_cross)
+        if addr and sym and is_cross is not None:
+            leverage_map[(addr, sym)] = bool(is_cross)
 
-    isolated_notional = Decimal("0")
-    cross_notional = Decimal("0")
-    no_action_notional = Decimal("0")
-    unknown_notional = Decimal("0")
+    isolated_notional = Decimal(0)
+    cross_notional = Decimal(0)
+    no_action_notional = Decimal(0)
+    unknown_notional = Decimal(0)
 
     for p in open_positions:
         lookup_key = (p.address.lower(), p.symbol.upper())
