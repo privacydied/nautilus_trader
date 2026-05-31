@@ -205,6 +205,9 @@ class StudyStatus(str, Enum):
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_NOT_OBSERVED_IN_REPLICA_CMDS_SAMPLE = "BLOCKED_UPDATE_LEVERAGE_NOT_OBSERVED_IN_REPLICA_CMDS_SAMPLE"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_SOURCE_TOO_SPARSE_SAMPLE = "BLOCKED_UPDATE_LEVERAGE_SOURCE_TOO_SPARSE_SAMPLE"
 
+    # Replica cmds object discovery / listing blockers
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY = "BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY"
+
     # Error
     NODE_FILLS_LIQ_PHASE_MINUS1_ERROR_INVALID_OUTPUT = "ERROR_INVALID_OUTPUT"
 
@@ -678,10 +681,25 @@ class TargetedBackwardLookupScanPlan:
     objects_considered: int = 0
     objects_selected: int = 0
     objects_skipped_over_cap: int = 0
+    objects_skipped_missing_size: int = 0
+    objects_skipped_non_data: int = 0
     estimated_compressed_bytes: int = 0
     max_download_bytes: int = 0
     server_side_filtering_available: bool = False
     client_side_decode_required: bool = True
+    # Listing audit fields
+    bucket: str = "hl-mainnet-node-data"
+    root_prefix: str = "replica_cmds/"
+    date_prefixes_generated: int = 0
+    date_prefixes_queried: int = 0
+    date_prefixes_with_objects: int = 0
+    date_prefixes_empty: int = 0
+    objects_listed_total: int = 0
+    smallest_listed_object_size: int = 0
+    largest_listed_object_size: int = 0
+    first_listed_keys_redacted: list[str] = field(default_factory=list)
+    listing_errors: list[str] = field(default_factory=list)
+    requester_pays_used: bool = False
 
 
 @dataclass
@@ -731,6 +749,13 @@ class TargetedBackwardLookupSummary:
     target_notional_resolved_fraction: float = 0.0
     coverage_start_reached_for_unresolved_pairs: bool = False
     source_or_decoder_blocked: bool = False
+    # Listing audit fields (mirrors scan plan for cross-reference)
+    objects_listed_total: int = 0
+    objects_skipped_over_cap: int = 0
+    objects_skipped_missing_size: int = 0
+    objects_skipped_non_data: int = 0
+    smallest_listed_object_size: int = 0
+    largest_listed_object_size: int = 0
 
 
 @dataclass
@@ -4522,10 +4547,17 @@ class NodeFillsLiqReconstructionProbe:
         scan_plan = _plan_backward_replica_cmds_scan(selected_positions, selection_plan, symbol_to_asset_id, config.max_download_bytes)
         self.targeted_backward_lookup_scan_plan = scan_plan
 
+        # --- Replica cmds listing with proper ISO-timestamp-aware filtering ---
+        scan_plan.requester_pays_used = config.requester_pays
+        scan_plan.bucket = 'hl-mainnet-node-data'
+        scan_plan.root_prefix = 'replica_cmds/'
+
         listing = _run_aws([
-            'aws', 's3api', 'list-objects-v2', '--bucket', 'hl-mainnet-node-data', '--prefix', 'replica_cmds/', '--request-payer', 'requester', '--output', 'json'
+            'aws', 's3api', 'list-objects-v2', '--bucket', 'hl-mainnet-node-data',
+            '--prefix', 'replica_cmds/', '--request-payer', 'requester', '--output', 'json'
         ], timeout=120)
         if listing.returncode != 0:
+            scan_plan.listing_errors.append(f'aws exit {listing.returncode}')
             self.targeted_margin_mode_continuation_plan = {
                 'current_task_cap': config.max_download_bytes,
                 'compressed_bytes_downloaded': 0,
@@ -4544,9 +4576,81 @@ class NodeFillsLiqReconstructionProbe:
         payload = json.loads(listing.stdout or '{}')
         objects = payload.get('Contents', [])
 
+        # Paginate if truncated (S3 returns max 1000 per page, but we used --max-keys 500)
+        continuation_token = payload.get('NextContinuationToken')
+        while continuation_token and payload.get('IsTruncated', False):
+            list_more = _run_aws([
+                'aws', 's3api', 'list-objects-v2', '--bucket', 'hl-mainnet-node-data',
+                '--prefix', 'replica_cmds/', '--request-payer', 'requester',
+                '--continuation-token', continuation_token, '--max-keys', '500', '--output', 'json'
+            ], timeout=120)
+            if list_more.returncode != 0:
+                scan_plan.listing_errors.append(f'pagination aws exit {list_more.returncode}')
+                break
+            more = json.loads(list_more.stdout or '{}')
+            objects.extend(more.get('Contents', []))
+            continuation_token = more.get('NextContinuationToken')
+            if not more.get('IsTruncated', False):
+                break
+
+        scan_plan.objects_listed_total = len(objects)
+
+        # Record listing statistics (first 5 keys redacted for privacy)
+        sizes = [int(o.get('Size', 0) or 0) for o in objects if o.get('Size') is not None]
+        if sizes:
+            scan_plan.smallest_listed_object_size = min(sizes)
+            scan_plan.largest_listed_object_size = max(sizes)
+        for obj in objects[:5]:
+            key = obj.get('Key', '')
+            parts = key.split('/')
+            # Redact the last filename component but keep date prefix visible
+            if len(parts) >= 3:
+                scan_plan.first_listed_keys_redacted.append(f'replica_cmds/{parts[1]}/{parts[2][:8]}...')
+            else:
+                scan_plan.first_listed_keys_redacted.append(key[:60])
+
+        # Extract YYYYMMDD from S3 key for proper date-range filtering.
+        # Key format: replica_cmds/YYYY-MM-DDThh:mm:ssZ/YYYYMMDD/<timestamp>.lz4
+        def _extract_key_date(key: str) -> str:
+            """Extract YYYYMMDD from replica_cmds ISO-timestamp key."""
+            parts = key.split('/')
+            # parts[0] = 'replica_cmds', parts[1] = 'YYYY-MM-DDThh:mm:ssZ', parts[2] = 'YYYYMMDD'
+            if len(parts) >= 3:
+                return parts[2]
+            return ''
+
+        # Derive date-range bounds from the scan plan's ISO-timestamp prefixes
+        # reverse_scan_start_prefix -> start boundary (most recent)
+        # reverse_scan_end_prefix -> end boundary (oldest, coverage start)
+        def _extract_date_from_prefix(prefix: str) -> str:
+            """Extract YYYYMMDD from an ISO-timestamp prefix like replica_cmds/2025-07-27T12:00:27Z/"""
+            clean = prefix.removeprefix('hl-mainnet-node-data/')
+            parts = clean.split('/')
+            # parts[1] = 'YYYY-MM-DDThh:mm:ssZ' -> extract YYYYMMDD
+            if len(parts) >= 2:
+                iso_date = parts[1]  # e.g. '2025-07-27T12:00:27Z'
+                return iso_date[:10].replace('-', '')  # '20250727'
+            return ''
+
+        start_date_str = _extract_date_from_prefix(scan_plan.reverse_scan_start_prefix)
+        end_date_str = _extract_date_from_prefix(scan_plan.reverse_scan_end_prefix)
+
+        # Count date prefixes for audit
+        all_dates = set()
+        dates_in_range = set()
+        for obj in objects:
+            key_date = _extract_key_date(obj.get('Key', ''))
+            if key_date:
+                all_dates.add(key_date)
+                if end_date_str <= key_date <= start_date_str:
+                    dates_in_range.add(key_date)
+
+        scan_plan.date_prefixes_generated = len(dates_in_range)
+        scan_plan.date_prefixes_queried = len(all_dates)
+        scan_plan.date_prefixes_with_objects = len(dates_in_range)
+        scan_plan.date_prefixes_empty = max(0, len(all_dates) - len(dates_in_range))
+
         selected_objects: list[dict[str, Any]] = []
-        coverage_start_key = scan_plan.reverse_scan_end_prefix.removeprefix('hl-mainnet-node-data/')
-        scan_start_key = scan_plan.reverse_scan_start_prefix.removeprefix('hl-mainnet-node-data/')
         selected_asset_id = symbol_to_asset_id.get(selection_plan.target_symbol, '')
         unresolved: dict[tuple[str, str], OpenNamedPosition] = {}
         latest_cutoffs: dict[tuple[str, str], tuple[int, int]] = {}
@@ -4564,68 +4668,119 @@ class NodeFillsLiqReconstructionProbe:
         for obj in sorted(objects, key=lambda x: x.get('Key', ''), reverse=True):
             key = obj.get('Key', '')
             if not key.startswith('replica_cmds/'):
-                continue
-            if key < coverage_start_key or key > scan_start_key:
+                scan_plan.objects_skipped_non_data += 1
                 continue
             size = int(obj.get('Size', 0) or 0)
+            if size <= 0:
+                scan_plan.objects_skipped_missing_size += 1
+                continue
+
+            # Date-range filter using extracted YYYYMMDD from key path
+            key_date = _extract_key_date(key)
+            if not key_date or key_date < end_date_str or key_date > start_date_str:
+                continue
+
             scan_plan.objects_considered += 1
             if size > config.max_download_bytes:
                 scan_plan.objects_skipped_over_cap += 1
                 continue
             if scan_plan.estimated_compressed_bytes + size > config.max_download_bytes:
                 continue
-            selected_objects.append({'key': f'hl-mainnet-node-data/{key}', 'size': size, 'date': key.split('/')[1] if len(key.split('/')) > 1 else ''})
+            selected_objects.append({
+                'key': f'hl-mainnet-node-data/{key}',
+                'size': size,
+                'date': key_date,
+            })
             scan_plan.estimated_compressed_bytes += size
             scan_plan.objects_selected += 1
 
+        # Copy listing audit to summary for cross-reference
+        self.targeted_backward_lookup_summary = TargetedBackwardLookupSummary(
+            target_symbol=selection_plan.target_symbol,
+            target_asset_id=selected_asset_id,
+            target_top_n=selection_plan.target_top_n,
+            selected_target_pairs=len(selected_positions),
+            selected_target_notional=selection_plan.selected_target_notional,
+            selected_target_notional_fraction=selection_plan.selected_target_notional_fraction,
+            selected_target_notional_fraction_of_SOL=selection_plan.selected_SOL_notional_fraction_of_SOL,
+            selected_target_notional_fraction_of_total_open=selection_plan.selected_SOL_notional_fraction_of_total_open,
+            objects_considered=scan_plan.objects_considered,
+            objects_downloaded=0,
+            compressed_bytes_downloaded=0,
+            cap=config.max_download_bytes,
+            cap_exhausted=False,  # Will be set later based on real conditions
+            coverage_start_reached=False,
+            stop_rule='',
+            actions_decoded_total=0,
+            updateLeverage_count_total=0,
+            target_updateLeverage_matches_total=0,
+            target_pairs_resolved=0,
+            target_pairs_unresolved=len(selected_positions),
+            target_notional_resolved=Decimal(0),
+            target_notional_unresolved=selection_plan.selected_target_notional,
+            target_notional_resolved_fraction=0.0,
+            coverage_start_reached_for_unresolved_pairs=False,
+            source_or_decoder_blocked=False,
+            # Listing audit
+            objects_listed_total=scan_plan.objects_listed_total,
+            objects_skipped_over_cap=scan_plan.objects_skipped_over_cap,
+            objects_skipped_missing_size=scan_plan.objects_skipped_missing_size,
+            objects_skipped_non_data=scan_plan.objects_skipped_non_data,
+            smallest_listed_object_size=scan_plan.smallest_listed_object_size,
+            largest_listed_object_size=scan_plan.largest_listed_object_size,
+        )
+
         if not selected_objects:
-            self.targeted_backward_lookup_summary = TargetedBackwardLookupSummary(
-                target_symbol=selection_plan.target_symbol,
-                target_asset_id=selected_asset_id,
-                target_top_n=selection_plan.target_top_n,
-                selected_target_pairs=len(selected_positions),
-                selected_target_notional=selection_plan.selected_target_notional,
-                selected_target_notional_fraction=selection_plan.selected_target_notional_fraction,
-                selected_target_notional_fraction_of_SOL=selection_plan.selected_SOL_notional_fraction_of_SOL,
-                selected_target_notional_fraction_of_total_open=selection_plan.selected_SOL_notional_fraction_of_total_open,
-                objects_considered=scan_plan.objects_considered,
-                objects_downloaded=0,
-                compressed_bytes_downloaded=0,
-                cap=config.max_download_bytes,
-                cap_exhausted=True,
-                coverage_start_reached=False,
-                stop_rule='NO_OBJECT_UNDER_CAP',
-                target_pairs_resolved=0,
-                target_pairs_unresolved=len(selected_positions),
-                target_notional_resolved=Decimal(0),
-                target_notional_unresolved=selection_plan.selected_target_notional,
-                target_notional_resolved_fraction=0.0,
-                coverage_start_reached_for_unresolved_pairs=False,
-                source_or_decoder_blocked=False,
-            )
-            self.targeted_margin_mode_classification, self.targeted_margin_mode_classification_summary, self.targeted_oi_completeness_proxy_audit = _classify_target_margin_modes(
-                selected_positions,
-                symbol_to_asset_id,
-                {},
-                set(),
-                set(),
-                open_summary.active_notional_total,
-            )
-            self.targeted_margin_mode_continuation_plan = {
-                'current_task_cap': config.max_download_bytes,
-                'compressed_bytes_downloaded': 0,
-                'remaining_cap': config.max_download_bytes,
-                'target_notional_resolved_fraction': 0.0,
-                'target_notional_unresolved_fraction': 1.0,
-                'estimated_bytes_to_resolve_80pct_top30_SOL_notional': None,
-                'estimated_bytes_to_resolve_all_top30_SOL': None,
-                'estimated_bytes_for_top250_SOL': None,
-                'estimated_bytes_for_all_open_positions': None,
-                'estimated_download_cost_if_known': None,
-                'approval_required_before_more_download': True,
-                'recommended_next_action': 'STOP_CLOSE_UNMEASURED_COST_PRIOR',
-            }
-            return self._terminal_for_targeted_margin_mode_lookup()
+            # Zero objects considered -> discovery/listing blocker, NOT cap-exhausted
+            if scan_plan.objects_considered == 0 and scan_plan.objects_listed_total > 0:
+                # Objects listed but none in date range or all over cap
+                self.targeted_margin_mode_continuation_plan = {
+                    'current_task_cap': config.max_download_bytes,
+                    'compressed_bytes_downloaded': 0,
+                    'remaining_cap': config.max_download_bytes,
+                    'target_notional_resolved_fraction': 0.0,
+                    'target_notional_unresolved_fraction': 1.0,
+                    'estimated_bytes_to_resolve_80pct_top30_SOL_notional': None,
+                    'estimated_bytes_to_resolve_all_top30_SOL': None,
+                    'estimated_bytes_for_top250_SOL': None,
+                    'estimated_bytes_for_all_open_positions': None,
+                    'estimated_download_cost_if_known': None,
+                    'approval_required_before_more_download': True,
+                    'recommended_next_action': 'CHECK_DATE_RANGE_OR_CAP',
+                }
+            elif scan_plan.objects_listed_total == 0:
+                self.targeted_margin_mode_continuation_plan = {
+                    'current_task_cap': config.max_download_bytes,
+                    'compressed_bytes_downloaded': 0,
+                    'remaining_cap': config.max_download_bytes,
+                    'target_notional_resolved_fraction': 0.0,
+                    'target_notional_unresolved_fraction': 1.0,
+                    'estimated_bytes_to_resolve_80pct_top30_SOL_notional': None,
+                    'estimated_bytes_to_resolve_all_top30_SOL': None,
+                    'estimated_bytes_for_top250_SOL': None,
+                    'estimated_bytes_for_all_open_positions': None,
+                    'estimated_download_cost_if_known': None,
+                    'approval_required_before_more_download': True,
+                    'recommended_next_action': 'CHECK_NAMESPACE_OR_PERMISSIONS',
+                }
+            else:
+                self.targeted_margin_mode_continuation_plan = {
+                    'current_task_cap': config.max_download_bytes,
+                    'compressed_bytes_downloaded': 0,
+                    'remaining_cap': config.max_download_bytes,
+                    'target_notional_resolved_fraction': 0.0,
+                    'target_notional_unresolved_fraction': 1.0,
+                    'estimated_bytes_to_resolve_80pct_top30_SOL_notional': None,
+                    'estimated_bytes_to_resolve_all_top30_SOL': None,
+                    'estimated_bytes_for_top250_SOL': None,
+                    'estimated_bytes_for_all_open_positions': None,
+                    'estimated_download_cost_if_known': None,
+                    'approval_required_before_more_download': True,
+                    'recommended_next_action': 'STOP_CLOSE_UNMEASURED_COST_PRIOR',
+                }
+
+            self.targeted_backward_lookup_summary.cap_exhausted = False
+            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY.value
 
         all_matches: list[dict[str, Any]] = []
         total_actions = 0
@@ -6293,11 +6448,14 @@ def _plan_backward_replica_cmds_scan(
         fill_window_end_block=last_block,
         replica_cmds_coverage_start='2025-01-25',
         replica_cmds_coverage_end='2025-07-27',
-        reverse_scan_start_prefix='hl-mainnet-node-data/replica_cmds/20250727/',
-        reverse_scan_end_prefix='hl-mainnet-node-data/replica_cmds/20250125/',
+        # S3 uses ISO timestamp prefixes: replica_cmds/YYYY-MM-DDThh:mm:ssZ/YYYYMMDD/<ts>.lz4
+        reverse_scan_start_prefix='hl-mainnet-node-data/replica_cmds/2025-07-27T12:00:27Z/',
+        reverse_scan_end_prefix='hl-mainnet-node-data/replica_cmds/2025-01-26T12:18:22Z/',
         objects_considered=0,
         objects_selected=0,
         objects_skipped_over_cap=0,
+        objects_skipped_missing_size=0,
+        objects_skipped_non_data=0,
         estimated_compressed_bytes=0,
         max_download_bytes=max_download_bytes,
         server_side_filtering_available=False,

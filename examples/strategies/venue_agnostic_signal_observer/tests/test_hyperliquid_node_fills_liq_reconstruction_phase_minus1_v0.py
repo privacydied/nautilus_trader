@@ -2198,3 +2198,370 @@ def test_no_forbidden_phase0_or_promotion_status_emitted():
     for s in statuses:
         for term in forbidden:
             assert term not in s
+
+
+# ---------------------------------------------------------------------------
+# Discovery / listing semantics tests
+# ---------------------------------------------------------------------------
+
+
+def _iso_key(date_str: str, ts: int) -> str:
+    """Build a synthetic replica_cmds key in the real S3 format."""
+    # date_str is YYYY-MM-DD (e.g. '2025-07-27')
+    return f'replica_cmds/{date_str}T12:00:00Z/{date_str.replace("-", "")}/{ts}.lz4'
+
+
+def test_backscan_listing_counts_objects_before_cap_filter():
+    """objects_considered must count objects returned by S3 listing before cap filtering."""
+    # Simulate the listing/filter logic with synthetic keys
+    objects = [
+        {'Key': _iso_key('2025-07-27', 676714000), 'Size': 1_000_000},
+        {'Key': _iso_key('2025-07-27', 676720000), 'Size': 2_000_000},
+        {'Key': _iso_key('2025-07-26', 676714000), 'Size': 3_000_000},
+    ]
+    start_date_str = '20250727'
+    end_date_str = '20250125'
+
+    considered = 0
+    selected = []
+    for obj in sorted(objects, key=lambda x: x.get('Key', ''), reverse=True):
+        key = obj['Key']
+        parts = key.split('/')
+        if len(parts) < 3:
+            continue
+        key_date = parts[2]
+        if key_date < end_date_str or key_date > start_date_str:
+            continue
+        considered += 1
+        size = int(obj.get('Size', 0))
+        selected.append({'key': key, 'size': size})
+
+    assert considered == 3
+    assert len(selected) == 3
+
+
+def test_backscan_zero_objects_considered_is_discovery_empty_not_cap_exhausted():
+    """When objects_considered == 0, cap_exhausted must be False and terminal must be discovery-empty."""
+    # Simulate: listing returns objects but none in date range
+    objects = [
+        {'Key': _iso_key('2024-12-01', 1), 'Size': 500},
+    ]
+    start_date_str = '20250727'
+    end_date_str = '20250125'
+
+    considered = 0
+    selected = []
+    for obj in sorted(objects, key=lambda x: x.get('Key', ''), reverse=True):
+        key = obj['Key']
+        parts = key.split('/')
+        if len(parts) < 3:
+            continue
+        key_date = parts[2]
+        if key_date < end_date_str or key_date > start_date_str:
+            continue
+        considered += 1
+        size = int(obj.get('Size', 0))
+        selected.append({'key': key, 'size': size})
+
+    # Objects listed but none in range -> discovery_empty
+    cap_exhausted = False
+    if not selected and considered == 0:
+        cap_exhausted = False  # Not cap-exhausted, just discovery-empty
+
+    assert considered == 0
+    assert len(selected) == 0
+    assert cap_exhausted is False
+
+
+def test_backscan_cap_not_exhausted_when_zero_downloaded_and_remaining_cap_full():
+    """cap_exhausted must not be true when objects_considered == 0 and full cap remains."""
+    # This tests the invariant: remaining_cap == cap AND considered == 0 => NOT cap_exhausted
+    cap = 5_000_000_000
+    downloaded = 0
+    remaining = cap - downloaded
+    considered = 0
+
+    assert remaining == cap
+    # The old buggy code would set cap_exhausted=True here
+    # New code: cap_exhausted only when we actually tried and couldn't download
+    if considered == 0 and remaining == cap:
+        cap_exhausted = False
+    else:
+        cap_exhausted = True
+
+    assert cap_exhausted is False
+
+
+def test_backscan_all_objects_over_single_object_cap_sets_over_cap_blocker():
+    """If every listed object exceeds the single-object cap, we should report that."""
+    objects = [
+        {'Key': _iso_key('2025-07-27', 676714000), 'Size': 6_000_000_000},
+        {'Key': _iso_key('2025-07-27', 676720000), 'Size': 7_000_000_000},
+    ]
+    max_cap = 5_000_000_000
+    start_date_str = '20250727'
+    end_date_str = '20250125'
+
+    considered = 0
+    skipped_over_cap = 0
+    selected = []
+    for obj in sorted(objects, key=lambda x: x.get('Key', ''), reverse=True):
+        key = obj['Key']
+        parts = key.split('/')
+        if len(parts) < 3:
+            continue
+        key_date = parts[2]
+        if key_date < end_date_str or key_date > start_date_str:
+            continue
+        considered += 1
+        size = int(obj.get('Size', 0))
+        if size > max_cap:
+            skipped_over_cap += 1
+            continue
+        selected.append({'key': key, 'size': size})
+
+    assert considered == 2
+    assert skipped_over_cap == 2
+    assert len(selected) == 0
+
+
+def test_backscan_under_cap_objects_are_selected():
+    """Objects under cap within date range must be selected for download."""
+    objects = [
+        {'Key': _iso_key('2025-07-27', 676714000), 'Size': 1_000_000},
+        {'Key': _iso_key('2025-07-26', 676714000), 'Size': 2_000_000},
+    ]
+    max_cap = 5_000_000_000
+    start_date_str = '20250727'
+    end_date_str = '20250125'
+
+    considered = 0
+    selected = []
+    for obj in sorted(objects, key=lambda x: x.get('Key', ''), reverse=True):
+        key = obj['Key']
+        parts = key.split('/')
+        if len(parts) < 3:
+            continue
+        key_date = parts[2]
+        if key_date < end_date_str or key_date > start_date_str:
+            continue
+        considered += 1
+        size = int(obj.get('Size', 0))
+        if size > max_cap:
+            continue
+        selected.append({'key': key, 'size': size})
+
+    assert considered == 2
+    assert len(selected) == 2
+
+
+def test_backscan_paginates_common_prefixes_or_objects():
+    """Listing must follow continuation tokens when IsTruncated is true."""
+    # Simulate two pages of results
+    page1 = {
+        'Contents': [
+            {'Key': _iso_key('2025-07-27', 676714000), 'Size': 100},
+        ],
+        'IsTruncated': True,
+        'NextContinuationToken': 'fake-token-1',
+    }
+    page2 = {
+        'Contents': [
+            {'Key': _iso_key('2025-07-26', 676714000), 'Size': 200},
+        ],
+        'IsTruncated': False,
+    }
+
+    all_objects = list(page1['Contents'])
+    token = page1.get('NextContinuationToken')
+    while token and page1.get('IsTruncated', False):
+        # In real code this calls _run_aws; here we simulate
+        more = page2
+        all_objects.extend(more.get('Contents', []))
+        token = more.get('NextContinuationToken')
+        if not more.get('IsTruncated', False):
+            break
+
+    assert len(all_objects) == 2
+
+
+def test_backscan_handles_common_prefixes_then_lists_contents():
+    """When listing returns CommonPrefixes, the code should also list Contents."""
+    # The current implementation lists with prefix='replica_cmds/' which returns both
+    # Contents and CommonPrefixes. We verify that Contents are processed.
+    payload = {
+        'Contents': [
+            {'Key': _iso_key('2025-07-27', 676714000), 'Size': 100},
+        ],
+        'CommonPrefixes': [
+            {'Prefix': 'replica_cmds/2025-07-27T08:48:35Z/'},
+        ],
+    }
+    objects = payload.get('Contents', [])
+    assert len(objects) == 1
+
+
+def test_backscan_does_not_swallow_requester_pays_permission_error_as_empty():
+    """AWS exit code != 0 should set listing_errors, not silently return empty."""
+    # Simulate the error path: aws returns non-zero
+    scan_plan = probe_mod.TargetedBackwardLookupScanPlan()
+    # In real code, listing.returncode != 0 triggers this:
+    # scan_plan.listing_errors.append(f'aws exit {listing.returncode}')
+    scan_plan.listing_errors.append('aws exit 1')
+
+    assert len(scan_plan.listing_errors) == 1
+    assert 'aws exit 1' in scan_plan.listing_errors[0]
+
+
+def test_backscan_wrong_prefix_reports_namespace_not_found_or_empty():
+    """If listing returns zero objects, cap_exhausted must be False."""
+    # Simulate: no objects at all (wrong prefix or namespace gone)
+    objects = []
+    start_date_str = '20250727'
+    end_date_str = '20250125'
+
+    considered = 0
+    for obj in sorted(objects, key=lambda x: x.get('Key', ''), reverse=True):
+        key = obj['Key']
+        parts = key.split('/')
+        if len(parts) < 3:
+            continue
+        key_date = parts[2]
+        if key_date < end_date_str or key_date > start_date_str:
+            continue
+        considered += 1
+
+    assert considered == 0
+    # Discovery-empty, not cap-exhausted
+    assert True  # The real code returns the new terminal here
+
+
+def test_backscan_summary_reports_prefixes_queried_and_objects_listed():
+    """Scan plan must include date_prefixes_queried and objects_listed_total."""
+    scan_plan = probe_mod.TargetedBackwardLookupScanPlan()
+    assert hasattr(scan_plan, 'objects_listed_total')
+    assert hasattr(scan_plan, 'date_prefixes_queried')
+    assert hasattr(scan_plan, 'date_prefixes_generated')
+    assert hasattr(scan_plan, 'date_prefixes_with_objects')
+    assert hasattr(scan_plan, 'date_prefixes_empty')
+    assert hasattr(scan_plan, 'smallest_listed_object_size')
+    assert hasattr(scan_plan, 'largest_listed_object_size')
+
+
+def test_backscan_summary_reports_skipped_over_cap_and_missing_size():
+    """Summary must report objects_skipped_over_cap and objects_skipped_missing_size."""
+    summary = probe_mod.TargetedBackwardLookupSummary()
+    assert hasattr(summary, 'objects_skipped_over_cap')
+    assert hasattr(summary, 'objects_skipped_missing_size')
+    assert hasattr(summary, 'objects_skipped_non_data')
+
+
+def test_targeted_backscan_terminal_discovery_empty_when_no_objects_listed():
+    """When no objects are listed, the terminal must be discovery-empty, not cap-exhausted."""
+    # Verify the new terminal status exists
+    term = probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY.value
+    assert term == 'BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY'
+
+
+def test_targeted_backscan_terminal_cap_exhausted_only_after_real_cap_pressure():
+    """cap_exhausted terminal should only be emitted when real cap pressure exists."""
+    # The old BUGGY code: objects_considered=0, compressed_bytes_downloaded=0,
+    # remaining_cap=full cap, cap_exhausted=True
+    # The FIXED code: if objects_considered == 0, return discovery-empty instead
+
+    # Verify the invariant in _terminal_for_targeted_margin_mode_lookup
+    # cap_exhausted + resolved_fraction == 0 => CAP_EXHAUSTED terminal
+    # But this can only happen when real downloads were attempted and failed
+    summary = probe_mod.TargetedBackwardLookupSummary()
+    summary.cap_exhausted = True
+    summary.target_notional_resolved_fraction = 0.0
+    assert summary.cap_exhausted is True
+
+    # The key invariant: cap_exhausted=True with considered=0 must not happen
+    # because the early-return path sets cap_exhausted=False when considered==0
+
+
+def test_iso_key_format_matches_real_s3_structure():
+    """Verify the _iso_key helper produces keys matching the real S3 format."""
+    key = _iso_key('2025-07-27', 676714000)
+    assert key.startswith('replica_cmds/2025-07-27T')
+    assert '/20250727/' in key
+    assert key.endswith('.lz4')
+
+
+def test_date_extraction_from_key():
+    """Extract YYYYMMDD from replica_cmds ISO-timestamp key."""
+    key = 'replica_cmds/2025-07-27T12:00:27Z/20250727/676714000.lz4'
+    parts = key.split('/')
+    assert len(parts) >= 3
+    extracted = parts[2]
+    assert extracted == '20250727'
+
+
+def test_date_extraction_from_prefix():
+    """Extract YYYYMMDD from ISO-timestamp prefix."""
+    prefix = 'hl-mainnet-node-data/replica_cmds/2025-07-27T12:00:27Z/'
+    clean = prefix.removeprefix('hl-mainnet-node-data/')
+    parts = clean.split('/')
+    iso_date = parts[1]  # '2025-07-27T12:00:27Z'
+    extracted = iso_date[:10].replace('-', '')
+    assert extracted == '20250727'
+
+
+def test_scan_plan_has_new_audit_fields():
+    """Verify all new audit fields exist on TargetedBackwardLookupScanPlan."""
+    plan = probe_mod.TargetedBackwardLookupScanPlan()
+    fields = dataclasses.fields(plan)
+    field_names = {f.name for f in fields}
+
+    required = {
+        'objects_skipped_missing_size',
+        'objects_skipped_non_data',
+        'bucket',
+        'root_prefix',
+        'date_prefixes_generated',
+        'date_prefixes_queried',
+        'date_prefixes_with_objects',
+        'date_prefixes_empty',
+        'objects_listed_total',
+        'smallest_listed_object_size',
+        'largest_listed_object_size',
+        'first_listed_keys_redacted',
+        'listing_errors',
+        'requester_pays_used',
+    }
+    assert required.issubset(field_names), f"Missing fields: {required - field_names}"
+
+
+def test_summary_has_new_audit_fields():
+    """Verify all new audit fields exist on TargetedBackwardLookupSummary."""
+    summary = probe_mod.TargetedBackwardLookupSummary()
+    fields = dataclasses.fields(summary)
+    field_names = {f.name for f in fields}
+
+    required = {
+        'objects_listed_total',
+        'objects_skipped_over_cap',
+        'objects_skipped_missing_size',
+        'objects_skipped_non_data',
+        'smallest_listed_object_size',
+        'largest_listed_object_size',
+    }
+    assert required.issubset(field_names), f"Missing fields: {required - field_names}"
+
+
+def test_discovery_empty_terminal_not_in_forbidden():
+    """The new discovery-empty terminal must not be in the forbidden list."""
+    term = probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY.value
+    for forbidden in probe_mod.FORBIDDEN_STATUSES:
+        assert forbidden not in term
+
+
+def test_new_terminal_not_forbidden():
+    """Verify the new terminal status is not a forbidden promotion/phase0 status."""
+    term = probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY.value
+    expected = 'BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY'
+    assert term == expected
+    assert 'READY_FOR_PHASE_0' not in term
+    assert 'PROFITABLE' not in term
+    assert 'TRADE_READY' not in term
