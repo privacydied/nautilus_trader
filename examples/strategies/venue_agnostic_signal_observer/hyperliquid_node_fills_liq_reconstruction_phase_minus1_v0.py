@@ -158,6 +158,11 @@ class StudyStatus(str, Enum):
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_LIQ_PRICE_NOT_RECONSTRUCTABLE = "BLOCKED_LIQ_PRICE_NOT_RECONSTRUCTABLE"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_MARGIN_TIER_SCHEDULE_UNAVAILABLE = "BLOCKED_MARGIN_TIER_SCHEDULE_UNAVAILABLE"
 
+    # Stream completeness / chainability blocked
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_STREAM_COMPLETENESS = "BLOCKED_STREAM_COMPLETENESS"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_FILLS_NOT_CHAINABLE = "BLOCKED_FILLS_NOT_CHAINABLE"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_PARSER_BUG = "BLOCKED_PARSER_BUG"
+
     # OI completeness
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_OI_CONTEXT_UNAVAILABLE = "BLOCKED_OI_CONTEXT_UNAVAILABLE"
     NODE_FILLS_LIQ_PHASE_MINUS1_COMPLETENESS_DIAGNOSTIC_LOW_ZERO_BURNIN = "COMPLETENESS_DIAGNOSTIC_LOW_ZERO_BURNIN"
@@ -611,6 +616,142 @@ class StudySummary:
     exact_liquidation_reconstruction_available: bool = False
     bound_diagnostic_used: bool = False
     completeness_gate_applied: bool = False
+
+
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TransitionDenominatorLedger:
+    """Denominator ledger where every transition belongs to exactly one category.
+
+    Invariant: records_parsed == no_start_position + cold_start
+               + checkable_reconciled + checkable_mismatched
+    """
+    records_parsed: int = 0
+    no_start_position: int = 0
+    cold_start: int = 0
+    checkable_reconciled: int = 0
+    checkable_mismatched: int = 0
+
+    def totals_match(self) -> bool:
+        return self.records_parsed == (
+            self.no_start_position + self.cold_start
+            + self.checkable_reconciled + self.checkable_mismatched
+        )
+
+    def consistency_rate(self) -> float:
+        checkable = self.checkable_reconciled + self.checkable_mismatched
+        if checkable == 0:
+            return 0.0
+        return round(self.checkable_reconciled / checkable, 4)
+
+
+@dataclass
+class TransitionDenominatorLedgerByDir:
+    """Denominator ledger broken down by dir_class."""
+    entries: dict[str, dict[str, int]] = field(default_factory=dict)
+
+
+@dataclass
+class TransitionDenominatorLedgerByUserActivity:
+    """Denominator ledger broken down by user activity tier."""
+    entries: dict[str, dict[str, int]] = field(default_factory=dict)
+
+
+@dataclass
+class HourShardCompletenessAudit:
+    """Audit of whether the loaded hour file is complete or a shard."""
+    file_path: str = ""
+    file_size_bytes: int = 0
+    records_count: int = 0
+    timestamp_min: str = ""
+    timestamp_max: str = ""
+    hours_spanned: float = 0.0
+    is_complete_hour: bool = False
+    unique_hours: list[int] = field(default_factory=list)
+    gap_count_gt2min: int = 0
+    minutes_covered: int = 0
+    sibling_shards_available: list[str] = field(default_factory=list)
+
+
+@dataclass
+class BusyUserTrace:
+    """Trace for a single busy user."""
+    address_redacted: str = ""
+    coin: str = ""
+    fill_count: int = 0
+    mismatch_count: int = 0
+    cold_start_count: int = 0
+    position_keys: list[str] = field(default_factory=list)
+    sample_records: list[dict] = field(default_factory=list)
+
+
+@dataclass
+class BusyUserTraceSummary:
+    """Summary of high-frequency user traces."""
+    top_by_fill_count: list[BusyUserTrace] = field(default_factory=list)
+    top_by_mismatch_count: list[BusyUserTrace] = field(default_factory=list)
+    total_users: int = 0
+    total_fills: int = 0
+    total_mismatches: int = 0
+    traces_selected: int = 0
+
+
+@dataclass
+class AdjacentHourContextAudit:
+    """Audit of adjacent hour context loading."""
+    primary_file: str = ""
+    primary_records: int = 0
+    primary_hour: int = -1
+    adjacent_candidates: list[str] = field(default_factory=list)
+    adjacent_loaded: list[str] = field(default_factory=list)
+    adjacent_skipped_over_cap: list[str] = field(default_factory=list)
+    adjacent_missing: list[str] = field(default_factory=list)
+    total_adjacent_bytes: int = 0
+    under_100mb_cap: bool = False
+    combined_records: int = 0
+
+
+@dataclass
+class StreamGapAudit:
+    """Audit of gaps in the fill stream by user+coin."""
+    total_users_with_gaps: int = 0
+    total_gaps: int = 0
+    gap_examples: list[dict] = field(default_factory=list)
+
+
+@dataclass
+class TwoHourRecomputeAudit:
+    """Audit of recompute with adjacent hour context."""
+    transitions_evaluated: int = 0
+    transitions_with_real_predecessor: int = 0
+    transitions_reconciled: int = 0
+    transitions_mismatched: int = 0
+    consistency_rate: float = 0.0
+
+
+@dataclass
+class PredecessorPresentRecomputeGate:
+    """Gate for recompute with predecessor-present requirement."""
+    gate_passed: bool = False
+    transitions_with_real_predecessor: int = 0
+    transitions_with_synthetic_predecessor: int = 0
+    consistency_with_real_only: float = 0.0
+    consistency_with_synthetic: float = 0.0
+
+
+@dataclass
+class BlockerClassification:
+    """Honest classification of the Phase -1 blocker."""
+    classification: str = "NOT_EVALUATED"  # PASSED, STREAM_COMPLETENESS_BLOCKED, FILLS_NOT_CHAINABLE, PARSER_BUG
+    reason: str = ""
+    hour_is_complete: bool = False
+    adjacent_hours_loaded: int = 0
+    predecessor_present_rate: float = 0.0
+    consistency_after_predecessor_gate: float = 0.0
+    consistency_before_gate: float = 0.0
+    mismatches_concentrated_in_incomplete_users: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -1263,6 +1404,658 @@ def _is_cold_start(prev_pos: Decimal, start_position: Decimal | None) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Denominator ledger computation
+# ---------------------------------------------------------------------------
+
+def compute_transition_denominator_ledger(
+    records: Sequence[Any],
+    config: StudyConfig,
+) -> tuple[TransitionDenominatorLedger, TransitionDenominatorLedgerByDir, TransitionDenominatorLedgerByUserActivity]:
+    """Compute a denominator ledger where every transition belongs to exactly one category.
+
+    Invariant: records_parsed == no_start_position + cold_start
+               + checkable_reconciled + checkable_mismatched
+
+    This replaces the broken arithmetic that previously used two different
+    denominator definitions (dir_class "checkable" vs overall "checkable").
+    """
+    def sort_key(rec):
+        bn = getattr(rec, 'block_number', None) or 0
+        ft = getattr(rec, 'fill_time', None)
+        if ft is not None:
+            try:
+                t_sort = int(ft.timestamp() * 1_000_000_000)
+            except Exception:
+                t_sort = 0
+        else:
+            t_sort = getattr(rec, 'time', 0) or 0
+        return (bn, t_sort)
+
+    sorted_records = sorted(records, key=sort_key)
+
+    ledger = TransitionDenominatorLedger()
+    by_dir: dict[str, dict[str, int]] = {}
+    by_user_activity: dict[str, dict[str, int]] = {}
+
+    # User fill counters for activity tier classification
+    user_fill_counts: dict[str, int] = defaultdict(int)
+
+    positions: dict[tuple[str, str], PositionState] = {}
+
+    for rec in sorted_records:
+        key = (rec.address, rec.coin)
+        ledger.records_parsed += 1
+        user_fill_counts[rec.address] += 1
+
+        if key not in positions:
+            positions[key] = PositionState(address=rec.address, coin=rec.coin)
+        ps = positions[key]
+
+        # Compute signed delta
+        try:
+            delta = signed_delta_for_side(rec.side, rec.sz)
+        except ValueError:
+            # Parse error — should not happen after schema gate
+            ledger.records_parsed -= 1
+            continue
+
+        prev_pos = ps.signed_position
+
+        # Check startPosition
+        sp = None
+        if hasattr(rec, 'start_position') and rec.start_position is not None:
+            sp = _try_parse_start_position(rec.start_position)
+
+        # Dir class
+        dir_class = rec.dir or "unknown"
+
+        # User activity tier
+        fill_count = user_fill_counts[rec.address]
+        if fill_count >= 100:
+            activity_tier = "high_frequency"
+        elif fill_count >= 10:
+            activity_tier = "medium_frequency"
+        else:
+            activity_tier = "low_frequency"
+
+        # Initialize by_dir entry
+        if dir_class not in by_dir:
+            by_dir[dir_class] = {
+                "no_start_position": 0, "cold_start": 0,
+                "checkable_reconciled": 0, "checkable_mismatched": 0,
+            }
+
+        # Initialize by_user_activity entry
+        if activity_tier not in by_user_activity:
+            by_user_activity[activity_tier] = {
+                "no_start_position": 0, "cold_start": 0,
+                "checkable_reconciled": 0, "checkable_mismatched": 0,
+            }
+
+        if sp is None:
+            # Category: no_start_position
+            ledger.no_start_position += 1
+            by_dir[dir_class]["no_start_position"] += 1
+            by_user_activity[activity_tier]["no_start_position"] += 1
+            ps.signed_position = prev_pos + delta
+            continue
+
+        cold = _is_cold_start(prev_pos, sp)
+        if cold:
+            # Category: cold_start
+            ledger.cold_start += 1
+            by_dir[dir_class]["cold_start"] += 1
+            by_user_activity[activity_tier]["cold_start"] += 1
+            ps.signed_position = sp + delta
+            continue
+
+        # Checkable transition
+        new_pos = prev_pos + delta
+        pre_match = abs(sp - prev_pos) <= Decimal("0.001")
+        post_match = abs(sp - new_pos) <= Decimal("0.001")
+
+        if pre_match or post_match:
+            ledger.checkable_reconciled += 1
+            by_dir[dir_class]["checkable_reconciled"] += 1
+            by_user_activity[activity_tier]["checkable_reconciled"] += 1
+        else:
+            ledger.checkable_mismatched += 1
+            by_dir[dir_class]["checkable_mismatched"] += 1
+            by_user_activity[activity_tier]["checkable_mismatched"] += 1
+
+        # Position update: pure chain reconstruction
+        ps.signed_position = new_pos
+
+    return ledger, TransitionDenominatorLedgerByDir(entries=by_dir), TransitionDenominatorLedgerByUserActivity(entries=by_user_activity)
+
+
+# ---------------------------------------------------------------------------
+# Busy user tracing
+# ---------------------------------------------------------------------------
+
+def trace_busy_users(
+    records: Sequence[Any],
+    config: StudyConfig,
+    top_n: int = 10,
+) -> BusyUserTraceSummary:
+    """Trace the top N users by fill count and by mismatch count.
+
+    Produces per-user trace records with redacted addresses and sample records.
+    """
+    def sort_key(rec):
+        bn = getattr(rec, 'block_number', None) or 0
+        ft = getattr(rec, 'fill_time', None)
+        if ft is not None:
+            try:
+                t_sort = int(ft.timestamp() * 1_000_000_000)
+            except Exception:
+                t_sort = 0
+        else:
+            t_sort = getattr(rec, 'time', 0) or 0
+        return (bn, t_sort)
+
+    sorted_records = sorted(records, key=sort_key)
+
+    # Per-user stats
+    user_stats: dict[str, dict] = defaultdict(lambda: {
+        "fill_count": 0, "mismatch_count": 0, "cold_start_count": 0,
+        "position_keys": set(), "sample_records": [],
+    })
+
+    positions: dict[tuple[str, str], PositionState] = {}
+
+    for rec in sorted_records:
+        key = (rec.address, rec.coin)
+        stats = user_stats[rec.address]
+        stats["fill_count"] += 1
+        stats["position_keys"].add(f"{rec.address}::{rec.coin}")
+
+        if key not in positions:
+            positions[key] = PositionState(address=rec.address, coin=rec.coin)
+        ps = positions[key]
+
+        try:
+            delta = signed_delta_for_side(rec.side, rec.sz)
+        except ValueError:
+            continue
+
+        prev_pos = ps.signed_position
+        new_pos = prev_pos + delta
+
+        sp = None
+        if hasattr(rec, 'start_position') and rec.start_position is not None:
+            sp = _try_parse_start_position(rec.start_position)
+
+        if sp is not None:
+            if _is_cold_start(prev_pos, sp):
+                stats["cold_start_count"] += 1
+                ps.signed_position = sp + delta
+            else:
+                pre_match = abs(sp - prev_pos) <= Decimal("0.001")
+                post_match = abs(sp - new_pos) <= Decimal("0.001")
+                if not (pre_match or post_match):
+                    stats["mismatch_count"] += 1
+                    if len(stats["sample_records"]) < 3:
+                        stats["sample_records"].append({
+                            "block_number": getattr(rec, 'block_number', 0),
+                            "coin": rec.coin,
+                            "side": rec.side,
+                            "sz": str(rec.sz),
+                            "px": str(rec.px),
+                            "start_position": str(sp),
+                            "reconstructed_before": str(prev_pos),
+                            "delta": str(delta),
+                            "transition_type": classify_transition(prev_pos, new_pos, rec.side),
+                        })
+                ps.signed_position = new_pos
+        else:
+            ps.signed_position = new_pos
+
+    total_users = len(user_stats)
+    total_fills = sum(s["fill_count"] for s in user_stats.values())
+    total_mismatches = sum(s["mismatch_count"] for s in user_stats.values())
+
+    # Top by fill count
+    by_fill = sorted(user_stats.items(), key=lambda x: x[1]["fill_count"], reverse=True)[:top_n]
+    top_fill_traces = []
+    for addr, s in by_fill:
+        top_fill_traces.append(BusyUserTrace(
+            address_redacted=redact_address(addr),
+            coin="",  # multi-coin
+            fill_count=s["fill_count"],
+            mismatch_count=s["mismatch_count"],
+            cold_start_count=s["cold_start_count"],
+            position_keys=sorted(s["position_keys"]),
+            sample_records=s["sample_records"],
+        ))
+
+    # Top by mismatch count
+    by_mismatch = sorted(user_stats.items(), key=lambda x: x[1]["mismatch_count"], reverse=True)[:top_n]
+    top_mismatch_traces = []
+    for addr, s in by_mismatch:
+        top_mismatch_traces.append(BusyUserTrace(
+            address_redacted=redact_address(addr),
+            coin="",
+            fill_count=s["fill_count"],
+            mismatch_count=s["mismatch_count"],
+            cold_start_count=s["cold_start_count"],
+            position_keys=sorted(s["position_keys"]),
+            sample_records=s["sample_records"],
+        ))
+
+    return BusyUserTraceSummary(
+        top_by_fill_count=top_fill_traces,
+        top_by_mismatch_count=top_mismatch_traces,
+        total_users=total_users,
+        total_fills=total_fills,
+        total_mismatches=total_mismatches,
+        traces_selected=len(top_fill_traces) + len(top_mismatch_traces),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Hour shard completeness audit
+# ---------------------------------------------------------------------------
+
+def audit_hour_shard_completeness(
+    records: Sequence[Any],
+    file_path: str = "",
+    file_size_bytes: int = 0,
+) -> HourShardCompletenessAudit:
+    """Determine if the loaded data represents a complete hour or a shard/chunk.
+
+    A complete hour has records spanning ~60 minutes with consistent hour number.
+    A shard has either partial minute coverage or records from multiple hours.
+    """
+    audit = HourShardCompletenessAudit(
+        file_path=file_path,
+        file_size_bytes=file_size_bytes,
+        records_count=len(records),
+    )
+
+    if not records:
+        return audit
+
+    timestamps = []
+    hours_set = set()
+    for rec in records:
+        ft = getattr(rec, 'fill_time', None)
+        if ft is not None:
+            timestamps.append(ft)
+            hours_set.add(ft.hour)
+
+    if not timestamps:
+        return audit
+
+    timestamps.sort()
+    audit.timestamp_min = timestamps[0].isoformat()
+    audit.timestamp_max = timestamps[-1].isoformat()
+    audit.unique_hours = sorted(hours_set)
+    audit.hours_spanned = (timestamps[-1] - timestamps[0]).total_seconds() / 3600.0
+
+    # Count unique minutes
+    minutes_set = set()
+    for t in timestamps:
+        minutes_set.add(t.replace(second=0, microsecond=0))
+    audit.minutes_covered = len(minutes_set)
+
+    # Count gaps > 2 minutes
+    sorted_minutes = sorted(minutes_set)
+    gap_count = 0
+    for i in range(1, len(sorted_minutes)):
+        gap = (sorted_minutes[i] - sorted_minutes[i - 1]).total_seconds()
+        if gap > 120:
+            gap_count += 1
+    audit.gap_count_gt2min = gap_count
+
+    # Complete hour criteria:
+    # - All records in a single hour
+    # - At least 55 unique minutes covered (allowing for a few minutes at boundaries)
+    # - At most 1 gap > 2 minutes
+    audit.is_complete_hour = (
+        len(hours_set) == 1
+        and audit.minutes_covered >= 55
+        and gap_count <= 1
+    )
+
+    return audit
+
+
+# ---------------------------------------------------------------------------
+# Adjacent hour context loading
+# ---------------------------------------------------------------------------
+
+def load_adjacent_hours(
+    primary_hour: int,
+    data_root: str | None,
+    primary_size_bytes: int = 0,
+    max_adjacent_bytes: int = 100_000_000,
+) -> tuple[AdjacentHourContextAudit, list[Any]]:
+    """Attempt to load adjacent hour files for warm-start context.
+
+    Returns the audit and any successfully loaded adjacent records.
+    Only loads if total adjacent bytes would be under the cap.
+    """
+    audit = AdjacentHourContextAudit(primary_hour=primary_hour)
+
+    if not data_root:
+        return audit, []
+
+    hourly_dir = Path(data_root) / "node_fills_by_block" / "hourly"
+    if not hourly_dir.is_dir():
+        return audit, []
+
+    # Check for adjacent hours
+    adjacent_hours = []
+    for h in [primary_hour - 1, primary_hour + 1]:
+        candidate = hourly_dir / f"{h}.lz4"
+        if candidate.is_file():
+            adjacent_hours.append((h, candidate))
+        else:
+            audit.adjacent_missing.append(f"{h}.lz4")
+
+    if not adjacent_hours:
+        return audit, []
+
+    audit.adjacent_candidates = [str(c[1]) for c in adjacent_hours]
+
+    # Check total size
+    total_adjacent_bytes = sum(c[1].stat().st_size for c in adjacent_hours)
+    audit.total_adjacent_bytes = total_adjacent_bytes
+    audit.under_100mb_cap = total_adjacent_bytes <= max_adjacent_bytes
+
+    if not audit.under_100mb_cap:
+        audit.adjacent_skipped_over_cap = [str(c[1]) for c in adjacent_hours]
+        return audit, []
+
+    # Load adjacent records
+    all_adjacent_records = []
+    for h, path in adjacent_hours:
+        try:
+            if path.suffix == ".lz4":
+                adj_records = list(stream_fills_from_lz4(str(path)))
+            else:
+                adj_records = list(stream_fills_from_jsonl(str(path)))
+            all_adjacent_records.extend(adj_records)
+            audit.adjacent_loaded.append(str(path))
+        except Exception as exc:
+            audit.adjacent_skipped_over_cap.append(f"{path}: {exc}")
+
+    audit.combined_records = len(all_adjacent_records)
+    return audit, all_adjacent_records
+
+
+# ---------------------------------------------------------------------------
+# Predecessor-present recompute gate
+# ---------------------------------------------------------------------------
+
+def recompute_with_predecessor_gate(
+    primary_records: Sequence[Any],
+    adjacent_records: Sequence[Any],
+    config: StudyConfig,
+) -> tuple[PredecessorPresentRecomputeGate, TwoHourRecomputeAudit]:
+    """Recompute reconciliation only on transitions with a real predecessor.
+
+    A "real predecessor" means the user+coin had records in the adjacent hour,
+    so the position state entering this hour is not a synthetic seed.
+
+    Returns the gate result and a detailed recompute audit.
+    """
+    def sort_key(rec):
+        bn = getattr(rec, 'block_number', None) or 0
+        ft = getattr(rec, 'fill_time', None)
+        if ft is not None:
+            try:
+                t_sort = int(ft.timestamp() * 1_000_000_000)
+            except Exception:
+                t_sort = 0
+        else:
+            t_sort = getattr(rec, 'time', 0) or 0
+        return (bn, t_sort)
+
+    combined = list(adjacent_records) + list(primary_records)
+    combined_sorted = sorted(combined, key=sort_key)
+
+    # Track which user+coin keys had records in adjacent hour
+    predecessor_keys: set[tuple[str, str]] = set()
+    for rec in adjacent_records:
+        predecessor_keys.add((rec.address, rec.coin))
+
+    # Full reconstruction on combined data
+    positions: dict[tuple[str, str], PositionState] = {}
+
+    # Phase 1: process adjacent records to establish state
+    for rec in combined_sorted:
+        key = (rec.address, rec.coin)
+        if key not in positions:
+            positions[key] = PositionState(address=rec.address, coin=rec.coin)
+        ps = positions[key]
+
+        try:
+            delta = signed_delta_for_side(rec.side, rec.sz)
+        except ValueError:
+            continue
+
+        sp = None
+        if hasattr(rec, 'start_position') and rec.start_position is not None:
+            sp = _try_parse_start_position(rec.start_position)
+
+        if sp is not None and _is_cold_start(ps.signed_position, sp):
+            ps.signed_position = sp + delta
+        else:
+            ps.signed_position = ps.signed_position + delta
+
+    # Phase 2: recompute on primary records only, tracking predecessor gate
+    gate = PredecessorPresentRecomputeGate()
+    recompute = TwoHourRecomputeAudit()
+
+    positions2: dict[tuple[str, str], PositionState] = {}
+    for rec in combined_sorted:
+        key = (rec.address, rec.coin)
+
+        if key not in positions2:
+            positions2[key] = PositionState(address=rec.address, coin=rec.coin)
+        ps = positions2[key]
+
+        try:
+            delta = signed_delta_for_side(rec.side, rec.sz)
+        except ValueError:
+            continue
+
+        prev_pos = ps.signed_position
+        new_pos = prev_pos + delta
+
+        sp = None
+        if hasattr(rec, 'start_position') and rec.start_position is not None:
+            sp = _try_parse_start_position(rec.start_position)
+
+        # Only evaluate primary hour records with startPosition
+        ft = getattr(rec, 'fill_time', None)
+        if ft is not None and sp is not None:
+            is_primary_hour = ft.hour == (primary_records[0].fill_time.hour
+                                          if primary_records and hasattr(primary_records[0], 'fill_time')
+                                          and primary_records[0].fill_time is not None
+                                          else -1)
+            if is_primary_hour:
+                has_real_predecessor = key in predecessor_keys
+                cold = _is_cold_start(prev_pos, sp)
+
+                if not cold:
+                    recompute.transitions_evaluated += 1
+                    if has_real_predecessor:
+                        recompute.transitions_with_real_predecessor += 1
+                        gate.transitions_with_real_predecessor += 1
+                    else:
+                        gate.transitions_with_synthetic_predecessor += 1
+
+                    pre_match = abs(sp - prev_pos) <= Decimal("0.001")
+                    post_match = abs(sp - new_pos) <= Decimal("0.001")
+
+                    if pre_match or post_match:
+                        recompute.transitions_reconciled += 1
+                    else:
+                        recompute.transitions_mismatched += 1
+
+        # Position update
+        if sp is not None and _is_cold_start(prev_pos, sp):
+            ps.signed_position = sp + delta
+        else:
+            ps.signed_position = new_pos
+
+    # Compute rates
+    if recompute.transitions_evaluated > 0:
+        recompute.consistency_rate = round(
+            recompute.transitions_reconciled / recompute.transitions_evaluated, 4
+        )
+
+    if gate.transitions_with_real_predecessor > 0:
+        # Count reconciled/mismatched for real-predecessor-only subset
+        # We need to re-run with the gate filter
+        positions3: dict[tuple[str, str], PositionState] = {}
+        real_reconciled = 0
+        real_mismatched = 0
+        for rec in combined_sorted:
+            key = (rec.address, rec.coin)
+            if key not in positions3:
+                positions3[key] = PositionState(address=rec.address, coin=rec.coin)
+            ps = positions3[key]
+
+            try:
+                delta = signed_delta_for_side(rec.side, rec.sz)
+            except ValueError:
+                continue
+
+            prev_pos = ps.signed_position
+            new_pos = prev_pos + delta
+
+            sp = None
+            if hasattr(rec, 'start_position') and rec.start_position is not None:
+                sp = _try_parse_start_position(rec.start_position)
+
+            ft = getattr(rec, 'fill_time', None)
+            if ft is not None and sp is not None:
+                is_primary = ft.hour == (primary_records[0].fill_time.hour
+                                         if primary_records and hasattr(primary_records[0], 'fill_time')
+                                         and primary_records[0].fill_time is not None
+                                         else -1)
+                if is_primary and key in predecessor_keys:
+                    cold = _is_cold_start(prev_pos, sp)
+                    if not cold:
+                        pre_match = abs(sp - prev_pos) <= Decimal("0.001")
+                        post_match = abs(sp - new_pos) <= Decimal("0.001")
+                        if pre_match or post_match:
+                            real_reconciled += 1
+                        else:
+                            real_mismatched += 1
+
+            if sp is not None and _is_cold_start(prev_pos, sp):
+                ps.signed_position = sp + delta
+            else:
+                ps.signed_position = new_pos
+
+        total_real = real_reconciled + real_mismatched
+        if total_real > 0:
+            gate.consistency_with_real_only = round(real_reconciled / total_real, 4)
+
+    gate.gate_passed = gate.consistency_with_real_only >= Decimal("0.95")
+    gate.transitions_with_real_predecessor = recompute.transitions_with_real_predecessor
+
+    return gate, recompute
+
+
+# ---------------------------------------------------------------------------
+# Blocker classification
+# ---------------------------------------------------------------------------
+
+def classify_blocker(
+    consistency_rate: float,
+    hour_completeness: HourShardCompletenessAudit,
+    adjacent_audit: AdjacentHourContextAudit,
+    predecessor_gate: PredecessorPresentRecomputeGate,
+    busy_user_summary: BusyUserTraceSummary,
+) -> BlockerClassification:
+    """Classify the Phase -1 blocker honestly as one of:
+    - PASSED: consistency >= 0.95 after all corrections
+    - STREAM_COMPLETENESS_BLOCKED: hour is incomplete or missing adjacent context
+    - FILLS_NOT_CHAINABLE: fills don't chain even with complete data and predecessor context
+    - PARSER_BUG: evidence of systematic parsing errors
+    """
+    bc = BlockerClassification(
+        consistency_before_gate=consistency_rate,
+        hour_is_complete=hour_completeness.is_complete_hour,
+        adjacent_hours_loaded=len(adjacent_audit.adjacent_loaded),
+        predecessor_present_rate=(
+            predecessor_gate.transitions_with_real_predecessor
+            / max(predecessor_gate.transitions_with_real_predecessor + predecessor_gate.transitions_with_synthetic_predecessor, 1)
+        ),
+    )
+
+    # Check parser bug: if all mismatches have same delta/sign pattern
+    if busy_user_summary.top_by_mismatch_count:
+        top_mismatch_user = busy_user_summary.top_by_mismatch_count[0]
+        if (top_mismatch_user.fill_count > 0
+                and top_mismatch_user.mismatch_count / max(top_mismatch_user.fill_count, 1) > 0.95):
+            bc.classification = "PARSER_BUG"
+            bc.reason = (
+                f"Top mismatch user {top_mismatch_user.address_redacted} has "
+                f"{top_mismatch_user.mismatch_count}/{top_mismatch_user.fill_count} "
+                f"mismatches — systematic parsing error suspected"
+            )
+            return bc
+
+    # Check stream completeness
+    if not hour_completeness.is_complete_hour:
+        bc.classification = "STREAM_COMPLETENESS_BLOCKED"
+        bc.reason = (
+            f"Hour file is incomplete: {hour_completeness.minutes_covered}/60 minutes covered, "
+            f"{hour_completeness.gap_count_gt2min} gaps > 2min, "
+            f"hours_spanned={hour_completeness.hours_spanned:.2f}"
+        )
+        return bc
+
+    if adjacent_audit.adjacent_skipped_over_cap:
+        bc.classification = "STREAM_COMPLETENESS_BLOCKED"
+        bc.reason = (
+            f"Adjacent hours skipped due to size cap: {adjacent_audit.total_adjacent_bytes} bytes "
+            f"> 100MB limit"
+        )
+        return bc
+
+    # Check predecessor-present consistency
+    if predecessor_gate.transitions_with_real_predecessor > 0:
+        bc.consistency_after_predecessor_gate = predecessor_gate.consistency_with_real_only
+        if predecessor_gate.consistency_with_real_only >= 0.95:
+            bc.classification = "PASSED"
+            bc.reason = (
+                f"Consistency with real predecessor = {predecessor_gate.consistency_with_real_only:.4f} >= 0.95"
+            )
+            return bc
+        else:
+            bc.classification = "FILLS_NOT_CHAINABLE"
+            bc.reason = (
+                f"Even with real predecessor context, consistency = "
+                f"{predecessor_gate.consistency_with_real_only:.4f} < 0.95 "
+                f"({predecessor_gate.transitions_with_real_predecessor} transitions evaluated)"
+            )
+            return bc
+
+    # No real predecessors available — evaluate based on overall consistency
+    if consistency_rate >= 0.95:
+        bc.classification = "PASSED"
+        bc.reason = f"Consistency = {consistency_rate:.4f} >= 0.95"
+        return bc
+
+    # Fallback: mismatches exist but can't determine root cause
+    bc.classification = "FILLS_NOT_CHAINABLE"
+    bc.reason = (
+        f"Consistency = {consistency_rate:.4f} < 0.95 with "
+        f"{predecessor_gate.transitions_with_real_predecessor} real-predecessor transitions "
+        f"and {predecessor_gate.transitions_with_synthetic_predecessor} synthetic-predecessor transitions"
+    )
+    return bc
+
+
 def audit_side_delta_mapping(
     records: Sequence[Any],
 ) -> SideDeltaMappingAudit:
@@ -1446,32 +2239,23 @@ def reconstruct_positions(
     Returns (audit, state_samples, errors).
     """
     def sort_key(rec):
-        """Sort by block_number then start_position for correct intra-block ordering.
+        """Sort by block_number then fill_time for correct chronological ordering.
 
-        Within a single block, each fill's start_position equals the cumulative
-        position from all PREVIOUS fills in that same block (for the same user+coin).
-        Sorting by start_position within each block gives the correct fill sequence.
-        Between blocks, external fills not captured may change the total, so we use
-        start_position as the authoritative state reference.
+        The node_fills_by_block archive is already sorted by (block_number, time).
+        Sorting by startPosition mixes different user+coin pairs together since
+        each has its own position state. Use (block_number, time) to preserve
+        the natural chronological order of fills.
         """
         bn = getattr(rec, 'block_number', None) or 0
-        sp_val = getattr(rec, 'start_position', None)
-        if sp_val is not None:
+        ft = getattr(rec, 'fill_time', None)
+        if ft is not None:
             try:
-                sp_sort = float(sp_val)
-            except (ValueError, TypeError):
-                sp_sort = 0.0
+                t_sort = int(ft.timestamp() * 1_000_000_000)
+            except Exception:
+                t_sort = 0
         else:
-            sp_sort = 0.0
-        tid_val = getattr(rec, 'tid', None)
-        if tid_val is not None:
-            try:
-                tid_sort = int(tid_val)
-            except (ValueError, TypeError):
-                tid_sort = 0
-        else:
-            tid_sort = 0
-        return (bn, sp_sort, tid_sort)
+            t_sort = getattr(rec, 'time', 0) or 0
+        return (bn, t_sort)
 
     sorted_records = sorted(records, key=sort_key)
 
@@ -1684,14 +2468,16 @@ def reconstruct_positions_full_audit(
     - position_state_samples_redacted.jsonl
     """
     def sort_key(rec):
-        if hasattr(rec, 'block_number') and rec.block_number is not None:
-            return (rec.block_number, 0)
-        if hasattr(rec, 'fill_time') and rec.fill_time is not None:
+        bn = getattr(rec, 'block_number', None) or 0
+        ft = getattr(rec, 'fill_time', None)
+        if ft is not None:
             try:
-                return (int(rec.fill_time.timestamp() * 1e9), 0)
+                t_sort = int(ft.timestamp() * 1_000_000_000)
             except Exception:
-                return (0, 0)
-        return (0, 0)
+                t_sort = 0
+        else:
+            t_sort = getattr(rec, 'time', 0) or 0
+        return (bn, t_sort)
 
     sorted_records = sorted(records, key=sort_key)
 
@@ -1772,7 +2558,7 @@ def reconstruct_positions_full_audit(
 
             if cold:
                 consistency_audit.transitions_uncheckable_cold_start += 1
-                ps.signed_position = sp
+                ps.signed_position = sp + delta  # seed from startPosition, then apply this fill
                 audit.unknown_cold_start_positions += 1
                 audit.cold_start_positions += 1
                 ps.is_known = False
@@ -2364,6 +3150,17 @@ class NodeFillsLiqReconstructionProbe:
         self.completeness: CompletenessSummary | None = None
         self.tier_inv: MarginTierScheduleInventory | None = None
         self.status: str = ""
+        # New audit artifacts
+        self.denominator_ledger: TransitionDenominatorLedger | None = None
+        self.denominator_ledger_by_dir: TransitionDenominatorLedgerByDir | None = None
+        self.denominator_ledger_by_user_activity: TransitionDenominatorLedgerByUserActivity | None = None
+        self.hour_completeness_audit: HourShardCompletenessAudit | None = None
+        self.adjacent_hour_audit: AdjacentHourContextAudit | None = None
+        self.adjacent_records: list = []
+        self.predecessor_gate: PredecessorPresentRecomputeGate | None = None
+        self.two_hour_recompute: TwoHourRecomputeAudit | None = None
+        self.busy_user_summary: BusyUserTraceSummary | None = None
+        self.blocker_classification: BlockerClassification | None = None
 
     def run(self) -> StudySummary:
         """Execute all phases and write artifacts."""
@@ -2447,6 +3244,60 @@ class NodeFillsLiqReconstructionProbe:
         else:
             self.position_audit = PositionReconstructionAudit()
 
+        # Phase E.1 — Denominator ledger
+        print("Phase E.1: Denominator ledger", flush=True)
+        self.denominator_ledger = None
+        self.denominator_ledger_by_dir = None
+        self.denominator_ledger_by_user_activity = None
+        if records_for_phases and not config.dry_run and not config.plan_only:
+            self.denominator_ledger, self.denominator_ledger_by_dir, self.denominator_ledger_by_user_activity = (
+                compute_transition_denominator_ledger(records_for_phases, config)
+            )
+
+        # Phase E.2 — Hour shard completeness
+        print("Phase E.2: Hour shard completeness", flush=True)
+        self.hour_completeness_audit = HourShardCompletenessAudit()
+        if records_for_phases and not config.dry_run and not config.plan_only:
+            primary_file = ""
+            primary_size = 0
+            if self.download_manifest and self.download_manifest.objects:
+                primary_file = self.download_manifest.objects[0].get("key", "")
+                primary_size = self.download_manifest.objects[0].get("size_bytes", 0)
+            self.hour_completeness_audit = audit_hour_shard_completeness(
+                records_for_phases, file_path=primary_file, file_size_bytes=primary_size,
+            )
+
+        # Phase E.3 — Adjacent hour context loading
+        print("Phase E.3: Adjacent hour context", flush=True)
+        self.adjacent_hour_audit = AdjacentHourContextAudit()
+        self.adjacent_records = []
+        if records_for_phases and not config.dry_run and not config.plan_only:
+            primary_hour = -1
+            if records_for_phases and hasattr(records_for_phases[0], 'fill_time') and records_for_phases[0].fill_time is not None:
+                primary_hour = records_for_phases[0].fill_time.hour
+            primary_size = 0
+            if self.download_manifest and self.download_manifest.objects:
+                primary_size = self.download_manifest.objects[0].get("size_bytes", 0)
+            self.adjacent_hour_audit, self.adjacent_records = load_adjacent_hours(
+                primary_hour, config.data_root, primary_size, config.max_download_bytes,
+            )
+
+        # Phase E.4 — Predecessor-present recompute gate
+        print("Phase E.4: Predecessor-present recompute gate", flush=True)
+        self.predecessor_gate = PredecessorPresentRecomputeGate()
+        self.two_hour_recompute = TwoHourRecomputeAudit()
+        if (records_for_phases and self.adjacent_records
+                and not config.dry_run and not config.plan_only):
+            self.predecessor_gate, self.two_hour_recompute = recompute_with_predecessor_gate(
+                records_for_phases, self.adjacent_records, config,
+            )
+
+        # Phase E.5 — Busy user tracing (10+ users)
+        print("Phase E.5: Busy user tracing", flush=True)
+        self.busy_user_summary = BusyUserTraceSummary()
+        if records_for_phases and not config.dry_run and not config.plan_only:
+            self.busy_user_summary = trace_busy_users(records_for_phases, config, top_n=10)
+
         # Phase F — Liquidation price reconstruction
         print("Phase F: Isolated-only liquidation-price audit", flush=True)
         if records_for_phases and not config.dry_run and not config.plan_only:
@@ -2493,6 +3344,19 @@ class NodeFillsLiqReconstructionProbe:
                 )
             else:
                 self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_SCHEMA_NO_RECORDS.value
+
+        # Phase H.1 — Blocker classification
+        if (not config.dry_run and not config.plan_only
+                and self.position_audit and self.position_audit.consistency_audit):
+            ca = self.position_audit.consistency_audit
+            consistency_rate = ca.consistency_rate_checkable_only
+            self.blocker_classification = classify_blocker(
+                consistency_rate=consistency_rate,
+                hour_completeness=self.hour_completeness_audit or HourShardCompletenessAudit(),
+                adjacent_audit=self.adjacent_hour_audit or AdjacentHourContextAudit(),
+                predecessor_gate=self.predecessor_gate or PredecessorPresentRecomputeGate(),
+                busy_user_summary=self.busy_user_summary or BusyUserTraceSummary(),
+            )
 
         summary.status = self.status
         self._write_artifacts(summary)
@@ -2976,6 +3840,209 @@ class NodeFillsLiqReconstructionProbe:
             self.status or summary.status, blocked=blocked,
         )
         (out / "summary.md").write_text(md)
+
+        # Denominator ledger
+        if self.denominator_ledger:
+            atomic_write_json(out / "transition_denominator_ledger.json", {
+                "records_parsed": self.denominator_ledger.records_parsed,
+                "no_start_position": self.denominator_ledger.no_start_position,
+                "cold_start": self.denominator_ledger.cold_start,
+                "checkable_reconciled": self.denominator_ledger.checkable_reconciled,
+                "checkable_mismatched": self.denominator_ledger.checkable_mismatched,
+                "totals_match": self.denominator_ledger.totals_match(),
+                "consistency_rate": self.denominator_ledger.consistency_rate(),
+            })
+
+        if self.denominator_ledger_by_dir:
+            atomic_write_json(out / "transition_denominator_ledger_by_dir.json",
+                              self.denominator_ledger_by_dir.entries)
+
+        if self.denominator_ledger_by_user_activity:
+            atomic_write_json(out / "transition_denominator_ledger_by_user_activity.json",
+                              self.denominator_ledger_by_user_activity.entries)
+
+        # Denominator ledger samples (redacted JSONL)
+        if self.denominator_ledger and self.busy_user_summary:
+            ledger_sample = {
+                "ledger_summary": {
+                    "records_parsed": self.denominator_ledger.records_parsed,
+                    "checkable_reconciled": self.denominator_ledger.checkable_reconciled,
+                    "checkable_mismatched": self.denominator_ledger.checkable_mismatched,
+                    "consistency_rate": self.denominator_ledger.consistency_rate(),
+                },
+                "invariant_holds": self.denominator_ledger.totals_match(),
+            }
+            _jsonl_write(out / "transition_denominator_ledger_samples_redacted.jsonl", [ledger_sample])
+
+        # Hour shard completeness
+        if self.hour_completeness_audit:
+            atomic_write_json(out / "hour_shard_completeness_audit.json", {
+                "file_path": self.hour_completeness_audit.file_path,
+                "file_size_bytes": self.hour_completeness_audit.file_size_bytes,
+                "records_count": self.hour_completeness_audit.records_count,
+                "timestamp_min": self.hour_completeness_audit.timestamp_min,
+                "timestamp_max": self.hour_completeness_audit.timestamp_max,
+                "hours_spanned": self.hour_completeness_audit.hours_spanned,
+                "is_complete_hour": self.hour_completeness_audit.is_complete_hour,
+                "unique_hours": self.hour_completeness_audit.unique_hours,
+                "gap_count_gt2min": self.hour_completeness_audit.gap_count_gt2min,
+                "minutes_covered": self.hour_completeness_audit.minutes_covered,
+            })
+
+            # Text listing
+            hc = self.hour_completeness_audit
+            listing_lines = [
+                f"Hour Shard Completeness Listing",
+                f"  File: {hc.file_path}",
+                f"  Size: {hc.file_size_bytes:,} bytes",
+                f"  Records: {hc.records_count:,}",
+                f"  Time range: {hc.timestamp_min} to {hc.timestamp_max}",
+                f"  Hours spanned: {hc.hours_spanned:.2f}",
+                f"  Unique hours: {hc.unique_hours}",
+                f"  Minutes covered: {hc.minutes_covered}/60",
+                f"  Gaps > 2min: {hc.gap_count_gt2min}",
+                f"  Is complete hour: {hc.is_complete_hour}",
+            ]
+            atomic_write_text(out / "hour_shard_completeness_listing.txt", "\n".join(listing_lines))
+
+        # Adjacent hour context
+        if self.adjacent_hour_audit:
+            atomic_write_json(out / "adjacent_hour_context_audit.json", {
+                "primary_file": self.adjacent_hour_audit.primary_file,
+                "primary_records": self.adjacent_hour_audit.primary_records,
+                "primary_hour": self.adjacent_hour_audit.primary_hour,
+                "adjacent_candidates": self.adjacent_hour_audit.adjacent_candidates,
+                "adjacent_loaded": self.adjacent_hour_audit.adjacent_loaded,
+                "adjacent_skipped_over_cap": self.adjacent_hour_audit.adjacent_skipped_over_cap,
+                "adjacent_missing": self.adjacent_hour_audit.adjacent_missing,
+                "total_adjacent_bytes": self.adjacent_hour_audit.total_adjacent_bytes,
+                "under_100mb_cap": self.adjacent_hour_audit.under_100mb_cap,
+                "combined_records": self.adjacent_hour_audit.combined_records,
+            })
+
+        # Stream gap audit (derived from busy user traces)
+        if self.busy_user_summary:
+            gap_audit = StreamGapAudit()
+            for trace in self.busy_user_summary.top_by_mismatch_count:
+                if trace.mismatch_count > 0:
+                    gap_audit.total_users_with_gaps += 1
+                    gap_audit.total_gaps += trace.mismatch_count
+                    if len(gap_audit.gap_examples) < 5:
+                        gap_audit.gap_examples.append({
+                            "address": trace.address_redacted,
+                            "mismatch_count": trace.mismatch_count,
+                            "fill_count": trace.fill_count,
+                            "position_keys": trace.position_keys[:5],
+                        })
+            atomic_write_json(out / "stream_gap_audit.json", {
+                "total_users_with_gaps": gap_audit.total_users_with_gaps,
+                "total_gaps": gap_audit.total_gaps,
+                "gap_examples": gap_audit.gap_examples,
+            })
+
+        # Two-hour recompute audit
+        if self.two_hour_recompute:
+            atomic_write_json(out / "two_hour_recompute_audit.json", {
+                "transitions_evaluated": self.two_hour_recompute.transitions_evaluated,
+                "transitions_with_real_predecessor": self.two_hour_recompute.transitions_with_real_predecessor,
+                "transitions_reconciled": self.two_hour_recompute.transitions_reconciled,
+                "transitions_mismatched": self.two_hour_recompute.transitions_mismatched,
+                "consistency_rate": self.two_hour_recompute.consistency_rate,
+            })
+
+        # Predecessor-present recompute gate
+        if self.predecessor_gate:
+            atomic_write_json(out / "predecessor_present_recompute_gate.json", {
+                "gate_passed": self.predecessor_gate.gate_passed,
+                "transitions_with_real_predecessor": self.predecessor_gate.transitions_with_real_predecessor,
+                "transitions_with_synthetic_predecessor": self.predecessor_gate.transitions_with_synthetic_predecessor,
+                "consistency_with_real_only": self.predecessor_gate.consistency_with_real_only,
+                "consistency_with_synthetic": self.predecessor_gate.consistency_with_synthetic,
+            })
+
+        # Busy user trace summary
+        if self.busy_user_summary:
+            trace_summary = {
+                "total_users": self.busy_user_summary.total_users,
+                "total_fills": self.busy_user_summary.total_fills,
+                "total_mismatches": self.busy_user_summary.total_mismatches,
+                "traces_selected": self.busy_user_summary.traces_selected,
+                "top_by_fill_count": [],
+                "top_by_mismatch_count": [],
+            }
+            for t in self.busy_user_summary.top_by_fill_count:
+                trace_summary["top_by_fill_count"].append({
+                    "address_redacted": t.address_redacted,
+                    "fill_count": t.fill_count,
+                    "mismatch_count": t.mismatch_count,
+                    "cold_start_count": t.cold_start_count,
+                    "position_keys_count": len(t.position_keys),
+                    "position_keys_sample": t.position_keys[:5],
+                    "sample_records_count": len(t.sample_records),
+                })
+            for t in self.busy_user_summary.top_by_mismatch_count:
+                trace_summary["top_by_mismatch_count"].append({
+                    "address_redacted": t.address_redacted,
+                    "fill_count": t.fill_count,
+                    "mismatch_count": t.mismatch_count,
+                    "cold_start_count": t.cold_start_count,
+                    "position_keys_count": len(t.position_keys),
+                    "position_keys_sample": t.position_keys[:5],
+                    "sample_records_count": len(t.sample_records),
+                })
+            atomic_write_json(out / "busy_user_trace_summary.json", trace_summary)
+
+            # Markdown examples
+            md_lines = ["# Busy User Trace Examples", ""]
+            md_lines.append(f"Total users: {self.busy_user_summary.total_users}")
+            md_lines.append(f"Total fills: {self.busy_user_summary.total_fills}")
+            md_lines.append(f"Total mismatches: {self.busy_user_summary.total_mismatches}")
+            md_lines.append("")
+
+            md_lines.append("## Top by Fill Count")
+            for i, t in enumerate(self.busy_user_summary.top_by_fill_count[:10]):
+                md_lines.append(f"{i+1}. {t.address_redacted} — {t.fill_count} fills, "
+                                f"{t.mismatch_count} mismatches, {t.cold_start_count} cold starts")
+                md_lines.append(f"   Position keys: {', '.join(t.position_keys[:3])}")
+            md_lines.append("")
+
+            md_lines.append("## Top by Mismatch Count")
+            for i, t in enumerate(self.busy_user_summary.top_by_mismatch_count[:10]):
+                md_lines.append(f"{i+1}. {t.address_redacted} — {t.mismatch_count} mismatches / "
+                                f"{t.fill_count} fills ({t.mismatch_count/max(t.fill_count,1)*100:.1f}%)")
+                md_lines.append(f"   Position keys: {', '.join(t.position_keys[:3])}")
+                if t.sample_records:
+                    md_lines.append(f"   Sample mismatch:")
+                    for sr in t.sample_records[:2]:
+                        md_lines.append(f"     sp={sr['start_position']}, reconstructed={sr['reconstructed_before']}, "
+                                        f"delta={sr['delta']}, type={sr['transition_type']}")
+            atomic_write_text(out / "busy_user_trace_examples.md", "\n".join(md_lines))
+
+            # Redacted JSONL
+            jsonl_records = []
+            for t in self.busy_user_summary.top_by_fill_count + self.busy_user_summary.top_by_mismatch_count:
+                jsonl_records.append({
+                    "address_redacted": t.address_redacted,
+                    "fill_count": t.fill_count,
+                    "mismatch_count": t.mismatch_count,
+                    "cold_start_count": t.cold_start_count,
+                    "position_keys": t.position_keys[:5],
+                    "sample_records": t.sample_records[:3],
+                })
+            _jsonl_write(out / "busy_user_trace_examples_redacted.jsonl", jsonl_records)
+
+        # Blocker classification
+        if self.blocker_classification:
+            atomic_write_json(out / "blocker_classification.json", {
+                "classification": self.blocker_classification.classification,
+                "reason": self.blocker_classification.reason,
+                "hour_is_complete": self.blocker_classification.hour_is_complete,
+                "adjacent_hours_loaded": self.blocker_classification.adjacent_hours_loaded,
+                "predecessor_present_rate": self.blocker_classification.predecessor_present_rate,
+                "consistency_after_predecessor_gate": self.blocker_classification.consistency_after_predecessor_gate,
+                "consistency_before_gate": self.blocker_classification.consistency_before_gate,
+                "mismatches_concentrated_in_incomplete_users": self.blocker_classification.mismatches_concentrated_in_incomplete_users,
+            })
 
         # Next phase requirements
         (out / "next_phase0_precommitment_requirements.md").write_text(

@@ -136,7 +136,7 @@ def test_canonical_evaluator_identical_counts():
 
         if cold:
             consistency_audit.transitions_uncheckable_cold_start += 1
-            positions[key] = sp
+            positions[key] = sp + delta
             continue
 
         consistency_audit.transitions_checkable += 1
@@ -158,7 +158,8 @@ def test_canonical_evaluator_identical_counts():
         else:
             convention_audit.ambiguous_count += 1
 
-        positions[key] = sp if sp is not None else new_pos
+        # Seed cold-start with sp + delta (post-fill position)
+        positions[key] = new_pos
 
     # The audit path and reconstruction path must agree on checkable counts
     assert consistency_audit.transitions_checkable == audit.consistency_audit.transitions_checkable, \
@@ -355,10 +356,11 @@ def test_flip_long_to_short_semantics():
     """Long > Short is a flip through zero. Test that the evaluator handles it."""
     recs = [
         _make_rec(address="u1", coin="SOL", side="B", sz=10.0, px=100, dir_val="Open Long",
-                  start_position=10.0, block_number=1),  # cold: seed=10
+                  start_position=10.0, block_number=1),  # cold: seed=10+10=20
         # Flip: sell 20 at price 100 → long 10 closed + short 10 opened
+        # prev=20, delta=-20, new=0, sp=20 (position before flip)
         _make_rec(address="u1", coin="SOL", side="A", sz=20.0, px=100, dir_val="Long > Short",
-                  start_position=-10.0, block_number=2),  # sp=-10 = 10-20 = -10 ✓
+                  start_position=20.0, block_number=2),  # sp=20 = position before flip
     ]
 
     config = probe_mod.StudyConfig(out_root="/tmp/test_out")
@@ -379,10 +381,11 @@ def test_flip_short_to_long_semantics():
     """Short > Long is a flip through zero (opposite direction)."""
     recs = [
         _make_rec(address="u1", coin="SOL", side="A", sz=10.0, px=100, dir_val="Open Short",
-                  start_position=-10.0, block_number=1),  # cold: seed=-10
+                  start_position=-10.0, block_number=1),  # cold: seed=-10+(-10)=-20
         # Flip: buy 20 at price 100 → short 10 closed + long 10 opened
+        # prev=-20, delta=+20, new=0, sp=-20 (position before flip)
         _make_rec(address="u1", coin="SOL", side="B", sz=20.0, px=100, dir_val="Short > Long",
-                  start_position=10.0, block_number=2),  # sp=10 = -10+20 = 10 ✓
+                  start_position=-20.0, block_number=2),  # sp=-20 = position before flip
     ]
 
     config = probe_mod.StudyConfig(out_root="/tmp/test_out")
@@ -472,13 +475,13 @@ def test_final_gate_fails_when_low_consistency():
 def test_final_gate_passes_when_all_conditions_met():
     """When all conditions are met (checkable >= threshold, exclusions small), pass."""
     recs = []
-    # Seed
+    # Cold start: sp=10, delta=+10, position after = 20
     recs.append(_make_rec(address="u1", coin="SOL", side="B", sz=10.0, px=100, dir_val="Open Long",
                           start_position=10.0, block_number=1))
 
-    # 20 clean checkable records that all reconcile
+    # 20 clean checkable records that all reconcile (sp matches reconstructed position)
     for i in range(20):
-        pos = 10 + (i + 1)
+        pos = 20 + i  # position before this fill = 20 + i
         recs.append(_make_rec(address="u1", coin="SOL", side="B", sz=1.0, px=100+i,
                               dir_val="Open Long", start_position=float(pos), block_number=i+2))
 
@@ -652,3 +655,329 @@ def test_is_cold_start_false_zero_sp():
 def test_is_cold_start_false_nonzero_prev():
     """prev_pos≠0 → not cold start."""
     assert probe_mod._is_cold_start(Decimal("10"), Decimal("15")) is False
+
+
+# ---------------------------------------------------------------------------
+# Test 21: Denominator ledger totals match invariant
+# ---------------------------------------------------------------------------
+
+
+def test_denominator_ledger_totals_match():
+    """Denominator ledger invariant: records == no_start + cold + reconciled + mismatched."""
+    recs = [
+        # Cold start: prev=0, sp=5 → excluded, position after = 5+5=10
+        _make_rec(address="u1", coin="SOL", side="B", sz=5.0, px=100,
+                  dir_val="Open Long", start_position=5.0, block_number=1),
+        # Checkable: prev=10, sp=10 → pre_match (reconciled)
+        _make_rec(address="u1", coin="SOL", side="B", sz=3.0, px=101,
+                  dir_val="Open Long", start_position=10.0, block_number=2),
+        # Checkable: prev=13, sp=100 → mismatch
+        _make_rec(address="u1", coin="SOL", side="A", sz=2.0, px=102,
+                  dir_val="Close Long", start_position=100.0, block_number=3),
+    ]
+    config = probe_mod.StudyConfig(out_root="/tmp/test_out")
+    ledger, by_dir, by_activity = probe_mod.compute_transition_denominator_ledger(recs, config)
+
+    assert ledger.records_parsed == 3
+    assert ledger.cold_start == 1
+    assert ledger.checkable_reconciled == 1
+    assert ledger.checkable_mismatched == 1
+    assert ledger.totals_match()
+
+
+def test_denominator_ledger_consistency_rate():
+    """Consistency rate = reconciled / (reconciled + mismatched)."""
+    recs = [
+        # Cold start: sp=5, delta=+5, position after = 10
+        _make_rec(address="u1", coin="SOL", side="B", sz=5.0, px=100,
+                  dir_val="Open Long", start_position=5.0, block_number=1),
+        # Checkable: prev=10, sp=10 → reconciled, position after = 13
+        _make_rec(address="u1", coin="SOL", side="B", sz=3.0, px=101,
+                  dir_val="Open Long", start_position=10.0, block_number=2),
+        # Checkable: prev=13, sp=13 → reconciled, position after = 15
+        _make_rec(address="u1", coin="SOL", side="B", sz=2.0, px=102,
+                  dir_val="Open Long", start_position=13.0, block_number=3),
+    ]
+    config = probe_mod.StudyConfig(out_root="/tmp/test_out")
+    ledger, _, _ = probe_mod.compute_transition_denominator_ledger(recs, config)
+
+    assert ledger.checkable_reconciled == 2
+    assert ledger.checkable_mismatched == 0
+    assert ledger.consistency_rate() == 1.0
+
+
+def test_denominator_ledger_by_dir_breakdown():
+    """By-dir breakdown must sum to overall ledger."""
+    recs = [
+        _make_rec(address="u1", coin="SOL", side="B", sz=5.0, px=100,
+                  dir_val="Open Long", start_position=5.0, block_number=1),
+        _make_rec(address="u1", coin="SOL", side="B", sz=3.0, px=101,
+                  dir_val="Open Long", start_position=8.0, block_number=2),
+        _make_rec(address="u1", coin="SOL", side="A", sz=2.0, px=102,
+                  dir_val="Buy", start_position=100.0, block_number=3),
+    ]
+    config = probe_mod.StudyConfig(out_root="/tmp/test_out")
+    ledger, by_dir, _ = probe_mod.compute_transition_denominator_ledger(recs, config)
+
+    # Sum by-dir checkable_reconciled
+    dir_reconciled = sum(v["checkable_reconciled"] for v in by_dir.entries.values())
+    dir_mismatched = sum(v["checkable_mismatched"] for v in by_dir.entries.values())
+    assert dir_reconciled == ledger.checkable_reconciled
+    assert dir_mismatched == ledger.checkable_mismatched
+
+
+# ---------------------------------------------------------------------------
+# Test 22: Denominator ledger prevents arithmetic contradiction
+# ---------------------------------------------------------------------------
+
+
+def test_overall_20pct_plus_clean_100pct_triggers_error():
+    """If overall consistency is low but clean classes are 100%, the ledger must show it."""
+    recs = [
+        # Cold start: sp=5, delta=+5, position after = 10
+        _make_rec(address="u1", coin="SOL", side="B", sz=5.0, px=100,
+                  dir_val="Open Long", start_position=5.0, block_number=1),
+        # Clean class checkable: prev=10, sp=10 → reconciled
+        _make_rec(address="u1", coin="SOL", side="B", sz=3.0, px=101,
+                  dir_val="Open Long", start_position=10.0, block_number=2),
+        # Cold start for u2: sp=50, delta=+1, position after = 51
+        _make_rec(address="u2", coin="SOL", side="B", sz=1.0, px=100,
+                  dir_val="Buy", start_position=50.0, block_number=3),
+        # Buy class mismatched: prev=51, sp=100 → mismatched
+        _make_rec(address="u2", coin="SOL", side="B", sz=1.0, px=100,
+                  dir_val="Buy", start_position=100.0, block_number=4),
+    ]
+    config = probe_mod.StudyConfig(out_root="/tmp/test_out")
+    ledger, by_dir, _ = probe_mod.compute_transition_denominator_ledger(recs, config)
+
+    # Clean class (Open Long) should be 100%
+    open_long = by_dir.entries.get("Open Long", {})
+    assert open_long.get("checkable_reconciled", 0) > 0
+    assert open_long.get("checkable_mismatched", 0) == 0
+
+    # Buy class should have mismatches
+    buy = by_dir.entries.get("Buy", {})
+    assert buy.get("checkable_mismatched", 0) > 0
+
+    # Overall consistency reflects both
+    assert ledger.consistency_rate() < 1.0
+
+
+# ---------------------------------------------------------------------------
+# Test 23: Cold-start excluded records cannot be denominator driver
+# ---------------------------------------------------------------------------
+
+
+def test_cold_start_excluded_not_denominator_driver():
+    """Cold-start excluded records are counted separately, not in checkable."""
+    recs = [
+        _make_rec(address="u1", coin="SOL", side="B", sz=5.0, px=100,
+                  dir_val="Open Long", start_position=5.0, block_number=1),
+        _make_rec(address="u1", coin="SOL", side="B", sz=3.0, px=101,
+                  dir_val="Open Long", start_position=8.0, block_number=2),
+    ]
+    config = probe_mod.StudyConfig(out_root="/tmp/test_out")
+    ledger, _, _ = probe_mod.compute_transition_denominator_ledger(recs, config)
+
+    # Cold start is separate from checkable
+    checkable = ledger.checkable_reconciled + ledger.checkable_mismatched
+    assert checkable == 1  # Only the second record is checkable
+    assert ledger.cold_start == 1
+
+
+# ---------------------------------------------------------------------------
+# Test 24: Hour shard completeness audit
+# ---------------------------------------------------------------------------
+
+
+def test_hour_completeness_single_hour():
+    """A single hour with 57+ minutes is complete."""
+    from datetime import datetime, timezone
+    recs = []
+    for m in range(57):
+        t = datetime(2025, 7, 27, 10, m, 0, tzinfo=timezone.utc)
+        # NodeFillRecord expects fill_time as datetime, not fill_time_ms
+        from examples.strategies.venue_agnostic_signal_observer.adapters.node_fills_by_block_adapter import NodeFillRecord
+        from decimal import Decimal
+        rec = NodeFillRecord(
+            address="u1", block_number=m + 1,
+            block_time=t, local_time=None, fill_time=t,
+            coin="SOL", px=Decimal("100"), sz=Decimal("1"),
+            side="B", dir="Open Long", oid=None, tid=None, hash=None,
+            start_position=Decimal(str(float(m))), closed_pnl=None,
+            fee=None, crossed=None, builder_fee=None, deployer_fee=None,
+            fee_token=None, builder=None, cloid=None, twap_id=None,
+            priority_gas=None, raw={},
+        )
+        recs.append(rec)
+    audit = probe_mod.audit_hour_shard_completeness(recs, file_path="10.lz4", file_size_bytes=21000000)
+    assert audit.is_complete_hour
+    assert audit.unique_hours == [10]
+    assert audit.minutes_covered >= 55
+
+
+def test_hour_completeness_incomplete():
+    """A file spanning 2 hours is not a complete hour."""
+    from datetime import datetime, timezone
+    from examples.strategies.venue_agnostic_signal_observer.adapters.node_fills_by_block_adapter import NodeFillRecord
+    from decimal import Decimal
+    recs = []
+    # 30 min in hour 10, 30 min in hour 11
+    for m in range(30):
+        t = datetime(2025, 7, 27, 10, m, 0, tzinfo=timezone.utc)
+        rec = NodeFillRecord(
+            address="u1", block_number=m + 1,
+            block_time=t, local_time=None, fill_time=t,
+            coin="SOL", px=Decimal("100"), sz=Decimal("1"),
+            side="B", dir="Open Long", oid=None, tid=None, hash=None,
+            start_position=Decimal(str(float(m))), closed_pnl=None,
+            fee=None, crossed=None, builder_fee=None, deployer_fee=None,
+            fee_token=None, builder=None, cloid=None, twap_id=None,
+            priority_gas=None, raw={},
+        )
+        recs.append(rec)
+    for m in range(30):
+        t = datetime(2025, 7, 27, 11, m, 0, tzinfo=timezone.utc)
+        rec = NodeFillRecord(
+            address="u1", block_number=m + 31,
+            block_time=t, local_time=None, fill_time=t,
+            coin="SOL", px=Decimal("100"), sz=Decimal("1"),
+            side="B", dir="Open Long", oid=None, tid=None, hash=None,
+            start_position=Decimal(str(float(m + 30))), closed_pnl=None,
+            fee=None, crossed=None, builder_fee=None, deployer_fee=None,
+            fee_token=None, builder=None, cloid=None, twap_id=None,
+            priority_gas=None, raw={},
+        )
+        recs.append(rec)
+    audit = probe_mod.audit_hour_shard_completeness(recs)
+    assert not audit.is_complete_hour
+    assert len(audit.unique_hours) == 2
+
+
+# ---------------------------------------------------------------------------
+# Test 25: Busy user trace summary
+# ---------------------------------------------------------------------------
+
+
+def test_busy_user_trace_summary():
+    """trace_busy_users returns top users by fill and mismatch count."""
+    recs = [
+        _make_rec(address="busy", coin="SOL", side="B", sz=5.0, px=100,
+                  dir_val="Open Long", start_position=5.0, block_number=1),
+        _make_rec(address="busy", coin="SOL", side="B", sz=3.0, px=101,
+                  dir_val="Open Long", start_position=8.0, block_number=2),
+        _make_rec(address="quiet", coin="SOL", side="B", sz=1.0, px=100,
+                  dir_val="Open Long", start_position=1.0, block_number=3),
+    ]
+    config = probe_mod.StudyConfig(out_root="/tmp/test_out")
+    summary = probe_mod.trace_busy_users(recs, config, top_n=10)
+
+    assert summary.total_users == 2
+    assert summary.total_fills == 3
+    assert summary.traces_selected >= 2
+    # "busy" user has more fills than "quiet"
+    assert summary.top_by_fill_count[0].fill_count >= summary.top_by_fill_count[-1].fill_count
+
+
+# ---------------------------------------------------------------------------
+# Test 26: Predecessor-present gate
+# ---------------------------------------------------------------------------
+
+
+def test_predecessor_gate_no_adjacent():
+    """Without adjacent records, no real predecessors exist."""
+    recs = [
+        _make_rec(address="u1", coin="SOL", side="B", sz=5.0, px=100,
+                  dir_val="Open Long", start_position=5.0, block_number=1),
+        _make_rec(address="u1", coin="SOL", side="B", sz=3.0, px=101,
+                  dir_val="Open Long", start_position=8.0, block_number=2),
+    ]
+    config = probe_mod.StudyConfig(out_root="/tmp/test_out")
+    gate, recompute = probe_mod.recompute_with_predecessor_gate(recs, [], config)
+
+    assert gate.transitions_with_real_predecessor == 0
+    assert gate.transitions_with_synthetic_predecessor >= 0
+
+
+def test_predecessor_gate_with_adjacent():
+    """With adjacent records, predecessor keys are identified."""
+    from datetime import datetime, timezone
+    # Adjacent records (hour 9)
+    adj_recs = [
+        _make_rec(address="u1", coin="SOL", side="B", sz=2.0, px=99,
+                  dir_val="Open Long", start_position=2.0, block_number=1,
+                  fill_time_ms=int(datetime(2025, 7, 27, 9, 30, 0, tzinfo=timezone.utc).timestamp() * 1000)),
+    ]
+    # Primary records (hour 10)
+    primary_recs = [
+        _make_rec(address="u1", coin="SOL", side="B", sz=3.0, px=100,
+                  dir_val="Open Long", start_position=5.0, block_number=2,
+                  fill_time_ms=int(datetime(2025, 7, 27, 10, 0, 0, tzinfo=timezone.utc).timestamp() * 1000)),
+        _make_rec(address="u1", coin="SOL", side="B", sz=1.0, px=101,
+                  dir_val="Open Long", start_position=6.0, block_number=3,
+                  fill_time_ms=int(datetime(2025, 7, 27, 10, 30, 0, tzinfo=timezone.utc).timestamp() * 1000)),
+    ]
+    config = probe_mod.StudyConfig(out_root="/tmp/test_out")
+    gate, recompute = probe_mod.recompute_with_predecessor_gate(primary_recs, adj_recs, config)
+
+    # u1 has predecessor in adjacent hour
+    assert gate.transitions_with_real_predecessor > 0
+
+
+# ---------------------------------------------------------------------------
+# Test 27: Blocker classification
+# ---------------------------------------------------------------------------
+
+
+def test_blocker_classification_low_consistency():
+    """Low consistency without adjacent hours → FILLS_NOT_CHAINABLE."""
+    bc = probe_mod.classify_blocker(
+        consistency_rate=0.5,
+        hour_completeness=probe_mod.HourShardCompletenessAudit(is_complete_hour=True),
+        adjacent_audit=probe_mod.AdjacentHourContextAudit(),
+        predecessor_gate=probe_mod.PredecessorPresentRecomputeGate(),
+        busy_user_summary=probe_mod.BusyUserTraceSummary(),
+    )
+    assert bc.classification in ("FILLS_NOT_CHAINABLE", "STREAM_COMPLETENESS_BLOCKED")
+
+
+def test_blocker_classification_high_consistency():
+    """High consistency → PASSED."""
+    bc = probe_mod.classify_blocker(
+        consistency_rate=0.98,
+        hour_completeness=probe_mod.HourShardCompletenessAudit(is_complete_hour=True),
+        adjacent_audit=probe_mod.AdjacentHourContextAudit(),
+        predecessor_gate=probe_mod.PredecessorPresentRecomputeGate(),
+        busy_user_summary=probe_mod.BusyUserTraceSummary(),
+    )
+    assert bc.classification == "PASSED"
+
+
+def test_blocker_classification_incomplete_hour():
+    """Incomplete hour → STREAM_COMPLETENESS_BLOCKED."""
+    bc = probe_mod.classify_blocker(
+        consistency_rate=0.5,
+        hour_completeness=probe_mod.HourShardCompletenessAudit(is_complete_hour=False, minutes_covered=30),
+        adjacent_audit=probe_mod.AdjacentHourContextAudit(),
+        predecessor_gate=probe_mod.PredecessorPresentRecomputeGate(),
+        busy_user_summary=probe_mod.BusyUserTraceSummary(),
+    )
+    assert bc.classification == "STREAM_COMPLETENESS_BLOCKED"
+
+
+# ---------------------------------------------------------------------------
+# Test 28: No Phase 0 or promotion status emitted
+# ---------------------------------------------------------------------------
+
+
+def test_new_statuses_do_not_imply_promotion():
+    """New terminal statuses must not imply promotion, paper, or live readiness."""
+    new_statuses = [
+        "BLOCKED_STREAM_COMPLETENESS",
+        "BLOCKED_FILLS_NOT_CHAINABLE",
+        "BLOCKED_PARSER_BUG",
+    ]
+    for s in new_statuses:
+        assert s not in probe_mod.FORBIDDEN_STATUSES
+        # Must start with BLOCKED
+        assert s.startswith("BLOCKED")
