@@ -6158,7 +6158,7 @@ def build_test_count_and_registry_guard_accounting_text() -> str:
     return "\n".join([
         "# Test-count / registry guard accounting",
         "",
-        "focused_probe_runner_collected_count: 99",
+        "focused_probe_runner_collected_count: 97",
         "registry_guard_collected_count: 2",
         "prior_registry_guard_count: 3",
         "reason_registry_guard_is_2_instead_of_3: the remaining guard module contains two focused registry-presence tests; Wall 2 source-existence coverage adds explicit accounting/status-safety tests in the probe/runner tests rather than restoring a redundant third registry-file test.",
