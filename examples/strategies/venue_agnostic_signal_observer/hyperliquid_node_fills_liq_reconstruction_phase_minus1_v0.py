@@ -684,6 +684,8 @@ class TargetedBackwardLookupObjectAudit:
     target_address_matches: int = 0
     target_address_symbol_matches: int = 0
     decode_errors: list[str] = field(default_factory=list)
+    partial_or_truncated: bool = False
+    full_object: bool = False
 
 
 @dataclass
@@ -4974,6 +4976,37 @@ class NodeFillsLiqReconstructionProbe:
             manifest["wall2_targeted_holder_leverage_lookup"] = dataclasses.asdict(self.targeted_backward_lookup_summary)
             summary.download_bytes_actual = self.targeted_backward_lookup_summary.compressed_bytes_downloaded
         atomic_write_json(out / "run_manifest.json", manifest)
+
+        if self.wall2_frozen_named_input_audit:
+            atomic_write_json(out / 'wall2_frozen_named_input_audit.json', dataclasses.asdict(self.wall2_frozen_named_input_audit))
+        if self.wall2_open_position_set_summary:
+            atomic_write_json(out / 'target_open_named_positions_summary.json', dataclasses.asdict(self.wall2_open_position_set_summary))
+        if self.target_open_named_positions:
+            atomic_write_json(out / 'target_open_named_positions.json', [dataclasses.asdict(p) for p in self.target_open_named_positions])
+            atomic_write_json(out / 'target_open_named_addresses.json', sorted({p.address for p in self.target_open_named_positions}))
+            atomic_write_json(out / 'target_open_named_address_symbol_pairs.json', [
+                {'address_redacted': redact_address(p.address), 'symbol': p.symbol} for p in self.target_open_named_positions
+            ])
+        if self.targeted_big_holder_lookup_plan:
+            atomic_write_json(out / 'targeted_big_holder_lookup_plan.json', dataclasses.asdict(self.targeted_big_holder_lookup_plan))
+        if self.asset_id_symbol_mapping_audit:
+            atomic_write_json(out / 'asset_id_symbol_mapping_audit.json', self.asset_id_symbol_mapping_audit)
+        if self.targeted_backward_lookup_scan_plan:
+            atomic_write_json(out / 'targeted_backward_lookup_scan_plan.json', dataclasses.asdict(self.targeted_backward_lookup_scan_plan))
+        if self.targeted_backward_lookup_object_audit:
+            _jsonl_write(out / 'targeted_backward_lookup_object_audit.jsonl', [dataclasses.asdict(a) for a in self.targeted_backward_lookup_object_audit])
+        if self.targeted_backward_lookup_matches:
+            _jsonl_write(out / 'targeted_backward_lookup_matches.jsonl', self.targeted_backward_lookup_matches)
+        if self.targeted_backward_lookup_summary:
+            atomic_write_json(out / 'targeted_backward_lookup_summary.json', dataclasses.asdict(self.targeted_backward_lookup_summary))
+        if self.targeted_margin_mode_classification:
+            atomic_write_json(out / 'targeted_margin_mode_classification.json', [dataclasses.asdict(r) for r in self.targeted_margin_mode_classification])
+        if self.targeted_margin_mode_classification_summary:
+            atomic_write_json(out / 'targeted_margin_mode_classification_summary.json', dataclasses.asdict(self.targeted_margin_mode_classification_summary))
+        if self.targeted_oi_completeness_proxy_audit:
+            atomic_write_json(out / 'targeted_oi_completeness_proxy_audit.json', self.targeted_oi_completeness_proxy_audit)
+        if self.targeted_margin_mode_continuation_plan:
+            atomic_write_json(out / 'targeted_margin_mode_continuation_plan.json', self.targeted_margin_mode_continuation_plan)
         (out / "precommitment_hash.txt").write_text(precommit_hash)
 
         if self.source_plan:
@@ -6145,25 +6178,16 @@ def _parse_replica_cmds_target_object(
     raw_compressed = dest.read_bytes()
     if not sha:
         sha = hashlib.sha256(raw_compressed).hexdigest()
-    raw_bytes, _compression_mode = _decompress_lz4_best_effort(raw_compressed)
-    text = raw_bytes.decode('utf-8', 'replace')
-    lines = [line for line in text.splitlines() if line.strip()]
-    payloads = []
-    for line in lines:
-        try:
-            payloads.append(_json_loads(line.encode()))
-        except Exception:
-            continue
-    if not payloads:
-        payloads = [_json_loads(text.encode())]
-    actions = []
-    decoder_audit = ReplicaCmdsDecoderEnvelopeAudit()
-    for payload in payloads:
-        acts, aud = extract_replica_cmds_actions(payload)
-        actions.extend(acts)
-        decoder_audit = _merge_decoder_audit(decoder_audit, aud)
+    raw_bytes, compression_mode = _decompress_lz4_best_effort(raw_compressed)
+    actions, decoder_audit, parse_errors = _parse_replica_cmds_bytes(raw_bytes)
+    decode_errors: list[Any] = []
+    if compression_mode in {'lz4_partial', 'lz4_error', 'lz4_unavailable'}:
+        decode_errors.append(compression_mode)
+        decoder_audit.decode_error_count += 1
+    decode_errors.extend(parse_errors[:20])
     target_addresses = {p.address for p in unresolved_pairs.values()}
     target_asset_ids = {symbol_to_asset_id[p.symbol] for p in unresolved_pairs.values() if p.symbol in symbol_to_asset_id}
+    asset_id_to_symbol = {aid: sym for sym, aid in symbol_to_asset_id.items()}
     matches = []
     target_address_matches = 0
     target_address_symbol_matches = 0
@@ -6173,16 +6197,12 @@ def _parse_replica_cmds_target_object(
             continue
         update_count += 1
         asset_id = str(action.get('asset')) if action.get('asset') is not None else ''
-        identity = action.get('identity') or action.get('vaultAddress') or ''
+        identity = str(action.get('identity') or action.get('vaultAddress') or action.get('user') or action.get('address') or '')
         if identity in target_addresses:
             target_address_matches += 1
         if identity not in target_addresses or asset_id not in target_asset_ids:
             continue
-        symbol = id_to_symbol = None
-        for sym, aid in symbol_to_asset_id.items():
-            if aid == asset_id:
-                symbol = sym
-                break
+        symbol = asset_id_to_symbol.get(asset_id)
         if symbol is None:
             continue
         pair = (identity, symbol)
@@ -6214,9 +6234,12 @@ def _parse_replica_cmds_target_object(
         target_updateLeverage_matches=len(matches),
         target_address_matches=target_address_matches,
         target_address_symbol_matches=target_address_symbol_matches,
-        decode_errors=decoder_audit.unknown_envelope_examples_redacted[:5] if decoder_audit.decode_error_count else [],
+        decode_errors=decode_errors[:20],
+        partial_or_truncated=(compression_mode == 'lz4_partial'),
+        full_object=(compression_mode in {'lz4_full', 'plain'} and not parse_errors),
     )
-    return audit, matches, None
+    blocker = 'UNKNOWN_DECODER_OR_SOURCE_BLOCKED' if audit.decode_errors and not actions else None
+    return audit, matches, blocker
 
 
 def _derive_source_probe_input_from_prior_reports() -> dict[str, Any]:
@@ -6636,17 +6659,29 @@ def _parse_replica_cmds_bytes(raw: bytes) -> tuple[list[dict], ReplicaCmdsDecode
     return all_actions, merged, errors
 
 
-def _merge_decoder_audit(dst: ReplicaCmdsDecoderEnvelopeAudit, src: ReplicaCmdsDecoderEnvelopeAudit) -> None:
+def _merge_decoder_audit(
+    dst: ReplicaCmdsDecoderEnvelopeAudit | None,
+    src: ReplicaCmdsDecoderEnvelopeAudit | None,
+) -> ReplicaCmdsDecoderEnvelopeAudit:
+    if dst is None:
+        dst = ReplicaCmdsDecoderEnvelopeAudit()
+    if src is None:
+        dst.decode_error_count += 1
+        if dst.decoder_confidence == '':
+            dst.decoder_confidence = 'LOW'
+        return dst
     dst.envelope_paths_seen = sorted(set(dst.envelope_paths_seen) | set(src.envelope_paths_seen))
     dst.unknown_envelope_count += src.unknown_envelope_count
     dst.unknown_envelope_examples_redacted.extend(src.unknown_envelope_examples_redacted[: max(0, 20 - len(dst.unknown_envelope_examples_redacted))])
     dst.actions_with_type_field += src.actions_with_type_field
     dst.actions_without_type_field += src.actions_without_type_field
+    dst.decode_error_count += src.decode_error_count
     for k, v in src.action_type_counts.items():
         dst.action_type_counts[k] = dst.action_type_counts.get(k, 0) + v
-    order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
-    if order.get(src.decoder_confidence, 0) > order.get(dst.decoder_confidence, 0):
+    order = {"": -1, "LOW": 0, "MEDIUM": 1, "HIGH": 2}
+    if order.get(src.decoder_confidence, -1) > order.get(dst.decoder_confidence, -1):
         dst.decoder_confidence = src.decoder_confidence
+    return dst
 
 
 def sample_update_leverage_density(config: StudyConfig, plan: ReplicaCmdsSourceExistencePlan) -> tuple[ReplicaCmdsUpdateLeverageDensityProbe, ReplicaCmdsDecoderEnvelopeAudit]:

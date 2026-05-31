@@ -1676,3 +1676,128 @@ def test_wall1_preserved_headline_counts():
 
 def test_builder_at_coin_remains_excluded_from_wall2():
     assert probe_mod.classify_coin_universe('@123') == probe_mod.ReconstructionUniverse.BUILDER_AT_COIN
+
+
+def _make_open_named_position(address: str = "0xabc", symbol: str = "SOL", notional: str = "1000") -> probe_mod.OpenNamedPosition:
+    return probe_mod.OpenNamedPosition(
+        address=address,
+        symbol=symbol,
+        side='LONG',
+        position_size=Decimal('1'),
+        position_notional_at_last_fill_px=Decimal(notional),
+        last_fill_block=10,
+    )
+
+
+def test_merge_decoder_audit_handles_none_child_audit():
+    merged = probe_mod._merge_decoder_audit(None, None)
+    assert isinstance(merged, probe_mod.ReplicaCmdsDecoderEnvelopeAudit)
+    assert merged.decode_error_count == 1
+    assert merged.decoder_confidence == "LOW"
+
+
+def test_merge_decoder_audit_handles_empty_child_audit():
+    dst = probe_mod.ReplicaCmdsDecoderEnvelopeAudit(envelope_paths_seen=["payload.action"], actions_with_type_field=1)
+    src = probe_mod.ReplicaCmdsDecoderEnvelopeAudit()
+    merged = probe_mod._merge_decoder_audit(dst, src)
+    assert merged is dst
+    assert merged.envelope_paths_seen == ["payload.action"]
+    assert merged.actions_with_type_field == 1
+
+
+def test_parse_replica_cmds_target_object_returns_valid_audit_for_empty_jsonl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    cache_dir = Path('.local_data/targeted_replica_cmds_cache')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    obj = {"key": "hl-mainnet-node-data/replica_cmds/2025-07-27/empty.jsonl", "size": 0, "date": "2025-07-27"}
+    (cache_dir / 'empty.jsonl').write_bytes(b'\n\n')
+    monkeypatch.setattr(probe_mod, '_decompress_lz4_best_effort', lambda raw: (raw, 'plain'))
+    audit, matches, blocker = probe_mod._parse_replica_cmds_target_object(
+        obj,
+        probe_mod.StudyConfig(out_root=str(tmp_path)),
+        {('0xabc', 'SOL'): _make_open_named_position()},
+        {'SOL': '5'},
+        {('0xabc', 'SOL'): (10, 0)},
+    )
+    assert audit.actions_decoded_total == 0
+    assert audit.updateLeverage_count == 0
+    assert matches == []
+    assert blocker == 'UNKNOWN_DECODER_OR_SOURCE_BLOCKED'
+
+
+def test_parse_replica_cmds_target_object_returns_valid_audit_for_jsonl_without_update_leverage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    cache_dir = Path('.local_data/targeted_replica_cmds_cache')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    obj = {"key": "hl-mainnet-node-data/replica_cmds/2025-07-27/no_ul.jsonl", "size": 0, "date": "2025-07-27"}
+    payload = json.dumps({"type": "noop", "payload": {"type": "otherAction"}}).encode()
+    (cache_dir / 'no_ul.jsonl').write_bytes(payload + b'\n')
+    monkeypatch.setattr(probe_mod, '_decompress_lz4_best_effort', lambda raw: (raw, 'plain'))
+    audit, matches, blocker = probe_mod._parse_replica_cmds_target_object(
+        obj,
+        probe_mod.StudyConfig(out_root=str(tmp_path)),
+        {('0xabc', 'SOL'): _make_open_named_position()},
+        {'SOL': '5'},
+        {('0xabc', 'SOL'): (10, 0)},
+    )
+    assert audit.actions_decoded_total >= 1
+    assert audit.updateLeverage_count == 0
+    assert matches == []
+    assert blocker is None
+
+
+def test_parse_replica_cmds_target_object_returns_valid_audit_for_jsonl_with_update_leverage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    cache_dir = Path('.local_data/targeted_replica_cmds_cache')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    obj = {"key": "hl-mainnet-node-data/replica_cmds/2025-07-27/with_ul.jsonl", "size": 0, "date": "2025-07-27"}
+    payload = json.dumps({"type": "updateLeverage", "asset": 5, "isCross": False, "leverage": 3, "identity": "0xother", "block": 9}).encode()
+    (cache_dir / 'with_ul.jsonl').write_bytes(payload + b'\n')
+    monkeypatch.setattr(probe_mod, '_decompress_lz4_best_effort', lambda raw: (raw, 'plain'))
+    audit, matches, blocker = probe_mod._parse_replica_cmds_target_object(
+        obj,
+        probe_mod.StudyConfig(out_root=str(tmp_path)),
+        {('0xabc', 'SOL'): _make_open_named_position()},
+        {'SOL': '5'},
+        {('0xabc', 'SOL'): (10, 0)},
+    )
+    assert audit.updateLeverage_count == 1
+    assert audit.target_updateLeverage_matches == 0
+    assert matches == []
+    assert blocker is None
+
+
+def test_parse_replica_cmds_target_object_returns_valid_audit_for_target_update_leverage_match(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    cache_dir = Path('.local_data/targeted_replica_cmds_cache')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    obj = {"key": "hl-mainnet-node-data/replica_cmds/2025-07-27/target_ul.jsonl", "size": 0, "date": "2025-07-27"}
+    payload = json.dumps({"type": "updateLeverage", "asset": 5, "isCross": False, "leverage": 3, "identity": "0xabc", "block": 9}).encode()
+    (cache_dir / 'target_ul.jsonl').write_bytes(payload + b'\n')
+    monkeypatch.setattr(probe_mod, '_decompress_lz4_best_effort', lambda raw: (raw, 'plain'))
+    audit, matches, blocker = probe_mod._parse_replica_cmds_target_object(
+        obj,
+        probe_mod.StudyConfig(out_root=str(tmp_path)),
+        {('0xabc', 'SOL'): _make_open_named_position()},
+        {'SOL': '5'},
+        {('0xabc', 'SOL'): (10, 0)},
+    )
+    assert audit.target_updateLeverage_matches == 1
+    assert len(matches) == 1
+    assert matches[0]['symbol'] == 'SOL'
+    assert blocker is None
+
+
+def test_parse_replica_cmds_target_object_decode_blocked_returns_structured_blocker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    cache_dir = Path('.local_data/targeted_replica_cmds_cache')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    obj = {"key": "hl-mainnet-node-data/replica_cmds/2025-07-27/bad.lz4", "size": 0, "date": "2025-07-27"}
+    (cache_dir / 'bad.lz4').write_bytes(b'not-json')
+    monkeypatch.setattr(probe_mod, '_decompress_lz4_best_effort', lambda raw: (raw, 'lz4_partial'))
+    audit, matches, blocker = probe_mod._parse_replica_cmds_target_object(
+        obj,
+        probe_mod.StudyConfig(out_root=str(tmp_path)),
+        {('0xabc', 'SOL'): _make_open_named_position()},
+        {'SOL': '5'},
+        {('0xabc', 'SOL'): (10, 0)},
+    )
+    assert matches == []
+    assert blocker == 'UNKNOWN_DECODER_OR_SOURCE_BLOCKED'
+    assert audit.partial_or_truncated is True
+    assert audit.decode_errors
