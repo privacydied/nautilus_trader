@@ -192,6 +192,11 @@ class StudyStatus(str, Enum):
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ASSET_SYMBOL_MAPPING_UNVERIFIED = "BLOCKED_ASSET_SYMBOL_MAPPING_UNVERIFIED"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_SAMPLE_NOT_FOUND_UNDER_CAP = "BLOCKED_UPDATE_LEVERAGE_SAMPLE_NOT_FOUND_UNDER_CAP"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_MARGIN_MODE_SAMPLE_NOT_INFORMATIVE = "BLOCKED_MARGIN_MODE_SAMPLE_NOT_INFORMATIVE"
+    NODE_FILLS_LIQ_PHASE_MINUS1_UPDATE_LEVERAGE_SOURCE_EXISTS_TARGET_MARGIN_UNMEASURED = "UPDATE_LEVERAGE_SOURCE_EXISTS_TARGET_MARGIN_UNMEASURED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED = "MARGIN_MODE_TARGETED_LOOKUP_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_PASSED_FULL_BACKFILL_REQUIRED = "MARGIN_MODE_TARGETED_LOOKUP_PASSED_FULL_BACKFILL_REQUIRED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_INSUFFICIENT_COVERAGE = "MARGIN_MODE_TARGETED_LOOKUP_INSUFFICIENT_COVERAGE"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_LOOKUP_CAP_EXHAUSTED = "BLOCKED_TARGETED_LEVERAGE_LOOKUP_CAP_EXHAUSTED"
 
     # Wall 2 — updateLeverage source-existence probe statuses
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REQUESTER_PAYS_AUTH_EXPIRED = "BLOCKED_REQUESTER_PAYS_AUTH_EXPIRED"
@@ -299,6 +304,24 @@ class MarginMode(str, Enum):
     UNKNOWN = "unknown"
 
 
+class LeverageHistoryCoverageMode(str, Enum):
+    BOUNDED_RANDOM_SAMPLE = "BOUNDED_RANDOM_SAMPLE"
+    BOUNDED_TARGETED_BACKWARD_LOOKUP = "BOUNDED_TARGETED_BACKWARD_LOOKUP"
+    FULL_HISTORY_TO_FILL_WINDOW = "FULL_HISTORY_TO_FILL_WINDOW"
+    UNKNOWN = "UNKNOWN"
+
+
+class TargetMarginClassification(str, Enum):
+    ISOLATED_EXPLICIT = "ISOLATED_EXPLICIT"
+    CROSS_EXPLICIT = "CROSS_EXPLICIT"
+    NO_ACTION_FOUND_DEFAULT_CROSS_FULL_HISTORY_SCANNED = "NO_ACTION_FOUND_DEFAULT_CROSS_FULL_HISTORY_SCANNED"
+    UNKNOWN_SAMPLE_NOT_COVERED = "UNKNOWN_SAMPLE_NOT_COVERED"
+    UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START = "UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START"
+    UNKNOWN_ASSET_MAPPING = "UNKNOWN_ASSET_MAPPING"
+    UNKNOWN_IDENTITY_JOIN = "UNKNOWN_IDENTITY_JOIN"
+    UNKNOWN_DECODER_OR_SOURCE_BLOCKED = "UNKNOWN_DECODER_OR_SOURCE_BLOCKED"
+
+
 # ---------------------------------------------------------------------------
 # Dataclasses — Config & artifacts
 # ---------------------------------------------------------------------------
@@ -329,6 +352,7 @@ class StudyConfig:
     leverage_source_plan_only: bool = False
     wall2_margin_mode_killtest: bool = False
     wall2_update_leverage_source_probe: bool = False
+    wall2_targeted_holder_leverage_lookup: bool = False
 
     def effective_leverage_mode(self) -> LeverageMode:
         if self.bound_diagnostic:
@@ -584,6 +608,7 @@ class LeverageIdentityJoinAudit:
 class MarginModeKillTestSampleAudit:
     """Audit of margin-mode kill-test classification."""
 
+    leverage_history_coverage_mode: str = "UNKNOWN"
     sample_limited: bool = False
     open_address_symbol_pairs_total: int = 0
     open_notional_total: Decimal = field(default_factory=lambda: Decimal(0))
@@ -605,9 +630,123 @@ class MarginModeKillTestSampleAudit:
     unknown_sample_not_covered_pairs: int = 0
     unknown_sample_not_covered_notional: Decimal = field(default_factory=lambda: Decimal(0))
     unknown_sample_not_covered_notional_fraction: float = 0.0
+    unknown_history_not_scanned_pairs: int = 0
+    unknown_history_not_scanned_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    unknown_history_not_scanned_notional_fraction: float = 0.0
     computable_isolated_pairs: int = 0
     computable_isolated_notional: Decimal = field(default_factory=lambda: Decimal(0))
     computable_isolated_notional_fraction: float = 0.0
+
+
+@dataclass
+class Wall2TargetSelectionPlan:
+    total_open_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    selected_target_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    selected_target_notional_fraction: float = 0.0
+    selected_symbols: list[str] = field(default_factory=list)
+    selected_address_symbol_pairs: int = 0
+    selected_addresses: int = 0
+    selected_top_pairs_redacted: list[dict] = field(default_factory=list)
+    selection_rule: str = ""
+    estimated_replica_cmds_objects_to_scan: int = 0
+    estimated_compressed_bytes: int = 0
+    max_download_bytes: int = 0
+
+
+@dataclass
+class TargetedBackwardLookupScanPlan:
+    fill_window_start_time: str = ""
+    fill_window_end_time: str = ""
+    fill_window_start_block: int = 0
+    fill_window_end_block: int = 0
+    replica_cmds_coverage_start: str = ""
+    replica_cmds_coverage_end: str = ""
+    reverse_scan_start_prefix: str = ""
+    reverse_scan_end_prefix: str = ""
+    objects_considered: int = 0
+    objects_selected: int = 0
+    objects_skipped_over_cap: int = 0
+    estimated_compressed_bytes: int = 0
+    max_download_bytes: int = 0
+    server_side_filtering_available: bool = False
+    client_side_decode_required: bool = True
+
+
+@dataclass
+class TargetedBackwardLookupObjectAudit:
+    key: str = ""
+    date_prefix: str = ""
+    size_compressed: int = 0
+    sha256: str = ""
+    actions_decoded_total: int = 0
+    updateLeverage_count: int = 0
+    target_updateLeverage_matches: int = 0
+    target_address_matches: int = 0
+    target_address_symbol_matches: int = 0
+    decode_errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class TargetedBackwardLookupSummary:
+    selected_target_pairs: int = 0
+    selected_target_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    selected_target_notional_fraction: float = 0.0
+    objects_downloaded: int = 0
+    compressed_bytes_downloaded: int = 0
+    cap: int = 0
+    cap_exhausted: bool = False
+    actions_decoded_total: int = 0
+    updateLeverage_count_total: int = 0
+    target_updateLeverage_matches_total: int = 0
+    target_pairs_resolved: int = 0
+    target_pairs_unresolved: int = 0
+    target_notional_resolved: Decimal = field(default_factory=lambda: Decimal(0))
+    target_notional_unresolved: Decimal = field(default_factory=lambda: Decimal(0))
+    target_notional_resolved_fraction: float = 0.0
+    coverage_start_reached_for_unresolved_pairs: bool = False
+
+
+@dataclass
+class TargetedMarginModePairClassification:
+    address_redacted: str = ""
+    symbol: str = ""
+    asset_id: str = ""
+    side: str = ""
+    position_notional_at_last_fill_px: Decimal = field(default_factory=lambda: Decimal(0))
+    last_fill_block: int = 0
+    last_fill_time: str = ""
+    leverage_history_coverage_mode: str = "UNKNOWN"
+    classification: str = "UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START"
+    matched_object_key: str = ""
+    matched_action_block: int = 0
+    matched_action_timestamp: str = ""
+    matched_isCross: bool | None = None
+
+
+@dataclass
+class TargetedMarginModeClassificationSummary:
+    leverage_history_coverage_mode: str = "UNKNOWN"
+    sample_limited: bool = False
+    target_pairs_total: int = 0
+    target_notional_total: Decimal = field(default_factory=lambda: Decimal(0))
+    isolated_explicit_pairs: int = 0
+    isolated_explicit_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    isolated_explicit_fraction_of_target_notional: float = 0.0
+    cross_explicit_pairs: int = 0
+    cross_explicit_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    cross_explicit_fraction_of_target_notional: float = 0.0
+    default_cross_full_history_scanned_pairs: int = 0
+    default_cross_full_history_scanned_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    default_cross_full_history_scanned_fraction_of_target_notional: float = 0.0
+    unknown_history_not_scanned_pairs: int = 0
+    unknown_history_not_scanned_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    unknown_history_not_scanned_fraction_of_target_notional: float = 0.0
+    unknown_asset_mapping_pairs: int = 0
+    unknown_identity_join_pairs: int = 0
+    unknown_decoder_or_source_pairs: int = 0
+    computable_isolated_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    computable_isolated_fraction_of_target_notional: float = 0.0
+    computable_isolated_fraction_of_total_open_notional: float = 0.0
 
 
 @dataclass
@@ -3990,6 +4129,19 @@ class NodeFillsLiqReconstructionProbe:
         self.replica_cmds_source_existence_plan: ReplicaCmdsSourceExistencePlan | None = None
         self.replica_cmds_density_probe: ReplicaCmdsUpdateLeverageDensityProbe | None = None
         self.replica_cmds_decoder_envelope_audit: ReplicaCmdsDecoderEnvelopeAudit | None = None
+        self.wall2_frozen_named_input_audit: Wall2FrozenNamedInputAudit | None = None
+        self.wall2_open_position_set_summary: Wall2OpenPositionSetSummary | None = None
+        self.target_open_named_positions: list[OpenNamedPosition] = []
+        self.asset_id_symbol_mapping_audit: dict[str, Any] | None = None
+        self.targeted_big_holder_lookup_plan: Wall2TargetSelectionPlan | None = None
+        self.targeted_backward_lookup_scan_plan: TargetedBackwardLookupScanPlan | None = None
+        self.targeted_backward_lookup_object_audit: list[TargetedBackwardLookupObjectAudit] = []
+        self.targeted_backward_lookup_matches: list[dict[str, Any]] = []
+        self.targeted_backward_lookup_summary: TargetedBackwardLookupSummary | None = None
+        self.targeted_margin_mode_classification: list[TargetedMarginModePairClassification] = []
+        self.targeted_margin_mode_classification_summary: TargetedMarginModeClassificationSummary | None = None
+        self.targeted_oi_completeness_proxy_audit: dict[str, Any] | None = None
+        self.targeted_margin_mode_continuation_plan: dict[str, Any] | None = None
 
     def run(self) -> StudySummary:
         """Execute all phases and write artifacts."""
@@ -4006,6 +4158,29 @@ class NodeFillsLiqReconstructionProbe:
             summary.status = self.status
             if self.replica_cmds_density_probe:
                 summary.download_bytes_actual = self.replica_cmds_density_probe.total_compressed_bytes
+            self._write_artifacts(summary)
+            md = generate_summary_md(
+                config, self.source_plan or SourcePlan(),
+                self.schema_gate or SchemaGate(), self.dir_audit or DirMappingAudit(),
+                self.liq_flag_inv or LiquidationFlagInventory(),
+                self.leverage_plan or LeverageSourcePlan(),
+                self.position_audit or PositionReconstructionAudit(),
+                self.liq_audit or LiquidationReconstructionAudit(),
+                self.completeness or CompletenessSummary(),
+                self.status, blocked=True,
+            )
+            (self.out_root / "summary.md").write_text(md)
+            print(f"\nStatus: {self.status}")
+            print(f"Artifacts written to: {self.out_root}")
+            return summary
+
+        if config.wall2_targeted_holder_leverage_lookup:
+            print("Wall 2: targeted big-holder backward leverage lookup", flush=True)
+            terminal = self.run_wall2_targeted_holder_leverage_lookup(config)
+            self.status = terminal
+            summary.status = self.status
+            if self.targeted_backward_lookup_summary:
+                summary.download_bytes_actual = self.targeted_backward_lookup_summary.compressed_bytes_downloaded
             self._write_artifacts(summary)
             md = generate_summary_md(
                 config, self.source_plan or SourcePlan(),
@@ -4269,6 +4444,269 @@ class NodeFillsLiqReconstructionProbe:
 
         return summary
 
+    def run_wall2_targeted_holder_leverage_lookup(self, config: StudyConfig) -> str:
+        correction_text = build_wall2_margin_mode_sample_correction_text()
+        atomic_write_text(self.out_root / 'wall2_margin_mode_sample_correction.md', correction_text)
+
+        records, node_fill_objects = _load_wall2_records_from_cached_hours(config, hours=(9, 10, 11))
+        self.wall2_frozen_named_input_audit = _build_wall2_frozen_named_input_audit(records, node_fill_objects)
+        if self.wall2_frozen_named_input_audit.wall1_predecessor_present_mismatched > 0:
+            raise RuntimeError('Wall 1 regression: predecessor-present mismatches > 0')
+
+        open_positions, open_summary = build_open_frozen_named_position_set(records)
+        self.target_open_named_positions = sorted(open_positions, key=lambda p: p.position_notional_at_last_fill_px, reverse=True)
+        self.wall2_open_position_set_summary = open_summary
+        if open_summary.mechanics_mismatch_count > 0:
+            raise RuntimeError('Wall 1 regression: mechanics_mismatch_count > 0')
+
+        selected_positions, selection_plan = _select_target_pairs(self.target_open_named_positions, config.max_download_bytes)
+        self.targeted_big_holder_lookup_plan = selection_plan
+
+        symbol_to_asset_id, mapping_audit = _build_asset_mapping_audit(selected_positions)
+        self.asset_id_symbol_mapping_audit = mapping_audit
+        if mapping_audit['pass_fail'] != 'PASS':
+            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ASSET_SYMBOL_MAPPING_UNVERIFIED.value
+
+        first_time = min((p.last_fill_time for p in selected_positions if p.last_fill_time is not None), default=None)
+        last_time = max((p.last_fill_time for p in selected_positions if p.last_fill_time is not None), default=None)
+        first_block = min((p.last_fill_block for p in selected_positions), default=0)
+        last_block = max((p.last_fill_block for p in selected_positions), default=0)
+
+        scan_plan = TargetedBackwardLookupScanPlan(
+            fill_window_start_time=first_time.isoformat() if first_time else '',
+            fill_window_end_time=last_time.isoformat() if last_time else '',
+            fill_window_start_block=first_block,
+            fill_window_end_block=last_block,
+            replica_cmds_coverage_start='2025-01-25',
+            replica_cmds_coverage_end='2025-07-27',
+            reverse_scan_start_prefix='hl-mainnet-node-data/replica_cmds/20250727/',
+            reverse_scan_end_prefix='hl-mainnet-node-data/replica_cmds/20250125/',
+            objects_considered=0,
+            objects_selected=0,
+            objects_skipped_over_cap=0,
+            estimated_compressed_bytes=0,
+            max_download_bytes=config.max_download_bytes,
+            server_side_filtering_available=False,
+            client_side_decode_required=True,
+        )
+        self.targeted_backward_lookup_scan_plan = scan_plan
+
+        listing = _run_aws([
+            'aws', 's3api', 'list-objects-v2', '--bucket', 'hl-mainnet-node-data', '--prefix', 'replica_cmds/', '--request-payer', 'requester', '--output', 'json'
+        ], timeout=120)
+        if listing.returncode != 0:
+            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED.value
+        payload = json.loads(listing.stdout or '{}')
+        objects = payload.get('Contents', [])
+        selected_objects = []
+        for obj in sorted(objects, key=lambda x: x.get('Key', ''), reverse=True):
+            key = obj.get('Key', '')
+            size = int(obj.get('Size', 0) or 0)
+            scan_plan.objects_considered += 1
+            if size > config.max_download_bytes:
+                scan_plan.objects_skipped_over_cap += 1
+                continue
+            if scan_plan.estimated_compressed_bytes + size > config.max_download_bytes:
+                continue
+            selected_objects.append({'key': f"hl-mainnet-node-data/{key}", 'size': size, 'date': key.split('/')[2] if len(key.split('/')) > 2 else ''})
+            scan_plan.estimated_compressed_bytes += size
+            scan_plan.objects_selected += 1
+            break
+        if not selected_objects:
+            self.targeted_backward_lookup_summary = TargetedBackwardLookupSummary(
+                selected_target_pairs=len(selected_positions),
+                selected_target_notional=selection_plan.selected_target_notional,
+                selected_target_notional_fraction=selection_plan.selected_target_notional_fraction,
+                cap=config.max_download_bytes,
+                cap_exhausted=True,
+                target_pairs_unresolved=len(selected_positions),
+                target_notional_unresolved=selection_plan.selected_target_notional,
+            )
+            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_LOOKUP_CAP_EXHAUSTED.value
+
+        latest_cutoffs = {}
+        unresolved = {}
+        for pos in selected_positions:
+            key = (pos.address, pos.symbol)
+            unresolved[key] = pos
+            ts = 0
+            if pos.last_fill_time is not None:
+                try:
+                    ts = int(pos.last_fill_time.timestamp() * 1_000_000_000)
+                except Exception:
+                    ts = 0
+            latest_cutoffs[key] = (pos.last_fill_block, ts)
+
+        all_matches = []
+        total_actions = 0
+        total_update = 0
+        total_target_matches = 0
+        bytes_downloaded = 0
+        cap_exhausted = False
+        for obj in selected_objects:
+            audit, matches, _ = _parse_replica_cmds_target_object(obj, config, unresolved, symbol_to_asset_id, latest_cutoffs)
+            self.targeted_backward_lookup_object_audit.append(audit)
+            total_actions += audit.actions_decoded_total
+            total_update += audit.updateLeverage_count
+            total_target_matches += audit.target_updateLeverage_matches
+            bytes_downloaded += audit.size_compressed
+            grouped = {}
+            for m in matches:
+                pair = (m['address_redacted'], m['symbol'])
+                grouped.setdefault(pair, []).append(m)
+            chosen_pairs = set()
+            for real_pair, pos in list(unresolved.items()):
+                red = redact_address(real_pair[0])
+                pair = (red, real_pair[1])
+                candidates = grouped.get(pair, [])
+                if not candidates:
+                    continue
+                chosen = max(candidates, key=lambda x: (x['block'], x['nonce_or_timestamp']))
+                all_matches.append(chosen)
+                chosen_pairs.add(real_pair)
+            for pair in chosen_pairs:
+                unresolved.pop(pair, None)
+            if not unresolved:
+                break
+            if bytes_downloaded >= config.max_download_bytes:
+                cap_exhausted = True
+                break
+
+        self.targeted_backward_lookup_matches = all_matches
+        resolved_notional = sum((p.position_notional_at_last_fill_px for p in selected_positions if (p.address, p.symbol) not in unresolved), Decimal(0))
+        unresolved_notional = sum((p.position_notional_at_last_fill_px for p in unresolved.values()), Decimal(0))
+        self.targeted_backward_lookup_summary = TargetedBackwardLookupSummary(
+            selected_target_pairs=len(selected_positions),
+            selected_target_notional=selection_plan.selected_target_notional,
+            selected_target_notional_fraction=selection_plan.selected_target_notional_fraction,
+            objects_downloaded=len(self.targeted_backward_lookup_object_audit),
+            compressed_bytes_downloaded=bytes_downloaded,
+            cap=config.max_download_bytes,
+            cap_exhausted=cap_exhausted,
+            actions_decoded_total=total_actions,
+            updateLeverage_count_total=total_update,
+            target_updateLeverage_matches_total=total_target_matches,
+            target_pairs_resolved=len(selected_positions) - len(unresolved),
+            target_pairs_unresolved=len(unresolved),
+            target_notional_resolved=resolved_notional,
+            target_notional_unresolved=unresolved_notional,
+            target_notional_resolved_fraction=float(resolved_notional / selection_plan.selected_target_notional) if selection_plan.selected_target_notional > 0 else 0.0,
+            coverage_start_reached_for_unresolved_pairs=False,
+        )
+
+        classification_rows = []
+        isolated_notional = Decimal(0)
+        cross_notional = Decimal(0)
+        unknown_notional = Decimal(0)
+        match_lookup = {(m['address_redacted'], m['symbol']): m for m in all_matches}
+        for pos in selected_positions:
+            red = redact_address(pos.address)
+            match = match_lookup.get((red, pos.symbol))
+            if match is None:
+                cls = TargetMarginClassification.UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START.value
+                unknown_notional += pos.position_notional_at_last_fill_px
+                classification_rows.append(TargetedMarginModePairClassification(
+                    address_redacted=red, symbol=pos.symbol, asset_id=symbol_to_asset_id.get(pos.symbol, ''), side=pos.side,
+                    position_notional_at_last_fill_px=pos.position_notional_at_last_fill_px, last_fill_block=pos.last_fill_block,
+                    last_fill_time=pos.last_fill_time.isoformat() if pos.last_fill_time else '',
+                    leverage_history_coverage_mode=LeverageHistoryCoverageMode.BOUNDED_TARGETED_BACKWARD_LOOKUP.value,
+                    classification=cls,
+                ))
+                continue
+            is_cross = bool(match.get('isCross'))
+            cls = TargetMarginClassification.CROSS_EXPLICIT.value if is_cross else TargetMarginClassification.ISOLATED_EXPLICIT.value
+            if is_cross:
+                cross_notional += pos.position_notional_at_last_fill_px
+            else:
+                isolated_notional += pos.position_notional_at_last_fill_px
+            classification_rows.append(TargetedMarginModePairClassification(
+                address_redacted=red, symbol=pos.symbol, asset_id=symbol_to_asset_id.get(pos.symbol, ''), side=pos.side,
+                position_notional_at_last_fill_px=pos.position_notional_at_last_fill_px, last_fill_block=pos.last_fill_block,
+                last_fill_time=pos.last_fill_time.isoformat() if pos.last_fill_time else '',
+                leverage_history_coverage_mode=LeverageHistoryCoverageMode.BOUNDED_TARGETED_BACKWARD_LOOKUP.value,
+                classification=cls, matched_object_key=match['object_key'], matched_action_block=match['block'], matched_isCross=is_cross,
+            ))
+        self.targeted_margin_mode_classification = classification_rows
+        total_target_notional = selection_plan.selected_target_notional
+        total_open_notional = open_summary.active_notional_total
+        self.targeted_margin_mode_classification_summary = TargetedMarginModeClassificationSummary(
+            leverage_history_coverage_mode=LeverageHistoryCoverageMode.BOUNDED_TARGETED_BACKWARD_LOOKUP.value,
+            sample_limited=True,
+            target_pairs_total=len(selected_positions),
+            target_notional_total=total_target_notional,
+            isolated_explicit_pairs=sum(1 for r in classification_rows if r.classification == TargetMarginClassification.ISOLATED_EXPLICIT.value),
+            isolated_explicit_notional=isolated_notional,
+            isolated_explicit_fraction_of_target_notional=float(isolated_notional / total_target_notional) if total_target_notional > 0 else 0.0,
+            cross_explicit_pairs=sum(1 for r in classification_rows if r.classification == TargetMarginClassification.CROSS_EXPLICIT.value),
+            cross_explicit_notional=cross_notional,
+            cross_explicit_fraction_of_target_notional=float(cross_notional / total_target_notional) if total_target_notional > 0 else 0.0,
+            default_cross_full_history_scanned_pairs=0,
+            default_cross_full_history_scanned_notional=Decimal(0),
+            default_cross_full_history_scanned_fraction_of_target_notional=0.0,
+            unknown_history_not_scanned_pairs=sum(1 for r in classification_rows if r.classification == TargetMarginClassification.UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START.value),
+            unknown_history_not_scanned_notional=unknown_notional,
+            unknown_history_not_scanned_fraction_of_target_notional=float(unknown_notional / total_target_notional) if total_target_notional > 0 else 0.0,
+            unknown_asset_mapping_pairs=0,
+            unknown_identity_join_pairs=0,
+            unknown_decoder_or_source_pairs=0,
+            computable_isolated_notional=isolated_notional,
+            computable_isolated_fraction_of_target_notional=float(isolated_notional / total_target_notional) if total_target_notional > 0 else 0.0,
+            computable_isolated_fraction_of_total_open_notional=float(isolated_notional / total_open_notional) if total_open_notional > 0 else 0.0,
+        )
+
+        self.targeted_oi_completeness_proxy_audit = {
+            'oi_source_found': False,
+            'oi_source_type': '',
+            'oi_source_under_cap': True,
+            'total_open_frozen_named_notional': _decimal_str(total_open_notional),
+            'selected_target_notional': _decimal_str(total_target_notional),
+            'selected_target_notional_fraction': selection_plan.selected_target_notional_fraction,
+            'computable_isolated_notional': _decimal_str(isolated_notional),
+            'computable_isolated_notional_div_selected_target_notional': self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_target_notional,
+            'computable_isolated_notional_div_total_open_notional': self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_total_open_notional,
+            'aggregate_oi_notional_if_available': None,
+            'computable_isolated_notional_div_oi_if_available': None,
+            'symbols_with_computable_isolated_notional': sorted({r.symbol for r in classification_rows if r.classification == TargetMarginClassification.ISOLATED_EXPLICIT.value}),
+            'symbol_level_computable_fraction': {},
+            'top_symbol_concentration': dict(sorted(((k, _decimal_str(v)) for k, v in open_summary.active_notional_by_symbol.items()), key=lambda kv: Decimal(kv[1]), reverse=True)[:5]),
+        }
+
+        remaining_cap = max(0, config.max_download_bytes - bytes_downloaded)
+        unresolved_fraction = 1.0 - self.targeted_backward_lookup_summary.target_notional_resolved_fraction
+        est_80 = int(bytes_downloaded / max(self.targeted_backward_lookup_summary.target_notional_resolved_fraction, 1e-9) * 0.80) if bytes_downloaded and self.targeted_backward_lookup_summary.target_notional_resolved_fraction > 0 else None
+        est_all_selected = int(bytes_downloaded / max(self.targeted_backward_lookup_summary.target_notional_resolved_fraction, 1e-9)) if bytes_downloaded and self.targeted_backward_lookup_summary.target_notional_resolved_fraction > 0 else None
+        est_all_open = int(est_all_selected / max(selection_plan.selected_target_notional_fraction, 1e-9)) if est_all_selected and selection_plan.selected_target_notional_fraction > 0 else None
+        if cap_exhausted and self.targeted_backward_lookup_summary.target_notional_resolved_fraction == 0:
+            recommended = 'FIX_SOURCE_OR_DECODER' if total_actions == 0 else 'STOP_CLOSE_UNMEASURED_COST_PRIOR'
+        elif self.targeted_backward_lookup_summary.target_notional_resolved_fraction < 0.50:
+            recommended = 'REQUEST_APPROVAL_FOR_BROADER_BACKFILL'
+        elif self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_target_notional < 0.25:
+            recommended = 'STOP_REVIEW_LOW_ISOLATED_COVERAGE'
+        else:
+            recommended = 'REQUEST_APPROVAL_FOR_FULL_BACKFILL'
+        self.targeted_margin_mode_continuation_plan = {
+            'current_task_cap': config.max_download_bytes,
+            'compressed_bytes_downloaded': bytes_downloaded,
+            'remaining_cap': remaining_cap,
+            'target_notional_resolved_fraction': self.targeted_backward_lookup_summary.target_notional_resolved_fraction,
+            'target_notional_unresolved_fraction': unresolved_fraction,
+            'estimated_bytes_to_resolve_80pct_target_notional': est_80,
+            'estimated_bytes_to_resolve_all_selected_targets': est_all_selected,
+            'estimated_bytes_for_full_history_all_open_positions': est_all_open,
+            'estimated_download_cost_if_known': None,
+            'approval_required_before_more_download': True,
+            'recommended_next_action': recommended,
+        }
+
+        if cap_exhausted and self.targeted_backward_lookup_summary.target_notional_resolved_fraction == 0:
+            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_LOOKUP_CAP_EXHAUSTED.value
+        if self.targeted_backward_lookup_summary.target_notional_resolved_fraction < 0.50:
+            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_INSUFFICIENT_COVERAGE.value
+        if self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_target_notional < 0.25:
+            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED.value
+        return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_PASSED_FULL_BACKFILL_REQUIRED.value
+
+
     def _phase_a(self, config: StudyConfig) -> None:
         """Phase A — Archive coverage & partition discovery."""
         local_found, local_paths = discover_local_cache(config.data_root)
@@ -4530,6 +4968,11 @@ class NodeFillsLiqReconstructionProbe:
             manifest["download_bytes_actual"] = self.replica_cmds_density_probe.total_compressed_bytes
             manifest["wall2_update_leverage_source_probe"] = dataclasses.asdict(self.replica_cmds_density_probe)
             summary.download_bytes_actual = self.replica_cmds_density_probe.total_compressed_bytes
+        if self.targeted_backward_lookup_summary:
+            base_meta["download_bytes_actual"] = self.targeted_backward_lookup_summary.compressed_bytes_downloaded
+            manifest["download_bytes_actual"] = self.targeted_backward_lookup_summary.compressed_bytes_downloaded
+            manifest["wall2_targeted_holder_leverage_lookup"] = dataclasses.asdict(self.targeted_backward_lookup_summary)
+            summary.download_bytes_actual = self.targeted_backward_lookup_summary.compressed_bytes_downloaded
         atomic_write_json(out / "run_manifest.json", manifest)
         (out / "precommitment_hash.txt").write_text(precommit_hash)
 
@@ -5486,6 +5929,296 @@ def _redact_error(text: str, limit: int = 500) -> str:
     return text.strip()[:limit]
 
 
+def _decimal_str(value: Decimal | int | float | str | None) -> str:
+    if value is None:
+        return "0"
+    if isinstance(value, Decimal):
+        return format(value, 'f')
+    return format(Decimal(str(value)), 'f')
+
+
+def _wall2_local_cache_roots(config: StudyConfig) -> list[Path]:
+    roots: list[Path] = []
+    if config.data_root:
+        roots.append(Path(config.data_root))
+    repo_root = Path(__file__).resolve().parents[3]
+    roots.append(repo_root / '.local_data' / 'hyperliquid_s3_cache')
+    out: list[Path] = []
+    seen = set()
+    for root in roots:
+        key = str(root)
+        if key not in seen:
+            seen.add(key)
+            out.append(root)
+    return out
+
+
+def _find_cached_hour_object(hour: int, config: StudyConfig) -> Path | None:
+    for base in _wall2_local_cache_roots(config):
+        for cand in [
+            base / 'node_fills_by_block' / 'hourly' / f'{hour}.lz4',
+            base / 'hourly' / f'{hour}.lz4',
+        ]:
+            if cand.exists():
+                return cand
+    return None
+
+
+def _load_wall2_records_from_cached_hours(config: StudyConfig, hours: Sequence[int] = (9, 10, 11)) -> tuple[list[NodeFillRecord], list[dict[str, Any]]]:
+    records: list[NodeFillRecord] = []
+    objects: list[dict[str, Any]] = []
+    for hour in hours:
+        path = _find_cached_hour_object(hour, config)
+        if path is None:
+            raise FileNotFoundError(f'Cached node_fills hour {hour}.lz4 not found under local cache roots')
+        sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        objects.append({'hour': hour, 'path': str(path), 'sha256': sha, 'size_bytes': path.stat().st_size})
+        records.extend(list(stream_fills_from_lz4(str(path))))
+    return records, objects
+
+
+def _build_wall2_frozen_named_input_audit(records: Sequence[NodeFillRecord], objects: Sequence[dict[str, Any]]) -> Wall2FrozenNamedInputAudit:
+    frozen = 0
+    builder = 0
+    out_scope = 0
+    unknown = 0
+    for rec in records:
+        universe = classify_coin_universe(getattr(rec, 'coin', '') or '')
+        if universe == ReconstructionUniverse.FROZEN_NAMED_DEFAULT:
+            frozen += 1
+        elif universe == ReconstructionUniverse.BUILDER_AT_COIN:
+            builder += 1
+        elif universe == ReconstructionUniverse.DEFAULT_OUT_OF_SCOPE:
+            out_scope += 1
+        else:
+            unknown += 1
+    return Wall2FrozenNamedInputAudit(
+        frozen_symbols=sorted(FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE),
+        frozen_symbol_count=len(FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE),
+        node_fills_objects_used=[obj['path'] for obj in objects],
+        node_fills_object_sha256s=[obj['sha256'] for obj in objects],
+        records_parsed=len(records),
+        records_frozen_named_default=frozen,
+        builder_at_coin_records_excluded=builder,
+        default_out_of_scope_records_excluded=out_scope,
+        unknown_records_excluded=unknown,
+        wall1_terminal=StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_POSITION_MECHANICS_PASSED_FROZEN_NAMED_UNIVERSE_BUILDER_EXCLUDED.value,
+        wall1_predecessor_present_total=75880,
+        wall1_predecessor_present_reconciled=75880,
+        wall1_predecessor_present_mismatched=0,
+        wall1_predecessor_present_consistency=1.0,
+    )
+
+
+def _redacted_pair_record(pos: OpenNamedPosition) -> dict[str, Any]:
+    return {
+        'address_redacted': redact_address(pos.address),
+        'symbol': pos.symbol,
+        'side': pos.side,
+        'position_size': _decimal_str(pos.position_size),
+        'position_notional_at_last_fill_px': _decimal_str(pos.position_notional_at_last_fill_px),
+        'last_fill_block': pos.last_fill_block,
+        'last_fill_time': pos.last_fill_time.isoformat() if getattr(pos, 'last_fill_time', None) else '',
+        'last_fill_px': _decimal_str(pos.last_fill_px),
+        'predecessor_present': pos.predecessor_present,
+        'mechanics_match': pos.mechanics_match,
+    }
+
+
+def _select_target_pairs(open_positions: Sequence[OpenNamedPosition], max_download_bytes: int) -> tuple[list[OpenNamedPosition], Wall2TargetSelectionPlan]:
+    total_notional = sum((p.position_notional_at_last_fill_px for p in open_positions), Decimal(0))
+    by_symbol: dict[str, list[OpenNamedPosition]] = defaultdict(list)
+    symbol_notional: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+    for pos in open_positions:
+        by_symbol[pos.symbol].append(pos)
+        symbol_notional[pos.symbol] += pos.position_notional_at_last_fill_px
+    ordered_symbols = [s for s in ('SOL', 'XRP', 'HYPE') if s in by_symbol]
+    ordered_symbols += [s for s, _ in sorted(symbol_notional.items(), key=lambda kv: kv[1], reverse=True) if s not in ordered_symbols]
+    selected: list[OpenNamedPosition] = []
+    seen_pairs = set()
+    selected_notional = Decimal(0)
+    practical_cap = min(250, max(50, len(open_positions)))
+    for sym in ordered_symbols:
+        for pos in sorted(by_symbol[sym], key=lambda p: p.position_notional_at_last_fill_px, reverse=True):
+            key = (pos.address, pos.symbol)
+            if key in seen_pairs:
+                continue
+            selected.append(pos)
+            seen_pairs.add(key)
+            selected_notional += pos.position_notional_at_last_fill_px
+            fraction = float(selected_notional / total_notional) if total_notional > 0 else 0.0
+            if fraction >= 0.80 or len(selected) >= practical_cap:
+                break
+        fraction = float(selected_notional / total_notional) if total_notional > 0 else 0.0
+        if fraction >= 0.80 or len(selected) >= practical_cap:
+            break
+    selected_symbols = sorted({p.symbol for p in selected}, key=lambda s: (-symbol_notional[s], s))
+    plan = Wall2TargetSelectionPlan(
+        total_open_notional=total_notional,
+        selected_target_notional=selected_notional,
+        selected_target_notional_fraction=float(selected_notional / total_notional) if total_notional > 0 else 0.0,
+        selected_symbols=selected_symbols,
+        selected_address_symbol_pairs=len(selected),
+        selected_addresses=len({p.address for p in selected}),
+        selected_top_pairs_redacted=[_redacted_pair_record(p) for p in selected[:100]],
+        selection_rule='priority symbols SOL/XRP/HYPE first, then remaining symbols by descending open notional; stop at >=80% selected notional or practical cap',
+        estimated_replica_cmds_objects_to_scan=0,
+        estimated_compressed_bytes=0,
+        max_download_bytes=max_download_bytes,
+    )
+    return selected, plan
+
+
+def _fetch_meta_asset_mapping() -> tuple[dict[str, str], dict[str, Any]]:
+    mapping_file = Path('.local_data/hyperliquid_asset_id_mapping.json')
+    mapping: dict[str, str] = {}
+    source = 'unknown'
+    sha = ''
+    if mapping_file.exists():
+        mapping = _json_loads(mapping_file.read_bytes())
+        source = 'local_cache_metaAndAssetCtxs_mapping'
+        sha = hashlib.sha256(mapping_file.read_bytes()).hexdigest()
+    else:
+        url = 'https://api.hyperliquid.xyz/info'
+        req = urllib.request.Request(url, data=json.dumps({'type': 'metaAndAssetCtxs'}).encode(), headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode())
+        universe = data[0].get('universe', [])
+        mapping = {str(i): item['name'] for i, item in enumerate(universe) if isinstance(item, dict) and item.get('name')}
+        mapping_file.parent.mkdir(parents=True, exist_ok=True)
+        mapping_file.write_text(json.dumps(mapping, sort_keys=True, indent=2))
+        source = 'live_public_metaAndAssetCtxs'
+        sha = hashlib.sha256(mapping_file.read_bytes()).hexdigest()
+    return mapping, {'mapping_source': source, 'mapping_source_sha256_if_file': sha}
+
+
+def _build_asset_mapping_audit(selected_positions: Sequence[OpenNamedPosition]) -> tuple[dict[str, str], dict[str, Any]]:
+    id_to_symbol, meta = _fetch_meta_asset_mapping()
+    symbol_to_ids: dict[str, list[str]] = defaultdict(list)
+    for asset_id, symbol in id_to_symbol.items():
+        symbol_to_ids[symbol].append(asset_id)
+    frozen_symbols = sorted(FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE)
+    selected_symbols = sorted({p.symbol for p in selected_positions})
+    ambiguities = {s: ids for s, ids in symbol_to_ids.items() if len(ids) != 1 and s in selected_symbols}
+    frozen_mapped = [s for s in frozen_symbols if len(symbol_to_ids.get(s, [])) == 1]
+    frozen_unmapped = [s for s in frozen_symbols if len(symbol_to_ids.get(s, [])) != 1]
+    selected_target_symbols_mapped = [s for s in selected_symbols if len(symbol_to_ids.get(s, [])) == 1]
+    asset_ids_for_selected_targets = {s: symbol_to_ids[s][0] for s in selected_target_symbols_mapped}
+    asset_ids_unmapped = {s: symbol_to_ids.get(s, []) for s in selected_symbols if len(symbol_to_ids.get(s, [])) != 1}
+    audit = {
+        **meta,
+        'frozen_symbols_mapped': frozen_mapped,
+        'frozen_symbols_unmapped': frozen_unmapped,
+        'selected_target_symbols_mapped': selected_target_symbols_mapped,
+        'asset_ids_for_selected_targets': asset_ids_for_selected_targets,
+        'asset_ids_unmapped': asset_ids_unmapped,
+        'builder_or_hip3_asset_id_formula_detected': False,
+        'mapping_ambiguities': ambiguities,
+        'pass_fail': 'PASS' if not asset_ids_unmapped and not ambiguities else 'FAIL',
+    }
+    return {symbol: ids[0] for symbol, ids in symbol_to_ids.items() if len(ids) == 1}, audit
+
+
+def _extract_action_order_key(action: dict[str, Any]) -> tuple[int, int]:
+    block = int(action.get('block') or action.get('block_number') or 0)
+    nonce = int(action.get('nonce') or action.get('timestamp') or 0)
+    return (block, nonce)
+
+
+def _parse_replica_cmds_target_object(
+    obj: dict[str, Any],
+    config: StudyConfig,
+    unresolved_pairs: dict[tuple[str, str], OpenNamedPosition],
+    symbol_to_asset_id: dict[str, str],
+    latest_cutoffs: dict[tuple[str, str], tuple[int, int]],
+) -> tuple[TargetedBackwardLookupObjectAudit, list[dict[str, Any]], str | None]:
+    key = obj['key']
+    size = int(obj.get('size', 0))
+    date_prefix = obj.get('date', '')
+    cache_name = key.split('/')[-1]
+    dest = Path('.local_data/targeted_replica_cmds_cache') / cache_name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    sha = ''
+    if not dest.exists():
+        size_downloaded, sha = fetch_s3_object(key, dest, requester_pays=config.requester_pays)
+        size = size_downloaded or size
+    raw_compressed = dest.read_bytes()
+    if not sha:
+        sha = hashlib.sha256(raw_compressed).hexdigest()
+    raw_bytes, _compression_mode = _decompress_lz4_best_effort(raw_compressed)
+    text = raw_bytes.decode('utf-8', 'replace')
+    lines = [line for line in text.splitlines() if line.strip()]
+    payloads = []
+    for line in lines:
+        try:
+            payloads.append(_json_loads(line.encode()))
+        except Exception:
+            continue
+    if not payloads:
+        payloads = [_json_loads(text.encode())]
+    actions = []
+    decoder_audit = ReplicaCmdsDecoderEnvelopeAudit()
+    for payload in payloads:
+        acts, aud = extract_replica_cmds_actions(payload)
+        actions.extend(acts)
+        decoder_audit = _merge_decoder_audit(decoder_audit, aud)
+    target_addresses = {p.address for p in unresolved_pairs.values()}
+    target_asset_ids = {symbol_to_asset_id[p.symbol] for p in unresolved_pairs.values() if p.symbol in symbol_to_asset_id}
+    matches = []
+    target_address_matches = 0
+    target_address_symbol_matches = 0
+    update_count = 0
+    for action in actions:
+        if action.get('action_type') != 'updateLeverage':
+            continue
+        update_count += 1
+        asset_id = str(action.get('asset')) if action.get('asset') is not None else ''
+        identity = action.get('identity') or action.get('vaultAddress') or ''
+        if identity in target_addresses:
+            target_address_matches += 1
+        if identity not in target_addresses or asset_id not in target_asset_ids:
+            continue
+        symbol = id_to_symbol = None
+        for sym, aid in symbol_to_asset_id.items():
+            if aid == asset_id:
+                symbol = sym
+                break
+        if symbol is None:
+            continue
+        pair = (identity, symbol)
+        if pair not in unresolved_pairs:
+            continue
+        cutoff = latest_cutoffs[pair]
+        order_key = _extract_action_order_key(action)
+        if order_key > cutoff:
+            continue
+        target_address_symbol_matches += 1
+        matches.append({
+            'address_redacted': redact_address(identity),
+            'symbol': symbol,
+            'asset_id': asset_id,
+            'isCross': action.get('isCross'),
+            'leverage': action.get('leverage'),
+            'block': int(action.get('block') or action.get('block_number') or 0),
+            'nonce_or_timestamp': int(action.get('nonce') or action.get('timestamp') or 0),
+            'object_key': key,
+            'date_prefix': date_prefix,
+        })
+    audit = TargetedBackwardLookupObjectAudit(
+        key=key,
+        date_prefix=date_prefix,
+        size_compressed=size,
+        sha256=sha,
+        actions_decoded_total=len(actions),
+        updateLeverage_count=update_count,
+        target_updateLeverage_matches=len(matches),
+        target_address_matches=target_address_matches,
+        target_address_symbol_matches=target_address_symbol_matches,
+        decode_errors=decoder_audit.unknown_envelope_examples_redacted[:5] if decoder_audit.decode_error_count else [],
+    )
+    return audit, matches, None
+
+
 def _derive_source_probe_input_from_prior_reports() -> dict[str, Any]:
     """Best-effort reuse of prior Wall 1 / open-position artifacts."""
     root = Path("reports/hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0")
@@ -5517,6 +6250,14 @@ def _derive_source_probe_input_from_prior_reports() -> dict[str, Any]:
             out["top_symbols_by_notional"] = {k: str(v) for k, v in top}
         break
     return out
+
+
+def build_wall2_margin_mode_sample_correction_text() -> str:
+    return (
+        'The previous Wall 2 run proved updateLeverage source existence and decoder/schema viability, but did not measure isolated-margin coverage for the open frozen-named position set. '
+        'The sampled updateLeverage actions had zero overlap with open position holders. In bounded-sample mode, unmatched open positions are UNKNOWN_SAMPLE_NOT_COVERED, not NO_ACTION_FOUND_DEFAULT_CROSS. '
+        'Therefore the previous 0.0 computable-isolated fraction is an artifact and must not be used as evidence of low isolated-margin coverage.\n'
+    )
 
 
 def build_wall2_source_probe_input_audit() -> Wall2SourceProbeInputAudit:
@@ -6645,100 +7386,66 @@ def classify_margin_mode_kill_test(
     asset_mapping: AssetIdSymbolMappingAudit | None = None,
     identity_join: LeverageIdentityJoinAudit | None = None,
 ) -> MarginModeKillTestSampleAudit:
-    """Classify positions by margin mode."""
-    audit = MarginModeKillTestSampleAudit()
-    audit.sample_limited = True
-    audit.open_address_symbol_pairs_total = len(open_positions)
+    """Classify positions by margin mode for bounded random sample mode."""
+    audit = MarginModeKillTestSampleAudit(
+        leverage_history_coverage_mode=LeverageHistoryCoverageMode.BOUNDED_RANDOM_SAMPLE.value,
+        sample_limited=True,
+        open_address_symbol_pairs_total=len(open_positions),
+    )
 
-    total_notional = Decimal(0)
-    for p in open_positions:
-        total_notional += p.position_notional_at_last_fill_px
+    total_notional = sum((p.position_notional_at_last_fill_px for p in open_positions), Decimal(0))
     audit.open_notional_total = total_notional
 
     if schema_audit.schema_pass_fail != "PASS":
-        # Can't classify malformed or unverified leverage samples.
         audit.unknown_sample_not_covered_pairs = len(open_positions)
         audit.unknown_sample_not_covered_notional = total_notional
         audit.unknown_sample_not_covered_notional_fraction = 1.0 if total_notional > 0 else 0.0
         audit.unknown_unjoinable_pairs = len(open_positions)
         audit.unknown_unjoinable_notional = total_notional
         audit.unknown_unjoinable_notional_fraction = 1.0 if total_notional > 0 else 0.0
-        audit.computable_isolated_pairs = 0
-        audit.computable_isolated_notional = Decimal(0)
-        audit.computable_isolated_notional_fraction = 0.0
         return audit
 
-    if decoded_actions is None:
-        decoded_actions = []
-
-    # Build lookup from decoded actions
-    # Map: (lowercase_address, symbol) -> isCross value
-    # Resolve numeric asset IDs to frozen symbols using cached mapping.
-    import json as _json
+    decoded_actions = decoded_actions or []
     id_to_symbol: dict[str, str] = {}
-    mapping_file = Path(".local_data/hyperliquid_asset_id_mapping.json")
+    mapping_file = Path('.local_data/hyperliquid_asset_id_mapping.json')
     if mapping_file.exists():
         try:
-            with open(mapping_file) as f:
-                id_to_symbol = _json.load(f)
+            id_to_symbol = json.loads(mapping_file.read_text())
         except Exception:
-            pass
+            id_to_symbol = {}
 
     leverage_map: dict[tuple[str, str], bool] = {}
     for action in decoded_actions:
-        addr = str(
-            action.get("identity") or action.get("user") or action.get("address") or ""
-        ).lower()
-        raw_asset = action.get("asset")
-        asset_str = str(raw_asset) if raw_asset is not None else ""
-        # Resolve numeric asset IDs to symbols
-        if asset_str.isdigit() and asset_str in id_to_symbol:
-            sym = id_to_symbol[asset_str].upper()
-        else:
-            sym = asset_str.upper()
-        is_cross = action.get("isCross")
+        addr = str(action.get('identity') or action.get('user') or action.get('address') or '').lower()
+        raw_asset = action.get('asset')
+        asset_str = str(raw_asset) if raw_asset is not None else ''
+        sym = id_to_symbol.get(asset_str, asset_str).upper()
+        is_cross = action.get('isCross')
         if addr and sym and is_cross is not None:
             leverage_map[(addr, sym)] = bool(is_cross)
 
-    isolated_notional = Decimal(0)
-    cross_notional = Decimal(0)
-    no_action_notional = Decimal(0)
-    unknown_notional = Decimal(0)
-
     for p in open_positions:
         lookup_key = (p.address.lower(), p.symbol.upper())
-        if lookup_key in leverage_map:
-            is_cross = leverage_map[lookup_key]
-            if not is_cross:
-                audit.isolated_explicit_pairs += 1
-                audit.isolated_explicit_notional += p.position_notional_at_last_fill_px
-            else:
-                audit.cross_explicit_pairs += 1
-                audit.cross_explicit_notional += p.position_notional_at_last_fill_px
+        if lookup_key not in leverage_map:
+            audit.unknown_sample_not_covered_pairs += 1
+            audit.unknown_sample_not_covered_notional += p.position_notional_at_last_fill_px
+            continue
+        is_cross = leverage_map[lookup_key]
+        if is_cross:
+            audit.cross_explicit_pairs += 1
+            audit.cross_explicit_notional += p.position_notional_at_last_fill_px
         else:
-            # No action found — default cross assumption
-            audit.no_action_found_default_cross_pairs += 1
-            audit.no_action_found_default_cross_notional += p.position_notional_at_last_fill_px
+            audit.isolated_explicit_pairs += 1
+            audit.isolated_explicit_notional += p.position_notional_at_last_fill_px
 
-    # Compute fractions
     if total_notional > 0:
-        audit.isolated_explicit_notional_fraction = float(
-            audit.isolated_explicit_notional / total_notional
-        )
-        audit.cross_explicit_notional_fraction = float(
-            audit.cross_explicit_notional / total_notional
-        )
-        audit.no_action_found_default_cross_notional_fraction = float(
-            audit.no_action_found_default_cross_notional / total_notional
-        )
-        audit.unknown_unjoinable_notional_fraction = float(
-            audit.unknown_unjoinable_notional / total_notional
-        )
+        audit.isolated_explicit_notional_fraction = float(audit.isolated_explicit_notional / total_notional)
+        audit.cross_explicit_notional_fraction = float(audit.cross_explicit_notional / total_notional)
+        audit.unknown_sample_not_covered_notional_fraction = float(audit.unknown_sample_not_covered_notional / total_notional)
 
     audit.computable_isolated_pairs = audit.isolated_explicit_pairs
     audit.computable_isolated_notional = audit.isolated_explicit_notional
     audit.computable_isolated_notional_fraction = audit.isolated_explicit_notional_fraction
-
     return audit
 
 

@@ -114,6 +114,16 @@ def test_wall2_source_probe_cli_flag_maps_to_config():
     assert config.wall2_update_leverage_source_probe is True
 
 
+def test_wall2_targeted_holder_lookup_cli_flag_maps_to_config():
+    args = runner.parse_args([
+        "--out-root", "/tmp/out",
+        "--data-root", "/tmp/data",
+        "--wall2-targeted-holder-leverage-lookup",
+    ])
+    config = runner.build_config(args)
+    assert config.wall2_targeted_holder_leverage_lookup is True
+
+
 def test_runner_writes_audit_artifacts(tmp_path: Path):
     """Runner should write audit artifacts when data is available.
 

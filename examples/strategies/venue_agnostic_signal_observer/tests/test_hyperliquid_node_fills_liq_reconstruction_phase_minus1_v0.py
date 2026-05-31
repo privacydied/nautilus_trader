@@ -1354,8 +1354,7 @@ def test_margin_mode_classifier_cross_explicit():
     assert killtest.cross_explicit_notional_fraction > 0
 
 
-def test_no_action_found_default_cross():
-    """No matching action results in no_action_found_default_cross classification."""
+def test_bounded_random_sample_no_matching_action_is_unknown_sample_not_covered():
     positions = [
         probe_mod.OpenNamedPosition(
             address="0xabc", symbol="SOL", side="long",
@@ -1364,8 +1363,9 @@ def test_no_action_found_default_cross():
     ]
     schema_audit = probe_mod.UpdateLeverageSchemaAudit(schema_pass_fail="PASS")
     killtest = probe_mod.classify_margin_mode_kill_test(positions, schema_audit, [])
-    assert killtest.no_action_found_default_cross_pairs == 1
-    assert killtest.no_action_found_default_cross_notional_fraction > 0
+    assert killtest.unknown_sample_not_covered_pairs == 1
+    assert killtest.no_action_found_default_cross_pairs == 0
+    assert killtest.unknown_sample_not_covered_notional_fraction > 0
 
 
 def test_computable_isolated_notional_fraction():
@@ -1621,3 +1621,58 @@ def test_rejected_research_mutation_guard_accounting_exists():
     text = probe_mod.build_test_count_and_registry_guard_accounting_text()
     assert "REJECTED_RESEARCH_mutation_guard_exists: true" in text
     assert "where_REJECTED_RESEARCH_mutation_guard_lives:" in text
+
+
+def test_bounded_random_samples_classify_unmatched_as_unknown_sample_not_covered():
+    positions = [
+        probe_mod.OpenNamedPosition(address='0xaaa', symbol='SOL', side='long', position_size=Decimal('1'), position_notional_at_last_fill_px=Decimal('1000')),
+    ]
+    actions = [{'identity': '0xbbb', 'asset': 'SOL', 'isCross': False, 'leverage': 5}]
+    schema_audit = probe_mod.UpdateLeverageSchemaAudit(schema_pass_fail='PASS')
+    killtest = probe_mod.classify_margin_mode_kill_test(positions, schema_audit, actions)
+    assert killtest.unknown_sample_not_covered_pairs == 1
+    assert killtest.no_action_found_default_cross_pairs == 0
+
+
+def test_target_selection_ranks_by_notional_and_priority_symbols_present():
+    positions = [
+        probe_mod.OpenNamedPosition(address='a', symbol='ENA', position_notional_at_last_fill_px=Decimal('500')),
+        probe_mod.OpenNamedPosition(address='b', symbol='SOL', position_notional_at_last_fill_px=Decimal('400')),
+        probe_mod.OpenNamedPosition(address='c', symbol='XRP', position_notional_at_last_fill_px=Decimal('300')),
+        probe_mod.OpenNamedPosition(address='d', symbol='HYPE', position_notional_at_last_fill_px=Decimal('200')),
+    ]
+    selected, plan = probe_mod._select_target_pairs(positions, 100_000_000)
+    assert {'SOL', 'XRP', 'HYPE'}.issubset(set(plan.selected_symbols))
+    assert plan.selected_target_notional > 0
+
+
+def test_targeted_margin_terminals_do_not_emit_phase0_ready_statuses():
+    statuses = [
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_PASSED_FULL_BACKFILL_REQUIRED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_INSUFFICIENT_COVERAGE.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_LOOKUP_CAP_EXHAUSTED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ASSET_SYMBOL_MAPPING_UNVERIFIED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED.value,
+    ]
+    for s in statuses:
+        assert 'READY_FOR_PHASE_0' not in s
+        assert 'PAPER' not in s
+        assert 'LIVE' not in s
+        assert 'PROFITABLE' not in s
+
+
+def test_wall1_preserved_headline_counts():
+    audit = probe_mod.Wall2FrozenNamedInputAudit(
+        wall1_predecessor_present_total=75880,
+        wall1_predecessor_present_reconciled=75880,
+        wall1_predecessor_present_mismatched=0,
+        wall1_predecessor_present_consistency=1.0,
+    )
+    assert audit.wall1_predecessor_present_total == 75880
+    assert audit.wall1_predecessor_present_reconciled == 75880
+    assert audit.wall1_predecessor_present_mismatched == 0
+
+
+def test_builder_at_coin_remains_excluded_from_wall2():
+    assert probe_mod.classify_coin_universe('@123') == probe_mod.ReconstructionUniverse.BUILDER_AT_COIN
