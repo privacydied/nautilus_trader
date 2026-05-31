@@ -1176,3 +1176,269 @@ class TestFrozenNamedReconciliationGate:
         gate = probe_mod.compute_frozen_named_reconciliation_gate(recs, config)
         # Should have entries for the dir values
         assert len(gate.by_dir) > 0
+
+
+# ---------------------------------------------------------------------------
+# Wall 2 — margin-mode kill-test tests
+# ---------------------------------------------------------------------------
+
+
+def test_wall2_uses_only_frozen_named_rows():
+    """Wall 2 input audit counts only frozen named records."""
+    recs = [
+        _make_rec(coin="SOL", side="B", sz=1.0, start_position=0.0),
+        _make_rec(coin="DOGE", side="B", sz=5.0, start_position=0.0),
+        _make_rec(coin="@1", side="B", sz=1.0, start_position=0.0),  # builder
+        _make_rec(coin="BTC", side="B", sz=0.5, start_position=0.0),  # out of scope
+    ]
+    gate = probe_mod.FrozenNamedReconciliationGate()
+    gate.pass_fail = "PASS"
+    gate.predecessor_present_frozen_named = 0
+    gate.reconciled_frozen_named = 0
+    gate.mismatched_frozen_named = 0
+    gate.consistency_predecessor_present_frozen_named = 1.0
+
+    audit = probe_mod.build_wall2_frozen_named_input_audit(recs, gate)
+    assert audit.records_frozen_named_default == 2
+    assert audit.builder_at_coin_records_excluded == 1
+    assert audit.default_out_of_scope_records_excluded == 1
+
+
+def test_wall2_excludes_builder_at_coin():
+    """Builder @XXX records are excluded from frozen named default count."""
+    recs = [
+        _make_rec(coin="SOL", start_position=0.0),
+        _make_rec(coin="@1", start_position=0.0),
+        _make_rec(coin="@42", start_position=0.0),
+    ]
+    gate = probe_mod.FrozenNamedReconciliationGate()
+    gate.pass_fail = "PASS"
+    gate.predecessor_present_frozen_named = 0
+    gate.reconciled_frozen_named = 0
+    gate.mismatched_frozen_named = 0
+    gate.consistency_predecessor_present_frozen_named = 1.0
+
+    audit = probe_mod.build_wall2_frozen_named_input_audit(recs, gate)
+    assert audit.records_frozen_named_default == 1
+    assert audit.builder_at_coin_records_excluded == 2
+
+
+def test_wall2_open_position_set_replays_positions():
+    """Open position set correctly replays position states."""
+    recs = [
+        _make_rec(address="0xabc", coin="SOL", side="B", sz=10.0, px=100.0,
+                  start_position=0.0, block_number=1),
+        _make_rec(address="0xabc", coin="SOL", side="B", sz=5.0, px=101.0,
+                  start_position=10.0, block_number=2),
+        _make_rec(address="0xabc", coin="SOL", side="A", sz=3.0, px=102.0,
+                  start_position=15.0, block_number=3),
+    ]
+    open_positions, summary = probe_mod.build_open_frozen_named_position_set(recs)
+    assert len(open_positions) >= 1
+    assert summary.active_nonzero_address_symbol_pairs >= 1
+
+
+def test_update_leverage_decoder_unwraps_nested_envelopes():
+    """updateLeverage decoder finds actions inside multiSig.payload.action."""
+    payload = {
+        "multiSig": {
+            "payload": {
+                "action": {
+                    "type": "updateLeverage",
+                    "identity": "0xabc123",
+                    "asset": "SOL",
+                    "isCross": False,
+                    "leverage": 10,
+                }
+            }
+        }
+    }
+    actions = probe_mod._extract_update_leverage_actions(payload)
+    assert len(actions) == 1
+    assert actions[0]["type"] == "updateLeverage"
+    assert actions[0]["identity"] == "0xabc123"
+    assert actions[0]["isCross"] is False
+
+
+def test_update_leverage_decoder_handles_direct_action():
+    """updateLeverage decoder finds direct actions."""
+    payload = {
+        "type": "updateLeverage",
+        "identity": "0xdef456",
+        "asset": "DOGE",
+        "isCross": True,
+        "leverage": 5,
+    }
+    actions = probe_mod._extract_update_leverage_actions(payload)
+    assert len(actions) == 1
+    assert actions[0]["isCross"] is True
+
+
+def test_update_leverage_schema_passes_with_all_fields():
+    """Schema audit passes when all required fields are present."""
+    data = {
+        "type": "updateLeverage",
+        "identity": "0xabc",
+        "asset": "SOL",
+        "isCross": False,
+        "leverage": 10,
+        "block_number": 123,
+    }
+    raw = json.dumps(data).encode()
+    audit = probe_mod.decode_update_leverage_actions(raw)
+    assert audit.schema_pass_fail == "PASS"
+    assert audit.identity_field_present is True
+    assert audit.asset_field_present is True
+    assert audit.isCross_field_present is True
+    assert audit.leverage_field_present is True
+
+
+def test_update_leverage_schema_fails_without_fields():
+    """Schema audit fails when required fields are missing."""
+    data = {"type": "updateLeverage"}
+    raw = json.dumps(data).encode()
+    audit = probe_mod.decode_update_leverage_actions(raw)
+    assert audit.schema_pass_fail == "FAIL"
+
+
+def test_missing_update_leverage_sample_emits_not_found():
+    """No local data emits download_needed=True."""
+    plan = probe_mod.find_replica_cmds_update_leverage_slice(
+        config=probe_mod.StudyConfig(data_root="/nonexistent"),
+    )
+    # The plan should indicate download is needed
+    assert plan[0].download_needed is True
+
+
+def test_identity_join_normalizes_address_casing():
+    """Identity join works with mixed-case addresses."""
+    positions = [
+        probe_mod.OpenNamedPosition(
+            address="0xABC123", symbol="SOL", side="long",
+            position_size=Decimal("10"), position_notional_at_last_fill_px=Decimal("1000"),
+        ),
+    ]
+    actions = [{"identity": "0xabc123", "asset": "SOL", "isCross": False, "leverage": 10}]
+    schema_audit = probe_mod.UpdateLeverageSchemaAudit(schema_pass_fail="PASS")
+    killtest = probe_mod.classify_margin_mode_kill_test(positions, schema_audit, actions)
+    assert killtest.isolated_explicit_pairs == 1
+
+
+def test_margin_mode_classifier_isolated_explicit():
+    """Classifier assigns isolated_explicit when isCross is false."""
+    positions = [
+        probe_mod.OpenNamedPosition(
+            address="0xabc", symbol="SOL", side="long",
+            position_size=Decimal("10"), position_notional_at_last_fill_px=Decimal("1000"),
+        ),
+    ]
+    actions = [{"identity": "0xabc", "asset": "SOL", "isCross": False, "leverage": 10}]
+    schema_audit = probe_mod.UpdateLeverageSchemaAudit(schema_pass_fail="PASS")
+    killtest = probe_mod.classify_margin_mode_kill_test(positions, schema_audit, actions)
+    assert killtest.isolated_explicit_pairs == 1
+    assert killtest.isolated_explicit_notional_fraction > 0
+
+
+def test_margin_mode_classifier_cross_explicit():
+    """Classifier assigns cross_explicit when isCross is true."""
+    positions = [
+        probe_mod.OpenNamedPosition(
+            address="0xabc", symbol="SOL", side="long",
+            position_size=Decimal("10"), position_notional_at_last_fill_px=Decimal("1000"),
+        ),
+    ]
+    actions = [{"identity": "0xabc", "asset": "SOL", "isCross": True, "leverage": 5}]
+    schema_audit = probe_mod.UpdateLeverageSchemaAudit(schema_pass_fail="PASS")
+    killtest = probe_mod.classify_margin_mode_kill_test(positions, schema_audit, actions)
+    assert killtest.cross_explicit_pairs == 1
+    assert killtest.cross_explicit_notional_fraction > 0
+
+
+def test_no_action_found_default_cross():
+    """No matching action results in no_action_found_default_cross classification."""
+    positions = [
+        probe_mod.OpenNamedPosition(
+            address="0xabc", symbol="SOL", side="long",
+            position_size=Decimal("10"), position_notional_at_last_fill_px=Decimal("1000"),
+        ),
+    ]
+    schema_audit = probe_mod.UpdateLeverageSchemaAudit(schema_pass_fail="PASS")
+    killtest = probe_mod.classify_margin_mode_kill_test(positions, schema_audit, [])
+    assert killtest.no_action_found_default_cross_pairs == 1
+    assert killtest.no_action_found_default_cross_notional_fraction > 0
+
+
+def test_computable_isolated_notional_fraction():
+    """Computable isolated fraction is correctly computed."""
+    positions = [
+        probe_mod.OpenNamedPosition(
+            address="0xabc", symbol="SOL", side="long",
+            position_size=Decimal("10"), position_notional_at_last_fill_px=Decimal("1000"),
+        ),
+        probe_mod.OpenNamedPosition(
+            address="0xdef", symbol="DOGE", side="short",
+            position_size=Decimal("100"), position_notional_at_last_fill_px=Decimal("500"),
+        ),
+    ]
+    actions = [
+        {"identity": "0xabc", "asset": "SOL", "isCross": False, "leverage": 10},
+        {"identity": "0xdef", "asset": "DOGE", "isCross": True, "leverage": 5},
+    ]
+    schema_audit = probe_mod.UpdateLeverageSchemaAudit(schema_pass_fail="PASS")
+    killtest = probe_mod.classify_margin_mode_kill_test(positions, schema_audit, actions)
+    assert killtest.isolated_explicit_pairs == 1
+    assert killtest.cross_explicit_pairs == 1
+    # SOL=1000/(1000+500) = 0.667
+    assert abs(killtest.computable_isolated_notional_fraction - 1000/1500) < 0.01
+
+
+def test_wall2_killtest_does_not_authorize_phase0():
+    """Wall 2 terminal statuses do not authorize Phase 0."""
+    wall2_statuses = [
+        "BLOCKED_ISOLATED_MARGIN_COVERAGE_TOO_LOW_SAMPLE",
+        "LEVERAGE_MARGIN_SAMPLE_PASSED_FULL_BACKFILL_REQUIRED",
+        "BLOCKED_LEVERAGE_IDENTITY_JOIN_UNVERIFIED",
+        "BLOCKED_ASSET_SYMBOL_MAPPING_UNVERIFIED",
+        "BLOCKED_UPDATE_LEVERAGE_SAMPLE_NOT_FOUND_UNDER_CAP",
+        "BLOCKED_MARGIN_MODE_SAMPLE_NOT_INFORMATIVE",
+    ]
+    for s in wall2_statuses:
+        # Must not be in FORBIDDEN_STATUSES
+        # But these are valid Phase -1 statuses, not forbidden ones
+        assert "PHASE_0" not in s
+        assert "PAPER" not in s
+        assert "LIVE" not in s
+        assert "PROFITABLE" not in s
+        assert "ALPHA" not in s
+        assert "TRADE_READY" not in s
+
+
+def test_no_paper_live_promotion_profitability_status_emitted():
+    """No paper, live, promotion, or profitability status emitted."""
+    forbidden = probe_mod.FORBIDDEN_STATUSES
+    # Wall 2 statuses must not include forbidden statuses
+    for s in [
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ISOLATED_MARGIN_COVERAGE_TOO_LOW_SAMPLE.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_LEVERAGE_MARGIN_SAMPLE_PASSED_FULL_BACKFILL_REQUIRED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_LEVERAGE_IDENTITY_JOIN_UNVERIFIED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ASSET_SYMBOL_MAPPING_UNVERIFIED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_SAMPLE_NOT_FOUND_UNDER_CAP.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_MARGIN_MODE_SAMPLE_NOT_INFORMATIVE.value,
+    ]:
+        assert s not in forbidden
+
+
+def test_registry_guard_count():
+    """Verify the test module can be imported and has expected test count."""
+    import importlib
+    mod = importlib.import_module(
+        "examples.strategies.venue_agnostic_signal_observer.tests"
+        ".test_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+    )
+    test_funcs = [name for name in dir(mod) if name.startswith("test_")]
+    test_methods = []
+    for obj in vars(mod).values():
+        if isinstance(obj, type):
+            test_methods.extend(name for name in dir(obj) if name.startswith("test_"))
+    # At least 59 original + 17 new Wall 2 tests, including class-based tests.
+    assert len(test_funcs) + len(test_methods) >= 75

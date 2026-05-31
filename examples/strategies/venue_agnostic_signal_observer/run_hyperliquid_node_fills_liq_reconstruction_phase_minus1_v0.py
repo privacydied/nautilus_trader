@@ -109,6 +109,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--bound-diagnostic", action="store_true",
                         help="Enable max-leverage bound diagnostic mode")
 
+    # Wall 2 margin-mode kill-test
+    parser.add_argument("--wall2-margin-mode-killtest", action="store_true",
+                        help="Run Wall 2 margin-mode kill-test after Wall 1 passes")
+
     return parser.parse_args(argv)
 
 
@@ -141,6 +145,7 @@ def build_config(args: argparse.Namespace) -> probe_mod.StudyConfig:
         leverage_mode=args.leverage_mode,
         bound_diagnostic=args.bound_diagnostic,
         leverage_source_plan_only=args.leverage_source_plan_only,
+        wall2_margin_mode_killtest=args.wall2_margin_mode_killtest,
     )
 
 

@@ -16,6 +16,10 @@ from pathlib import Path
 
 import pytest
 
+from examples.strategies.venue_agnostic_signal_observer import (
+    run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0 as runner,
+)
+
 
 REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent.parent)
 
@@ -86,6 +90,17 @@ def test_runner_no_execution_path_words(tmp_path: Path):
 
     # Skip strict check — dry-run mode summary.json may contain 'order' in prose context
     pass
+
+
+def test_wall2_cli_flag_maps_to_config():
+    """--wall2-margin-mode-killtest maps onto StudyConfig."""
+    args = runner.parse_args([
+        "--out-root", "/tmp/out",
+        "--data-root", "/tmp/data",
+        "--wall2-margin-mode-killtest",
+    ])
+    config = runner.build_config(args)
+    assert config.wall2_margin_mode_killtest is True
 
 
 def test_runner_writes_audit_artifacts(tmp_path: Path):
