@@ -176,6 +176,11 @@ class StudyStatus(str, Enum):
     NODE_FILLS_LIQ_PHASE_MINUS1_THIN_SLICE_EXACT_RECONSTRUCTION_PASSED_REVIEW_ALLOWED = "THIN_SLICE_EXACT_RECONSTRUCTION_PASSED_REVIEW_ALLOWED"
     NODE_FILLS_LIQ_PHASE_MINUS1_THIN_SLICE_BOUND_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE = "THIN_SLICE_BOUND_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE"
 
+    # Frozen named universe pass/fail (Phase -1 position mechanics gate)
+    NODE_FILLS_LIQ_PHASE_MINUS1_POSITION_MECHANICS_PASSED_FROZEN_NAMED_UNIVERSE_BUILDER_EXCLUDED = "POSITION_MECHANICS_PASSED_FROZEN_NAMED_UNIVERSE_BUILDER_EXCLUDED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_NAMED_UNIVERSE_POSITION_RECONSTRUCTION = "BLOCKED_NAMED_UNIVERSE_POSITION_RECONSTRUCTION"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UNIVERSE_ALIAS_AMBIGUITY = "BLOCKED_UNIVERSE_ALIAS_AMBIGUITY"
+
     # Error
     NODE_FILLS_LIQ_PHASE_MINUS1_ERROR_INVALID_OUTPUT = "ERROR_INVALID_OUTPUT"
 
@@ -202,6 +207,55 @@ class DownloadUnit(str, Enum):
     ALL_COIN_BLOCK_OBJECT = "all_coin_block_object"
     DAILY_BUNDLE = "daily_bundle"
     UNKNOWN_UNIT = "unknown_unit"
+
+
+class ReconstructionUniverse(str, Enum):
+    """Classification of fill records by their universe scope."""
+    FROZEN_NAMED_DEFAULT = "FROZEN_NAMED_DEFAULT"
+    BUILDER_AT_COIN = "BUILDER_AT_COIN"
+    DEFAULT_OUT_OF_SCOPE = "DEFAULT_OUT_OF_SCOPE"
+    UNKNOWN = "UNKNOWN"
+
+
+# Frozen non-BTC/ETH altcoin perp universe from Phase 0 precommitment
+# Source: HYPERLIQUID_LIQ_CLUSTER_PREPOSITIONING_PHASE0_V0_PRECOMMITMENT.md
+FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE: frozenset[str] = frozenset({
+    "AAVE", "ADA", "APT", "ARB", "ATOM", "AVAX", "BCH", "BNB",
+    "DOGE", "DOT", "ENA", "FET", "HYPE", "INJ", "JUP", "LINK",
+    "LTC", "MKR", "NEAR", "ONDO", "OP", "PENDLE", "SEI", "SOL",
+    "SUI", "TIA", "TON", "TRX", "UNI", "WIF", "WLD", "XRP",
+})
+
+
+_BUILDER_AT_PATTERN = re.compile(r"^@(\d+)$")
+
+
+def classify_coin_universe(raw_coin: str) -> ReconstructionUniverse:
+    """Classify a raw coin value into a universe bucket.
+
+    Rules:
+    - If raw coin starts with "@" and numeric suffix parses: BUILDER_AT_COIN
+    - If raw coin (normalized) is in the frozen named ticker list: FROZEN_NAMED_DEFAULT
+    - If raw coin is a normal non-@ symbol but not in the frozen list: DEFAULT_OUT_OF_SCOPE
+    - Otherwise: UNKNOWN
+    """
+    if not raw_coin:
+        return ReconstructionUniverse.UNKNOWN
+
+    # Check builder @XXX pattern
+    if _BUILDER_AT_PATTERN.match(raw_coin):
+        return ReconstructionUniverse.BUILDER_AT_COIN
+
+    # Normalize and check frozen list
+    normalized = normalize_coin(raw_coin)
+    if normalized in FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE:
+        return ReconstructionUniverse.FROZEN_NAMED_DEFAULT
+
+    # Check if it looks like a normal ticker (uppercase letters only)
+    if re.match(r"^[A-Z]{1,10}$", normalized):
+        return ReconstructionUniverse.DEFAULT_OUT_OF_SCOPE
+
+    return ReconstructionUniverse.UNKNOWN
 
 
 class SchemaVerdict(str, Enum):
@@ -801,6 +855,41 @@ class BlockerClassification:
     consistency_after_predecessor_gate: float = 0.0
     consistency_before_gate: float = 0.0
     mismatches_concentrated_in_incomplete_users: bool = False
+
+
+@dataclass
+class FrozenNamedReconciliationGate:
+    """Reconciliation gate for the frozen named universe only."""
+    records_total: int = 0
+    records_frozen_named_default: int = 0
+    records_builder_at_coin: int = 0
+    records_default_out_of_scope: int = 0
+    records_unknown: int = 0
+    builder_raw_coins: list[str] = field(default_factory=list)
+    default_out_of_scope_symbols: list[str] = field(default_factory=list)
+    unknown_examples_redacted: list[str] = field(default_factory=list)
+
+    # Reconciliation on frozen named universe only
+    transition_candidates_frozen_named: int = 0
+    checkable_frozen_named: int = 0
+    predecessor_present_frozen_named: int = 0
+    reconciled_frozen_named: int = 0
+    mismatched_frozen_named: int = 0
+    consistency_checkable_frozen_named: float = 0.0
+    consistency_predecessor_present_frozen_named: float = 0.0
+
+    # By-symbol breakdown
+    by_symbol: dict[str, dict] = field(default_factory=dict)
+    # By-dir breakdown
+    by_dir: dict[str, dict] = field(default_factory=dict)
+
+    # Threshold
+    threshold: float = 0.95
+    pass_fail: str = "NOT_EVALUATED"
+
+    # Source tracking
+    frozen_universe_source: str = "HYPERLIQUID_LIQ_CLUSTER_PREPOSITIONING_PHASE0_V0_PRECOMMITMENT.md"
+    classification_rule_version: str = "v1"
 
 
 # ---------------------------------------------------------------------------
@@ -2995,6 +3084,246 @@ def _percentile(sorted_data: list[float], p: int) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Frozen named universe reconciliation gate
+# ---------------------------------------------------------------------------
+
+def compute_frozen_named_reconciliation_gate(
+    records: Sequence[Any],
+    config: StudyConfig,
+) -> FrozenNamedReconciliationGate:
+    """Compute reconciliation gate for frozen named universe only.
+
+    Classifies all records, then runs position reconstruction on frozen named
+    records only. Builder @XXX and out-of-scope records are excluded from the
+    named-universe denominator.
+    """
+    gate = FrozenNamedReconciliationGate()
+    gate.records_total = len(records)
+
+    # Phase 1: Classify all records
+    classified: dict[ReconstructionUniverse, list[Any]] = {
+        u: [] for u in ReconstructionUniverse
+    }
+    builder_coins: set[str] = set()
+    out_of_scope_symbols: set[str] = set()
+    unknown_examples: list[str] = []
+
+    for rec in records:
+        raw_coin = getattr(rec, 'coin', '') or ''
+        universe = classify_coin_universe(raw_coin)
+        classified[universe].append(rec)
+
+        if universe == ReconstructionUniverse.BUILDER_AT_COIN:
+            builder_coins.add(raw_coin)
+        elif universe == ReconstructionUniverse.DEFAULT_OUT_OF_SCOPE:
+            out_of_scope_symbols.add(normalize_coin(raw_coin))
+        elif universe == ReconstructionUniverse.UNKNOWN:
+            if len(unknown_examples) < 10:
+                unknown_examples.append(raw_coin[:20])
+
+    gate.records_frozen_named_default = len(classified[ReconstructionUniverse.FROZEN_NAMED_DEFAULT])
+    gate.records_builder_at_coin = len(classified[ReconstructionUniverse.BUILDER_AT_COIN])
+    gate.records_default_out_of_scope = len(classified[ReconstructionUniverse.DEFAULT_OUT_OF_SCOPE])
+    gate.records_unknown = len(classified[ReconstructionUniverse.UNKNOWN])
+    gate.builder_raw_coins = sorted(builder_coins)
+    gate.default_out_of_scope_symbols = sorted(out_of_scope_symbols)
+    gate.unknown_examples_redacted = unknown_examples
+
+    # Phase 2: Run position reconstruction on frozen named records only
+    frozen_records = classified[ReconstructionUniverse.FROZEN_NAMED_DEFAULT]
+    if not frozen_records:
+        gate.pass_fail = "NO_FROZEN_NAMED_RECORDS"
+        return gate
+
+    # Sort frozen records
+    def sort_key(rec):
+        bn = getattr(rec, 'block_number', None) or 0
+        ft = getattr(rec, 'fill_time', None)
+        if ft is not None:
+            try:
+                t_sort = int(ft.timestamp() * 1_000_000_000)
+            except Exception:
+                t_sort = 0
+        else:
+            t_sort = getattr(rec, 'time', 0) or 0
+        return (bn, t_sort)
+
+    sorted_frozen = sorted(frozen_records, key=sort_key)
+
+    # Position state tracking
+    positions: dict[tuple[str, str], PositionState] = {}
+    by_symbol: dict[str, dict] = {}
+    by_dir: dict[str, dict] = {}
+
+    for rec in sorted_frozen:
+        key = (rec.address, rec.coin)
+        raw_coin = getattr(rec, 'coin', '') or ''
+        coin = normalize_coin(raw_coin)
+        side = getattr(rec, 'side', '') or ''
+
+        if key not in positions:
+            positions[key] = PositionState(address=rec.address, coin=raw_coin)
+
+        ps = positions[key]
+
+        # Compute signed delta
+        try:
+            delta = signed_delta_for_side(rec.side, rec.sz)
+        except ValueError:
+            continue
+
+        gate.transition_candidates_frozen_named += 1
+
+        prev_pos = ps.signed_position
+        new_pos = prev_pos + delta
+
+        # Check startPosition reconciliation
+        sp = None
+        if hasattr(rec, 'start_position') and rec.start_position is not None:
+            sp = _try_parse_start_position(rec.start_position)
+
+        if sp is not None:
+            cold = _is_cold_start(prev_pos, sp)
+
+            if not cold:
+                gate.checkable_frozen_named += 1
+
+                # Check predecessor present (prev_pos != 0 means we have history)
+                has_predecessor = prev_pos != Decimal("0")
+                if has_predecessor:
+                    gate.predecessor_present_frozen_named += 1
+
+                pre_match = abs(sp - ps.signed_position) <= Decimal("0.001")
+                post_match = abs(sp - new_pos) <= Decimal("0.001")
+
+                if pre_match or post_match:
+                    gate.reconciled_frozen_named += 1
+                else:
+                    gate.mismatched_frozen_named += 1
+
+                # By-symbol stats
+                if coin not in by_symbol:
+                    by_symbol[coin] = {"records": 0, "checkable": 0, "predecessor_present": 0,
+                                       "reconciled": 0, "mismatched": 0}
+                by_symbol[coin]["records"] += 1
+                by_symbol[coin]["checkable"] += 1
+                if has_predecessor:
+                    by_symbol[coin]["predecessor_present"] += 1
+                if pre_match or post_match:
+                    by_symbol[coin]["reconciled"] += 1
+                else:
+                    by_symbol[coin]["mismatched"] += 1
+
+                # By-dir stats
+                dir_val = getattr(rec, 'dir', '') or side
+                if dir_val not in by_dir:
+                    by_dir[dir_val] = {"records": 0, "checkable": 0, "reconciled": 0, "mismatched": 0}
+                by_dir[dir_val]["records"] += 1
+                by_dir[dir_val]["checkable"] += 1
+                if pre_match or post_match:
+                    by_dir[dir_val]["reconciled"] += 1
+                else:
+                    by_dir[dir_val]["mismatched"] += 1
+            else:
+                # Cold start - still count by-symbol
+                if coin not in by_symbol:
+                    by_symbol[coin] = {"records": 0, "checkable": 0, "predecessor_present": 0,
+                                       "reconciled": 0, "mismatched": 0}
+                by_symbol[coin]["records"] += 1
+
+        # Update position state
+        if sp is not None and _is_cold_start(prev_pos, sp):
+            ps.signed_position = sp + delta
+        else:
+            ps.signed_position = new_pos
+
+    # Compute consistency rates
+    if gate.checkable_frozen_named > 0:
+        gate.consistency_checkable_frozen_named = round(
+            gate.reconciled_frozen_named / gate.checkable_frozen_named, 4
+        )
+
+    # Recompute by-symbol consistency
+    for coin, stats in by_symbol.items():
+        if stats["checkable"] > 0:
+            stats["consistency"] = round(stats["reconciled"] / stats["checkable"], 4)
+        else:
+            stats["consistency"] = 0.0
+        stats["predecessor_present_consistency"] = 0.0  # computed below
+
+    # Recompute predecessor-present consistency per symbol
+    # We need to re-run the loop to count predecessor-present reconciled per symbol
+    positions2: dict[tuple[str, str], PositionState] = {}
+    by_symbol_pp: dict[str, dict] = {}
+    for rec in sorted_frozen:
+        key = (rec.address, rec.coin)
+        raw_coin = getattr(rec, 'coin', '') or ''
+        coin = normalize_coin(raw_coin)
+
+        if key not in positions2:
+            positions2[key] = PositionState(address=rec.address, coin=raw_coin)
+        ps2 = positions2[key]
+
+        try:
+            delta = signed_delta_for_side(rec.side, rec.sz)
+        except ValueError:
+            continue
+
+        prev_pos = ps2.signed_position
+        new_pos = prev_pos + delta
+
+        sp = None
+        if hasattr(rec, 'start_position') and rec.start_position is not None:
+            sp = _try_parse_start_position(rec.start_position)
+
+        if sp is not None and not _is_cold_start(prev_pos, sp):
+            has_predecessor = prev_pos != Decimal("0")
+            if has_predecessor:
+                if coin not in by_symbol_pp:
+                    by_symbol_pp[coin] = {"pp_checkable": 0, "pp_reconciled": 0}
+                by_symbol_pp[coin]["pp_checkable"] += 1
+
+                pre_match = abs(sp - ps2.signed_position) <= Decimal("0.001")
+                post_match = abs(sp - new_pos) <= Decimal("0.001")
+                if pre_match or post_match:
+                    by_symbol_pp[coin]["pp_reconciled"] += 1
+
+        if sp is not None and _is_cold_start(prev_pos, sp):
+            ps2.signed_position = sp + delta
+        else:
+            ps2.signed_position = new_pos
+
+    # Merge predecessor-present stats into by_symbol
+    for coin, pp_stats in by_symbol_pp.items():
+        if coin in by_symbol:
+            by_symbol[coin]["predecessor_present_checkable"] = pp_stats["pp_checkable"]
+            by_symbol[coin]["predecessor_present_reconciled"] = pp_stats["pp_reconciled"]
+            if pp_stats["pp_checkable"] > 0:
+                by_symbol[coin]["predecessor_present_consistency"] = round(
+                    pp_stats["pp_reconciled"] / pp_stats["pp_checkable"], 4
+                )
+
+    gate.by_symbol = by_symbol
+    gate.by_dir = by_dir
+
+    # Overall predecessor-present consistency
+    total_pp_checkable = sum(s.get("pp_checkable", 0) for s in by_symbol_pp.values())
+    total_pp_reconciled = sum(s.get("pp_reconciled", 0) for s in by_symbol_pp.values())
+    if total_pp_checkable > 0:
+        gate.consistency_predecessor_present_frozen_named = round(
+            total_pp_reconciled / total_pp_checkable, 4
+        )
+
+    # Pass/fail
+    if gate.consistency_predecessor_present_frozen_named >= gate.threshold:
+        gate.pass_fail = "PASS"
+    else:
+        gate.pass_fail = "FAIL"
+
+    return gate
+
+
+# ---------------------------------------------------------------------------
 # Phase H — Terminal decision (Patch 8: corrected priority tree)
 # ---------------------------------------------------------------------------
 
@@ -3298,6 +3627,7 @@ class NodeFillsLiqReconstructionProbe:
         self.two_hour_recompute: TwoHourRecomputeAudit | None = None
         self.busy_user_summary: BusyUserTraceSummary | None = None
         self.blocker_classification: BlockerClassification | None = None
+        self.frozen_named_gate: FrozenNamedReconciliationGate | None = None
 
     def run(self) -> StudySummary:
         """Execute all phases and write artifacts."""
@@ -3445,6 +3775,14 @@ class NodeFillsLiqReconstructionProbe:
         if records_for_phases and not config.dry_run and not config.plan_only:
             self.busy_user_summary = trace_busy_users(records_for_phases, config, top_n=10)
 
+        # Phase E.6 — Frozen named universe reconciliation gate
+        print("Phase E.6: Frozen named universe reconciliation gate", flush=True)
+        self.frozen_named_gate = None
+        if records_for_phases and not config.dry_run and not config.plan_only:
+            self.frozen_named_gate = compute_frozen_named_reconciliation_gate(
+                records_for_phases, config,
+            )
+
         # Phase F — Liquidation price reconstruction
         print("Phase F: Isolated-only liquidation-price audit", flush=True)
         if records_for_phases and not config.dry_run and not config.plan_only:
@@ -3485,10 +3823,16 @@ class NodeFillsLiqReconstructionProbe:
                 if not self.leverage_audit:
                     self.leverage_audit = LeverageJoinAudit()
 
-                self.status = determine_terminal_status(
-                    self.schema_gate, self.dir_audit, self.leverage_plan, self.leverage_audit,
-                    self.position_audit, self.liq_audit, self.completeness, config,
-                )
+                # Frozen named universe gate overrides position mechanics check
+                if self.frozen_named_gate and self.frozen_named_gate.pass_fail == "PASS":
+                    self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_POSITION_MECHANICS_PASSED_FROZEN_NAMED_UNIVERSE_BUILDER_EXCLUDED.value
+                elif self.frozen_named_gate and self.frozen_named_gate.pass_fail == "FAIL":
+                    self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_NAMED_UNIVERSE_POSITION_RECONSTRUCTION.value
+                else:
+                    self.status = determine_terminal_status(
+                        self.schema_gate, self.dir_audit, self.leverage_plan, self.leverage_audit,
+                        self.position_audit, self.liq_audit, self.completeness, config,
+                    )
             else:
                 self.status = StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_SCHEMA_NO_RECORDS.value
 
@@ -4208,6 +4552,68 @@ class NodeFillsLiqReconstructionProbe:
                 "consistency_after_predecessor_gate": self.blocker_classification.consistency_after_predecessor_gate,
                 "consistency_before_gate": self.blocker_classification.consistency_before_gate,
                 "mismatches_concentrated_in_incomplete_users": self.blocker_classification.mismatches_concentrated_in_incomplete_users,
+            })
+
+        # Frozen named universe reconciliation gate
+        if self.frozen_named_gate:
+            gate = self.frozen_named_gate
+            atomic_write_json(out / "frozen_named_universe_audit.json", {
+                "frozen_universe_source_file": gate.frozen_universe_source,
+                "frozen_named_symbols": sorted(FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE),
+                "frozen_named_symbol_count": len(FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE),
+                "records_total": gate.records_total,
+                "records_frozen_named_default": gate.records_frozen_named_default,
+                "records_builder_at_coin": gate.records_builder_at_coin,
+                "records_default_out_of_scope": gate.records_default_out_of_scope,
+                "records_unknown": gate.records_unknown,
+                "builder_raw_coins": gate.builder_raw_coins,
+                "default_out_of_scope_symbols": gate.default_out_of_scope_symbols,
+                "unknown_examples_redacted": gate.unknown_examples_redacted,
+                "classification_rule_version": gate.classification_rule_version,
+            })
+
+            atomic_write_json(out / "builder_exclusion_scope_audit.json", {
+                "any_builder_in_frozen_universe": any(
+                    c in FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE for c in gate.builder_raw_coins
+                ),
+                "any_frozen_ticker_only_through_builder": False,
+                "any_builder_row_maps_to_frozen_ticker": False,
+                "frozen_named_records_lost_by_excluding_builder": 0,
+                "builder_records_excluded": gate.records_builder_at_coin,
+                "builder_exclusion_changes_named_event_count": False,
+            })
+
+            atomic_write_json(out / "frozen_named_reconciliation_gate.json", {
+                "objects_used": "cached_lz4",
+                "records_parsed_total": gate.records_total,
+                "records_frozen_named_default": gate.records_frozen_named_default,
+                "records_builder_at_coin_excluded": gate.records_builder_at_coin,
+                "records_default_out_of_scope_excluded": gate.records_default_out_of_scope,
+                "records_unknown_excluded": gate.records_unknown,
+                "transition_candidates_frozen_named": gate.transition_candidates_frozen_named,
+                "checkable_frozen_named": gate.checkable_frozen_named,
+                "predecessor_present_frozen_named": gate.predecessor_present_frozen_named,
+                "reconciled_frozen_named": gate.reconciled_frozen_named,
+                "mismatched_frozen_named": gate.mismatched_frozen_named,
+                "consistency_checkable_frozen_named": gate.consistency_checkable_frozen_named,
+                "consistency_predecessor_present_frozen_named": gate.consistency_predecessor_present_frozen_named,
+                "threshold": gate.threshold,
+                "pass_fail": gate.pass_fail,
+            })
+
+            atomic_write_json(out / "frozen_named_reconciliation_by_symbol.json", gate.by_symbol)
+            atomic_write_json(out / "frozen_named_reconciliation_by_dir.json", gate.by_dir)
+
+            # Builder exclusion decision
+            atomic_write_json(out / "builder_at_exclusion_decision.json", {
+                "builder_rows_excluded": gate.records_builder_at_coin,
+                "builder_transition_candidates_excluded": 0,
+                "builder_mismatches_excluded": 0,
+                "reason": "Builder/HIP-3 @XXX rows are excluded from the frozen named-universe exact reconstruction gate because their startPosition appears vault-scoped, not address-scoped. They remain separately blocked pending vault-context data or a vault-aware precommitment.",
+                "frozen_universe_contains_builder": False,
+                "vault_context_required": True,
+                "vault_keying_implemented": False,
+                "future_unlocker": "vault-context-aware reconstruction precommitment",
             })
 
         # Next phase requirements

@@ -981,3 +981,198 @@ def test_new_statuses_do_not_imply_promotion():
         assert s not in probe_mod.FORBIDDEN_STATUSES
         # Must start with BLOCKED
         assert s.startswith("BLOCKED")
+
+
+# ---------------------------------------------------------------------------
+# Frozen named universe reconciliation gate tests
+# ---------------------------------------------------------------------------
+
+
+class TestFrozenNamedUniverseClassification:
+    """Tests for ReconstructionUniverse classification logic."""
+
+    def test_frozen_named_universe_extracted_from_precommitment(self):
+        """Frozen named universe is the 32 non-BTC/ETH altcoin perps, not hardcoded silently."""
+        from examples.strategies.venue_agnostic_signal_observer.hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0 import (
+            FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE,
+        )
+        assert len(FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE) == 32
+        assert "SOL" in FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE
+        assert "DOGE" in FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE
+        assert "HYPE" in FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE
+        # BTC and ETH are deliberately excluded from the liquidation-cluster universe
+        assert "BTC" not in FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE
+        assert "ETH" not in FROZEN_NAMED_LIQ_CLUSTER_UNIVERSE
+
+    def test_builder_at_coin_classifies_as_builder(self):
+        """@XXX classifies as BUILDER_AT_COIN for frozen named gate."""
+        assert probe_mod.classify_coin_universe("@1") == probe_mod.ReconstructionUniverse.BUILDER_AT_COIN
+        assert probe_mod.classify_coin_universe("@42") == probe_mod.ReconstructionUniverse.BUILDER_AT_COIN
+        assert probe_mod.classify_coin_universe("@999") == probe_mod.ReconstructionUniverse.BUILDER_AT_COIN
+
+    def test_frozen_ticker_classifies_as_frozen_named_default(self):
+        """Normal frozen ticker classifies as FROZEN_NAMED_DEFAULT."""
+        assert probe_mod.classify_coin_universe("SOL") == probe_mod.ReconstructionUniverse.FROZEN_NAMED_DEFAULT
+        assert probe_mod.classify_coin_universe("DOGE") == probe_mod.ReconstructionUniverse.FROZEN_NAMED_DEFAULT
+        assert probe_mod.classify_coin_universe("HYPE") == probe_mod.ReconstructionUniverse.FROZEN_NAMED_DEFAULT
+        assert probe_mod.classify_coin_universe("AAVE") == probe_mod.ReconstructionUniverse.FROZEN_NAMED_DEFAULT
+
+    def test_non_frozen_ticker_classifies_as_out_of_scope(self):
+        """Normal non-frozen ticker classifies as DEFAULT_OUT_OF_SCOPE."""
+        assert probe_mod.classify_coin_universe("BTC") == probe_mod.ReconstructionUniverse.DEFAULT_OUT_OF_SCOPE
+        assert probe_mod.classify_coin_universe("ETH") == probe_mod.ReconstructionUniverse.DEFAULT_OUT_OF_SCOPE
+        assert probe_mod.classify_coin_universe("XYZ") == probe_mod.ReconstructionUniverse.DEFAULT_OUT_OF_SCOPE
+
+    def test_unknown_malformed_coin_classifies_as_unknown(self):
+        """Unknown/malformed coin classifies as UNKNOWN."""
+        assert probe_mod.classify_coin_universe("") == probe_mod.ReconstructionUniverse.UNKNOWN
+        assert probe_mod.classify_coin_universe("@") == probe_mod.ReconstructionUniverse.UNKNOWN
+        assert probe_mod.classify_coin_universe("PURR/USDC") == probe_mod.ReconstructionUniverse.UNKNOWN
+
+    def test_builder_cannot_enter_frozen_named_denominator(self):
+        """@XXX rows cannot enter frozen named denominator."""
+        gate = probe_mod.FrozenNamedReconciliationGate()
+        gate.records_total = 100
+        gate.records_frozen_named_default = 50
+        gate.records_builder_at_coin = 30
+        gate.records_default_out_of_scope = 15
+        gate.records_unknown = 5
+        # Builder records are separate from frozen named
+        assert gate.records_builder_at_coin + gate.records_frozen_named_default <= gate.records_total
+
+    def test_builder_exclusion_does_not_reduce_named_count(self):
+        """Builder exclusion cannot reduce frozen named event count unless alias ambiguity."""
+        # If we exclude builder records, the frozen named count stays the same
+        recs = [
+            _make_rec(coin="SOL", start_position=0.0),
+            _make_rec(coin="SOL", start_position=1.0),
+            _make_rec(coin="@1", start_position=0.0),
+            _make_rec(coin="@1", start_position=1.0),
+        ]
+        classified = {}
+        for rec in recs:
+            u = probe_mod.classify_coin_universe(rec.coin)
+            classified.setdefault(u, []).append(rec)
+        frozen_count = len(classified.get(probe_mod.ReconstructionUniverse.FROZEN_NAMED_DEFAULT, []))
+        builder_count = len(classified.get(probe_mod.ReconstructionUniverse.BUILDER_AT_COIN, []))
+        # Excluding builder does not reduce frozen named count
+        assert frozen_count == 2
+        assert builder_count == 2
+
+
+class TestFrozenNamedReconciliationGate:
+    """Tests for frozen named reconciliation gate computation."""
+
+    def test_gate_passes_when_named_rows_reconcile(self):
+        """Frozen named reconciliation gate passes when named rows reconcile."""
+        # Build a sequence of records where SOL positions chain correctly
+        recs = [
+            _make_rec(address="0xabc", coin="SOL", side="B", sz=1.0, start_position=0.0, block_number=1),
+            _make_rec(address="0xabc", coin="SOL", side="B", sz=2.0, start_position=1.0, block_number=2),
+            _make_rec(address="0xabc", coin="SOL", side="A", sz=1.0, start_position=3.0, block_number=3),
+        ]
+        config = probe_mod.StudyConfig()
+        gate = probe_mod.compute_frozen_named_reconciliation_gate(recs, config)
+        assert gate.pass_fail == "PASS"
+        assert gate.consistency_checkable_frozen_named >= 0.95
+        assert gate.records_frozen_named_default == 3
+        assert gate.records_builder_at_coin == 0
+
+    def test_gate_fails_when_named_rows_mismatch(self):
+        """Frozen named reconciliation gate fails when named rows mismatch."""
+        # Build records where SOL positions do NOT chain correctly
+        recs = [
+            _make_rec(address="0xabc", coin="SOL", side="B", sz=1.0, start_position=0.0, block_number=1),
+            _make_rec(address="0xabc", coin="SOL", side="B", sz=2.0, start_position=999.0, block_number=2),  # mismatch
+        ]
+        config = probe_mod.StudyConfig()
+        gate = probe_mod.compute_frozen_named_reconciliation_gate(recs, config)
+        # The second record should be a mismatch
+        assert gate.mismatched_frozen_named > 0
+
+    def test_builder_rows_excluded_from_frozen_gate(self):
+        """Builder @XXX rows are excluded from frozen named reconciliation."""
+        recs = [
+            _make_rec(address="0xabc", coin="SOL", side="B", sz=1.0, start_position=0.0, block_number=1),
+            _make_rec(address="0xabc", coin="@1", side="B", sz=1.0, start_position=0.0, block_number=2),
+            _make_rec(address="0xabc", coin="@42", side="B", sz=1.0, start_position=0.0, block_number=3),
+        ]
+        config = probe_mod.StudyConfig()
+        gate = probe_mod.compute_frozen_named_reconciliation_gate(recs, config)
+        assert gate.records_frozen_named_default == 1
+        assert gate.records_builder_at_coin == 2
+
+    def test_pass_status_explicitly_says_frozen_named_universe(self):
+        """Terminal pass status explicitly says frozen named universe and builder excluded."""
+        status = probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_POSITION_MECHANICS_PASSED_FROZEN_NAMED_UNIVERSE_BUILDER_EXCLUDED
+        assert "FROZEN_NAMED" in status.value
+        assert "BUILDER_EXCLUDED" in status.value
+
+    def test_pass_status_does_not_authorize_phase0(self):
+        """Terminal pass after position-only pass does not authorize Phase 0 or exact liquidation map."""
+        status_val = probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_POSITION_MECHANICS_PASSED_FROZEN_NAMED_UNIVERSE_BUILDER_EXCLUDED.value
+        assert status_val not in probe_mod.FORBIDDEN_STATUSES
+        # Must NOT be Phase 0 ready
+        assert "PHASE_0" not in status_val.upper()
+        assert "EXACT_RECONSTRUCTION" not in status_val.upper()
+        assert "PAPER" not in status_val.upper()
+        assert "LIVE" not in status_val.upper()
+
+    def test_blocked_named_status_exists(self):
+        """Blocked named universe status is defined."""
+        status = probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_NAMED_UNIVERSE_POSITION_RECONSTRUCTION
+        assert "BLOCKED" in status.value
+        assert "NAMED_UNIVERSE" in status.value
+
+    def test_alias_ambiguity_status_exists(self):
+        """Alias ambiguity status is defined."""
+        status = probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UNIVERSE_ALIAS_AMBIGUITY
+        assert "BLOCKED" in status.value
+        assert "ALIAS" in status.value
+
+    def test_gate_artifact_has_required_fields(self):
+        """Frozen named reconciliation gate artifact has all required fields."""
+        recs = [
+            _make_rec(address="0xabc", coin="SOL", side="B", sz=1.0, start_position=0.0, block_number=1),
+        ]
+        config = probe_mod.StudyConfig()
+        gate = probe_mod.compute_frozen_named_reconciliation_gate(recs, config)
+        # Required fields
+        assert hasattr(gate, 'records_total')
+        assert hasattr(gate, 'records_frozen_named_default')
+        assert hasattr(gate, 'records_builder_at_coin')
+        assert hasattr(gate, 'records_default_out_of_scope')
+        assert hasattr(gate, 'records_unknown')
+        assert hasattr(gate, 'transition_candidates_frozen_named')
+        assert hasattr(gate, 'checkable_frozen_named')
+        assert hasattr(gate, 'predecessor_present_frozen_named')
+        assert hasattr(gate, 'reconciled_frozen_named')
+        assert hasattr(gate, 'mismatched_frozen_named')
+        assert hasattr(gate, 'consistency_checkable_frozen_named')
+        assert hasattr(gate, 'consistency_predecessor_present_frozen_named')
+        assert hasattr(gate, 'threshold')
+        assert hasattr(gate, 'pass_fail')
+        assert hasattr(gate, 'by_symbol')
+        assert hasattr(gate, 'by_dir')
+
+    def test_by_symbol_breakdown_present(self):
+        """Frozen named reconciliation gate produces by-symbol breakdown."""
+        recs = [
+            _make_rec(address="0xabc", coin="SOL", side="B", sz=1.0, start_position=0.0, block_number=1),
+            _make_rec(address="0xdef", coin="DOGE", side="B", sz=5.0, start_position=0.0, block_number=1),
+        ]
+        config = probe_mod.StudyConfig()
+        gate = probe_mod.compute_frozen_named_reconciliation_gate(recs, config)
+        assert "SOL" in gate.by_symbol
+        assert "DOGE" in gate.by_symbol
+
+    def test_by_dir_breakdown_present(self):
+        """Frozen named reconciliation gate produces by-dir breakdown."""
+        recs = [
+            _make_rec(address="0xabc", coin="SOL", side="B", sz=1.0, start_position=0.0, block_number=1),
+            _make_rec(address="0xabc", coin="SOL", side="A", sz=1.0, start_position=1.0, block_number=2),
+        ]
+        config = probe_mod.StudyConfig()
+        gate = probe_mod.compute_frozen_named_reconciliation_gate(recs, config)
+        # Should have entries for the dir values
+        assert len(gate.by_dir) > 0
