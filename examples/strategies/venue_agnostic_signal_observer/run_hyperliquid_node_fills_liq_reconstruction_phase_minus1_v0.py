@@ -116,6 +116,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Run Wall 2 updateLeverage source-existence probe")
     parser.add_argument("--wall2-targeted-holder-leverage-lookup", action="store_true",
                         help="Run Wall 2 targeted big-holder backward leverage lookup")
+    parser.add_argument("--target-symbol", default="SOL",
+                        help="Target symbol for bounded targeted holder leverage lookup")
+    parser.add_argument("--target-top-n", type=int, default=30,
+                        help="Top-N address-symbol pairs to target for bounded targeted holder leverage lookup")
 
     return parser.parse_args(argv)
 
@@ -152,6 +156,8 @@ def build_config(args: argparse.Namespace) -> probe_mod.StudyConfig:
         wall2_margin_mode_killtest=args.wall2_margin_mode_killtest,
         wall2_update_leverage_source_probe=args.wall2_update_leverage_source_probe,
         wall2_targeted_holder_leverage_lookup=args.wall2_targeted_holder_leverage_lookup,
+        target_symbol=args.target_symbol.upper(),
+        target_top_n=args.target_top_n,
     )
 
 

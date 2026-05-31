@@ -193,10 +193,10 @@ class StudyStatus(str, Enum):
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_SAMPLE_NOT_FOUND_UNDER_CAP = "BLOCKED_UPDATE_LEVERAGE_SAMPLE_NOT_FOUND_UNDER_CAP"
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_MARGIN_MODE_SAMPLE_NOT_INFORMATIVE = "BLOCKED_MARGIN_MODE_SAMPLE_NOT_INFORMATIVE"
     NODE_FILLS_LIQ_PHASE_MINUS1_UPDATE_LEVERAGE_SOURCE_EXISTS_TARGET_MARGIN_UNMEASURED = "UPDATE_LEVERAGE_SOURCE_EXISTS_TARGET_MARGIN_UNMEASURED"
-    NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED = "MARGIN_MODE_TARGETED_LOOKUP_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED"
-    NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_PASSED_FULL_BACKFILL_REQUIRED = "MARGIN_MODE_TARGETED_LOOKUP_PASSED_FULL_BACKFILL_REQUIRED"
-    NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_INSUFFICIENT_COVERAGE = "MARGIN_MODE_TARGETED_LOOKUP_INSUFFICIENT_COVERAGE"
-    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_LOOKUP_CAP_EXHAUSTED = "BLOCKED_TARGETED_LEVERAGE_LOOKUP_CAP_EXHAUSTED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED = "MARGIN_MODE_TARGETED_BACKSCAN_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_PASSED_BROADER_BACKFILL_JUSTIFIED = "MARGIN_MODE_TARGETED_BACKSCAN_PASSED_BROADER_BACKFILL_JUSTIFIED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP = "MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED = "BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED"
 
     # Wall 2 — updateLeverage source-existence probe statuses
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REQUESTER_PAYS_AUTH_EXPIRED = "BLOCKED_REQUESTER_PAYS_AUTH_EXPIRED"
@@ -353,6 +353,8 @@ class StudyConfig:
     wall2_margin_mode_killtest: bool = False
     wall2_update_leverage_source_probe: bool = False
     wall2_targeted_holder_leverage_lookup: bool = False
+    target_symbol: str = "SOL"
+    target_top_n: int = 30
 
     def effective_leverage_mode(self) -> LeverageMode:
         if self.bound_diagnostic:
@@ -643,9 +645,16 @@ class Wall2TargetSelectionPlan:
     total_open_notional: Decimal = field(default_factory=lambda: Decimal(0))
     selected_target_notional: Decimal = field(default_factory=lambda: Decimal(0))
     selected_target_notional_fraction: float = 0.0
+    total_open_SOL_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    selected_SOL_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    selected_SOL_notional_fraction_of_SOL: float = 0.0
+    selected_SOL_notional_fraction_of_total_open: float = 0.0
+    target_symbol: str = "SOL"
+    target_top_n: int = 30
     selected_symbols: list[str] = field(default_factory=list)
     selected_address_symbol_pairs: int = 0
     selected_addresses: int = 0
+    selected_address_symbol_pairs_full: list[dict[str, Any]] = field(default_factory=list)
     selected_top_pairs_redacted: list[dict] = field(default_factory=list)
     selection_rule: str = ""
     estimated_replica_cmds_objects_to_scan: int = 0
@@ -655,6 +664,9 @@ class Wall2TargetSelectionPlan:
 
 @dataclass
 class TargetedBackwardLookupScanPlan:
+    target_symbol: str = "SOL"
+    target_asset_id: str = ""
+    target_top_n: int = 30
     fill_window_start_time: str = ""
     fill_window_end_time: str = ""
     fill_window_start_block: int = 0
@@ -686,17 +698,29 @@ class TargetedBackwardLookupObjectAudit:
     decode_errors: list[str] = field(default_factory=list)
     partial_or_truncated: bool = False
     full_object: bool = False
+    unresolved_pairs_before: int = 0
+    unresolved_pairs_after: int = 0
+    newest_prior_matches_selected: int = 0
+    coverage_start_pair_candidates: list[str] = field(default_factory=list)
 
 
 @dataclass
 class TargetedBackwardLookupSummary:
+    target_symbol: str = "SOL"
+    target_asset_id: str = ""
+    target_top_n: int = 30
     selected_target_pairs: int = 0
     selected_target_notional: Decimal = field(default_factory=lambda: Decimal(0))
     selected_target_notional_fraction: float = 0.0
+    selected_target_notional_fraction_of_SOL: float = 0.0
+    selected_target_notional_fraction_of_total_open: float = 0.0
+    objects_considered: int = 0
     objects_downloaded: int = 0
     compressed_bytes_downloaded: int = 0
     cap: int = 0
     cap_exhausted: bool = False
+    coverage_start_reached: bool = False
+    stop_rule: str = ""
     actions_decoded_total: int = 0
     updateLeverage_count_total: int = 0
     target_updateLeverage_matches_total: int = 0
@@ -706,6 +730,7 @@ class TargetedBackwardLookupSummary:
     target_notional_unresolved: Decimal = field(default_factory=lambda: Decimal(0))
     target_notional_resolved_fraction: float = 0.0
     coverage_start_reached_for_unresolved_pairs: bool = False
+    source_or_decoder_blocked: bool = False
 
 
 @dataclass
@@ -734,20 +759,26 @@ class TargetedMarginModeClassificationSummary:
     isolated_explicit_pairs: int = 0
     isolated_explicit_notional: Decimal = field(default_factory=lambda: Decimal(0))
     isolated_explicit_fraction_of_target_notional: float = 0.0
+    isolated_explicit_fraction_of_resolved_notional: float = 0.0
     cross_explicit_pairs: int = 0
     cross_explicit_notional: Decimal = field(default_factory=lambda: Decimal(0))
     cross_explicit_fraction_of_target_notional: float = 0.0
+    cross_explicit_fraction_of_resolved_notional: float = 0.0
     default_cross_full_history_scanned_pairs: int = 0
     default_cross_full_history_scanned_notional: Decimal = field(default_factory=lambda: Decimal(0))
     default_cross_full_history_scanned_fraction_of_target_notional: float = 0.0
+    default_cross_full_history_scanned_fraction_of_resolved_notional: float = 0.0
     unknown_history_not_scanned_pairs: int = 0
     unknown_history_not_scanned_notional: Decimal = field(default_factory=lambda: Decimal(0))
     unknown_history_not_scanned_fraction_of_target_notional: float = 0.0
     unknown_asset_mapping_pairs: int = 0
     unknown_identity_join_pairs: int = 0
     unknown_decoder_or_source_pairs: int = 0
+    target_notional_resolved: Decimal = field(default_factory=lambda: Decimal(0))
+    target_notional_resolved_fraction: float = 0.0
     computable_isolated_notional: Decimal = field(default_factory=lambda: Decimal(0))
     computable_isolated_fraction_of_target_notional: float = 0.0
+    computable_isolated_fraction_of_resolved_notional: float = 0.0
     computable_isolated_fraction_of_total_open_notional: float = 0.0
 
 
@@ -4461,48 +4492,81 @@ class NodeFillsLiqReconstructionProbe:
         if open_summary.mechanics_mismatch_count > 0:
             raise RuntimeError('Wall 1 regression: mechanics_mismatch_count > 0')
 
-        selected_positions, selection_plan = _select_target_pairs(self.target_open_named_positions, config.max_download_bytes)
+        selected_positions, selection_plan = _select_target_pairs(
+            self.target_open_named_positions,
+            config.max_download_bytes,
+            target_symbol=config.target_symbol,
+            target_top_n=config.target_top_n,
+        )
         self.targeted_big_holder_lookup_plan = selection_plan
 
         symbol_to_asset_id, mapping_audit = _build_asset_mapping_audit(selected_positions)
         self.asset_id_symbol_mapping_audit = mapping_audit
         if mapping_audit['pass_fail'] != 'PASS':
+            self.targeted_margin_mode_continuation_plan = {
+                'current_task_cap': config.max_download_bytes,
+                'compressed_bytes_downloaded': 0,
+                'remaining_cap': config.max_download_bytes,
+                'target_notional_resolved_fraction': 0.0,
+                'target_notional_unresolved_fraction': 1.0,
+                'estimated_bytes_to_resolve_80pct_top30_SOL_notional': None,
+                'estimated_bytes_to_resolve_all_top30_SOL': None,
+                'estimated_bytes_for_top250_SOL': None,
+                'estimated_bytes_for_all_open_positions': None,
+                'estimated_download_cost_if_known': None,
+                'approval_required_before_more_download': True,
+                'recommended_next_action': 'FIX_ASSET_SYMBOL_MAPPING',
+            }
             return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ASSET_SYMBOL_MAPPING_UNVERIFIED.value
 
-        first_time = min((p.last_fill_time for p in selected_positions if p.last_fill_time is not None), default=None)
-        last_time = max((p.last_fill_time for p in selected_positions if p.last_fill_time is not None), default=None)
-        first_block = min((p.last_fill_block for p in selected_positions), default=0)
-        last_block = max((p.last_fill_block for p in selected_positions), default=0)
-
-        scan_plan = TargetedBackwardLookupScanPlan(
-            fill_window_start_time=first_time.isoformat() if first_time else '',
-            fill_window_end_time=last_time.isoformat() if last_time else '',
-            fill_window_start_block=first_block,
-            fill_window_end_block=last_block,
-            replica_cmds_coverage_start='2025-01-25',
-            replica_cmds_coverage_end='2025-07-27',
-            reverse_scan_start_prefix='hl-mainnet-node-data/replica_cmds/20250727/',
-            reverse_scan_end_prefix='hl-mainnet-node-data/replica_cmds/20250125/',
-            objects_considered=0,
-            objects_selected=0,
-            objects_skipped_over_cap=0,
-            estimated_compressed_bytes=0,
-            max_download_bytes=config.max_download_bytes,
-            server_side_filtering_available=False,
-            client_side_decode_required=True,
-        )
+        scan_plan = _plan_backward_replica_cmds_scan(selected_positions, selection_plan, symbol_to_asset_id, config.max_download_bytes)
         self.targeted_backward_lookup_scan_plan = scan_plan
 
         listing = _run_aws([
             'aws', 's3api', 'list-objects-v2', '--bucket', 'hl-mainnet-node-data', '--prefix', 'replica_cmds/', '--request-payer', 'requester', '--output', 'json'
         ], timeout=120)
         if listing.returncode != 0:
+            self.targeted_margin_mode_continuation_plan = {
+                'current_task_cap': config.max_download_bytes,
+                'compressed_bytes_downloaded': 0,
+                'remaining_cap': config.max_download_bytes,
+                'target_notional_resolved_fraction': 0.0,
+                'target_notional_unresolved_fraction': 1.0,
+                'estimated_bytes_to_resolve_80pct_top30_SOL_notional': None,
+                'estimated_bytes_to_resolve_all_top30_SOL': None,
+                'estimated_bytes_for_top250_SOL': None,
+                'estimated_bytes_for_all_open_positions': None,
+                'estimated_download_cost_if_known': None,
+                'approval_required_before_more_download': True,
+                'recommended_next_action': 'FIX_SOURCE_OR_DECODER',
+            }
             return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED.value
         payload = json.loads(listing.stdout or '{}')
         objects = payload.get('Contents', [])
-        selected_objects = []
+
+        selected_objects: list[dict[str, Any]] = []
+        coverage_start_key = scan_plan.reverse_scan_end_prefix.removeprefix('hl-mainnet-node-data/')
+        scan_start_key = scan_plan.reverse_scan_start_prefix.removeprefix('hl-mainnet-node-data/')
+        selected_asset_id = symbol_to_asset_id.get(selection_plan.target_symbol, '')
+        unresolved: dict[tuple[str, str], OpenNamedPosition] = {}
+        latest_cutoffs: dict[tuple[str, str], tuple[int, int]] = {}
+        for pos in selected_positions:
+            pair = (pos.address, pos.symbol)
+            unresolved[pair] = pos
+            ts = 0
+            if pos.last_fill_time is not None:
+                try:
+                    ts = int(pos.last_fill_time.timestamp() * 1_000_000_000)
+                except Exception:
+                    ts = 0
+            latest_cutoffs[pair] = (pos.last_fill_block, ts)
+
         for obj in sorted(objects, key=lambda x: x.get('Key', ''), reverse=True):
             key = obj.get('Key', '')
+            if not key.startswith('replica_cmds/'):
+                continue
+            if key < coverage_start_key or key > scan_start_key:
+                continue
             size = int(obj.get('Size', 0) or 0)
             scan_plan.objects_considered += 1
             if size > config.max_download_bytes:
@@ -4510,203 +4574,213 @@ class NodeFillsLiqReconstructionProbe:
                 continue
             if scan_plan.estimated_compressed_bytes + size > config.max_download_bytes:
                 continue
-            selected_objects.append({'key': f"hl-mainnet-node-data/{key}", 'size': size, 'date': key.split('/')[2] if len(key.split('/')) > 2 else ''})
+            selected_objects.append({'key': f'hl-mainnet-node-data/{key}', 'size': size, 'date': key.split('/')[1] if len(key.split('/')) > 1 else ''})
             scan_plan.estimated_compressed_bytes += size
             scan_plan.objects_selected += 1
-            break
+
         if not selected_objects:
             self.targeted_backward_lookup_summary = TargetedBackwardLookupSummary(
+                target_symbol=selection_plan.target_symbol,
+                target_asset_id=selected_asset_id,
+                target_top_n=selection_plan.target_top_n,
                 selected_target_pairs=len(selected_positions),
                 selected_target_notional=selection_plan.selected_target_notional,
                 selected_target_notional_fraction=selection_plan.selected_target_notional_fraction,
+                selected_target_notional_fraction_of_SOL=selection_plan.selected_SOL_notional_fraction_of_SOL,
+                selected_target_notional_fraction_of_total_open=selection_plan.selected_SOL_notional_fraction_of_total_open,
+                objects_considered=scan_plan.objects_considered,
+                objects_downloaded=0,
+                compressed_bytes_downloaded=0,
                 cap=config.max_download_bytes,
                 cap_exhausted=True,
+                coverage_start_reached=False,
+                stop_rule='NO_OBJECT_UNDER_CAP',
+                target_pairs_resolved=0,
                 target_pairs_unresolved=len(selected_positions),
+                target_notional_resolved=Decimal(0),
                 target_notional_unresolved=selection_plan.selected_target_notional,
+                target_notional_resolved_fraction=0.0,
+                coverage_start_reached_for_unresolved_pairs=False,
+                source_or_decoder_blocked=False,
             )
-            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_LOOKUP_CAP_EXHAUSTED.value
+            self.targeted_margin_mode_classification, self.targeted_margin_mode_classification_summary, self.targeted_oi_completeness_proxy_audit = _classify_target_margin_modes(
+                selected_positions,
+                symbol_to_asset_id,
+                {},
+                set(),
+                set(),
+                open_summary.active_notional_total,
+            )
+            self.targeted_margin_mode_continuation_plan = {
+                'current_task_cap': config.max_download_bytes,
+                'compressed_bytes_downloaded': 0,
+                'remaining_cap': config.max_download_bytes,
+                'target_notional_resolved_fraction': 0.0,
+                'target_notional_unresolved_fraction': 1.0,
+                'estimated_bytes_to_resolve_80pct_top30_SOL_notional': None,
+                'estimated_bytes_to_resolve_all_top30_SOL': None,
+                'estimated_bytes_for_top250_SOL': None,
+                'estimated_bytes_for_all_open_positions': None,
+                'estimated_download_cost_if_known': None,
+                'approval_required_before_more_download': True,
+                'recommended_next_action': 'STOP_CLOSE_UNMEASURED_COST_PRIOR',
+            }
+            return self._terminal_for_targeted_margin_mode_lookup()
 
-        latest_cutoffs = {}
-        unresolved = {}
-        for pos in selected_positions:
-            key = (pos.address, pos.symbol)
-            unresolved[key] = pos
-            ts = 0
-            if pos.last_fill_time is not None:
-                try:
-                    ts = int(pos.last_fill_time.timestamp() * 1_000_000_000)
-                except Exception:
-                    ts = 0
-            latest_cutoffs[key] = (pos.last_fill_block, ts)
-
-        all_matches = []
+        all_matches: list[dict[str, Any]] = []
         total_actions = 0
         total_update = 0
         total_target_matches = 0
         bytes_downloaded = 0
         cap_exhausted = False
+        source_or_decoder_blocked = False
+        source_or_decoder_blocked_pairs: set[tuple[str, str]] = set()
+        coverage_start_reached_pairs: set[tuple[str, str]] = set()
+
         for obj in selected_objects:
-            audit, matches, _ = _parse_replica_cmds_target_object(obj, config, unresolved, symbol_to_asset_id, latest_cutoffs)
+            if not unresolved:
+                break
+            projected = bytes_downloaded + int(obj.get('size', 0) or 0)
+            if projected > config.max_download_bytes:
+                cap_exhausted = True
+                break
+            audit, matches, blocker = _parse_replica_cmds_target_object(obj, config, unresolved, symbol_to_asset_id, latest_cutoffs)
+            if unresolved and obj.get('date') == scan_plan.replica_cmds_coverage_start:
+                audit.coverage_start_pair_candidates = [f'{redact_address(addr)}:{sym}' for addr, sym in unresolved.keys()]
+                coverage_start_reached_pairs.update(unresolved.keys())
             self.targeted_backward_lookup_object_audit.append(audit)
             total_actions += audit.actions_decoded_total
             total_update += audit.updateLeverage_count
             total_target_matches += audit.target_updateLeverage_matches
             bytes_downloaded += audit.size_compressed
-            grouped = {}
-            for m in matches:
-                pair = (m['address_redacted'], m['symbol'])
-                grouped.setdefault(pair, []).append(m)
-            chosen_pairs = set()
+            if blocker:
+                source_or_decoder_blocked = True
+                source_or_decoder_blocked_pairs.update(unresolved.keys())
+            chosen = _resolve_most_recent_prior_leverage(matches)
+            chosen_pairs: set[tuple[str, str]] = set()
             for real_pair, pos in list(unresolved.items()):
                 red = redact_address(real_pair[0])
-                pair = (red, real_pair[1])
-                candidates = grouped.get(pair, [])
-                if not candidates:
+                resolved_match = chosen.get((red, real_pair[1]))
+                if resolved_match is None:
                     continue
-                chosen = max(candidates, key=lambda x: (x['block'], x['nonce_or_timestamp']))
-                all_matches.append(chosen)
+                all_matches.append(resolved_match)
                 chosen_pairs.add(real_pair)
             for pair in chosen_pairs:
                 unresolved.pop(pair, None)
-            if not unresolved:
-                break
-            if bytes_downloaded >= config.max_download_bytes:
+            if bytes_downloaded >= config.max_download_bytes and unresolved:
                 cap_exhausted = True
                 break
 
-        self.targeted_backward_lookup_matches = all_matches
-        resolved_notional = sum((p.position_notional_at_last_fill_px for p in selected_positions if (p.address, p.symbol) not in unresolved), Decimal(0))
-        unresolved_notional = sum((p.position_notional_at_last_fill_px for p in unresolved.values()), Decimal(0))
+        coverage_start_reached = bool(unresolved) and coverage_start_reached_pairs.issuperset(set(unresolved.keys()))
+        match_lookup = _resolve_most_recent_prior_leverage(all_matches)
+        classification_rows, classification_summary, oi_proxy = _classify_target_margin_modes(
+            selected_positions,
+            symbol_to_asset_id,
+            match_lookup,
+            coverage_start_reached_pairs,
+            source_or_decoder_blocked_pairs,
+            open_summary.active_notional_total,
+        )
+        self.targeted_margin_mode_classification = classification_rows
+        self.targeted_margin_mode_classification_summary = classification_summary
+        self.targeted_oi_completeness_proxy_audit = oi_proxy
+
+        resolved_notional = classification_summary.target_notional_resolved
+        unresolved_notional = selection_plan.selected_target_notional - resolved_notional
+        if cap_exhausted:
+            stop_rule = 'CAP_EXHAUSTED'
+        elif unresolved and coverage_start_reached:
+            stop_rule = 'COVERAGE_START_REACHED_FOR_UNRESOLVED'
+        elif unresolved:
+            stop_rule = 'UNRESOLVED_UNDER_CAP'
+        else:
+            stop_rule = 'ALL_TARGET_PAIRS_RESOLVED'
         self.targeted_backward_lookup_summary = TargetedBackwardLookupSummary(
+            target_symbol=selection_plan.target_symbol,
+            target_asset_id=selected_asset_id,
+            target_top_n=selection_plan.target_top_n,
             selected_target_pairs=len(selected_positions),
             selected_target_notional=selection_plan.selected_target_notional,
             selected_target_notional_fraction=selection_plan.selected_target_notional_fraction,
+            selected_target_notional_fraction_of_SOL=selection_plan.selected_SOL_notional_fraction_of_SOL,
+            selected_target_notional_fraction_of_total_open=selection_plan.selected_SOL_notional_fraction_of_total_open,
+            objects_considered=scan_plan.objects_considered,
             objects_downloaded=len(self.targeted_backward_lookup_object_audit),
             compressed_bytes_downloaded=bytes_downloaded,
             cap=config.max_download_bytes,
             cap_exhausted=cap_exhausted,
+            coverage_start_reached=coverage_start_reached,
+            stop_rule=stop_rule,
             actions_decoded_total=total_actions,
             updateLeverage_count_total=total_update,
             target_updateLeverage_matches_total=total_target_matches,
-            target_pairs_resolved=len(selected_positions) - len(unresolved),
-            target_pairs_unresolved=len(unresolved),
+            target_pairs_resolved=classification_summary.isolated_explicit_pairs + classification_summary.cross_explicit_pairs + classification_summary.default_cross_full_history_scanned_pairs,
+            target_pairs_unresolved=classification_summary.unknown_history_not_scanned_pairs,
             target_notional_resolved=resolved_notional,
             target_notional_unresolved=unresolved_notional,
-            target_notional_resolved_fraction=float(resolved_notional / selection_plan.selected_target_notional) if selection_plan.selected_target_notional > 0 else 0.0,
-            coverage_start_reached_for_unresolved_pairs=False,
+            target_notional_resolved_fraction=classification_summary.target_notional_resolved_fraction,
+            coverage_start_reached_for_unresolved_pairs=coverage_start_reached,
+            source_or_decoder_blocked=source_or_decoder_blocked,
         )
-
-        classification_rows = []
-        isolated_notional = Decimal(0)
-        cross_notional = Decimal(0)
-        unknown_notional = Decimal(0)
-        match_lookup = {(m['address_redacted'], m['symbol']): m for m in all_matches}
-        for pos in selected_positions:
-            red = redact_address(pos.address)
-            match = match_lookup.get((red, pos.symbol))
-            if match is None:
-                cls = TargetMarginClassification.UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START.value
-                unknown_notional += pos.position_notional_at_last_fill_px
-                classification_rows.append(TargetedMarginModePairClassification(
-                    address_redacted=red, symbol=pos.symbol, asset_id=symbol_to_asset_id.get(pos.symbol, ''), side=pos.side,
-                    position_notional_at_last_fill_px=pos.position_notional_at_last_fill_px, last_fill_block=pos.last_fill_block,
-                    last_fill_time=pos.last_fill_time.isoformat() if pos.last_fill_time else '',
-                    leverage_history_coverage_mode=LeverageHistoryCoverageMode.BOUNDED_TARGETED_BACKWARD_LOOKUP.value,
-                    classification=cls,
-                ))
-                continue
-            is_cross = bool(match.get('isCross'))
-            cls = TargetMarginClassification.CROSS_EXPLICIT.value if is_cross else TargetMarginClassification.ISOLATED_EXPLICIT.value
-            if is_cross:
-                cross_notional += pos.position_notional_at_last_fill_px
-            else:
-                isolated_notional += pos.position_notional_at_last_fill_px
-            classification_rows.append(TargetedMarginModePairClassification(
-                address_redacted=red, symbol=pos.symbol, asset_id=symbol_to_asset_id.get(pos.symbol, ''), side=pos.side,
-                position_notional_at_last_fill_px=pos.position_notional_at_last_fill_px, last_fill_block=pos.last_fill_block,
-                last_fill_time=pos.last_fill_time.isoformat() if pos.last_fill_time else '',
-                leverage_history_coverage_mode=LeverageHistoryCoverageMode.BOUNDED_TARGETED_BACKWARD_LOOKUP.value,
-                classification=cls, matched_object_key=match['object_key'], matched_action_block=match['block'], matched_isCross=is_cross,
-            ))
-        self.targeted_margin_mode_classification = classification_rows
-        total_target_notional = selection_plan.selected_target_notional
-        total_open_notional = open_summary.active_notional_total
-        self.targeted_margin_mode_classification_summary = TargetedMarginModeClassificationSummary(
-            leverage_history_coverage_mode=LeverageHistoryCoverageMode.BOUNDED_TARGETED_BACKWARD_LOOKUP.value,
-            sample_limited=True,
-            target_pairs_total=len(selected_positions),
-            target_notional_total=total_target_notional,
-            isolated_explicit_pairs=sum(1 for r in classification_rows if r.classification == TargetMarginClassification.ISOLATED_EXPLICIT.value),
-            isolated_explicit_notional=isolated_notional,
-            isolated_explicit_fraction_of_target_notional=float(isolated_notional / total_target_notional) if total_target_notional > 0 else 0.0,
-            cross_explicit_pairs=sum(1 for r in classification_rows if r.classification == TargetMarginClassification.CROSS_EXPLICIT.value),
-            cross_explicit_notional=cross_notional,
-            cross_explicit_fraction_of_target_notional=float(cross_notional / total_target_notional) if total_target_notional > 0 else 0.0,
-            default_cross_full_history_scanned_pairs=0,
-            default_cross_full_history_scanned_notional=Decimal(0),
-            default_cross_full_history_scanned_fraction_of_target_notional=0.0,
-            unknown_history_not_scanned_pairs=sum(1 for r in classification_rows if r.classification == TargetMarginClassification.UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START.value),
-            unknown_history_not_scanned_notional=unknown_notional,
-            unknown_history_not_scanned_fraction_of_target_notional=float(unknown_notional / total_target_notional) if total_target_notional > 0 else 0.0,
-            unknown_asset_mapping_pairs=0,
-            unknown_identity_join_pairs=0,
-            unknown_decoder_or_source_pairs=0,
-            computable_isolated_notional=isolated_notional,
-            computable_isolated_fraction_of_target_notional=float(isolated_notional / total_target_notional) if total_target_notional > 0 else 0.0,
-            computable_isolated_fraction_of_total_open_notional=float(isolated_notional / total_open_notional) if total_open_notional > 0 else 0.0,
-        )
-
-        self.targeted_oi_completeness_proxy_audit = {
-            'oi_source_found': False,
-            'oi_source_type': '',
-            'oi_source_under_cap': True,
-            'total_open_frozen_named_notional': _decimal_str(total_open_notional),
-            'selected_target_notional': _decimal_str(total_target_notional),
-            'selected_target_notional_fraction': selection_plan.selected_target_notional_fraction,
-            'computable_isolated_notional': _decimal_str(isolated_notional),
-            'computable_isolated_notional_div_selected_target_notional': self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_target_notional,
-            'computable_isolated_notional_div_total_open_notional': self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_total_open_notional,
-            'aggregate_oi_notional_if_available': None,
-            'computable_isolated_notional_div_oi_if_available': None,
-            'symbols_with_computable_isolated_notional': sorted({r.symbol for r in classification_rows if r.classification == TargetMarginClassification.ISOLATED_EXPLICIT.value}),
-            'symbol_level_computable_fraction': {},
-            'top_symbol_concentration': dict(sorted(((k, _decimal_str(v)) for k, v in open_summary.active_notional_by_symbol.items()), key=lambda kv: Decimal(kv[1]), reverse=True)[:5]),
-        }
+        self.targeted_backward_lookup_matches = list(match_lookup.values())
 
         remaining_cap = max(0, config.max_download_bytes - bytes_downloaded)
         unresolved_fraction = 1.0 - self.targeted_backward_lookup_summary.target_notional_resolved_fraction
         est_80 = int(bytes_downloaded / max(self.targeted_backward_lookup_summary.target_notional_resolved_fraction, 1e-9) * 0.80) if bytes_downloaded and self.targeted_backward_lookup_summary.target_notional_resolved_fraction > 0 else None
         est_all_selected = int(bytes_downloaded / max(self.targeted_backward_lookup_summary.target_notional_resolved_fraction, 1e-9)) if bytes_downloaded and self.targeted_backward_lookup_summary.target_notional_resolved_fraction > 0 else None
+        selected_fraction_of_sol = selection_plan.selected_SOL_notional_fraction_of_SOL
+        est_top250_sol = int(est_all_selected / max(selected_fraction_of_sol, 1e-9)) if est_all_selected and selected_fraction_of_sol > 0 else None
         est_all_open = int(est_all_selected / max(selection_plan.selected_target_notional_fraction, 1e-9)) if est_all_selected and selection_plan.selected_target_notional_fraction > 0 else None
         if cap_exhausted and self.targeted_backward_lookup_summary.target_notional_resolved_fraction == 0:
-            recommended = 'FIX_SOURCE_OR_DECODER' if total_actions == 0 else 'STOP_CLOSE_UNMEASURED_COST_PRIOR'
-        elif self.targeted_backward_lookup_summary.target_notional_resolved_fraction < 0.50:
-            recommended = 'REQUEST_APPROVAL_FOR_BROADER_BACKFILL'
-        elif self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_target_notional < 0.25:
+            recommended = 'FIX_SOURCE_OR_DECODER' if source_or_decoder_blocked else 'STOP_CLOSE_UNMEASURED_COST_PRIOR'
+        elif self.targeted_backward_lookup_summary.target_notional_resolved_fraction < 0.60:
+            recommended = 'STOP_CLOSE_UNMEASURED_COST_PRIOR'
+        elif self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_resolved_notional < 0.25:
             recommended = 'STOP_REVIEW_LOW_ISOLATED_COVERAGE'
         else:
-            recommended = 'REQUEST_APPROVAL_FOR_FULL_BACKFILL'
+            recommended = 'REQUEST_APPROVAL_FOR_BROADER_BACKFILL'
         self.targeted_margin_mode_continuation_plan = {
             'current_task_cap': config.max_download_bytes,
             'compressed_bytes_downloaded': bytes_downloaded,
             'remaining_cap': remaining_cap,
             'target_notional_resolved_fraction': self.targeted_backward_lookup_summary.target_notional_resolved_fraction,
             'target_notional_unresolved_fraction': unresolved_fraction,
-            'estimated_bytes_to_resolve_80pct_target_notional': est_80,
-            'estimated_bytes_to_resolve_all_selected_targets': est_all_selected,
-            'estimated_bytes_for_full_history_all_open_positions': est_all_open,
+            'estimated_bytes_to_resolve_80pct_top30_SOL_notional': est_80,
+            'estimated_bytes_to_resolve_all_top30_SOL': est_all_selected,
+            'estimated_bytes_for_top250_SOL': est_top250_sol,
+            'estimated_bytes_for_all_open_positions': est_all_open,
             'estimated_download_cost_if_known': None,
             'approval_required_before_more_download': True,
             'recommended_next_action': recommended,
         }
 
-        if cap_exhausted and self.targeted_backward_lookup_summary.target_notional_resolved_fraction == 0:
-            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_LOOKUP_CAP_EXHAUSTED.value
-        if self.targeted_backward_lookup_summary.target_notional_resolved_fraction < 0.50:
-            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_INSUFFICIENT_COVERAGE.value
-        if self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_target_notional < 0.25:
-            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED.value
-        return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_PASSED_FULL_BACKFILL_REQUIRED.value
+        return self._terminal_for_targeted_margin_mode_lookup()
+
+
+    def _terminal_for_targeted_margin_mode_lookup(self) -> str:
+        if self.targeted_backward_lookup_summary is None:
+            raise RuntimeError('targeted backward lookup summary missing')
+        if self.targeted_margin_mode_classification_summary is None:
+            raise RuntimeError('targeted margin mode classification summary missing')
+
+        resolved_fraction = self.targeted_backward_lookup_summary.target_notional_resolved_fraction
+        resolved_isolated_fraction = (
+            self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_resolved_notional
+        )
+        target_isolated_fraction = (
+            self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_target_notional
+        )
+        cap_exhausted = self.targeted_backward_lookup_summary.cap_exhausted
+
+        if cap_exhausted and resolved_fraction == 0:
+            return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED.value
+        if cap_exhausted and resolved_fraction < 0.60:
+            return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED.value
+        if resolved_fraction < 0.60:
+            return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP.value
+        if resolved_isolated_fraction >= 0.25 or target_isolated_fraction >= 0.25:
+            return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_PASSED_BROADER_BACKFILL_JUSTIFIED.value
+        return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED.value
 
 
     def _phase_a(self, config: StudyConfig) -> None:
@@ -4995,8 +5069,12 @@ class NodeFillsLiqReconstructionProbe:
             atomic_write_json(out / 'targeted_backward_lookup_scan_plan.json', dataclasses.asdict(self.targeted_backward_lookup_scan_plan))
         if self.targeted_backward_lookup_object_audit:
             _jsonl_write(out / 'targeted_backward_lookup_object_audit.jsonl', [dataclasses.asdict(a) for a in self.targeted_backward_lookup_object_audit])
+        elif self.targeted_backward_lookup_scan_plan:
+            _jsonl_write(out / 'targeted_backward_lookup_object_audit.jsonl', [])
         if self.targeted_backward_lookup_matches:
             _jsonl_write(out / 'targeted_backward_lookup_matches.jsonl', self.targeted_backward_lookup_matches)
+        elif self.targeted_backward_lookup_scan_plan:
+            _jsonl_write(out / 'targeted_backward_lookup_matches.jsonl', [])
         if self.targeted_backward_lookup_summary:
             atomic_write_json(out / 'targeted_backward_lookup_summary.json', dataclasses.asdict(self.targeted_backward_lookup_summary))
         if self.targeted_margin_mode_classification:
@@ -6058,43 +6136,80 @@ def _redacted_pair_record(pos: OpenNamedPosition) -> dict[str, Any]:
     }
 
 
-def _select_target_pairs(open_positions: Sequence[OpenNamedPosition], max_download_bytes: int) -> tuple[list[OpenNamedPosition], Wall2TargetSelectionPlan]:
+def _select_target_pairs(
+    open_positions: Sequence[OpenNamedPosition],
+    max_download_bytes: int,
+    target_symbol: str = "SOL",
+    target_top_n: int = 30,
+) -> tuple[list[OpenNamedPosition], Wall2TargetSelectionPlan]:
     total_notional = sum((p.position_notional_at_last_fill_px for p in open_positions), Decimal(0))
-    by_symbol: dict[str, list[OpenNamedPosition]] = defaultdict(list)
-    symbol_notional: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
-    for pos in open_positions:
-        by_symbol[pos.symbol].append(pos)
-        symbol_notional[pos.symbol] += pos.position_notional_at_last_fill_px
-    ordered_symbols = [s for s in ('SOL', 'XRP', 'HYPE') if s in by_symbol]
-    ordered_symbols += [s for s, _ in sorted(symbol_notional.items(), key=lambda kv: kv[1], reverse=True) if s not in ordered_symbols]
-    selected: list[OpenNamedPosition] = []
-    seen_pairs = set()
-    selected_notional = Decimal(0)
-    practical_cap = min(250, max(50, len(open_positions)))
-    for sym in ordered_symbols:
-        for pos in sorted(by_symbol[sym], key=lambda p: p.position_notional_at_last_fill_px, reverse=True):
-            key = (pos.address, pos.symbol)
-            if key in seen_pairs:
-                continue
-            selected.append(pos)
-            seen_pairs.add(key)
-            selected_notional += pos.position_notional_at_last_fill_px
+    normalized_target_symbol = (target_symbol or "SOL").upper()
+    target_positions = [p for p in open_positions if p.symbol.upper() == normalized_target_symbol]
+    total_target_symbol_notional = sum((p.position_notional_at_last_fill_px for p in target_positions), Decimal(0))
+
+    selected: list[OpenNamedPosition]
+    selection_rule: str
+    if target_positions:
+        bounded_top_n = max(1, int(target_top_n or 1))
+        selected = sorted(
+            target_positions,
+            key=lambda p: (p.position_notional_at_last_fill_px, p.last_fill_block, p.address),
+            reverse=True,
+        )[:bounded_top_n]
+        selection_rule = (
+            f"target symbol {normalized_target_symbol} only; rank address-symbol pairs by descending open notional; "
+            f"select top {bounded_top_n}"
+        )
+    else:
+        by_symbol: dict[str, list[OpenNamedPosition]] = defaultdict(list)
+        symbol_notional: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
+        for pos in open_positions:
+            by_symbol[pos.symbol].append(pos)
+            symbol_notional[pos.symbol] += pos.position_notional_at_last_fill_px
+        ordered_symbols = [s for s in ('SOL', 'XRP', 'HYPE') if s in by_symbol]
+        ordered_symbols += [s for s, _ in sorted(symbol_notional.items(), key=lambda kv: kv[1], reverse=True) if s not in ordered_symbols]
+        selected = []
+        seen_pairs = set()
+        selected_notional = Decimal(0)
+        practical_cap = min(250, max(50, len(open_positions)))
+        for sym in ordered_symbols:
+            for pos in sorted(by_symbol[sym], key=lambda p: p.position_notional_at_last_fill_px, reverse=True):
+                key = (pos.address, pos.symbol)
+                if key in seen_pairs:
+                    continue
+                selected.append(pos)
+                seen_pairs.add(key)
+                selected_notional += pos.position_notional_at_last_fill_px
+                fraction = float(selected_notional / total_notional) if total_notional > 0 else 0.0
+                if fraction >= 0.80 or len(selected) >= practical_cap:
+                    break
             fraction = float(selected_notional / total_notional) if total_notional > 0 else 0.0
             if fraction >= 0.80 or len(selected) >= practical_cap:
                 break
-        fraction = float(selected_notional / total_notional) if total_notional > 0 else 0.0
-        if fraction >= 0.80 or len(selected) >= practical_cap:
-            break
-    selected_symbols = sorted({p.symbol for p in selected}, key=lambda s: (-symbol_notional[s], s))
+        selection_rule = 'priority symbols SOL/XRP/HYPE first, then remaining symbols by descending open notional; stop at >=80% selected notional or practical cap'
+
+    selected_notional = sum((p.position_notional_at_last_fill_px for p in selected), Decimal(0))
+    selected_target_symbol_notional = sum(
+        (p.position_notional_at_last_fill_px for p in selected if p.symbol.upper() == normalized_target_symbol),
+        Decimal(0),
+    )
+    selected_symbols = sorted({p.symbol for p in selected})
     plan = Wall2TargetSelectionPlan(
         total_open_notional=total_notional,
         selected_target_notional=selected_notional,
         selected_target_notional_fraction=float(selected_notional / total_notional) if total_notional > 0 else 0.0,
+        total_open_SOL_notional=total_target_symbol_notional,
+        selected_SOL_notional=selected_target_symbol_notional,
+        selected_SOL_notional_fraction_of_SOL=float(selected_target_symbol_notional / total_target_symbol_notional) if total_target_symbol_notional > 0 else 0.0,
+        selected_SOL_notional_fraction_of_total_open=float(selected_target_symbol_notional / total_notional) if total_notional > 0 else 0.0,
+        target_symbol=normalized_target_symbol,
+        target_top_n=max(1, int(target_top_n or 1)),
         selected_symbols=selected_symbols,
         selected_address_symbol_pairs=len(selected),
         selected_addresses=len({p.address for p in selected}),
+        selected_address_symbol_pairs_full=[_redacted_pair_record(p) for p in selected],
         selected_top_pairs_redacted=[_redacted_pair_record(p) for p in selected[:100]],
-        selection_rule='priority symbols SOL/XRP/HYPE first, then remaining symbols by descending open notional; stop at >=80% selected notional or practical cap',
+        selection_rule=selection_rule,
         estimated_replica_cmds_objects_to_scan=0,
         estimated_compressed_bytes=0,
         max_download_bytes=max_download_bytes,
@@ -6158,6 +6273,53 @@ def _extract_action_order_key(action: dict[str, Any]) -> tuple[int, int]:
     return (block, nonce)
 
 
+def _plan_backward_replica_cmds_scan(
+    selected_positions: Sequence[OpenNamedPosition],
+    selection_plan: Wall2TargetSelectionPlan,
+    symbol_to_asset_id: dict[str, str],
+    max_download_bytes: int,
+) -> TargetedBackwardLookupScanPlan:
+    first_time = min((p.last_fill_time for p in selected_positions if p.last_fill_time is not None), default=None)
+    last_time = max((p.last_fill_time for p in selected_positions if p.last_fill_time is not None), default=None)
+    first_block = min((p.last_fill_block for p in selected_positions), default=0)
+    last_block = max((p.last_fill_block for p in selected_positions), default=0)
+    return TargetedBackwardLookupScanPlan(
+        target_symbol=selection_plan.target_symbol,
+        target_asset_id=symbol_to_asset_id.get(selection_plan.target_symbol, ''),
+        target_top_n=selection_plan.target_top_n,
+        fill_window_start_time=first_time.isoformat() if first_time else '',
+        fill_window_end_time=last_time.isoformat() if last_time else '',
+        fill_window_start_block=first_block,
+        fill_window_end_block=last_block,
+        replica_cmds_coverage_start='2025-01-25',
+        replica_cmds_coverage_end='2025-07-27',
+        reverse_scan_start_prefix='hl-mainnet-node-data/replica_cmds/20250727/',
+        reverse_scan_end_prefix='hl-mainnet-node-data/replica_cmds/20250125/',
+        objects_considered=0,
+        objects_selected=0,
+        objects_skipped_over_cap=0,
+        estimated_compressed_bytes=0,
+        max_download_bytes=max_download_bytes,
+        server_side_filtering_available=False,
+        client_side_decode_required=True,
+    )
+
+
+def _resolve_most_recent_prior_leverage(matches: Sequence[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+    resolved: dict[tuple[str, str], dict[str, Any]] = {}
+    for match in matches:
+        pair = (match['address_redacted'], match['symbol'])
+        chosen = resolved.get(pair)
+        key = (int(match.get('block') or 0), int(match.get('nonce_or_timestamp') or 0))
+        if chosen is None:
+            resolved[pair] = match
+            continue
+        chosen_key = (int(chosen.get('block') or 0), int(chosen.get('nonce_or_timestamp') or 0))
+        if key > chosen_key:
+            resolved[pair] = match
+    return resolved
+
+
 def _parse_replica_cmds_target_object(
     obj: dict[str, Any],
     config: StudyConfig,
@@ -6192,6 +6354,7 @@ def _parse_replica_cmds_target_object(
     target_address_matches = 0
     target_address_symbol_matches = 0
     update_count = 0
+    unresolved_pairs_before = len(unresolved_pairs)
     for action in actions:
         if action.get('action_type') != 'updateLeverage':
             continue
@@ -6224,6 +6387,8 @@ def _parse_replica_cmds_target_object(
             'object_key': key,
             'date_prefix': date_prefix,
         })
+    resolved = _resolve_most_recent_prior_leverage(matches)
+    newest_matches = list(resolved.values())
     audit = TargetedBackwardLookupObjectAudit(
         key=key,
         date_prefix=date_prefix,
@@ -6231,15 +6396,131 @@ def _parse_replica_cmds_target_object(
         sha256=sha,
         actions_decoded_total=len(actions),
         updateLeverage_count=update_count,
-        target_updateLeverage_matches=len(matches),
+        target_updateLeverage_matches=len(newest_matches),
         target_address_matches=target_address_matches,
         target_address_symbol_matches=target_address_symbol_matches,
         decode_errors=decode_errors[:20],
         partial_or_truncated=(compression_mode == 'lz4_partial'),
         full_object=(compression_mode in {'lz4_full', 'plain'} and not parse_errors),
+        unresolved_pairs_before=unresolved_pairs_before,
+        unresolved_pairs_after=max(0, unresolved_pairs_before - len(newest_matches)),
+        newest_prior_matches_selected=len(newest_matches),
     )
     blocker = 'UNKNOWN_DECODER_OR_SOURCE_BLOCKED' if audit.decode_errors and not actions else None
-    return audit, matches, blocker
+    return audit, newest_matches, blocker
+
+
+def _classify_target_margin_modes(
+    selected_positions: Sequence[OpenNamedPosition],
+    symbol_to_asset_id: dict[str, str],
+    match_lookup: dict[tuple[str, str], dict[str, Any]],
+    coverage_start_reached_pairs: set[tuple[str, str]],
+    source_or_decoder_blocked_pairs: set[tuple[str, str]],
+    total_open_notional: Decimal,
+) -> tuple[list[TargetedMarginModePairClassification], TargetedMarginModeClassificationSummary, dict[str, Any]]:
+    classification_rows: list[TargetedMarginModePairClassification] = []
+    isolated_notional = Decimal(0)
+    cross_notional = Decimal(0)
+    default_cross_notional = Decimal(0)
+    unknown_notional = Decimal(0)
+    unknown_decoder_pairs = 0
+    total_target_notional = sum((p.position_notional_at_last_fill_px for p in selected_positions), Decimal(0))
+    total_open_sol_notional = sum((p.position_notional_at_last_fill_px for p in selected_positions if p.symbol.upper() == 'SOL'), Decimal(0))
+    for pos in selected_positions:
+        red = redact_address(pos.address)
+        pair = (pos.address, pos.symbol)
+        match = match_lookup.get((red, pos.symbol))
+        classification = TargetMarginClassification.UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START.value
+        matched_object_key = ''
+        matched_action_block = 0
+        matched_action_timestamp = ''
+        matched_is_cross = None
+        if match is not None:
+            is_cross = bool(match.get('isCross'))
+            classification = (
+                TargetMarginClassification.CROSS_EXPLICIT.value
+                if is_cross else TargetMarginClassification.ISOLATED_EXPLICIT.value
+            )
+            if is_cross:
+                cross_notional += pos.position_notional_at_last_fill_px
+            else:
+                isolated_notional += pos.position_notional_at_last_fill_px
+            matched_object_key = match.get('object_key', '')
+            matched_action_block = int(match.get('block') or 0)
+            ts = match.get('nonce_or_timestamp')
+            matched_action_timestamp = str(ts) if ts is not None else ''
+            matched_is_cross = is_cross
+        elif pair in coverage_start_reached_pairs:
+            classification = TargetMarginClassification.NO_ACTION_FOUND_DEFAULT_CROSS_FULL_HISTORY_SCANNED.value
+            default_cross_notional += pos.position_notional_at_last_fill_px
+        else:
+            unknown_notional += pos.position_notional_at_last_fill_px
+            if pair in source_or_decoder_blocked_pairs:
+                unknown_decoder_pairs += 1
+        classification_rows.append(TargetedMarginModePairClassification(
+            address_redacted=red,
+            symbol=pos.symbol,
+            asset_id=symbol_to_asset_id.get(pos.symbol, ''),
+            side=pos.side,
+            position_notional_at_last_fill_px=pos.position_notional_at_last_fill_px,
+            last_fill_block=pos.last_fill_block,
+            last_fill_time=pos.last_fill_time.isoformat() if pos.last_fill_time else '',
+            leverage_history_coverage_mode=LeverageHistoryCoverageMode.BOUNDED_TARGETED_BACKWARD_LOOKUP.value,
+            classification=classification,
+            matched_object_key=matched_object_key,
+            matched_action_block=matched_action_block,
+            matched_action_timestamp=matched_action_timestamp,
+            matched_isCross=matched_is_cross,
+        ))
+    resolved_notional_total = isolated_notional + cross_notional + default_cross_notional
+    summary = TargetedMarginModeClassificationSummary(
+        leverage_history_coverage_mode=LeverageHistoryCoverageMode.BOUNDED_TARGETED_BACKWARD_LOOKUP.value,
+        sample_limited=True,
+        target_pairs_total=len(selected_positions),
+        target_notional_total=total_target_notional,
+        isolated_explicit_pairs=sum(1 for r in classification_rows if r.classification == TargetMarginClassification.ISOLATED_EXPLICIT.value),
+        isolated_explicit_notional=isolated_notional,
+        isolated_explicit_fraction_of_target_notional=float(isolated_notional / total_target_notional) if total_target_notional > 0 else 0.0,
+        isolated_explicit_fraction_of_resolved_notional=float(isolated_notional / resolved_notional_total) if resolved_notional_total > 0 else 0.0,
+        cross_explicit_pairs=sum(1 for r in classification_rows if r.classification == TargetMarginClassification.CROSS_EXPLICIT.value),
+        cross_explicit_notional=cross_notional,
+        cross_explicit_fraction_of_target_notional=float(cross_notional / total_target_notional) if total_target_notional > 0 else 0.0,
+        cross_explicit_fraction_of_resolved_notional=float(cross_notional / resolved_notional_total) if resolved_notional_total > 0 else 0.0,
+        default_cross_full_history_scanned_pairs=sum(1 for r in classification_rows if r.classification == TargetMarginClassification.NO_ACTION_FOUND_DEFAULT_CROSS_FULL_HISTORY_SCANNED.value),
+        default_cross_full_history_scanned_notional=default_cross_notional,
+        default_cross_full_history_scanned_fraction_of_target_notional=float(default_cross_notional / total_target_notional) if total_target_notional > 0 else 0.0,
+        default_cross_full_history_scanned_fraction_of_resolved_notional=float(default_cross_notional / resolved_notional_total) if resolved_notional_total > 0 else 0.0,
+        unknown_history_not_scanned_pairs=sum(1 for r in classification_rows if r.classification == TargetMarginClassification.UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START.value),
+        unknown_history_not_scanned_notional=unknown_notional,
+        unknown_history_not_scanned_fraction_of_target_notional=float(unknown_notional / total_target_notional) if total_target_notional > 0 else 0.0,
+        unknown_asset_mapping_pairs=0,
+        unknown_identity_join_pairs=0,
+        unknown_decoder_or_source_pairs=unknown_decoder_pairs,
+        target_notional_resolved=resolved_notional_total,
+        target_notional_resolved_fraction=float(resolved_notional_total / total_target_notional) if total_target_notional > 0 else 0.0,
+        computable_isolated_notional=isolated_notional,
+        computable_isolated_fraction_of_target_notional=float(isolated_notional / total_target_notional) if total_target_notional > 0 else 0.0,
+        computable_isolated_fraction_of_resolved_notional=float(isolated_notional / resolved_notional_total) if resolved_notional_total > 0 else 0.0,
+        computable_isolated_fraction_of_total_open_notional=float(isolated_notional / total_open_notional) if total_open_notional > 0 else 0.0,
+    )
+    oi_proxy = {
+        'oi_source_found': False,
+        'oi_source_type': '',
+        'oi_source_under_cap': True,
+        'total_open_frozen_named_notional': _decimal_str(total_open_notional),
+        'total_open_SOL_notional': _decimal_str(total_open_sol_notional),
+        'selected_target_notional': _decimal_str(total_target_notional),
+        'selected_target_notional_fraction': float(total_target_notional / total_open_notional) if total_open_notional > 0 else 0.0,
+        'computable_isolated_notional': _decimal_str(isolated_notional),
+        'computable_isolated_notional_div_selected_target_notional': summary.computable_isolated_fraction_of_target_notional,
+        'computable_isolated_notional_div_total_open_notional': summary.computable_isolated_fraction_of_total_open_notional,
+        'aggregate_oi_notional_if_available': None,
+        'computable_isolated_notional_div_oi_if_available': None,
+        'symbols_with_computable_isolated_notional': sorted({r.symbol for r in classification_rows if r.classification == TargetMarginClassification.ISOLATED_EXPLICIT.value}),
+        'symbol_level_computable_fraction': {},
+        'top_symbol_concentration': {},
+    }
+    return classification_rows, summary, oi_proxy
 
 
 def _derive_source_probe_input_from_prior_reports() -> dict[str, Any]:

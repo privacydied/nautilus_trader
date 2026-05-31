@@ -242,7 +242,7 @@ Wall 2 source-existence / margin-mode conservative refinements:
 - NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_LEVERAGE_IDENTITY_JOIN_UNVERIFIED
 - NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ASSET_SYMBOL_MAPPING_UNVERIFIED
 
-These statuses are post-hoc conservative refinements of the Phase -1 feasibility taxonomy. They do not relax gates, authorize Phase 0, imply profitability, or change the frozen hypothesis universe.
+These statuses are post-hoc conservative refinements of the Phase -1 feasibility taxonomy for the user-approved bounded targeted backscan. They do not relax gates, authorize Phase 0, imply profitability, change the frozen hypothesis universe, or permit live/paper/shadow execution.
 
 Bound diagnostic:
 - NODE_FILLS_LIQ_PHASE_MINUS1_THIN_SLICE_BOUND_DIAGNOSTIC_COMPLETE_NOT_PROMOTABLE

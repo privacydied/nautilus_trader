@@ -1641,17 +1641,95 @@ def test_target_selection_ranks_by_notional_and_priority_symbols_present():
         probe_mod.OpenNamedPosition(address='c', symbol='XRP', position_notional_at_last_fill_px=Decimal('300')),
         probe_mod.OpenNamedPosition(address='d', symbol='HYPE', position_notional_at_last_fill_px=Decimal('200')),
     ]
-    selected, plan = probe_mod._select_target_pairs(positions, 100_000_000)
+    selected, plan = probe_mod._select_target_pairs(positions, 100_000_000, target_symbol='DOGE')
     assert {'SOL', 'XRP', 'HYPE'}.issubset(set(plan.selected_symbols))
     assert plan.selected_target_notional > 0
 
 
+def test_target_selection_can_restrict_to_top_30_sol_pairs():
+    positions = [
+        probe_mod.OpenNamedPosition(
+            address=f'addr{i:03d}',
+            symbol='SOL',
+            side='LONG',
+            position_size=Decimal('1'),
+            position_notional_at_last_fill_px=Decimal(str(1000 - i)),
+            last_fill_block=100 + i,
+        )
+        for i in range(40)
+    ]
+    positions += [
+        probe_mod.OpenNamedPosition(address='xrp1', symbol='XRP', position_notional_at_last_fill_px=Decimal('5000')),
+        probe_mod.OpenNamedPosition(address='hype1', symbol='HYPE', position_notional_at_last_fill_px=Decimal('4000')),
+    ]
+    selected, plan = probe_mod._select_target_pairs(
+        positions,
+        5_000_000_000,
+        target_symbol='SOL',
+        target_top_n=30,
+    )
+    assert len(selected) == 30
+    assert all(p.symbol == 'SOL' for p in selected)
+    notionals = [p.position_notional_at_last_fill_px for p in selected]
+    assert notionals == sorted(notionals, reverse=True)
+    assert plan.target_symbol == 'SOL'
+    assert plan.target_top_n == 30
+
+
+def test_targeted_lookup_terminal_uses_resolved_notional_fraction_and_resolved_isolated_fraction():
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.targeted_backward_lookup_summary = probe_mod.TargetedBackwardLookupSummary(
+        target_notional_resolved_fraction=0.70,
+        cap_exhausted=False,
+    )
+    probe.targeted_margin_mode_classification_summary = probe_mod.TargetedMarginModeClassificationSummary(
+        computable_isolated_fraction_of_target_notional=0.20,
+        isolated_explicit_fraction_of_resolved_notional=0.20,
+        computable_isolated_fraction_of_resolved_notional=0.20,
+    )
+    assert probe._terminal_for_targeted_margin_mode_lookup() == (
+        'NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED'
+    )
+
+
+def test_targeted_lookup_terminal_passes_when_resolved_isolated_fraction_is_meaningful_even_if_target_fraction_is_lower():
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.targeted_backward_lookup_summary = probe_mod.TargetedBackwardLookupSummary(
+        target_notional_resolved_fraction=0.62,
+        cap_exhausted=False,
+    )
+    probe.targeted_margin_mode_classification_summary = probe_mod.TargetedMarginModeClassificationSummary(
+        computable_isolated_fraction_of_target_notional=0.18,
+        isolated_explicit_fraction_of_resolved_notional=0.31,
+        computable_isolated_fraction_of_resolved_notional=0.31,
+    )
+    assert probe._terminal_for_targeted_margin_mode_lookup() == (
+        'NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_PASSED_BROADER_BACKFILL_JUSTIFIED'
+    )
+
+
+def test_targeted_lookup_terminal_insufficient_coverage_under_cap_when_resolved_fraction_below_sixty_percent():
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.targeted_backward_lookup_summary = probe_mod.TargetedBackwardLookupSummary(
+        target_notional_resolved_fraction=0.59,
+        cap_exhausted=False,
+    )
+    probe.targeted_margin_mode_classification_summary = probe_mod.TargetedMarginModeClassificationSummary(
+        computable_isolated_fraction_of_target_notional=0.00,
+        isolated_explicit_fraction_of_resolved_notional=0.00,
+        computable_isolated_fraction_of_resolved_notional=0.00,
+    )
+    assert probe._terminal_for_targeted_margin_mode_lookup() == (
+        'NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP'
+    )
+
+
 def test_targeted_margin_terminals_do_not_emit_phase0_ready_statuses():
     statuses = [
-        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED.value,
-        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_PASSED_FULL_BACKFILL_REQUIRED.value,
-        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_LOOKUP_INSUFFICIENT_COVERAGE.value,
-        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_LOOKUP_CAP_EXHAUSTED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_PASSED_BROADER_BACKFILL_JUSTIFIED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED.value,
         probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_ASSET_SYMBOL_MAPPING_UNVERIFIED.value,
         probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED.value,
     ]
@@ -1801,3 +1879,322 @@ def test_parse_replica_cmds_target_object_decode_blocked_returns_structured_bloc
     assert blocker == 'UNKNOWN_DECODER_OR_SOURCE_BLOCKED'
     assert audit.partial_or_truncated is True
     assert audit.decode_errors
+
+
+
+def _make_target_position(address: str, symbol: str = 'SOL', notional: str = '1000', block: int = 100, ts_ns: int = 1000) -> probe_mod.OpenNamedPosition:
+    from datetime import datetime, timezone
+    return probe_mod.OpenNamedPosition(
+        address=address,
+        symbol=symbol,
+        side='LONG',
+        position_size=Decimal('1'),
+        position_notional_at_last_fill_px=Decimal(notional),
+        last_fill_block=block,
+        last_fill_time=datetime.fromtimestamp(ts_ns / 1_000_000_000, tz=timezone.utc),
+    )
+
+
+def test_targeted_backscan_uses_most_recent_prior_update_leverage():
+    matches = [
+        {'address_redacted': probe_mod.redact_address('0xaaa'), 'symbol': 'SOL', 'block': 10, 'nonce_or_timestamp': 100, 'isCross': False},
+        {'address_redacted': probe_mod.redact_address('0xaaa'), 'symbol': 'SOL', 'block': 11, 'nonce_or_timestamp': 90, 'isCross': True},
+        {'address_redacted': probe_mod.redact_address('0xaaa'), 'symbol': 'SOL', 'block': 11, 'nonce_or_timestamp': 110, 'isCross': False},
+    ]
+    resolved = probe_mod._resolve_most_recent_prior_leverage(matches)
+    chosen = resolved[(probe_mod.redact_address('0xaaa'), 'SOL')]
+    assert chosen['block'] == 11
+    assert chosen['nonce_or_timestamp'] == 110
+    assert chosen['isCross'] is False
+
+
+def test_targeted_backscan_ignores_future_update_leverage_after_fill_timestamp(tmp_path, monkeypatch):
+    cache_dir = Path('.local_data/targeted_replica_cmds_cache')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    obj = {'key': 'hl-mainnet-node-data/replica_cmds/2025-07-27/future_cutoff.jsonl', 'size': 0, 'date': '2025-07-27'}
+    rows = [
+        {'type': 'updateLeverage', 'asset': 5, 'isCross': True, 'leverage': 3, 'identity': '0xabc', 'block': 12, 'timestamp': 1200},
+        {'type': 'updateLeverage', 'asset': 5, 'isCross': False, 'leverage': 5, 'identity': '0xabc', 'block': 10, 'timestamp': 1000},
+    ]
+    (cache_dir / 'future_cutoff.jsonl').write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    monkeypatch.setattr(probe_mod, '_decompress_lz4_best_effort', lambda raw: (raw, 'plain'))
+    audit, matches, blocker = probe_mod._parse_replica_cmds_target_object(
+        obj,
+        probe_mod.StudyConfig(out_root=str(tmp_path)),
+        {('0xabc', 'SOL'): _make_target_position('0xabc', block=10, ts_ns=1000)},
+        {'SOL': '5'},
+        {('0xabc', 'SOL'): (10, 1000)},
+    )
+    assert blocker is None
+    assert audit.updateLeverage_count == 2
+    assert len(matches) == 1
+    assert matches[0]['block'] == 10
+    assert matches[0]['isCross'] is False
+
+
+def test_targeted_backscan_resolves_pair_once_prior_update_leverage_found(tmp_path, monkeypatch):
+    cache_dir = Path('.local_data/targeted_replica_cmds_cache')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    obj = {'key': 'hl-mainnet-node-data/replica_cmds/2025-07-27/dedupe.jsonl', 'size': 0, 'date': '2025-07-27'}
+    rows = [
+        {'type': 'updateLeverage', 'asset': 5, 'isCross': True, 'leverage': 2, 'identity': '0xabc', 'block': 9, 'timestamp': 900},
+        {'type': 'updateLeverage', 'asset': 5, 'isCross': False, 'leverage': 4, 'identity': '0xabc', 'block': 10, 'timestamp': 1000},
+    ]
+    (cache_dir / 'dedupe.jsonl').write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    monkeypatch.setattr(probe_mod, '_decompress_lz4_best_effort', lambda raw: (raw, 'plain'))
+    audit, matches, blocker = probe_mod._parse_replica_cmds_target_object(
+        obj,
+        probe_mod.StudyConfig(out_root=str(tmp_path)),
+        {('0xabc', 'SOL'): _make_target_position('0xabc', block=10, ts_ns=1000)},
+        {'SOL': '5'},
+        {('0xabc', 'SOL'): (10, 1000)},
+    )
+    assert blocker is None
+    assert audit.target_updateLeverage_matches == 1
+    assert audit.newest_prior_matches_selected == 1
+    assert matches[0]['block'] == 10
+
+
+def test_targeted_backscan_continues_unresolved_pairs_until_cap_or_coverage_start():
+    selected_positions = [
+        _make_target_position('0xaaa', notional='1000'),
+        _make_target_position('0xbbb', notional='500'),
+    ]
+    symbol_to_asset_id = {'SOL': '5'}
+    rows, summary, _ = probe_mod._classify_target_margin_modes(
+        selected_positions,
+        symbol_to_asset_id,
+        {(probe_mod.redact_address('0xaaa'), 'SOL'): {'object_key': 'x', 'block': 10, 'nonce_or_timestamp': 1, 'isCross': False}},
+        set(),
+        set(),
+        Decimal('2000'),
+    )
+    assert summary.target_pairs_total == 2
+    assert summary.unknown_history_not_scanned_pairs == 1
+    assert any(r.classification == probe_mod.TargetMarginClassification.UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START.value for r in rows)
+
+
+def test_default_cross_requires_coverage_start_for_exact_address_asset_pair():
+    selected_positions = [
+        _make_target_position('0xaaa', notional='1000'),
+        _make_target_position('0xbbb', notional='500'),
+    ]
+    rows, summary, _ = probe_mod._classify_target_margin_modes(
+        selected_positions,
+        {'SOL': '5'},
+        {},
+        {('0xaaa', 'SOL')},
+        set(),
+        Decimal('2000'),
+    )
+    by_addr = {r.address_redacted: r.classification for r in rows}
+    assert by_addr[probe_mod.redact_address('0xaaa')] == probe_mod.TargetMarginClassification.NO_ACTION_FOUND_DEFAULT_CROSS_FULL_HISTORY_SCANNED.value
+    assert by_addr[probe_mod.redact_address('0xbbb')] == probe_mod.TargetMarginClassification.UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START.value
+    assert summary.default_cross_full_history_scanned_pairs == 1
+    assert summary.unknown_history_not_scanned_pairs == 1
+
+
+def test_no_action_before_cap_exhaustion_stays_unknown_history_not_scanned():
+    selected_positions = [_make_target_position('0xaaa', notional='1000')]
+    rows, summary, _ = probe_mod._classify_target_margin_modes(
+        selected_positions,
+        {'SOL': '5'},
+        {},
+        set(),
+        set(),
+        Decimal('1000'),
+    )
+    assert rows[0].classification == probe_mod.TargetMarginClassification.UNKNOWN_HISTORY_NOT_SCANNED_TO_COVERAGE_START.value
+    assert summary.default_cross_full_history_scanned_pairs == 0
+    assert summary.unknown_history_not_scanned_pairs == 1
+
+
+def test_is_cross_false_maps_to_isolated_explicit():
+    rows, summary, _ = probe_mod._classify_target_margin_modes(
+        [_make_target_position('0xaaa', notional='1000')],
+        {'SOL': '5'},
+        {(probe_mod.redact_address('0xaaa'), 'SOL'): {'object_key': 'x', 'block': 9, 'nonce_or_timestamp': 1, 'isCross': False}},
+        set(),
+        set(),
+        Decimal('2000'),
+    )
+    assert rows[0].classification == probe_mod.TargetMarginClassification.ISOLATED_EXPLICIT.value
+    assert summary.isolated_explicit_pairs == 1
+
+
+def test_is_cross_true_maps_to_cross_explicit():
+    rows, summary, _ = probe_mod._classify_target_margin_modes(
+        [_make_target_position('0xaaa', notional='1000')],
+        {'SOL': '5'},
+        {(probe_mod.redact_address('0xaaa'), 'SOL'): {'object_key': 'x', 'block': 9, 'nonce_or_timestamp': 1, 'isCross': True}},
+        set(),
+        set(),
+        Decimal('2000'),
+    )
+    assert rows[0].classification == probe_mod.TargetMarginClassification.CROSS_EXPLICIT.value
+    assert summary.cross_explicit_pairs == 1
+
+
+def test_unknown_pairs_are_not_counted_as_cross():
+    _, summary, _ = probe_mod._classify_target_margin_modes(
+        [_make_target_position('0xaaa', notional='1000')],
+        {'SOL': '5'},
+        {},
+        set(),
+        set(),
+        Decimal('2000'),
+    )
+    assert summary.cross_explicit_pairs == 0
+    assert summary.cross_explicit_notional == Decimal('0')
+
+
+def test_unknown_pairs_are_not_counted_as_default_cross():
+    _, summary, _ = probe_mod._classify_target_margin_modes(
+        [_make_target_position('0xaaa', notional='1000')],
+        {'SOL': '5'},
+        {},
+        set(),
+        set(),
+        Decimal('2000'),
+    )
+    assert summary.default_cross_full_history_scanned_pairs == 0
+    assert summary.default_cross_full_history_scanned_notional == Decimal('0')
+
+
+def test_target_notional_resolved_fraction_computed_correctly():
+    _, summary, _ = probe_mod._classify_target_margin_modes(
+        [_make_target_position('0xaaa', notional='1000'), _make_target_position('0xbbb', notional='1000')],
+        {'SOL': '5'},
+        {(probe_mod.redact_address('0xaaa'), 'SOL'): {'object_key': 'x', 'block': 9, 'nonce_or_timestamp': 1, 'isCross': False}},
+        set(),
+        set(),
+        Decimal('5000'),
+    )
+    assert summary.target_notional_resolved_fraction == pytest.approx(0.5)
+
+
+def test_computable_isolated_fraction_of_resolved_notional_computed_correctly():
+    _, summary, _ = probe_mod._classify_target_margin_modes(
+        [_make_target_position('0xaaa', notional='1000'), _make_target_position('0xbbb', notional='1000')],
+        {'SOL': '5'},
+        {
+            (probe_mod.redact_address('0xaaa'), 'SOL'): {'object_key': 'x', 'block': 9, 'nonce_or_timestamp': 1, 'isCross': False},
+            (probe_mod.redact_address('0xbbb'), 'SOL'): {'object_key': 'y', 'block': 9, 'nonce_or_timestamp': 1, 'isCross': True},
+        },
+        set(),
+        set(),
+        Decimal('5000'),
+    )
+    assert summary.computable_isolated_fraction_of_resolved_notional == pytest.approx(0.5)
+
+
+def test_computable_isolated_fraction_of_target_notional_computed_correctly():
+    _, summary, _ = probe_mod._classify_target_margin_modes(
+        [_make_target_position('0xaaa', notional='500'), _make_target_position('0xbbb', notional='1500')],
+        {'SOL': '5'},
+        {(probe_mod.redact_address('0xaaa'), 'SOL'): {'object_key': 'x', 'block': 9, 'nonce_or_timestamp': 1, 'isCross': False}},
+        set(),
+        set(),
+        Decimal('3000'),
+    )
+    assert summary.computable_isolated_fraction_of_target_notional == pytest.approx(0.25)
+
+
+def test_low_isolated_with_enough_resolved_notional_emits_backscan_low_isolated_review_required():
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.targeted_backward_lookup_summary = probe_mod.TargetedBackwardLookupSummary(target_notional_resolved_fraction=0.75, cap_exhausted=False)
+    probe.targeted_margin_mode_classification_summary = probe_mod.TargetedMarginModeClassificationSummary(
+        computable_isolated_fraction_of_target_notional=0.10,
+        computable_isolated_fraction_of_resolved_notional=0.10,
+    )
+    assert probe._terminal_for_targeted_margin_mode_lookup().endswith('MARGIN_MODE_TARGETED_BACKSCAN_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED')
+
+
+def test_meaningful_isolated_emits_backscan_passed_broader_backfill_justified():
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.targeted_backward_lookup_summary = probe_mod.TargetedBackwardLookupSummary(target_notional_resolved_fraction=0.80, cap_exhausted=False)
+    probe.targeted_margin_mode_classification_summary = probe_mod.TargetedMarginModeClassificationSummary(
+        computable_isolated_fraction_of_target_notional=0.30,
+        computable_isolated_fraction_of_resolved_notional=0.20,
+    )
+    assert probe._terminal_for_targeted_margin_mode_lookup().endswith('MARGIN_MODE_TARGETED_BACKSCAN_PASSED_BROADER_BACKFILL_JUSTIFIED')
+
+
+def test_insufficient_coverage_under_cap_emits_backscan_insufficient_coverage_under_cap():
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.targeted_backward_lookup_summary = probe_mod.TargetedBackwardLookupSummary(target_notional_resolved_fraction=0.59, cap_exhausted=False)
+    probe.targeted_margin_mode_classification_summary = probe_mod.TargetedMarginModeClassificationSummary()
+    assert probe._terminal_for_targeted_margin_mode_lookup().endswith('MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP')
+
+
+def test_cap_exhaustion_emits_backscan_cap_exhausted():
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.targeted_backward_lookup_summary = probe_mod.TargetedBackwardLookupSummary(target_notional_resolved_fraction=0.59, cap_exhausted=True)
+    probe.targeted_margin_mode_classification_summary = probe_mod.TargetedMarginModeClassificationSummary()
+    assert probe._terminal_for_targeted_margin_mode_lookup().endswith('BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED')
+
+
+def test_targeted_backward_summary_has_required_backscan_fields():
+    summary = probe_mod.TargetedBackwardLookupSummary()
+    data = summary.__dict__
+    for key in [
+        'target_symbol', 'target_asset_id', 'target_top_n', 'selected_target_pairs', 'selected_target_notional',
+        'selected_target_notional_fraction_of_SOL', 'selected_target_notional_fraction_of_total_open',
+        'objects_considered', 'objects_downloaded', 'compressed_bytes_downloaded', 'cap', 'cap_exhausted',
+        'coverage_start_reached', 'stop_rule', 'actions_decoded_total', 'updateLeverage_count_total',
+        'target_updateLeverage_matches_total', 'target_pairs_resolved', 'target_pairs_unresolved',
+        'target_notional_resolved', 'target_notional_unresolved', 'target_notional_resolved_fraction',
+        'coverage_start_reached_for_unresolved_pairs', 'source_or_decoder_blocked'
+    ]:
+        assert key in data
+
+
+def test_classification_summary_has_required_fraction_fields():
+    summary = probe_mod.TargetedMarginModeClassificationSummary()
+    data = summary.__dict__
+    for key in [
+        'isolated_explicit_fraction_of_target_notional', 'isolated_explicit_fraction_of_resolved_notional',
+        'cross_explicit_fraction_of_target_notional', 'cross_explicit_fraction_of_resolved_notional',
+        'default_cross_full_history_scanned_fraction_of_target_notional', 'default_cross_full_history_scanned_fraction_of_resolved_notional',
+        'unknown_history_not_scanned_fraction_of_target_notional', 'target_notional_resolved_fraction',
+        'computable_isolated_fraction_of_target_notional', 'computable_isolated_fraction_of_resolved_notional',
+        'computable_isolated_fraction_of_total_open_notional'
+    ]:
+        assert key in data
+
+
+def test_continuation_plan_has_required_backscan_fields():
+    plan = {
+        'current_task_cap': 1,
+        'compressed_bytes_downloaded': 2,
+        'remaining_cap': 3,
+        'target_notional_resolved_fraction': 0.4,
+        'target_notional_unresolved_fraction': 0.6,
+        'estimated_bytes_to_resolve_80pct_top30_SOL_notional': 4,
+        'estimated_bytes_to_resolve_all_top30_SOL': 5,
+        'estimated_bytes_for_top250_SOL': 6,
+        'estimated_bytes_for_all_open_positions': 7,
+        'estimated_download_cost_if_known': None,
+        'approval_required_before_more_download': True,
+        'recommended_next_action': 'X',
+    }
+    for key in [
+        'current_task_cap', 'compressed_bytes_downloaded', 'remaining_cap', 'target_notional_resolved_fraction',
+        'target_notional_unresolved_fraction', 'estimated_bytes_to_resolve_80pct_top30_SOL_notional',
+        'estimated_bytes_to_resolve_all_top30_SOL', 'estimated_bytes_for_top250_SOL', 'estimated_bytes_for_all_open_positions',
+        'estimated_download_cost_if_known', 'approval_required_before_more_download', 'recommended_next_action'
+    ]:
+        assert key in plan
+
+
+def test_no_forbidden_phase0_or_promotion_status_emitted():
+    statuses = [
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_PASSED_BROADER_BACKFILL_JUSTIFIED.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP.value,
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED.value,
+    ]
+    forbidden = ['READY_FOR_PHASE_0', 'LIQUIDATION_MAP_FEASIBILITY_PASSED', 'TRADE_READY', 'EXECUTION_READY', 'PAPER_READY', 'LIVE_READY', 'PROFITABLE', 'ALPHA_FOUND', 'EDGE_CONFIRMED', 'PROMOTION_AUTHORIZED']
+    for s in statuses:
+        for term in forbidden:
+            assert term not in s

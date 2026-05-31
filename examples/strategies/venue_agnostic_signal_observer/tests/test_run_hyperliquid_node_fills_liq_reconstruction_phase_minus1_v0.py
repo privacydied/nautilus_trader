@@ -124,6 +124,22 @@ def test_wall2_targeted_holder_lookup_cli_flag_maps_to_config():
     assert config.wall2_targeted_holder_leverage_lookup is True
 
 
+def test_targeted_holder_lookup_cli_args_map_to_config():
+    args = runner.parse_args([
+        "--out-root", "/tmp/out",
+        "--data-root", "/tmp/data",
+        "--wall2-targeted-holder-leverage-lookup",
+        "--target-symbol", "SOL",
+        "--target-top-n", "30",
+        "--max-download-bytes", "5000000000",
+    ])
+    config = runner.build_config(args)
+    assert config.wall2_targeted_holder_leverage_lookup is True
+    assert config.target_symbol == "SOL"
+    assert config.target_top_n == 30
+    assert config.max_download_bytes == 5_000_000_000
+
+
 def test_runner_writes_audit_artifacts(tmp_path: Path):
     """Runner should write audit artifacts when data is available.
 
