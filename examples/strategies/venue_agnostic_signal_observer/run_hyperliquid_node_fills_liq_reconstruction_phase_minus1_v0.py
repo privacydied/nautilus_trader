@@ -120,6 +120,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Target symbol for bounded targeted holder leverage lookup")
     parser.add_argument("--target-top-n", type=int, default=30,
                         help="Top-N address-symbol pairs to target for bounded targeted holder leverage lookup")
+    parser.add_argument("--replica-cmds-selection-mode", default="chronology_strict_newest_prior",
+                        choices=["chronology_strict_newest_prior"],
+                        help="Object selection mode for replica_cmds backscan (Wall 2)")
 
     return parser.parse_args(argv)
 
@@ -158,6 +161,7 @@ def build_config(args: argparse.Namespace) -> probe_mod.StudyConfig:
         wall2_targeted_holder_leverage_lookup=args.wall2_targeted_holder_leverage_lookup,
         target_symbol=args.target_symbol.upper(),
         target_top_n=args.target_top_n,
+        replica_cmds_selection_mode=args.replica_cmds_selection_mode,
     )
 
 

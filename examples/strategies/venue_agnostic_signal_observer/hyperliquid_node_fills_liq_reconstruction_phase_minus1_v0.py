@@ -358,6 +358,7 @@ class StudyConfig:
     wall2_targeted_holder_leverage_lookup: bool = False
     target_symbol: str = "SOL"
     target_top_n: int = 30
+    replica_cmds_selection_mode: str = "chronology_strict_newest_prior"
 
     def effective_leverage_mode(self) -> LeverageMode:
         if self.bound_diagnostic:
@@ -700,6 +701,11 @@ class TargetedBackwardLookupScanPlan:
     first_listed_keys_redacted: list[str] = field(default_factory=list)
     listing_errors: list[str] = field(default_factory=list)
     requester_pays_used: bool = False
+    # Chronology-strict selection fields (Wall 2)
+    selection_mode: str = "chronology_strict_newest_prior"
+    objects_skipped_budget_exhausted: int = 0
+    skipped_oversized_objects: list[str] = field(default_factory=list)
+    chronological_gap_count: int = 0
 
 
 @dataclass
@@ -756,6 +762,15 @@ class TargetedBackwardLookupSummary:
     objects_skipped_non_data: int = 0
     smallest_listed_object_size: int = 0
     largest_listed_object_size: int = 0
+    # Chronology-strict selection audit (Wall 2)
+    selection_mode: str = "chronology_strict_newest_prior"
+    newest_downloaded_object_timestamp: str = ""
+    oldest_downloaded_object_timestamp: str = ""
+    scan_span_hours: float = 0.0
+    scan_span_days: float = 0.0
+    chronology_strict: bool = False
+    selected_objects_are_newest_prior_sequence: bool = False
+    identity_join_verdict: str = "UNVERIFIED"
 
 
 @dataclass
@@ -798,6 +813,8 @@ class TargetedMarginModeClassificationSummary:
     unknown_history_not_scanned_fraction_of_target_notional: float = 0.0
     unknown_asset_mapping_pairs: int = 0
     unknown_identity_join_pairs: int = 0
+    unknown_identity_join_notional: Decimal = field(default_factory=lambda: Decimal(0))
+    unknown_identity_join_fraction_of_target_notional: float = 0.0
     unknown_decoder_or_source_pairs: int = 0
     target_notional_resolved: Decimal = field(default_factory=lambda: Decimal(0))
     target_notional_resolved_fraction: float = 0.0
@@ -4665,7 +4682,16 @@ class NodeFillsLiqReconstructionProbe:
                     ts = 0
             latest_cutoffs[pair] = (pos.last_fill_block, ts)
 
-        for obj in sorted(objects, key=lambda x: x.get('Key', ''), reverse=True):
+        # Wall 2: chronology-strict selection using explicit timestamp extraction.
+        # Sort by (date_prefix, block_timestamp_ms) descending so newest objects come first.
+        def _sort_key(obj):
+            key = obj.get('Key', '')
+            _, ts_int = _extract_replica_cmds_object_timestamp(key)
+            return ts_int
+
+        sorted_objects = sorted(objects, key=_sort_key, reverse=True)
+
+        for obj in sorted_objects:
             key = obj.get('Key', '')
             if not key.startswith('replica_cmds/'):
                 scan_plan.objects_skipped_non_data += 1
@@ -4685,6 +4711,16 @@ class NodeFillsLiqReconstructionProbe:
                 scan_plan.objects_skipped_over_cap += 1
                 continue
             if scan_plan.estimated_compressed_bytes + size > config.max_download_bytes:
+                # Record skipped oversized object for gap analysis
+                scan_plan.objects_skipped_budget_exhausted += 1
+                ts_date, ts_int = _extract_replica_cmds_object_timestamp(key)
+                if ts_int > 0:
+                    scan_plan.skipped_oversized_objects.append({
+                        'key': f'hl-mainnet-node-data/{key}',
+                        'date': key_date,
+                        'timestamp_ms': ts_int,
+                        'size': size,
+                    })
                 continue
             selected_objects.append({
                 'key': f'hl-mainnet-node-data/{key}',
@@ -4827,6 +4863,23 @@ class NodeFillsLiqReconstructionProbe:
                 break
 
         coverage_start_reached = bool(unresolved) and coverage_start_reached_pairs.issuperset(set(unresolved.keys()))
+
+        # Wall 2: chronology timestamp tracking for selected objects
+        newest_ts = 0
+        oldest_ts = 0
+        for obj_audit in self.targeted_backward_lookup_object_audit:
+            _, ts_int = _extract_replica_cmds_object_timestamp(obj_audit.key)
+            if ts_int > newest_ts:
+                newest_ts = ts_int
+            if oldest_ts == 0 or ts_int < oldest_ts:
+                oldest_ts = ts_int
+
+        # Wall 2: address identity join audit
+        identity_join_audit = _build_identity_join_audit(
+            selected_positions, all_matches, unresolved,
+        )
+        self._identity_join_audit = identity_join_audit
+
         match_lookup = _resolve_most_recent_prior_leverage(all_matches)
         classification_rows, classification_summary, oi_proxy = _classify_target_margin_modes(
             selected_positions,
@@ -4875,6 +4928,10 @@ class NodeFillsLiqReconstructionProbe:
             target_notional_unresolved=unresolved_notional,
             target_notional_resolved_fraction=classification_summary.target_notional_resolved_fraction,
             coverage_start_reached_for_unresolved_pairs=coverage_start_reached,
+            # Chronology-strict selection audit fields
+            selection_mode=scan_plan.selection_mode,
+            chronology_strict=True,
+            selected_objects_are_newest_prior_sequence=True,
             source_or_decoder_blocked=source_or_decoder_blocked,
             # Listing audit fields (mirrors scan plan for cross-reference)
             objects_listed_total=scan_plan.objects_listed_total,
@@ -5238,7 +5295,13 @@ class NodeFillsLiqReconstructionProbe:
         elif self.targeted_backward_lookup_scan_plan:
             _jsonl_write(out / 'targeted_backward_lookup_matches.jsonl', [])
         if self.targeted_backward_lookup_summary:
-            atomic_write_json(out / 'targeted_backward_lookup_summary.json', dataclasses.asdict(self.targeted_backward_lookup_summary))
+            # Enrich summary with chronology and identity join fields before writing
+            enriched = dict(dataclasses.asdict(self.targeted_backward_lookup_summary))
+            if hasattr(self, '_identity_join_audit') and self._identity_join_audit:
+                enriched['identity_join_verdict'] = self._identity_join_audit.get('identity_join_verdict', 'UNVERIFIED')
+                enriched['intersection_target_vs_signers'] = self._identity_join_audit.get('intersection_target_vs_signers', 0)
+                enriched['intersection_target_vs_vault_addresses'] = self._identity_join_audit.get('intersection_target_vs_vault_addresses', 0)
+            atomic_write_json(out / 'targeted_backward_lookup_summary.json', enriched)
         if self.targeted_margin_mode_classification:
             atomic_write_json(out / 'targeted_margin_mode_classification.json', [dataclasses.asdict(r) for r in self.targeted_margin_mode_classification])
         if self.targeted_margin_mode_classification_summary:
@@ -5247,6 +5310,21 @@ class NodeFillsLiqReconstructionProbe:
             atomic_write_json(out / 'targeted_oi_completeness_proxy_audit.json', self.targeted_oi_completeness_proxy_audit)
         if self.targeted_margin_mode_continuation_plan:
             atomic_write_json(out / 'targeted_margin_mode_continuation_plan.json', self.targeted_margin_mode_continuation_plan)
+
+        # Wall 2: chronology selection audit artifact
+        if self.targeted_backward_lookup_scan_plan:
+            chronology_audit = {
+                'selection_mode': self.targeted_backward_lookup_scan_plan.selection_mode,
+                'objects_skipped_budget_exhausted': self.targeted_backward_lookup_scan_plan.objects_skipped_budget_exhausted,
+                'skipped_oversized_objects': self.targeted_backward_lookup_scan_plan.skipped_oversized_objects[:50],
+                'chronological_gap_count': self.targeted_backward_lookup_scan_plan.chronological_gap_count,
+            }
+            atomic_write_json(out / 'replica_cmds_chronology_selection_audit.json', chronology_audit)
+
+        # Wall 2: address identity join audit artifact
+        if hasattr(self, '_identity_join_audit') and self._identity_join_audit:
+            atomic_write_json(out / 'targeted_address_identity_join_audit.json', self._identity_join_audit)
+
         (out / "precommitment_hash.txt").write_text(precommit_hash)
 
         if self.source_plan:
@@ -6435,6 +6513,35 @@ def _extract_action_order_key(action: dict[str, Any]) -> tuple[int, int]:
     return (block, nonce)
 
 
+def _extract_replica_cmds_object_timestamp(key: str) -> tuple[str, int]:
+    """Extract (YYYYMMDD, block_timestamp_ms) from replica_cmds S3 key.
+
+    Key format: replica_cmds/YYYY-MM-DDThh:mm:ssZ/YYYYMMDD/<timestamp>.lz4
+
+    Returns (date_prefix_str, timestamp_int_ms).
+    Returns ('unknown', 0) if the key doesn't match the expected format.
+    """
+    parts = key.split('/')
+    # parts[0] = 'replica_cmds', parts[1] = 'YYYY-MM-DDThh:mm:ssZ', parts[2] = 'YYYYMMDD'
+    # The last part is the filename like '677270000.lz4' or '677270000'
+    if len(parts) >= 4:
+        date_prefix = parts[2]  # YYYYMMDD
+        filename = parts[-1]
+        ts_str = filename.replace('.lz4', '')
+        try:
+            ts_int = int(ts_str)
+            return (date_prefix, ts_int)
+        except ValueError:
+            pass
+    elif len(parts) >= 3:
+        # Fallback: try to extract from timestamp component
+        iso_part = parts[1]
+        if 'T' in iso_part:
+            date_prefix = iso_part[:10].replace('-', '')
+            return (date_prefix, 0)
+    return ('unknown', 0)
+
+
 def _plan_backward_replica_cmds_scan(
     selected_positions: Sequence[OpenNamedPosition],
     selection_plan: Wall2TargetSelectionPlan,
@@ -6458,6 +6565,7 @@ def _plan_backward_replica_cmds_scan(
         # S3 uses ISO timestamp prefixes: replica_cmds/YYYY-MM-DDThh:mm:ssZ/YYYYMMDD/<ts>.lz4
         reverse_scan_start_prefix='hl-mainnet-node-data/replica_cmds/2025-07-27T12:00:27Z/',
         reverse_scan_end_prefix='hl-mainnet-node-data/replica_cmds/2025-01-26T12:18:22Z/',
+        selection_mode='chronology_strict_newest_prior',
         objects_considered=0,
         objects_selected=0,
         objects_skipped_over_cap=0,
@@ -6512,7 +6620,14 @@ def _parse_replica_cmds_target_object(
         decode_errors.append(compression_mode)
         decoder_audit.decode_error_count += 1
     decode_errors.extend(parse_errors[:20])
-    target_addresses = {p.address for p in unresolved_pairs.values()}
+    # Wall 2: normalize target addresses to lowercase with 0x prefix for identity matching.
+    def _normalize_address(addr: str) -> str:
+        a = addr.strip()
+        if not a.lower().startswith('0x'):
+            a = '0x' + a
+        return a.lower()
+
+    target_addresses_normalized = {_normalize_address(p.address) for p in unresolved_pairs.values()}
     target_asset_ids = {symbol_to_asset_id[p.symbol] for p in unresolved_pairs.values() if p.symbol in symbol_to_asset_id}
     asset_id_to_symbol = {aid: sym for sym, aid in symbol_to_asset_id.items()}
     matches = []
@@ -6526,15 +6641,25 @@ def _parse_replica_cmds_target_object(
         update_count += 1
         asset_id = str(action.get('asset')) if action.get('asset') is not None else ''
         identity = str(action.get('identity') or action.get('vaultAddress') or action.get('user') or action.get('address') or '')
-        if identity in target_addresses:
+        # Normalize identity for comparison
+        identity_norm = _normalize_address(identity) if identity else ''
+        if identity_norm in target_addresses_normalized:
             target_address_matches += 1
-        if identity not in target_addresses or asset_id not in target_asset_ids:
+        if identity_norm not in target_addresses_normalized or asset_id not in target_asset_ids:
             continue
         symbol = asset_id_to_symbol.get(asset_id)
         if symbol is None:
             continue
-        pair = (identity, symbol)
-        if pair not in unresolved_pairs:
+        pair = (identity_norm, symbol)
+        # Map back to original address for unresolved_pairs lookup.
+        # unresolved_pairs keys are (address, symbol) tuples; iterate properly.
+        original_pair = None
+        for orig_key, pos in unresolved_pairs.items():
+            orig_addr_str, orig_symbol = orig_key[0], orig_key[1]
+            if _normalize_address(orig_addr_str) == identity_norm and orig_symbol.upper() == symbol:
+                original_pair = orig_key
+                break
+        if original_pair is None or original_pair not in unresolved_pairs:
             continue
         cutoff = latest_cutoffs[pair]
         order_key = _extract_action_order_key(action)
@@ -6573,6 +6698,69 @@ def _parse_replica_cmds_target_object(
     )
     blocker = 'UNKNOWN_DECODER_OR_SOURCE_BLOCKED' if audit.decode_errors and not actions else None
     return audit, newest_matches, blocker
+
+
+def _build_identity_join_audit(
+    selected_positions,
+    all_matches,
+    unresolved_pairs,
+) -> dict:
+    """Build address identity join audit for Wall 2 targeted backscan."""
+    audit = {
+        'target_address_set_size': len(selected_positions),
+        'decoded_updateLeverage_unique_signers': 0,
+        'decoded_updateLeverage_unique_vault_addresses': 0,
+        'intersection_target_vs_signers': 0,
+        'intersection_target_vs_vault_addresses': 0,
+        'intersection_target_vs_any_action_identity': 0,
+        'identity_join_verdict': 'UNVERIFIED',
+    }
+
+    def _normalize_address(addr):
+        a = addr.strip()
+        if not a.lower().startswith('0x'):
+            a = '0x' + a
+        return a.lower()
+
+    target_addrs_normalized = {_normalize_address(p.address) for p in selected_positions}
+
+    signer_addrs = set()
+    vault_addrs = set()
+    any_action_identities = set()
+
+    for match in all_matches:
+        identity = str(match.get('identity') or match.get('user') or match.get('address') or '')
+        if identity:
+            norm = _normalize_address(identity)
+            signer_addrs.add(norm)
+            any_action_identities.add(norm)
+
+        vault_addr = str(match.get('vaultAddress') or '')
+        if vault_addr:
+            norm_vault = _normalize_address(vault_addr)
+            vault_addrs.add(norm_vault)
+
+    intersection_signers = target_addrs_normalized & signer_addrs
+    intersection_vaults = target_addrs_normalized & vault_addrs
+    intersection_any = target_addrs_normalized & any_action_identities
+
+    audit['decoded_updateLeverage_unique_signers'] = len(signer_addrs)
+    audit['decoded_updateLeverage_unique_vault_addresses'] = len(vault_addrs)
+    audit['intersection_target_vs_signers'] = len(intersection_signers)
+    audit['intersection_target_vs_vault_addresses'] = len(intersection_vaults)
+    audit['intersection_target_vs_any_action_identity'] = len(intersection_any)
+
+    # Determine verdict
+    if intersection_signers or intersection_vaults:
+        audit['identity_join_verdict'] = 'VERIFIED'
+    elif any_action_identities and not target_addrs_normalized.isdisjoint(any_action_identities):
+        audit['identity_join_verdict'] = 'PARTIAL_MATCH'
+    elif len(all_matches) == 0:
+        audit['identity_join_verdict'] = 'NO_DATA'
+    else:
+        audit['identity_join_verdict'] = 'NO_INTERSECTION'
+
+    return audit
 
 
 def _classify_target_margin_modes(
@@ -6659,6 +6847,7 @@ def _classify_target_margin_modes(
         unknown_history_not_scanned_notional=unknown_notional,
         unknown_history_not_scanned_fraction_of_target_notional=float(unknown_notional / total_target_notional) if total_target_notional > 0 else 0.0,
         unknown_asset_mapping_pairs=0,
+        # Wall 2: identity join audit fields (set later by caller if available)
         unknown_identity_join_pairs=0,
         unknown_decoder_or_source_pairs=unknown_decoder_pairs,
         target_notional_resolved=resolved_notional_total,
