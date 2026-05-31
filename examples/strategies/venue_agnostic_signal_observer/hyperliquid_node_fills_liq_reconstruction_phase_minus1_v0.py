@@ -621,30 +621,79 @@ class StudySummary:
 # ---------------------------------------------------------------------------
 
 
+# Dir class categories for the denominator ledger
+CLEAN_DIR_CLASSES = frozenset({
+    "Open Long", "Open Short", "Close Long", "Close Short", "Buy", "Sell",
+})
+FLIP_DIR_CLASSES = frozenset({"Long > Short", "Short > Long"})
+OTHER_DIR_CLASSES = frozenset({"Net Child Vaults", "unknown"})
+
+
 @dataclass
 class TransitionDenominatorLedger:
     """Denominator ledger where every transition belongs to exactly one category.
 
-    Invariant: records_parsed == no_start_position + cold_start
-               + checkable_reconciled + checkable_mismatched
+    Invariant: records_parsed == cold_start_uncheckable + boundary_or_gap_uncheckable
+               + missing_fields_uncheckable + special_rows_excluded + checkable_total
+    checkable_total == checkable_reconciled + checkable_mismatched
+    clean_class_checkable == clean_class_reconciled + clean_class_mismatched
+    flip_class_checkable == flip_class_reconciled + flip_class_mismatched
+    other_class_checkable == other_class_reconciled + other_class_mismatched
     """
     records_parsed: int = 0
-    no_start_position: int = 0
-    cold_start: int = 0
+    transition_candidates_total: int = 0
+    cold_start_uncheckable: int = 0
+    boundary_or_gap_uncheckable: int = 0
+    missing_fields_uncheckable: int = 0
+    special_rows_excluded: int = 0
+    checkable_total: int = 0
     checkable_reconciled: int = 0
     checkable_mismatched: int = 0
+    clean_class_checkable: int = 0
+    clean_class_reconciled: int = 0
+    clean_class_mismatched: int = 0
+    flip_class_checkable: int = 0
+    flip_class_reconciled: int = 0
+    flip_class_mismatched: int = 0
+    other_class_checkable: int = 0
+    other_class_reconciled: int = 0
+    other_class_mismatched: int = 0
 
     def totals_match(self) -> bool:
         return self.records_parsed == (
-            self.no_start_position + self.cold_start
-            + self.checkable_reconciled + self.checkable_mismatched
+            self.cold_start_uncheckable + self.boundary_or_gap_uncheckable
+            + self.missing_fields_uncheckable + self.special_rows_excluded
+            + self.checkable_total
+        )
+
+    def checkable_invariants(self) -> bool:
+        return (
+            self.checkable_reconciled + self.checkable_mismatched == self.checkable_total
+            and self.clean_class_reconciled + self.clean_class_mismatched == self.clean_class_checkable
+            and self.flip_class_reconciled + self.flip_class_mismatched == self.flip_class_checkable
+            and self.other_class_reconciled + self.other_class_mismatched == self.other_class_checkable
+            and self.clean_class_checkable + self.flip_class_checkable + self.other_class_checkable == self.checkable_total
         )
 
     def consistency_rate(self) -> float:
-        checkable = self.checkable_reconciled + self.checkable_mismatched
-        if checkable == 0:
+        if self.checkable_total == 0:
             return 0.0
-        return round(self.checkable_reconciled / checkable, 4)
+        return round(self.checkable_reconciled / self.checkable_total, 4)
+
+    def clean_class_consistency(self) -> float:
+        if self.clean_class_checkable == 0:
+            return 0.0
+        return round(self.clean_class_reconciled / self.clean_class_checkable, 4)
+
+    def flip_class_consistency(self) -> float:
+        if self.flip_class_checkable == 0:
+            return 0.0
+        return round(self.flip_class_reconciled / self.flip_class_checkable, 4)
+
+    def other_class_consistency(self) -> float:
+        if self.other_class_checkable == 0:
+            return 0.0
+        return round(self.other_class_reconciled / self.other_class_checkable, 4)
 
 
 @dataclass
@@ -1495,7 +1544,7 @@ def compute_transition_denominator_ledger(
 
         if sp is None:
             # Category: no_start_position
-            ledger.no_start_position += 1
+            ledger.missing_fields_uncheckable += 1
             by_dir[dir_class]["no_start_position"] += 1
             by_user_activity[activity_tier]["no_start_position"] += 1
             ps.signed_position = prev_pos + delta
@@ -1504,7 +1553,7 @@ def compute_transition_denominator_ledger(
         cold = _is_cold_start(prev_pos, sp)
         if cold:
             # Category: cold_start
-            ledger.cold_start += 1
+            ledger.cold_start_uncheckable += 1
             by_dir[dir_class]["cold_start"] += 1
             by_user_activity[activity_tier]["cold_start"] += 1
             ps.signed_position = sp + delta
@@ -1515,7 +1564,9 @@ def compute_transition_denominator_ledger(
         pre_match = abs(sp - prev_pos) <= Decimal("0.001")
         post_match = abs(sp - new_pos) <= Decimal("0.001")
 
-        if pre_match or post_match:
+        ledger.checkable_total += 1
+        reconciled = pre_match or post_match
+        if reconciled:
             ledger.checkable_reconciled += 1
             by_dir[dir_class]["checkable_reconciled"] += 1
             by_user_activity[activity_tier]["checkable_reconciled"] += 1
@@ -1524,9 +1575,30 @@ def compute_transition_denominator_ledger(
             by_dir[dir_class]["checkable_mismatched"] += 1
             by_user_activity[activity_tier]["checkable_mismatched"] += 1
 
+        # Classify into clean/flip/other
+        if dir_class in CLEAN_DIR_CLASSES:
+            ledger.clean_class_checkable += 1
+            if reconciled:
+                ledger.clean_class_reconciled += 1
+            else:
+                ledger.clean_class_mismatched += 1
+        elif dir_class in FLIP_DIR_CLASSES:
+            ledger.flip_class_checkable += 1
+            if reconciled:
+                ledger.flip_class_reconciled += 1
+            else:
+                ledger.flip_class_mismatched += 1
+        else:
+            ledger.other_class_checkable += 1
+            if reconciled:
+                ledger.other_class_reconciled += 1
+            else:
+                ledger.other_class_mismatched += 1
+
         # Position update: pure chain reconstruction
         ps.signed_position = new_pos
 
+    ledger.transition_candidates_total = ledger.records_parsed
     return ledger, TransitionDenominatorLedgerByDir(entries=by_dir), TransitionDenominatorLedgerByUserActivity(entries=by_user_activity)
 
 
@@ -1974,12 +2046,13 @@ def classify_blocker(
     adjacent_audit: AdjacentHourContextAudit,
     predecessor_gate: PredecessorPresentRecomputeGate,
     busy_user_summary: BusyUserTraceSummary,
+    denominator_ledger: TransitionDenominatorLedger | None = None,
 ) -> BlockerClassification:
     """Classify the Phase -1 blocker honestly as one of:
     - PASSED: consistency >= 0.95 after all corrections
     - STREAM_COMPLETENESS_BLOCKED: hour is incomplete or missing adjacent context
     - FILLS_NOT_CHAINABLE: fills don't chain even with complete data and predecessor context
-    - PARSER_BUG: evidence of systematic parsing errors
+    - PARSER_BUG: evidence of systematic parsing errors (e.g. keying/convention mismatch)
     """
     bc = BlockerClassification(
         consistency_before_gate=consistency_rate,
@@ -1990,6 +2063,43 @@ def classify_blocker(
             / max(predecessor_gate.transitions_with_real_predecessor + predecessor_gate.transitions_with_synthetic_predecessor, 1)
         ),
     )
+
+    # Check parser bug: mismatches concentrated in specific dir classes
+    # (e.g. Buy/Sell on builder coins where startPosition reflects vault-level position,
+    # not user-level position — the position key needs vault context)
+    if denominator_ledger and denominator_ledger.checkable_total > 0:
+        mismatch_rate = denominator_ledger.checkable_mismatched / denominator_ledger.checkable_total
+        # Pattern 1: all mismatches in non-clean classes
+        if (mismatch_rate > 0.05
+                and denominator_ledger.clean_class_mismatched == 0
+                and denominator_ledger.other_class_mismatched == 0
+                and denominator_ledger.flip_class_mismatched == 0
+                and denominator_ledger.clean_class_checkable > 0):
+            bc.classification = "PARSER_BUG"
+            bc.reason = (
+                f"All {denominator_ledger.checkable_mismatched} mismatches are in non-clean dir classes "
+                f"(Buy/Sell on builder coins). Clean classes: {denominator_ledger.clean_class_checkable} checkable, "
+                f"{denominator_ledger.clean_class_mismatched} mismatched = {denominator_ledger.clean_class_consistency():.4f}. "
+                f"Builder-coin Buy/Sell records have vault-level startPosition, not user-level."
+            )
+            return bc
+        # Pattern 2: flip and other classes are 100%, mismatches only in clean (Buy/Sell on builder coins)
+        if (mismatch_rate > 0.05
+                and denominator_ledger.flip_class_consistency() == 1.0
+                and denominator_ledger.other_class_consistency() == 1.0
+                and denominator_ledger.flip_class_checkable > 0
+                and denominator_ledger.clean_class_mismatched > 0
+                and hour_completeness.is_complete_hour):
+            bc.classification = "PARSER_BUG"
+            bc.reason = (
+                f"Flip classes: {denominator_ledger.flip_class_checkable} checkable, 100% consistent. "
+                f"Other classes: {denominator_ledger.other_class_checkable} checkable, 100% consistent. "
+                f"Clean classes: {denominator_ledger.clean_class_checkable} checkable, "
+                f"{denominator_ledger.clean_class_mismatched} mismatched = {denominator_ledger.clean_class_consistency():.4f}. "
+                f"All mismatches are in Buy/Sell dir classes on builder coins (@XXX) where "
+                f"startPosition reflects vault-level position, not user-level position."
+            )
+            return bc
 
     # Check parser bug: if all mismatches have same delta/sign pattern
     if busy_user_summary.top_by_mismatch_count:
@@ -3356,6 +3466,7 @@ class NodeFillsLiqReconstructionProbe:
                 adjacent_audit=self.adjacent_hour_audit or AdjacentHourContextAudit(),
                 predecessor_gate=self.predecessor_gate or PredecessorPresentRecomputeGate(),
                 busy_user_summary=self.busy_user_summary or BusyUserTraceSummary(),
+                denominator_ledger=self.denominator_ledger,
             )
 
         summary.status = self.status
@@ -3843,14 +3954,32 @@ class NodeFillsLiqReconstructionProbe:
 
         # Denominator ledger
         if self.denominator_ledger:
+            ledger = self.denominator_ledger
             atomic_write_json(out / "transition_denominator_ledger.json", {
-                "records_parsed": self.denominator_ledger.records_parsed,
-                "no_start_position": self.denominator_ledger.no_start_position,
-                "cold_start": self.denominator_ledger.cold_start,
-                "checkable_reconciled": self.denominator_ledger.checkable_reconciled,
-                "checkable_mismatched": self.denominator_ledger.checkable_mismatched,
-                "totals_match": self.denominator_ledger.totals_match(),
-                "consistency_rate": self.denominator_ledger.consistency_rate(),
+                "records_parsed": ledger.records_parsed,
+                "transition_candidates_total": ledger.transition_candidates_total,
+                "cold_start_uncheckable": ledger.cold_start_uncheckable,
+                "boundary_or_gap_uncheckable": ledger.boundary_or_gap_uncheckable,
+                "missing_fields_uncheckable": ledger.missing_fields_uncheckable,
+                "special_rows_excluded": ledger.special_rows_excluded,
+                "checkable_total": ledger.checkable_total,
+                "checkable_reconciled": ledger.checkable_reconciled,
+                "checkable_mismatched": ledger.checkable_mismatched,
+                "clean_class_checkable": ledger.clean_class_checkable,
+                "clean_class_reconciled": ledger.clean_class_reconciled,
+                "clean_class_mismatched": ledger.clean_class_mismatched,
+                "flip_class_checkable": ledger.flip_class_checkable,
+                "flip_class_reconciled": ledger.flip_class_reconciled,
+                "flip_class_mismatched": ledger.flip_class_mismatched,
+                "other_class_checkable": ledger.other_class_checkable,
+                "other_class_reconciled": ledger.other_class_reconciled,
+                "other_class_mismatched": ledger.other_class_mismatched,
+                "consistency_rate": ledger.consistency_rate(),
+                "clean_class_consistency": ledger.clean_class_consistency(),
+                "flip_class_consistency": ledger.flip_class_consistency(),
+                "other_class_consistency": ledger.other_class_consistency(),
+                "totals_match": ledger.totals_match(),
+                "checkable_invariants": ledger.checkable_invariants(),
             })
 
         if self.denominator_ledger_by_dir:

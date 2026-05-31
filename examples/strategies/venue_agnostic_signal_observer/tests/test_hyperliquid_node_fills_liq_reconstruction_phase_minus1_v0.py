@@ -679,7 +679,7 @@ def test_denominator_ledger_totals_match():
     ledger, by_dir, by_activity = probe_mod.compute_transition_denominator_ledger(recs, config)
 
     assert ledger.records_parsed == 3
-    assert ledger.cold_start == 1
+    assert ledger.cold_start_uncheckable == 1
     assert ledger.checkable_reconciled == 1
     assert ledger.checkable_mismatched == 1
     assert ledger.totals_match()
@@ -782,7 +782,7 @@ def test_cold_start_excluded_not_denominator_driver():
     # Cold start is separate from checkable
     checkable = ledger.checkable_reconciled + ledger.checkable_mismatched
     assert checkable == 1  # Only the second record is checkable
-    assert ledger.cold_start == 1
+    assert ledger.cold_start_uncheckable == 1
 
 
 # ---------------------------------------------------------------------------
