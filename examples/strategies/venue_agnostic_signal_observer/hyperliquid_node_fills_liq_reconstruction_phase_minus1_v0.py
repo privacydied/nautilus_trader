@@ -475,6 +475,34 @@ class LeverageJoinAudit:
 
 
 # ---------------------------------------------------------------------------
+# Wall 2 — shared helper functions (extracted from nested scopes for testing)
+# ---------------------------------------------------------------------------
+
+def _normalize_address(addr: str) -> str:
+    """Normalize an Ethereum-style address to lowercase with 0x prefix.
+
+    Handles bare hex strings, uppercase, mixed case, and missing 0x prefix.
+    """
+    a = addr.strip()
+    if not a.lower().startswith('0x'):
+        a = '0x' + a
+    return a.lower()
+
+
+def _extract_replica_cmds_date_from_key(key: str) -> str:
+    """Extract the YYYYMMDD date prefix from a replica_cmds S3 object key.
+
+    Key shape: replica_cmds/YYYY-MM-DDThh:mm:ssZ/YYYYMMDD/<timestamp>.lz4
+    Returns the YYYYMMDD string (e.g. '20250727') for range filtering.
+    """
+    parts = key.rstrip('/').split('/')
+    # Expected after split: ['replica_cmds', 'YYYY-MM-DDThh:mm:ssZ', 'YYYYMMDD', '<timestamp>.lz4']
+    if len(parts) >= 3:
+        return parts[2]
+    return ''
+
+
+# ---------------------------------------------------------------------------
 # Wall 2 — margin-mode kill-test dataclasses
 # ---------------------------------------------------------------------------
 
@@ -706,6 +734,7 @@ class TargetedBackwardLookupScanPlan:
     objects_skipped_budget_exhausted: int = 0
     skipped_oversized_objects: list[str] = field(default_factory=list)
     chronological_gap_count: int = 0
+    chronological_ranks_selected: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -726,6 +755,9 @@ class TargetedBackwardLookupObjectAudit:
     unresolved_pairs_after: int = 0
     newest_prior_matches_selected: int = 0
     coverage_start_pair_candidates: list[str] = field(default_factory=list)
+    # Wall 2 chronology tracking fields.
+    object_timestamp_ms: int = 0
+    chronological_rank: int = 0
 
 
 @dataclass
@@ -738,10 +770,13 @@ class TargetedBackwardLookupSummary:
     selected_target_notional_fraction: float = 0.0
     selected_target_notional_fraction_of_SOL: float = 0.0
     selected_target_notional_fraction_of_total_open: float = 0.0
+    selected_unique_addresses: int = 0
     objects_considered: int = 0
+    objects_selected: int = 0
     objects_downloaded: int = 0
     compressed_bytes_downloaded: int = 0
     cap: int = 0
+    remaining_cap: int = 0
     cap_exhausted: bool = False
     coverage_start_reached: bool = False
     stop_rule: str = ""
@@ -4683,7 +4718,7 @@ class NodeFillsLiqReconstructionProbe:
             latest_cutoffs[pair] = (pos.last_fill_block, ts)
 
         # Wall 2: chronology-strict selection using explicit timestamp extraction.
-        # Sort by (date_prefix, block_timestamp_ms) descending so newest objects come first.
+        # Sort by filename timestamp descending so newest objects come first.
         def _sort_key(obj):
             key = obj.get('Key', '')
             _, ts_int = _extract_replica_cmds_object_timestamp(key)
@@ -4691,17 +4726,27 @@ class NodeFillsLiqReconstructionProbe:
 
         sorted_objects = sorted(objects, key=_sort_key, reverse=True)
 
-        for obj in sorted_objects:
+        # Track chronological gaps and future exclusions for audit.
+        last_selected_ts: int = 0
+        selected_chronological_ranks: list[int] = []
+
+        for rank, obj in enumerate(sorted_objects, start=1):
             key = obj.get('Key', '')
             if not key.startswith('replica_cmds/'):
                 scan_plan.objects_skipped_non_data += 1
                 continue
-            size = int(obj.get('Size', 0) or 0)
+            size = int(obj.get('Size') or 0)
             if size <= 0:
                 scan_plan.objects_skipped_missing_size += 1
                 continue
 
-            # Date-range filter using extracted YYYYMMDD from key path
+            ts_date, ts_int = _extract_replica_cmds_object_timestamp(key)
+            if ts_int > 0:
+                cutoff_ms = max((cutoff[1] for cutoff in latest_cutoffs.values()), default=0) // 1_000_000
+                if cutoff_ms and ts_int > cutoff_ms:
+                    continue
+
+            # Date-range filter using extracted YYYYMMDD from key path.
             key_date = _extract_key_date(key)
             if not key_date or key_date < end_date_str or key_date > start_date_str:
                 continue
@@ -4709,26 +4754,38 @@ class NodeFillsLiqReconstructionProbe:
             scan_plan.objects_considered += 1
             if size > config.max_download_bytes:
                 scan_plan.objects_skipped_over_cap += 1
+                scan_plan.skipped_oversized_objects.append({
+                    'key': f'hl-mainnet-node-data/{key}',
+                    'timestamp_ms': ts_int,
+                    'size_bytes': size,
+                    'reason': 'single_object_exceeds_cap',
+                })
                 continue
             if scan_plan.estimated_compressed_bytes + size > config.max_download_bytes:
-                # Record skipped oversized object for gap analysis
                 scan_plan.objects_skipped_budget_exhausted += 1
-                ts_date, ts_int = _extract_replica_cmds_object_timestamp(key)
-                if ts_int > 0:
-                    scan_plan.skipped_oversized_objects.append({
-                        'key': f'hl-mainnet-node-data/{key}',
-                        'date': key_date,
-                        'timestamp_ms': ts_int,
-                        'size': size,
-                    })
+                scan_plan.skipped_oversized_objects.append({
+                    'key': f'hl-mainnet-node-data/{key}',
+                    'timestamp_ms': ts_int,
+                    'size_bytes': size,
+                    'reason': 'skipped_over_remaining_cap',
+                })
                 continue
+            if selected_objects and ts_int > 0 and last_selected_ts > 0 and last_selected_ts > ts_int:
+                gap_seconds = (last_selected_ts - ts_int) / 1_000
+                if gap_seconds > 3600:
+                    scan_plan.chronological_gap_count += 1
             selected_objects.append({
-                'key': f'hl-mainnet-node-data/{key}',
+                'key': key,
                 'size': size,
                 'date': key_date,
             })
             scan_plan.estimated_compressed_bytes += size
             scan_plan.objects_selected += 1
+            selected_chronological_ranks.append(rank)
+            if ts_int > 0:
+                last_selected_ts = ts_int
+
+        scan_plan.chronological_ranks_selected = selected_chronological_ranks
 
         # Copy listing audit to summary for cross-reference
         self.targeted_backward_lookup_summary = TargetedBackwardLookupSummary(
@@ -4740,10 +4797,13 @@ class NodeFillsLiqReconstructionProbe:
             selected_target_notional_fraction=selection_plan.selected_target_notional_fraction,
             selected_target_notional_fraction_of_SOL=selection_plan.selected_SOL_notional_fraction_of_SOL,
             selected_target_notional_fraction_of_total_open=selection_plan.selected_SOL_notional_fraction_of_total_open,
+            selected_unique_addresses=len({p.address for p in selected_positions}),
             objects_considered=scan_plan.objects_considered,
+            objects_selected=scan_plan.objects_selected,
             objects_downloaded=0,
             compressed_bytes_downloaded=0,
             cap=config.max_download_bytes,
+            remaining_cap=config.max_download_bytes,
             cap_exhausted=False,  # Will be set later based on real conditions
             coverage_start_reached=False,
             stop_rule='',
@@ -4828,6 +4888,9 @@ class NodeFillsLiqReconstructionProbe:
         source_or_decoder_blocked_pairs: set[tuple[str, str]] = set()
         coverage_start_reached_pairs: set[tuple[str, str]] = set()
 
+        # Track chronological ranks during download for object audit enrichment.
+        download_rank = 0
+
         for obj in selected_objects:
             if not unresolved:
                 break
@@ -4836,6 +4899,11 @@ class NodeFillsLiqReconstructionProbe:
                 cap_exhausted = True
                 break
             audit, matches, blocker = _parse_replica_cmds_target_object(obj, config, unresolved, symbol_to_asset_id, latest_cutoffs)
+            # Populate Wall 2 chronology tracking fields on the audit.
+            _, ts_int = _extract_replica_cmds_object_timestamp(audit.key)
+            audit.object_timestamp_ms = ts_int
+            audit.chronological_rank = download_rank
+            download_rank += 1
             if unresolved and obj.get('date') == scan_plan.replica_cmds_coverage_start:
                 audit.coverage_start_pair_candidates = [f'{redact_address(addr)}:{sym}' for addr, sym in unresolved.keys()]
                 coverage_start_reached_pairs.update(unresolved.keys())
@@ -4912,10 +4980,13 @@ class NodeFillsLiqReconstructionProbe:
             selected_target_notional_fraction=selection_plan.selected_target_notional_fraction,
             selected_target_notional_fraction_of_SOL=selection_plan.selected_SOL_notional_fraction_of_SOL,
             selected_target_notional_fraction_of_total_open=selection_plan.selected_SOL_notional_fraction_of_total_open,
+            selected_unique_addresses=len({p.address for p in selected_positions}),
             objects_considered=scan_plan.objects_considered,
+            objects_selected=scan_plan.objects_selected,
             objects_downloaded=len(self.targeted_backward_lookup_object_audit),
             compressed_bytes_downloaded=bytes_downloaded,
             cap=config.max_download_bytes,
+            remaining_cap=max(0, config.max_download_bytes - bytes_downloaded),
             cap_exhausted=cap_exhausted,
             coverage_start_reached=coverage_start_reached,
             stop_rule=stop_rule,
@@ -4940,6 +5011,11 @@ class NodeFillsLiqReconstructionProbe:
             objects_skipped_non_data=scan_plan.objects_skipped_non_data,
             smallest_listed_object_size=scan_plan.smallest_listed_object_size,
             largest_listed_object_size=scan_plan.largest_listed_object_size,
+            # Wall 2 chronology tracking: ms timestamps from object audits.
+            newest_downloaded_object_timestamp=str(newest_ts) if newest_ts else '',
+            oldest_downloaded_object_timestamp=str(oldest_ts) if oldest_ts else '',
+            scan_span_hours=(newest_ts - oldest_ts) / 3_600_000 if (newest_ts and oldest_ts and newest_ts > oldest_ts) else 0.0,
+            scan_span_days=((newest_ts - oldest_ts) / 3_600_000 / 24.0) if (newest_ts and oldest_ts and newest_ts > oldest_ts) else 0.0,
         )
         self.targeted_backward_lookup_matches = list(match_lookup.values())
 
@@ -4992,7 +5068,7 @@ class NodeFillsLiqReconstructionProbe:
         cap_exhausted = self.targeted_backward_lookup_summary.cap_exhausted
 
         if cap_exhausted and resolved_fraction == 0:
-            return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED.value
+            return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP.value
         if cap_exhausted and resolved_fraction < 0.60:
             return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED.value
         if resolved_fraction < 0.60:
@@ -5295,13 +5371,19 @@ class NodeFillsLiqReconstructionProbe:
         elif self.targeted_backward_lookup_scan_plan:
             _jsonl_write(out / 'targeted_backward_lookup_matches.jsonl', [])
         if self.targeted_backward_lookup_summary:
-            # Enrich summary with chronology and identity join fields before writing
-            enriched = dict(dataclasses.asdict(self.targeted_backward_lookup_summary))
-            if hasattr(self, '_identity_join_audit') and self._identity_join_audit:
-                enriched['identity_join_verdict'] = self._identity_join_audit.get('identity_join_verdict', 'UNVERIFIED')
-                enriched['intersection_target_vs_signers'] = self._identity_join_audit.get('intersection_target_vs_signers', 0)
-                enriched['intersection_target_vs_vault_addresses'] = self._identity_join_audit.get('intersection_target_vs_vault_addresses', 0)
-            atomic_write_json(out / 'targeted_backward_lookup_summary.json', enriched)
+             # Enrich summary with chronology and identity join fields before writing.
+             enriched = dict(dataclasses.asdict(self.targeted_backward_lookup_summary))
+             if hasattr(self, '_identity_join_audit') and self._identity_join_audit:
+                 enriched['identity_join_verdict'] = self._identity_join_audit.get('identity_join_verdict', 'UNVERIFIED')
+                 enriched['intersection_target_vs_signers'] = self._identity_join_audit.get('intersection_target_vs_signers', 0)
+                 enriched['intersection_target_vs_vault_addresses'] = self._identity_join_audit.get('intersection_target_vs_vault_addresses', 0)
+             if self.targeted_backward_lookup_scan_plan:
+                 enriched['selection_mode'] = self.targeted_backward_lookup_scan_plan.selection_mode
+                 enriched['objects_skipped_over_cap'] = self.targeted_backward_lookup_scan_plan.objects_skipped_over_cap
+                 enriched['objects_skipped_budget_exhausted'] = self.targeted_backward_lookup_scan_plan.objects_skipped_budget_exhausted
+                 enriched['chronological_gap_count'] = self.targeted_backward_lookup_scan_plan.chronological_gap_count
+                 enriched['skipped_oversized_objects'] = self.targeted_backward_lookup_scan_plan.skipped_oversized_objects[:50]
+             atomic_write_json(out / 'targeted_backward_lookup_summary.json', enriched)
         if self.targeted_margin_mode_classification:
             atomic_write_json(out / 'targeted_margin_mode_classification.json', [dataclasses.asdict(r) for r in self.targeted_margin_mode_classification])
         if self.targeted_margin_mode_classification_summary:
@@ -6518,7 +6600,8 @@ def _extract_replica_cmds_object_timestamp(key: str) -> tuple[str, int]:
 
     Key format: replica_cmds/YYYY-MM-DDThh:mm:ssZ/YYYYMMDD/<timestamp>.lz4
 
-    Returns (date_prefix_str, timestamp_int_ms).
+    Returns (date_prefix_str, timestamp_int_ms) where timestamp is the filename
+    integer component used for strict newest-prior chronology ordering.
     Returns ('unknown', 0) if the key doesn't match the expected format.
     """
     parts = key.split('/')
@@ -6540,6 +6623,81 @@ def _extract_replica_cmds_object_timestamp(key: str) -> tuple[str, int]:
             date_prefix = iso_part[:10].replace('-', '')
             return (date_prefix, 0)
     return ('unknown', 0)
+
+
+def _audit_previous_5gb_object_selection(
+    selected_object_rows: Sequence[dict[str, Any]],
+    candidate_object_rows: Sequence[dict[str, Any]] | None = None,
+    *,
+    previous_run_dir: str = '',
+    previous_terminal: str = '',
+    previous_compressed_bytes: int = 0,
+) -> dict[str, Any]:
+    selected = list(selected_object_rows)
+    candidates = list(candidate_object_rows or selected)
+
+    def _row_key(row: dict[str, Any]) -> str:
+        return str(row.get('key') or row.get('Key') or '')
+
+    def _row_size(row: dict[str, Any]) -> int:
+        return int(row.get('size_compressed') or row.get('size_bytes') or row.get('size') or row.get('Size') or 0)
+
+    candidate_sorted = sorted(
+        candidates,
+        key=lambda row: _extract_replica_cmds_object_timestamp(_row_key(row))[1],
+        reverse=True,
+    )
+    rank_lookup = {_row_key(row): idx + 1 for idx, row in enumerate(candidate_sorted)}
+    selected_keys = [_row_key(row) for row in selected]
+    selected_timestamps = [_extract_replica_cmds_object_timestamp(key)[1] for key in selected_keys]
+    selected_sizes = [_row_size(row) for row in selected]
+    selected_ranks = [rank_lookup.get(key, 0) for key in selected_keys]
+
+    expected_prefix = [rank_lookup.get(_row_key(row), 0) for row in candidate_sorted[:len(selected_keys)]]
+    selection_was_chronology_strict = bool(selected_ranks) and selected_ranks == expected_prefix
+    saw_backward_jump = any(
+        selected_timestamps[idx] < selected_timestamps[idx + 1]
+        for idx in range(len(selected_timestamps) - 1)
+    ) if len(selected_timestamps) >= 2 else False
+    lower_rank_after_higher = any(
+        selected_ranks[idx] > selected_ranks[idx + 1]
+        for idx in range(len(selected_ranks) - 1)
+        if selected_ranks[idx] and selected_ranks[idx + 1]
+    ) if len(selected_ranks) >= 2 else False
+    selection_was_size_biased = (not selection_was_chronology_strict) and (saw_backward_jump or lower_rank_after_higher)
+
+    selected_key_set = set(selected_keys)
+    nearest_prior_objects_not_selected = [
+        _row_key(row)
+        for row in candidate_sorted[: max(len(selected_keys), 10)]
+        if _row_key(row) not in selected_key_set
+    ]
+    if selection_was_chronology_strict:
+        reason_not_selected = 'NONE'
+        verdict = 'CHRONOLOGY_STRICT_NEAREST_PRIOR'
+    elif selection_was_size_biased:
+        reason_not_selected = 'NON_CHRONOLOGICAL_SELECTION_ORDER'
+        verdict = 'SIZE_BIASED_OR_NON_CHRONOLOGICAL_SELECTION'
+    else:
+        reason_not_selected = 'INSUFFICIENT_CANDIDATE_CONTEXT'
+        verdict = 'AMBIGUOUS_SELECTION'
+
+    return {
+        'previous_run_dir': previous_run_dir,
+        'previous_terminal': previous_terminal,
+        'previous_objects_downloaded': len(selected_keys),
+        'previous_compressed_bytes': previous_compressed_bytes,
+        'previous_selected_object_keys': selected_keys,
+        'previous_selected_object_timestamps': selected_timestamps,
+        'previous_selected_object_sizes': selected_sizes,
+        'selection_was_chronology_strict': selection_was_chronology_strict,
+        'selection_was_size_biased': selection_was_size_biased,
+        'selection_was_ambiguous': not selection_was_chronology_strict and not selection_was_size_biased,
+        'chronological_rank_of_selected_objects': selected_ranks,
+        'nearest_prior_objects_not_selected': nearest_prior_objects_not_selected,
+        'reason_nearest_prior_objects_not_selected': reason_not_selected,
+        'audit_verdict': verdict,
+    }
 
 
 def _plan_backward_replica_cmds_scan(
@@ -6621,12 +6779,6 @@ def _parse_replica_cmds_target_object(
         decoder_audit.decode_error_count += 1
     decode_errors.extend(parse_errors[:20])
     # Wall 2: normalize target addresses to lowercase with 0x prefix for identity matching.
-    def _normalize_address(addr: str) -> str:
-        a = addr.strip()
-        if not a.lower().startswith('0x'):
-            a = '0x' + a
-        return a.lower()
-
     target_addresses_normalized = {_normalize_address(p.address) for p in unresolved_pairs.values()}
     target_asset_ids = {symbol_to_asset_id[p.symbol] for p in unresolved_pairs.values() if p.symbol in symbol_to_asset_id}
     asset_id_to_symbol = {aid: sym for sym, aid in symbol_to_asset_id.items()}
@@ -6640,7 +6792,7 @@ def _parse_replica_cmds_target_object(
             continue
         update_count += 1
         asset_id = str(action.get('asset')) if action.get('asset') is not None else ''
-        identity = str(action.get('identity') or action.get('vaultAddress') or action.get('user') or action.get('address') or '')
+        identity = str(action.get('identity') or action.get('signer') or action.get('vaultAddress') or action.get('user') or action.get('address') or '')
         # Normalize identity for comparison
         identity_norm = _normalize_address(identity) if identity else ''
         if identity_norm in target_addresses_normalized:
@@ -6715,12 +6867,6 @@ def _build_identity_join_audit(
         'intersection_target_vs_any_action_identity': 0,
         'identity_join_verdict': 'UNVERIFIED',
     }
-
-    def _normalize_address(addr):
-        a = addr.strip()
-        if not a.lower().startswith('0x'):
-            a = '0x' + a
-        return a.lower()
 
     target_addrs_normalized = {_normalize_address(p.address) for p in selected_positions}
 
@@ -6992,31 +7138,57 @@ def _date_bucket_from_key(key: str) -> str:
     return "unknown"
 
 
-def _list_s3api_objects(prefix: str, max_keys: int = 100) -> list[dict]:
+def _list_s3api_objects(prefix: str, max_keys: int = 1000) -> list[dict]:
+    """List objects under prefix with full pagination via continuation tokens.
+
+    Uses --max-keys 1000 (AWS maximum) and loops on ContinuationToken until
+    all objects are enumerated. Returns at most the first max_keys entries to
+    avoid unbounded memory usage for very large prefixes.
+    """
     key_prefix = prefix
     bucket = "hl-mainnet-node-data"
     if prefix.startswith("hl-mainnet-node-data/"):
         key_prefix = prefix[len("hl-mainnet-node-data/"):]
-    res = _run_aws([
-        "aws", "s3api", "list-objects-v2",
-        "--bucket", bucket,
-        "--prefix", key_prefix,
-        "--max-keys", str(max_keys),
-        "--request-payer", "requester",
-    ], timeout=60)
-    if res.returncode != 0:
-        return []
-    try:
-        data = _json_loads((res.stdout or "{}").encode())
-    except Exception:
-        return []
-    out = []
-    for obj in data.get("Contents") or []:
-        key = obj.get("Key", "")
-        if not key or key.endswith("/"):
-            continue
-        out.append({"key": f"{bucket}/{key}", "size": int(obj.get("Size") or 0)})
-    return out
+
+    all_out: list[dict] = []
+    continuation_token: str | None = None
+    batch_size = max(max_keys, 1000)
+
+    while True:
+        cmd = [
+            "aws", "s3api", "list-objects-v2",
+            "--bucket", bucket,
+            "--prefix", key_prefix,
+            "--max-keys", str(batch_size),
+            "--request-payer", "requester",
+        ]
+        if continuation_token:
+            cmd.extend(["--continuation-token", continuation_token])
+
+        res = _run_aws(cmd, timeout=120)
+        if res.returncode != 0:
+            break
+        try:
+            data = _json_loads((res.stdout or "{}").encode())
+        except Exception:
+            break
+
+        for obj in data.get("Contents") or []:
+            key = obj.get("Key", "")
+            if not key or key.endswith("/"):
+                continue
+            all_out.append({"key": f"{bucket}/{key}", "size": int(obj.get("Size") or 0)})
+            if len(all_out) >= max_keys:
+                break
+
+        if len(all_out) >= max_keys:
+            break
+
+        continuation_token = data.get("NextContinuationToken")
+        if not continuation_token:
+            break
+
+    return all_out
 
 
 def _list_s3api_common_prefixes(prefix: str, max_keys: int = 100) -> list[str]:
@@ -7218,39 +7390,65 @@ def extract_replica_cmds_actions(obj: Any, path: str = "", depth: int = 0) -> tu
                 return val
         return None
 
-    def rec(x: Any, p: str, d: int) -> None:
+    def rec(x: Any, p: str, d: int, parent_vault_address: str = "", parent_signer: str = "") -> None:
         if d > 16:
             return
         if isinstance(x, list):
             # signed_action_bundles entries are frequently [signature/hash, payload].
             # Decode the payload side while retaining the envelope path.
+            # Capture signer hex from bundle index 0 for identity matching.
             if len(x) == 2 and isinstance(x[1], dict):
-                rec(x[1], f"{p}[payload]", d + 1)
+                bundle_signer = x[0] if isinstance(x[0], str) else ""
+                rec(x[1], f"{p}[payload]", d + 1, parent_vault_address, bundle_signer or parent_signer)
                 return
             for i, item in enumerate(x):
-                rec(item, f"{p}[{i}]", d + 1)
+                rec(item, f"{p}[{i}]", d + 1, parent_vault_address, parent_signer)
             return
         if not isinstance(x, dict):
             return
+        # Propagate vaultAddress from signed_action wrapper into nested action dicts.
+        current_vault = parent_vault_address or x.get("vaultAddress", "")
+        current_signer = parent_signer or ""
         t = action_type_from_dict(x)
         if isinstance(t, str):
             audit.actions_with_type_field += 1
             audit.action_type_counts[t] = audit.action_type_counts.get(t, 0) + 1
-            actions.append({**x, "action_type": t, "envelope_path": p})
+            action_entry = {**x, "action_type": t, "envelope_path": p}
+            # Wall 2: propagate vaultAddress from signed_action parent into the action dict
+            # so that identity matching in _parse_replica_cmds_target_object can find it.
+            if current_vault and not action_entry.get("vaultAddress"):
+                action_entry["vaultAddress"] = current_vault
+            # Wall 2: propagate signer hex from bundle index 0 for identity matching.
+            if current_signer and not action_entry.get("signer"):
+                action_entry["signer"] = current_signer
+            actions.append(action_entry)
         elif any(k in x for k in ("isCross", "leverage", "asset")):
             audit.actions_without_type_field += 1
-            actions.append({**x, "action_type": "updateLeverage" if {"isCross", "leverage", "asset"}.issubset(x.keys()) else "unknown", "envelope_path": p})
+            action_entry = {**x, "action_type": "updateLeverage" if {"isCross", "leverage", "asset"}.issubset(x.keys()) else "unknown", "envelope_path": p}
+            if current_vault and not action_entry.get("vaultAddress"):
+                action_entry["vaultAddress"] = current_vault
+            if current_signer and not action_entry.get("signer"):
+                action_entry["signer"] = current_signer
+            actions.append(action_entry)
         for k, v in x.items():
             np = f"{p}.{k}" if p else k
-            if k in ("signed_action_bundles", "signed_actions", "action", "multiSig", "payload", "actions"):
+            if k == "signed_actions" and isinstance(v, list):
+                # Propagate vaultAddress from each signed_action element to its nested action.
                 audit.envelope_paths_seen.append(np)
-                rec(v, np, d + 1)
+                for sa in v:
+                    if isinstance(sa, dict):
+                        sa_vault = sa.get("vaultAddress", "")
+                        rec(v, np, d + 1, sa_vault or current_vault)
+                        break  # rec will iterate the list itself
+            elif k in ("signed_action_bundles", "action", "multiSig", "payload", "actions"):
+                audit.envelope_paths_seen.append(np)
+                rec(v, np, d + 1, current_vault)
             elif isinstance(v, (dict, list)):
                 if isinstance(v, dict) and not any(kk in v for kk in ("type", "action", "payload", "multiSig", "actions", "signed_actions", "signed_action_bundles")):
                     audit.unknown_envelope_count += 1
                     if len(audit.unknown_envelope_examples_redacted) < 20:
                         audit.unknown_envelope_examples_redacted.append({"path": np, "keys": sorted(str(kk) for kk in list(v.keys())[:20])})
-                rec(v, np, d + 1)
+                rec(v, np, d + 1, current_vault)
     rec(obj, path, depth)
     audit.envelope_paths_seen = sorted(set(audit.envelope_paths_seen))
     if actions and audit.decode_error_count == 0:
@@ -7341,7 +7539,7 @@ def sample_update_leverage_density(config: StudyConfig, plan: ReplicaCmdsSourceE
             audit.decode_error_count += 1
         _merge_decoder_audit(merged_audit, audit)
         uls = [a for a in actions if (a.get("action_type") == "updateLeverage" or a.get("type") == "updateLeverage")]
-        identities = {str(a.get("identity") or a.get("user") or a.get("address")) for a in uls if a.get("identity") or a.get("user") or a.get("address")}
+        identities = {str(a.get("identity") or a.get("signer") or a.get("user") or a.get("address")) for a in uls if a.get("identity") or a.get("signer") or a.get("user") or a.get("address")}
         assets = {str(a.get("asset")) for a in uls if a.get("asset") is not None}
         sample = ReplicaCmdsDensityObjectSample(
             object_key=obj.get("key", ""),
@@ -7439,14 +7637,14 @@ def find_replica_cmds_update_leverage_slice(
     plan.local_cache_candidates = local_candidates[:20]
 
     # Check each local candidate for updateLeverage
-    import lz4.frame as _lz4f
     for cpath in local_candidates:
         try:
             if str(cpath).endswith(".lz4"):
                 full_compressed = Path(cpath).read_bytes()
                 # Decompress and check first 5MB for action types.
                 # updateLeverage actions may be deep in the file (~3-4MB into large files).
-                raw = _lz4f.decompress(full_compressed)[:5_000_000]
+                raw, _compression_mode = _decompress_lz4_best_effort(full_compressed)
+                raw = raw[:5_000_000]
             else:
                 compressed = Path(cpath).read_bytes()[:1024]
                 raw = compressed
@@ -7576,7 +7774,7 @@ def redact_update_leverage_samples(actions: Sequence[dict], limit: int = 100) ->
     """Return redacted updateLeverage samples with the required audit fields."""
     rows: list[dict] = []
     for action in list(actions)[:limit]:
-        identity = str(action.get("identity") or action.get("user") or action.get("address") or "")
+        identity = str(action.get("identity") or action.get("signer") or action.get("user") or action.get("address") or "")
         rows.append({
             "outer_block_number": action.get("block_number") or action.get("block") or "",
             "outer_timestamp_if_present": action.get("timestamp") or action.get("time") or "",
@@ -8086,7 +8284,7 @@ def classify_margin_mode_kill_test(
 
     leverage_map: dict[tuple[str, str], bool] = {}
     for action in decoded_actions:
-        addr = str(action.get('identity') or action.get('user') or action.get('address') or '').lower()
+        addr = str(action.get('identity') or action.get('signer') or action.get('user') or action.get('address') or '').lower()
         raw_asset = action.get('asset')
         asset_str = str(raw_asset) if raw_asset is not None else ''
         sym = id_to_symbol.get(asset_str, asset_str).upper()

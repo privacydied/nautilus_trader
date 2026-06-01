@@ -21,7 +21,7 @@ from examples.strategies.venue_agnostic_signal_observer import (
 )
 
 
-REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent.parent)
+REPO_ROOT = str(Path(__file__).resolve().parents[4])
 
 
 def _run_probe(out_root: str, data_root: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -132,12 +132,14 @@ def test_targeted_holder_lookup_cli_args_map_to_config():
         "--target-symbol", "SOL",
         "--target-top-n", "30",
         "--max-download-bytes", "5000000000",
+        "--replica-cmds-selection-mode", "chronology_strict_newest_prior",
     ])
     config = runner.build_config(args)
     assert config.wall2_targeted_holder_leverage_lookup is True
     assert config.target_symbol == "SOL"
     assert config.target_top_n == 30
     assert config.max_download_bytes == 5_000_000_000
+    assert config.replica_cmds_selection_mode == "chronology_strict_newest_prior"
 
 
 def test_runner_writes_audit_artifacts(tmp_path: Path):

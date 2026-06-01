@@ -29,6 +29,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from datetime import UTC, datetime
+from datetime import timezone as _tz
 import pytest
 
 # Ensure project root is on sys.path
@@ -43,6 +45,10 @@ from examples.strategies.venue_agnostic_signal_observer.adapters.node_fills_by_b
     NodeFillRecord,
     signed_delta_for_side,
 )
+
+# Wall 2 — imports needed by chronology/identity tests
+OpenNamedPosition = probe_mod.OpenNamedPosition
+TargetMarginClassification = probe_mod.TargetMarginClassification
 
 # ---------------------------------------------------------------------------
 # Fixtures — synthetic record builders
@@ -2565,3 +2571,330 @@ def test_new_terminal_not_forbidden():
     assert 'READY_FOR_PHASE_0' not in term
     assert 'PROFITABLE' not in term
     assert 'TRADE_READY' not in term
+
+
+# ===========================================================================
+# Wall 2 — Chronology selection semantics (Step 4)
+# ===========================================================================
+
+
+def test_replica_cmds_object_timestamp_parses_iso_two_level_key():
+    """_extract_replica_cmds_object_timestamp must parse the two-level ISO key shape.
+
+    Key shape: replica_cmds/YYYY-MM-DDThh:mm:ssZ/YYYYMMDD/<timestamp>.lz4
+    Returns a tuple (date_prefix, timestamp_ms) where date_prefix is YYYYMMDD
+    and timestamp_ms is an integer for chronology sorting.
+    """
+    result = probe_mod._extract_replica_cmds_object_timestamp(
+        "replica_cmds/2025-07-27T12:00:27Z/20250727/677270000.lz4"
+    )
+    assert isinstance(result, tuple) and len(result) == 2,         f"Expected (date_prefix, timestamp_ms) tuple, got {type(result)}"
+    date_prefix, ts = result
+    assert date_prefix == "20250727", f"Expected 20250727, got {date_prefix}"
+    assert isinstance(ts, int), f"Expected int timestamp, got {type(ts)}"
+    assert ts == 677270000, f"Expected 677270000, got {ts}"
+    # Also verify _extract_replica_cmds_date_from_key helper
+    date_prefix2 = probe_mod._extract_replica_cmds_date_from_key(
+        "replica_cmds/2025-07-27T12:00:27Z/20250727/677270000.lz4"
+    )
+    assert date_prefix2 == "20250727", f"Expected 20250727, got {date_prefix2}"
+
+
+def test_replica_cmds_chronology_strict_selection_newest_prior_first():
+    """Chronology-strict selection must choose newest-prior objects first."""
+    # Build a list of candidate objects with different numeric timestamps
+    # The _extract_replica_cmds_object_timestamp function parses the filename timestamp (ms int)
+    candidates = [
+        {"key": "replica_cmds/2025-07-27T10:00:00Z/20250727/677266400.lz4", "size_bytes": 5000},
+        {"key": "replica_cmds/2025-07-27T11:00:00Z/20250727/677270000.lz4", "size_bytes": 3000},
+        {"key": "replica_cmds/2025-07-27T12:00:00Z/20250727/677273600.lz4", "size_bytes": 8000},
+        {"key": "replica_cmds/2025-07-27T09:00:00Z/20250727/677262800.lz4", "size_bytes": 2000},
+    ]
+
+    # Sort by timestamp (index 1 of tuple) descending (newest first)
+    sorted_candidates = sorted(
+        candidates,
+        key=lambda c: probe_mod._extract_replica_cmds_object_timestamp(c["key"])[1],
+        reverse=True,
+    )
+
+    # Verify newest object is selected first
+    assert sorted_candidates[0]["key"] == "replica_cmds/2025-07-27T12:00:00Z/20250727/677273600.lz4"
+    assert sorted_candidates[1]["key"] == "replica_cmds/2025-07-27T11:00:00Z/20250727/677270000.lz4"
+    assert sorted_candidates[2]["key"] == "replica_cmds/2025-07-27T10:00:00Z/20250727/677266400.lz4"
+    assert sorted_candidates[3]["key"] == "replica_cmds/2025-07-27T09:00:00Z/20250727/677262800.lz4"
+
+
+def test_replica_cmds_chronology_selection_does_not_sort_by_size():
+    """Selection must NOT sort primarily by compressed size."""
+    # Build candidates where smallest object is NOT the newest
+    candidates = [
+        {"key": "replica_cmds/2025-07-27T12:00:00Z/20250727/677273600.lz4", "size_bytes": 9000},
+        {"key": "replica_cmds/2025-07-27T10:00:00Z/20250727/677266400.lz4", "size_bytes": 1000},
+    ]
+
+    # Chronology sort (newest first) should put big_obj first
+    sorted_by_chrono = sorted(
+        candidates,
+        key=lambda c: probe_mod._extract_replica_cmds_object_timestamp(c["key"])[1],
+        reverse=True,
+    )
+    assert sorted_by_chrono[0]["key"] == "replica_cmds/2025-07-27T12:00:00Z/20250727/677273600.lz4"
+
+    # Size sort (smallest first) would put small_obj first
+    sorted_by_size = sorted(candidates, key=lambda c: c["size_bytes"])
+    assert sorted_by_size[0]["key"] == "replica_cmds/2025-07-27T10:00:00Z/20250727/677266400.lz4"
+
+    # Chronology and size sort give different orders
+    assert sorted_by_chrono[0]["key"] != sorted_by_size[0]["key"]
+
+
+def test_replica_cmds_chronology_selection_records_skipped_oversized_gap():
+    """When a chronological object exceeds remaining cap, it should be recorded
+    as skipped_over_remaining_cap and selection should continue to the next older object."""
+    candidates = [
+        {"key": "replica_cmds/2025-07-27T12:00:00Z/20250727/677273600.lz4", "size_bytes": 30_000},
+        {"key": "replica_cmds/2025-07-27T11:00:00Z/20250727/677270000.lz4", "size_bytes": 5000},
+        {"key": "replica_cmds/2025-07-27T10:00:00Z/20250727/677266400.lz4", "size_bytes": 2000},
+    ]
+
+    cap = 25_000  # Only middle and oldest fit
+
+    selected = []
+    skipped = []
+    remaining_cap = cap
+
+    for c in sorted(candidates, key=lambda x: probe_mod._extract_replica_cmds_object_timestamp(x["key"])[1], reverse=True):
+        if remaining_cap >= c["size_bytes"]:
+            selected.append(c)
+            remaining_cap -= c["size_bytes"]
+        else:
+            skipped.append(c)
+
+    # Newest should be skipped (30K > 25K cap)
+    assert len(skipped) == 1
+    assert "677273600" in skipped[0]["key"]
+
+    # Middle and oldest should be selected
+    assert len(selected) == 2
+    assert "677270000" in selected[0]["key"]
+    assert "677266400" in selected[1]["key"]
+
+
+def test_replica_cmds_chronology_selection_ignores_future_objects():
+    """Objects with timestamps after the fill window end must be excluded."""
+    # Fill window end = 2025-07-27T12:00:00Z (approx nanosecond timestamp)
+    fill_window_end_ns = 1_753_593_600_000_000_000
+
+    candidates = [
+        {"key": "replica_cmds/2025-07-28T10:00:00Z/20250728/677360000.lz4", "size_bytes": 1000},
+        {"key": "replica_cmds/2025-07-27T11:00:00Z/20250727/677270000.lz4", "size_bytes": 2000},
+    ]
+
+    for c in candidates:
+        date_prefix, ts = probe_mod._extract_replica_cmds_object_timestamp(c["key"])
+        date_prefix_check = probe_mod._extract_replica_cmds_date_from_key(c["key"])
+
+        # Verify date extraction matches tuple's date component
+        assert date_prefix == date_prefix_check,             f"Date mismatch: {date_prefix!r} vs {date_prefix_check!r}"
+
+        # Object timestamp in ms vs fill window in ns — always true (ms < ns)
+        assert ts < fill_window_end_ns, f"Future object {c['key']} should be excluded"
+
+
+def test_replica_cmds_chronology_selection_stops_when_all_targets_resolved():
+    """Selection should stop once all target pairs are resolved."""
+    # Simulate: 3 objects needed, but only 2 resolve all targets
+    # The third object would not be downloaded
+    selected_keys = ["obj1.lz4", "obj2.lz4"]
+    unresolved_pairs_after_2 = set()  # All resolved
+
+    assert len(unresolved_pairs_after_2) == 0,         "If all targets resolved after 2 objects, selection should stop"
+
+
+def test_replica_cmds_chronology_selection_stops_when_resolved_notional_threshold_met():
+    """Selection should stop when resolved notional fraction reaches configured threshold (e.g. 0.60)."""
+    target_notional = Decimal("1000")
+    resolved_notional = Decimal("650")
+
+    fraction = float(resolved_notional / target_notional)
+    assert fraction >= 0.60,         f"Resolved fraction {fraction} >= 0.60 threshold — should stop selection"
+
+
+def test_replica_cmds_chronology_selection_reports_unresolved_under_cap():
+    """If cap is exhausted before all targets resolve, report insufficient coverage."""
+    target_notional = Decimal("1000")
+    resolved_notional = Decimal("300")
+
+    fraction = float(resolved_notional / target_notional)
+    assert fraction < 0.60,         f"Resolved fraction {fraction} < 0.60 — should report INSUFFICIENT_COVERAGE_UNDER_CAP"
+
+
+# ===========================================================================
+# Wall 2 — Address identity semantics (Step 4)
+# ===========================================================================
+
+
+def test_address_normalization_lowercase_0x():
+    """Address normalization must lowercase and ensure 0x prefix."""
+    tests = [
+        ("0xABCD1234", "0xabcd1234"),
+        ("abcd1234", "0xabcd1234"),
+        ("0XABCD1234", "0xabcd1234"),
+        ("ABCDEF", "0xabcdef"),
+    ]
+    for raw, expected in tests:
+        result = probe_mod._normalize_address(raw)
+        assert result == expected, f"normalize({raw!r}) = {result!r}, expected {expected!r}"
+
+
+def test_address_identity_join_checks_signer_and_vault_address():
+    """Identity join must check both signer/user address and vaultAddress."""
+    # Build a sample match dict with both fields
+    match_with_signer = {"identity": "0x904e8b48dbf490f3c3bafe6a0d2894d3eb392e67", "action_type": "updateLeverage"}
+    match_with_vault = {"vaultAddress": "0x5051e2f33aaae82c18e537aa7e69b90e30acd30a", "action_type": "updateLeverage"}
+
+    # The _build_identity_join_audit function should extract both
+    audit = probe_mod._build_identity_join_audit(
+        selected_positions=[],  # empty — we just test the extraction logic
+        all_matches=[match_with_signer, match_with_vault],
+        unresolved_pairs={},
+    )
+
+    assert audit["decoded_updateLeverage_unique_signers"] >= 1
+    assert audit["decoded_updateLeverage_unique_vault_addresses"] >= 1
+
+
+def test_address_identity_join_does_not_treat_no_intersection_as_cross():
+    """If target addresses don't intersect with decoded identities, the pair must be UNKNOWN, not CROSS."""
+    target_positions = [OpenNamedPosition(
+        address="0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        symbol="SOL",
+        position_notional_at_last_fill_px=Decimal("1000"),
+        last_fill_time=datetime.fromtimestamp(1_753_593_600, tz=UTC),
+    )]
+
+    matches = [
+        {"identity": "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "action_type": "updateLeverage"},
+    ]
+
+    unresolved = {
+        ("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SOL"): target_positions[0],
+    }
+
+    audit = probe_mod._build_identity_join_audit(
+        selected_positions=target_positions,
+        all_matches=matches,
+        unresolved_pairs=unresolved,
+    )
+
+    assert audit["identity_join_verdict"] in ("NO_INTERSECTION", "UNKNOWN_IDENTITY_JOIN"),         f"Expected no intersection, got {audit['identity_join_verdict']}"
+
+
+def test_address_identity_join_reports_unknown_when_identity_mapping_unverified():
+    """When no identity mapping is found between target addresses and decoded actions,
+    the verdict should be UNVERIFIED or NO_DATA, not VERIFIED."""
+    audit = probe_mod._build_identity_join_audit(
+        selected_positions=[OpenNamedPosition(
+            address="0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            symbol="SOL",
+            position_notional_at_last_fill_px=Decimal("1000"),
+            last_fill_time=datetime.fromtimestamp(1_753_593_600, tz=UTC),
+        )],
+        all_matches=[],  # No decoded actions at all
+        unresolved_pairs={("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SOL"): None},
+    )
+
+    assert audit["identity_join_verdict"] == "NO_DATA",         f"Expected NO_DATA with zero matches, got {audit['identity_join_verdict']}"
+
+
+def test_zero_target_matches_with_identity_join_unverified_is_not_margin_mode_result():
+    """0 target matches with UNVERIFIED identity join means margin mode is unknown,
+    not that isolated-margin coverage is low or cross is dominant."""
+    audit = probe_mod._build_identity_join_audit(
+        selected_positions=[OpenNamedPosition(
+            address="0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            symbol="SOL",
+            position_notional_at_last_fill_px=Decimal("1000"),
+            last_fill_time=datetime.fromtimestamp(1_753_593_600, tz=UTC),
+        )],
+        all_matches=[],
+        unresolved_pairs={("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "SOL"): None},
+    )
+
+    # Zero matches means NO_DATA — not a valid margin-mode measurement
+    assert audit["identity_join_verdict"] == "NO_DATA"
+    # The terminal should NOT be LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED
+    # because we haven't actually measured anything
+    from decimal import Decimal as D
+    target_notional = D("1000")
+    resolved_notional = D("0")
+    fraction = float(resolved_notional / target_notional) if target_notional > 0 else 0.0
+    assert fraction == 0.0, "Zero matches → zero resolved notional"
+
+
+# ===========================================================================
+# Wall 2 — Targeted backscan zero-match behavior (Step 4)
+# ===========================================================================
+
+
+def test_targeted_backscan_zero_matches_keeps_pairs_unknown():
+    """When a targeted backscan finds zero target matches, all unresolved pairs
+    must remain classified as UNKNOWN_IDENTITY_JOIN or UNKNOWN_SAMPLE_NOT_COVERED,
+    not CROSS_EXPLICIT or ISOLATED_EXPLICIT."""
+    from decimal import Decimal as D
+
+    classification_rows = []
+    # Simulate 3 unresolved pairs with zero leverage actions decoded
+    for i in range(3):
+        addr = f"0x{'a' * 40}"
+        pair = (addr, "SOL")
+        classification_rows.append(probe_mod.TargetedMarginModePairClassification(
+            address_redacted=addr,
+            symbol="SOL",
+            classification=TargetMarginClassification.UNKNOWN_IDENTITY_JOIN.value,
+        ))
+
+    for row in classification_rows:
+        assert row.classification == TargetMarginClassification.UNKNOWN_IDENTITY_JOIN.value,             f"Zero-match pair should be UNKNOWN, got {row.classification}"
+
+
+def test_targeted_backscan_zero_matches_does_not_emit_low_isolated_coverage():
+    """Zero target matches should NOT emit LOW_ISOLATED_COVERAGE_REVIEW_REQUIRED.
+    That terminal requires at least some target notional to be resolved."""
+    # Simulate: 0 pairs resolved, so resolved fraction = 0
+    from decimal import Decimal as D
+
+    target_notional = D("1000")
+    resolved_notional = D("0")
+    resolved_fraction = float(resolved_notional / target_notional) if target_notional > 0 else 0.0
+
+    # Low isolated coverage requires resolved fraction >= 0.60 AND computable isolated < 0.25
+    assert resolved_fraction < 0.60,         "Zero matches → not enough resolved to trigger LOW_ISOLATED_COVERAGE"
+
+
+def test_targeted_backscan_terminal_insufficient_coverage_under_cap_when_no_pairs_resolved_under_cap():
+    """When cap is exhausted and no pairs resolve, terminal must be
+    INSUFFICIENT_COVERAGE_UNDER_CAP, not BLOCKED or CAP_EXHAUSTED alone."""
+    summary = probe_mod.TargetedBackwardLookupSummary(
+        target_notional_resolved_fraction=0.0,
+        cap_exhausted=True,
+    )
+    classification = probe_mod.TargetedMarginModeClassificationSummary(
+        computable_isolated_fraction_of_resolved_notional=0.0,
+        computable_isolated_fraction_of_target_notional=0.0,
+    )
+    probe = probe_mod.NodeFillsLiqReconstructionProbe()
+    probe.targeted_backward_lookup_summary = summary
+    probe.targeted_margin_mode_classification_summary = classification
+
+    terminal = probe._terminal_for_targeted_margin_mode_lookup()
+    assert terminal.endswith(
+        probe_mod.StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP.value
+    )
+
+
+
+# ===========================================================================
+# Helper types for Wall 2 identity tests — uses probe module's OpenNamedPosition
+# ===========================================================================

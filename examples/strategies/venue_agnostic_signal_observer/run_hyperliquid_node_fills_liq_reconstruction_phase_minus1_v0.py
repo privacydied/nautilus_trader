@@ -41,8 +41,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Ensure the project root is on sys.path for imports
-_repo_root = str(Path(__file__).resolve().parent.parent.parent)
+# Ensure the repository root is on sys.path for imports
+_repo_root = str(Path(__file__).resolve().parents[3])
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 

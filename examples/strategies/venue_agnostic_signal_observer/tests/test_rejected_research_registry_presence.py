@@ -17,7 +17,7 @@ STUDY_ID = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
 
 def test_registry_file_exists():
     """The study registry should exist."""
-    repo_root = str(Path(__file__).resolve().parent.parent.parent.parent)
+    repo_root = str(Path(__file__).resolve().parents[4])
     registry_path = Path(repo_root) / "examples/strategies/venue_agnostic_signal_observer" / "data" / "rejected_research_registry.json"
 
     # The registry may not exist yet if no studies have been rejected
@@ -30,7 +30,7 @@ def test_probe_does_not_create_registry():
     import subprocess
     import sys
 
-    repo_root = str(Path(__file__).resolve().parent.parent.parent.parent)
+    repo_root = str(Path(__file__).resolve().parents[4])
 
     # Find or create a temp output dir
     out_dir = Path("/tmp/test_probe_registry")
