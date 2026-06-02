@@ -13,6 +13,7 @@ from ..paper.models import PaperExecutionMode, PaperStrategySpec, PaperStrategyS
 from ..paper.refalsification import (
     RefalsificationConfig,
     RefalsificationDecision,
+    _find_latest_artifact,
     refalsify_strategy,
     run_refalsification_once,
 )
@@ -61,7 +62,8 @@ def _setup_artifacts(
     study_id: str = "test_study",
     null_rejected: bool = False,
 ) -> Path:
-    study_dir = artifacts_root / f"{study_id}_report_20260101"
+    # Production convention: directory name is exactly the study_id
+    study_dir = artifacts_root / study_id
     study_dir.mkdir(parents=True, exist_ok=True)
 
     # Null test results
@@ -148,7 +150,7 @@ class TestRefalsifyStrategy:
     def test_fdr_now_fails_disables(self, tmp_path: Path) -> None:
         """FDR now fails → disables."""
         strategy = _make_enabled_strategy()
-        study_dir = tmp_path / "test_study_report_20260101"
+        study_dir = tmp_path / "test_study"
         study_dir.mkdir(parents=True, exist_ok=True)
         # Write stage2 results with fdr_blocked=True
         from ..conductor.atomic_io import write_json_atomic
@@ -172,7 +174,7 @@ class TestRefalsifyStrategy:
     def test_holdout_now_fails_disables(self, tmp_path: Path) -> None:
         """Holdout now fails → disables."""
         strategy = _make_enabled_strategy()
-        study_dir = tmp_path / "test_study_report_20260101"
+        study_dir = tmp_path / "test_study"
         study_dir.mkdir(parents=True, exist_ok=True)
         from ..conductor.atomic_io import write_json_atomic
         write_json_atomic(
@@ -197,7 +199,7 @@ class TestRefalsifyStrategy:
     ) -> None:
         """Cross-capture median now below cost floor → disables."""
         strategy = _make_enabled_strategy()
-        study_dir = tmp_path / "test_study_report_20260101"
+        study_dir = tmp_path / "test_study"
         study_dir.mkdir(parents=True, exist_ok=True)
         from ..conductor.atomic_io import write_json_atomic
         write_json_atomic(
@@ -229,7 +231,7 @@ class TestRefalsifyStrategy:
     ) -> None:
         """Cross-capture median negative → disables."""
         strategy = _make_enabled_strategy()
-        study_dir = tmp_path / "test_study_report_20260101"
+        study_dir = tmp_path / "test_study"
         study_dir.mkdir(parents=True, exist_ok=True)
         from ..conductor.atomic_io import write_json_atomic
         write_json_atomic(
@@ -384,3 +386,95 @@ class TestRefalsifyStrategy:
         assert "EXECUTION_READY" not in report
         assert "LIVE_READY" not in report
         assert "CANDIDATE_FOR_LIVE" not in report
+
+
+class TestFindLatestArtifactExactMatch:
+    """Regression tests for exact study_id matching in _find_latest_artifact."""
+
+    def test_find_latest_artifact_ignores_substring_study_id_match(
+        self, tmp_path: Path
+    ) -> None:
+        """Target study_id='abc' must return exact 'abc' artifact, not 'abc_extra'."""
+        # Create older exact artifact for "abc"
+        exact_dir = tmp_path / "abc"
+        exact_dir.mkdir()
+        (exact_dir / "null_test_results.json").write_text("{}")
+        # Set mtime to older
+        import os
+        os.utime(exact_dir, (1000, 1000))
+
+        # Create newer unrelated artifact for "abc_extra"
+        superset_dir = tmp_path / "abc_extra"
+        superset_dir.mkdir()
+        (superset_dir / "null_test_results.json").write_text("{}")
+        # Set mtime to newer
+        os.utime(superset_dir, (2000, 2000))
+
+        result = _find_latest_artifact(tmp_path, "abc")
+        assert result is not None
+        assert result.name == "abc", (
+            f"Expected exact match 'abc', got '{result.name}' "
+            "(substring bug: abc_extra selected instead)"
+        )
+
+    def test_find_latest_artifact_returns_none_when_only_superset_study_exists(
+        self, tmp_path: Path
+    ) -> None:
+        """Target study_id='abc' must return None when only 'abc_extra' exists."""
+        superset_dir = tmp_path / "abc_extra"
+        superset_dir.mkdir()
+        (superset_dir / "null_test_results.json").write_text("{}")
+
+        result = _find_latest_artifact(tmp_path, "abc")
+        assert result is None, (
+            f"Expected None for exact-match-only lookup, got '{result.name}' "
+            "(substring bug: abc_extra should not match abc)"
+        )
+
+    def test_find_latest_artifact_selects_latest_exact_match(
+        self, tmp_path: Path
+    ) -> None:
+        """Two exact artifacts for 'abc' — select latest by mtime."""
+        import os
+
+        older_dir = tmp_path / "abc_older"
+        older_dir.mkdir()
+        os.utime(older_dir, (1000, 1000))
+
+        newer_dir = tmp_path / "abc_newer"
+        newer_dir.mkdir()
+        os.utime(newer_dir, (2000, 2000))
+
+        # Neither should match "abc" exactly
+        result = _find_latest_artifact(tmp_path, "abc")
+        assert result is None
+
+    def test_find_latest_artifact_exact_directory_name_match(
+        self, tmp_path: Path
+    ) -> None:
+        """Directory named exactly study_id is found."""
+        target = tmp_path / "hyperliquid_node_fills"
+        target.mkdir()
+        (target / "null_test_results.json").write_text("{}")
+
+        result = _find_latest_artifact(tmp_path, "hyperliquid_node_fills")
+        assert result is not None
+        assert result.name == "hyperliquid_node_fills"
+
+    def test_find_latest_artifact_no_cross_match_between_similar_studies(
+        self, tmp_path: Path
+    ) -> None:
+        """study_id='hyperliquid_node_fills' must not match
+        'hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0'."""
+        import os
+
+        # Create the longer-named study artifact (newer)
+        longer_dir = tmp_path / "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+        longer_dir.mkdir()
+        os.utime(longer_dir, (2000, 2000))
+
+        result = _find_latest_artifact(tmp_path, "hyperliquid_node_fills")
+        assert result is None, (
+            f"Expected None, got '{result.name}' "
+            "(substring bug: longer study_id matched as substring)"
+        )
