@@ -86,6 +86,16 @@ MOVED_CONFIG_CONSTANTS = (
     'STUDY_SALT',
     'CANDIDATE_NAMESPACES',
 )
+MOVED_PARSING_HELPERS = (
+    '_normalize_address',
+    '_extract_replica_cmds_date_from_key',
+    '_extract_replica_cmds_object_timestamp',
+    '_extract_action_order_key',
+    '_decimal_str',
+)
+MOVED_BARS_HELPERS = (
+    '_date_bucket_from_key',
+)
 FORBIDDEN_TERMS = {
     'paper',
     'paper_dashboard',
@@ -387,3 +397,63 @@ def test_moved_model_dataclass_fields_match_expected_defaults_and_factories():
             else:
                 assert field.default == expected_default
                 assert field.default_factory is dataclasses.MISSING
+
+
+def test_moved_parsing_helpers_remain_exposed_via_runner_package_and_legacy_wrapper():
+    legacy = importlib.import_module(LEGACY_MODULE)
+    pkg = importlib.import_module(PACKAGE_MODULE)
+    runner = importlib.import_module(RUNNER_MODULE)
+    parsing = importlib.import_module(f'{PACKAGE_MODULE}.parsing')
+    for name in MOVED_PARSING_HELPERS:
+        assert hasattr(parsing, name), f'parsing missing {name}'
+        assert hasattr(runner, name), f'runner missing {name}'
+        assert hasattr(pkg, name), f'package missing {name}'
+        assert hasattr(legacy, name), f'legacy missing {name}'
+        assert getattr(runner, name) is getattr(parsing, name), name
+        assert getattr(pkg, name) is getattr(parsing, name), name
+        assert getattr(legacy, name) is getattr(parsing, name), name
+
+
+def test_moved_bars_helpers_remain_exposed_via_runner_package_and_legacy_wrapper():
+    legacy = importlib.import_module(LEGACY_MODULE)
+    pkg = importlib.import_module(PACKAGE_MODULE)
+    runner = importlib.import_module(RUNNER_MODULE)
+    bars = importlib.import_module(f'{PACKAGE_MODULE}.bars')
+    for name in MOVED_BARS_HELPERS:
+        assert hasattr(bars, name), f'bars missing {name}'
+        assert hasattr(runner, name), f'runner missing {name}'
+        assert hasattr(pkg, name), f'package missing {name}'
+        assert hasattr(legacy, name), f'legacy missing {name}'
+        assert getattr(runner, name) is getattr(bars, name), name
+        assert getattr(pkg, name) is getattr(bars, name), name
+        assert getattr(legacy, name) is getattr(bars, name), name
+
+
+def test_moved_parsing_helper_smoke():
+    parsing = importlib.import_module(f'{PACKAGE_MODULE}.parsing')
+    assert parsing._normalize_address('0xABC123') == '0xabc123'
+    assert parsing._normalize_address('abc123') == '0xabc123'
+    assert parsing._extract_replica_cmds_date_from_key('replica_cmds/2025-07-27T00:00:00Z/20250727/123.lz4') == '20250727'
+    assert parsing._extract_replica_cmds_date_from_key('random/key') == ''
+    date_prefix, ts = parsing._extract_replica_cmds_object_timestamp('replica_cmds/2025-07-27T00:00:00Z/20250727/677270000.lz4')
+    assert date_prefix == '20250727'
+    assert ts == 677270000
+    assert parsing._extract_action_order_key({'block': 10, 'nonce': 5}) == (10, 5)
+    assert parsing._decimal_str(None) == '0'
+    assert parsing._decimal_str(3.14) == '3.14'
+
+
+def test_moved_bars_helper_smoke():
+    bars = importlib.import_module(f'{PACKAGE_MODULE}.bars')
+    assert bars._date_bucket_from_key('replica_cmds/2025-07-27/20250727/123.lz4') == '2025-07-27'
+    assert bars._date_bucket_from_key('random/key') == 'unknown'
+
+
+def test_parsing_module_has_all():
+    parsing = importlib.import_module(f'{PACKAGE_MODULE}.parsing')
+    assert set(getattr(parsing, '__all__', ())) == set(MOVED_PARSING_HELPERS)
+
+
+def test_bars_module_has_all():
+    bars = importlib.import_module(f'{PACKAGE_MODULE}.bars')
+    assert set(getattr(bars, '__all__', ())) == set(MOVED_BARS_HELPERS)
