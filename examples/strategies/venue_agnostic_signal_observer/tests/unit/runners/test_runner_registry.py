@@ -356,7 +356,8 @@ class TestRunnerSpecLazyImports:
         _clear_lazy_modules()
         module = HYPERLIQUID_COST_FEASIBILITY.import_package_module()
         assert module.__name__ == HYPERLIQUID_COST_FEASIBILITY.package_module
-        assert hasattr(module, "compute_cost_feasibility")
+        assert hasattr(module, "METADATA")
+        assert not hasattr(module, "compute_cost_feasibility")
 
     def test_cost_feasibility_import_implementation_module(self) -> None:
         _clear_lazy_modules()

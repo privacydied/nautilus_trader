@@ -1,9 +1,5 @@
-"""Hyperliquid cost-feasibility hypothesis package."""
+"""Metadata-only package descriptor for Hyperliquid cost-feasibility."""
 
-from .compat import __all__ as __all__
-from .compat import export_namespace as export_namespace
-from .compat import export_namespace as _export_namespace
+from .metadata import METADATA as METADATA
 
-globals().update(_export_namespace())
-
-del _export_namespace
+__all__ = ("METADATA",)

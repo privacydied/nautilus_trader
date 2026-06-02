@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from examples.strategies.venue_agnostic_signal_observer.hypotheses.package_contract import (
     HypothesisPackageMetadata,
 )
@@ -7,8 +9,19 @@ from examples.strategies.venue_agnostic_signal_observer.hypotheses.package_contr
     validate_hypothesis_metadata,
 )
 
+_COST_FEASIBILITY_METADATA_TEMPLATE = HypothesisPackageMetadata(
+    key="",
+    study_id="",
+    family="",
+    venue="",
+    phase="",
+    description="",
+    tags=(),
+)
+
 METADATA = validate_hypothesis_metadata(
-    HypothesisPackageMetadata(
+    replace(
+        _COST_FEASIBILITY_METADATA_TEMPLATE,
         key="hyperliquid_cost_feasibility",
         study_id="hyperliquid_cost_feasibility",
         family="cost_feasibility",
@@ -28,5 +41,7 @@ METADATA = validate_hypothesis_metadata(
         legacy_module="examples.strategies.venue_agnostic_signal_observer.hyperliquid_cost_feasibility",
     )
 )
+
+assert isinstance(METADATA, HypothesisPackageMetadata)
 
 __all__ = ("METADATA",)

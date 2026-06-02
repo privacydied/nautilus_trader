@@ -125,7 +125,7 @@ class TestRunnerCliSpecRegistryContract:
             f"subprocess failed:\nstdout={result.stdout}\nstderr={result.stderr}"
         )
         assert "hits []" in result.stdout
-        assert f"cost_runner_imported {True}" in result.stdout
+        assert f"cost_runner_imported {False}" in result.stdout
         assert f"cost_entry_imported {False}" in result.stdout
 
     def test_registered_runner_spec_keys_are_deterministic(self) -> None:
@@ -236,7 +236,7 @@ class TestRunnerCliSpecRegistryContract:
         )
         assert result.stdout.strip().endswith("OK")
 
-    def test_importing_cli_specs_and_registry_imports_only_cost_feasibility_runner_not_legacy_cli(self) -> None:
+    def test_importing_cli_specs_and_registry_does_not_import_cost_feasibility_runner(self) -> None:
         code = textwrap.dedent(
             f"""
             import sys
@@ -244,7 +244,7 @@ class TestRunnerCliSpecRegistryContract:
             from examples.strategies.venue_agnostic_signal_observer.runners import cli_specs, registry
             after = set(sys.modules)
             new = after - before
-            assert {_COST_RUNNER_MODULE!r} in new
+            assert {_COST_RUNNER_MODULE!r} not in new
             assert {_COST_ENTRY_MODULE!r} not in new
             print("OK")
             """
@@ -286,20 +286,3 @@ class TestRunnerCliSpecRegistryContract:
             f"subprocess failed:\nstdout={result.stdout}\nstderr={result.stderr}"
         )
 
-    def test_importing_cli_specs_and_registry_imports_only_cost_feasibility_runner_not_legacy_cli(self) -> None:
-        code = textwrap.dedent(
-            f"""
-            import sys
-            before = set(sys.modules)
-            from examples.strategies.venue_agnostic_signal_observer.runners import cli_specs, registry
-            after = set(sys.modules)
-            new = after - before
-            assert {_COST_RUNNER_MODULE!r} in new
-            assert {_COST_ENTRY_MODULE!r} not in new
-            print("OK")
-            """
-        )
-        result = _run_isolated_python(code)
-        assert result.returncode == 0, (
-            f"subprocess failed:\nstdout={result.stdout}\nstderr={result.stderr}"
-        )

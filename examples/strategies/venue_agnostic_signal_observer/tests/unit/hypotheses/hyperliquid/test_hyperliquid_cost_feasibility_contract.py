@@ -81,60 +81,21 @@ def test_old_root_wrapper_has_no_algorithmic_defs() -> None:
     assert defs == []
 
 
-def test_package_init_is_small() -> None:
-    assert len(PACKAGE_INIT_PATH.read_text().splitlines()) <= 10
+def test_package_init_remains_metadata_only_small() -> None:
+    assert len(PACKAGE_INIT_PATH.read_text().splitlines()) <= 5
 
 
-def test_package_all_is_deterministic_tuple() -> None:
+def test_package_all_is_metadata_only_tuple() -> None:
     package = _reload_module(PACKAGE_MODULE)
     assert isinstance(package.__all__, tuple)
-    assert package.__all__ == (
-        "PROCEED_TO_V1_EVALUATION",
-        "DO_NOT_PROCEED_COST_WALL_PERSISTS",
-        "INSUFFICIENT_LIVE_CAPTURE",
-        "AWAITING_STRESS_WINDOWS",
-        "DataSource",
-        "CoinCostSummary",
-        "CostFeasibilityResult",
-        "compute_cost_feasibility",
-        "write_cost_outputs",
-    )
+    assert package.__all__ == ("METADATA",)
 
 
-def test_every_package_all_symbol_exists_on_package() -> None:
+def test_package_exposes_metadata_object() -> None:
     package = _reload_module(PACKAGE_MODULE)
-    for name in package.__all__:
-        assert hasattr(package, name)
-
-
-def test_every_package_all_symbol_exists_on_runner() -> None:
-    package = _reload_module(PACKAGE_MODULE)
-    runner = _reload_module(RUNNER_MODULE)
-    for name in package.__all__:
-        assert hasattr(runner, name)
-
-
-def test_every_package_all_symbol_resolves_to_same_object_as_runner() -> None:
-    runner = _reload_module(RUNNER_MODULE)
-    package = _reload_module(PACKAGE_MODULE)
-    for name in package.__all__:
-        assert getattr(package, name) is getattr(runner, name)
-
-
-def test_legacy_wrapper_exposes_every_package_all_symbol() -> None:
-    legacy = _reload_module(LEGACY_MODULE)
-    package = _reload_module(PACKAGE_MODULE)
-    for name in package.__all__:
-        assert hasattr(legacy, name)
-
-
-def test_legacy_wrapper_symbol_identity_matches_package_and_runner() -> None:
-    runner = _reload_module(RUNNER_MODULE)
-    package = _reload_module(PACKAGE_MODULE)
-    legacy = _reload_module(LEGACY_MODULE)
-    for name in package.__all__:
-        assert getattr(legacy, name) is getattr(package, name)
-        assert getattr(legacy, name) is getattr(runner, name)
+    metadata_mod = _reload_module(METADATA_MODULE)
+    assert hasattr(package, "METADATA")
+    assert package.METADATA == metadata_mod.METADATA
 
 
 def test_cli_still_imports_old_root_module() -> None:
@@ -163,7 +124,9 @@ def test_registry_import_does_not_import_cost_feasibility_runner() -> None:
     assert NODE_FILLS_RUNNER_MODULE not in sys.modules
 
 
-def test_metadata_import_does_not_import_node_fills_runner() -> None:
+def test_metadata_import_does_not_import_cost_feasibility_runner_or_node_fills_runner() -> None:
+    sys.modules.pop(RUNNER_MODULE, None)
     sys.modules.pop(NODE_FILLS_RUNNER_MODULE, None)
     _reload_module(METADATA_MODULE)
+    assert RUNNER_MODULE not in sys.modules
     assert NODE_FILLS_RUNNER_MODULE not in sys.modules
