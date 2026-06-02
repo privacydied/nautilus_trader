@@ -5,6 +5,10 @@ from importlib import import_module
 from types import ModuleType
 
 from examples.strategies.venue_agnostic_signal_observer.hypotheses.base import HypothesisRunner
+from examples.strategies.venue_agnostic_signal_observer.hypotheses.package_contract import (
+    HypothesisPackageMetadata,
+    validate_hypothesis_metadata,
+)
 from examples.strategies.venue_agnostic_signal_observer.runners.base import RegisteredRunner
 
 # ---------------------------------------------------------------------------
@@ -65,6 +69,45 @@ class RunnerSpec:
     package_module: str
     legacy_module: str
     tags: tuple[str, ...] = ()
+
+    @classmethod
+    def from_hypothesis_metadata(
+        cls,
+        metadata: HypothesisPackageMetadata,
+    ) -> RunnerSpec:
+        """Build a runner spec from validated metadata-only package metadata."""
+        validated = validate_hypothesis_metadata(metadata)
+        cli_module = validated.cli_module
+        implementation_module = validated.implementation_module
+        package_module = validated.package_module
+        legacy_module = validated.legacy_module
+        required_modules = {
+            "cli_module": cli_module,
+            "implementation_module": implementation_module,
+            "package_module": package_module,
+            "legacy_module": legacy_module,
+        }
+        missing = [name for name, value in required_modules.items() if value is None]
+        if missing:
+            raise ValueError(
+                "RunnerSpec conversion requires module fields: " + ", ".join(missing)
+            )
+        assert cli_module is not None
+        assert implementation_module is not None
+        assert package_module is not None
+        assert legacy_module is not None
+        return cls(
+            key=validated.key,
+            family=validated.family,
+            venue=validated.venue,
+            study_id=validated.study_id,
+            description=validated.description,
+            cli_module=cli_module,
+            implementation_module=implementation_module,
+            package_module=package_module,
+            legacy_module=legacy_module,
+            tags=validated.tags,
+        )
 
     def import_cli_module(self) -> ModuleType:
         """Lazily import the CLI entrypoint module."""

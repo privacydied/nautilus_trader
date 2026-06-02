@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
+
+from examples.strategies.venue_agnostic_signal_observer.hypotheses.package_contract import (
+    HypothesisPackageMetadata,
+)
 
 from examples.strategies.venue_agnostic_signal_observer.hypotheses.base import (
     ArtifactRef,
@@ -98,6 +103,24 @@ from examples.strategies.venue_agnostic_signal_observer.runners.registry import 
 )
 
 _NODE_FILLS_KEY = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+
+
+def _synthetic_metadata(**overrides: object) -> HypothesisPackageMetadata:
+    values: dict[str, Any] = {
+        "key": "synthetic_runner_v0",
+        "study_id": "synthetic_study_v0",
+        "family": "synthetic_family",
+        "venue": "hyperliquid",
+        "phase": "phase0",
+        "description": "Synthetic metadata-only package.",
+        "tags": ("observer_only", "synthetic"),
+        "cli_module": "synthetic.cli",
+        "implementation_module": "synthetic.runner",
+        "package_module": "synthetic",
+        "legacy_module": "synthetic_legacy",
+    }
+    values.update(overrides)
+    return HypothesisPackageMetadata(**values)
 
 
 class TestRunnerSpecRegistry:
@@ -213,6 +236,57 @@ class TestRunnerSpecRegistry:
         for key in all_keys:
             for frag in forbidden_fragments:
                 assert frag not in key, f"forbidden fragment {frag!r} in key {key!r}"
+
+    def test_runner_spec_can_be_constructed_from_hypothesis_metadata(self) -> None:
+        metadata = _synthetic_metadata()
+
+        spec = RunnerSpec.from_hypothesis_metadata(metadata)
+
+        assert spec.key == "synthetic_runner_v0"
+        assert spec.family == "synthetic_family"
+        assert spec.venue == "hyperliquid"
+        assert spec.study_id == "synthetic_study_v0"
+        assert spec.description == "Synthetic metadata-only package."
+        assert spec.tags == ("observer_only", "synthetic")
+
+    def test_metadata_conversion_preserves_module_strings(self) -> None:
+        metadata = _synthetic_metadata(
+            cli_module="synthetic.cli.entry",
+            implementation_module="synthetic.impl.runner",
+            package_module="synthetic.pkg",
+            legacy_module="synthetic_legacy.wrapper",
+        )
+
+        spec = RunnerSpec.from_hypothesis_metadata(metadata)
+
+        assert spec.cli_module == "synthetic.cli.entry"
+        assert spec.implementation_module == "synthetic.impl.runner"
+        assert spec.package_module == "synthetic.pkg"
+        assert spec.legacy_module == "synthetic_legacy.wrapper"
+
+    def test_metadata_conversion_validates_metadata(self) -> None:
+        metadata = _synthetic_metadata(key=" ")
+
+        with pytest.raises(ValueError, match="key"):
+            RunnerSpec.from_hypothesis_metadata(metadata)
+
+    def test_metadata_conversion_requires_runner_module_fields(self) -> None:
+        metadata = _synthetic_metadata(cli_module=None)
+
+        with pytest.raises(ValueError, match="cli_module"):
+            RunnerSpec.from_hypothesis_metadata(metadata)
+
+    def test_metadata_conversion_does_not_import_module_strings(self) -> None:
+        import sys
+
+        fake_module = "unit7b.synthetic_runner_impl_should_not_import"
+        sys.modules.pop(fake_module, None)
+        metadata = _synthetic_metadata(implementation_module=fake_module)
+
+        spec = RunnerSpec.from_hypothesis_metadata(metadata)
+
+        assert spec.implementation_module == fake_module
+        assert fake_module not in sys.modules
 
 
 class TestRunnerSpecLazyImports:
