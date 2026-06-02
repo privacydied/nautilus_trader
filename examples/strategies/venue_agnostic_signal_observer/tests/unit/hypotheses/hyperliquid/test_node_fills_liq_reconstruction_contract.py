@@ -20,10 +20,18 @@ PACKAGE_DIR = (
     / "hyperliquid"
     / "node_fills_liq_reconstruction"
 )
+PACKAGE_INIT_PATH = PACKAGE_DIR / "__init__.py"
+PACKAGE_COMPAT_PATH = PACKAGE_DIR / "compat.py"
+PACKAGE_RUNNER_PATH = PACKAGE_DIR / "runner.py"
+LEGACY_MODULE = (
+    "examples.strategies.venue_agnostic_signal_observer."
+    "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+)
 PACKAGE_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer.hypotheses."
     "hyperliquid.node_fills_liq_reconstruction"
 )
+RUNNER_MODULE = f"{PACKAGE_MODULE}.runner"
 FORBIDDEN_TERMS = {
     'paper',
     'paper_dashboard',
@@ -66,6 +74,12 @@ def _fixture() -> dict[str, object]:
     return json.loads(FIXTURE_PATH.read_text())
 
 
+def _required_symbols() -> tuple[str, ...]:
+    required_symbols = _fixture()['required_symbols']
+    assert isinstance(required_symbols, list)
+    return tuple(str(name) for name in required_symbols)
+
+
 def _iter_import_names(path: Path) -> list[str]:
     tree = ast.parse(path.read_text())
     names: list[str] = []
@@ -106,14 +120,35 @@ def test_wrapper_has_no_business_logic_defs_and_is_small():
     assert len(text.splitlines()) <= 80
 
 
-def test_wrapper_reexports_all_required_symbols_via_package():
-    legacy = importlib.import_module(
-        'examples.strategies.venue_agnostic_signal_observer.hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0'
-    )
+def test_package_initializer_is_small_and_compat_only():
+    text = PACKAGE_INIT_PATH.read_text()
+    tree = ast.parse(text)
+    function_defs = [node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    class_defs = [node.name for node in tree.body if isinstance(node, ast.ClassDef)]
+    assert not function_defs, function_defs
+    assert not class_defs, class_defs
+    assert len(text.splitlines()) <= 20
+
+
+def test_wrapper_reexports_all_required_symbols_via_package_and_runner():
+    legacy = importlib.import_module(LEGACY_MODULE)
     pkg = importlib.import_module(PACKAGE_MODULE)
-    for name in _fixture()['required_symbols']:
+    runner = importlib.import_module(RUNNER_MODULE)
+    for name in _required_symbols():
         assert hasattr(legacy, name), f'legacy missing {name}'
         assert hasattr(pkg, name), f'package missing {name}'
+        assert hasattr(runner, name), f'runner missing {name}'
+
+
+def test_package_all_matches_runner_exports_for_all_names():
+    pkg = importlib.import_module(PACKAGE_MODULE)
+    runner = importlib.import_module(RUNNER_MODULE)
+    exported = tuple(getattr(pkg, '__all__', ()))
+    assert exported
+    for name in exported:
+        assert hasattr(pkg, name), f'package missing exported symbol {name}'
+        assert hasattr(runner, name), f'runner missing exported symbol {name}'
+        assert getattr(pkg, name) is getattr(runner, name), name
 
 
 def test_forbidden_import_scan_passes_for_wrapper_and_package():
@@ -126,6 +161,7 @@ def test_forbidden_import_scan_passes_for_wrapper_and_package():
 def test_package_files_exist():
     expected = {
         '__init__.py',
+        'compat.py',
         'runner.py',
         'statuses.py',
         'config.py',
@@ -137,3 +173,27 @@ def test_package_files_exist():
         'artifacts.py',
     }
     assert expected.issubset({path.name for path in PACKAGE_DIR.glob('*.py')})
+
+
+def test_compat_module_exports_required_fixture_symbols():
+    compat = importlib.import_module(f'{PACKAGE_MODULE}.compat')
+    required = _required_symbols()
+    assert compat.REQUIRED_LEGACY_SYMBOLS == required
+    exported = set(compat.__all__)
+    missing = sorted(set(required) - exported)
+    assert not missing, missing
+
+
+def test_compat_export_namespace_resolves_runner_objects():
+    compat = importlib.import_module(f'{PACKAGE_MODULE}.compat')
+    runner = importlib.import_module(RUNNER_MODULE)
+    namespace = compat.export_namespace()
+    assert set(namespace) == set(compat.__all__)
+    for name, value in namespace.items():
+        assert value is getattr(runner, name), name
+
+
+def test_wall2_source_probe_method_resolves_runner_globals() -> None:
+    runner = importlib.import_module(RUNNER_MODULE)
+    method = runner.NodeFillsLiqReconstructionProbe.run_wall2_update_leverage_source_probe
+    assert method.__globals__['__name__'] == runner.__name__
