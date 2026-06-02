@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from enum import Enum
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +20,22 @@ from examples.strategies.venue_agnostic_signal_observer.core.signal_direction im
     require_signal_direction,
     signal_direction_sign,
 )
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[6]
+
+
+def _run_import_probe(code: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(_REPO_ROOT.parent)
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=_REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
 
 
 class TestSignalDirectionEnum:
@@ -159,20 +178,27 @@ class TestSignalDirectionSign:
 
 class TestSignalDirectionImportContract:
     def test_module_import_is_dependency_light(self) -> None:
-        module = __import__(
-            "examples.strategies.venue_agnostic_signal_observer.core.signal_direction",
-            fromlist=["*"],
+        result = _run_import_probe(
+            """
+import sys
+before = set(sys.modules)
+import examples.strategies.venue_agnostic_signal_observer.core.signal_direction as module
+after = set(sys.modules)
+forbidden = (
+    'examples.strategies.venue_agnostic_signal_observer.paper',
+    'examples.strategies.venue_agnostic_signal_observer.bot',
+    'examples.strategies.venue_agnostic_signal_observer.conductor',
+    'examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.node_fills_liq_reconstruction.runner',
+    'examples.strategies.venue_agnostic_signal_observer.hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0',
+)
+hits = [name for name in forbidden if name in after - before]
+print(module.__name__)
+print('hits', hits)
+raise SystemExit(1 if hits else 0)
+"""
         )
-        assert module is not None
-
-        forbidden = (
-            "examples.strategies.venue_agnostic_signal_observer.paper",
-            "examples.strategies.venue_agnostic_signal_observer.bot",
-            "examples.strategies.venue_agnostic_signal_observer.conductor",
-            "examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.node_fills_liq_reconstruction.runner",
-            "examples.strategies.venue_agnostic_signal_observer.hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0",
-        )
-        assert not any(name in sys.modules for name in forbidden)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert 'hits []' in result.stdout
 
     def test_existing_core_direction_remains_importable(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.core import direction

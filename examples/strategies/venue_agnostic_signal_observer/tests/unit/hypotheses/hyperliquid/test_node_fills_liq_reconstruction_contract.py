@@ -3,6 +3,9 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+import os
+import subprocess
+import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -36,6 +39,22 @@ RUNNER_MODULE = f"{PACKAGE_MODULE}.runner"
 STATUSES_MODULE = f"{PACKAGE_MODULE}.statuses"
 CONFIG_MODULE = f"{PACKAGE_MODULE}.config"
 MODELS_MODULE = f"{PACKAGE_MODULE}.models"
+REPO_ROOT = Path(__file__).resolve().parents[7]
+
+
+def _run_import_probe(code: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(REPO_ROOT.parent)
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
 MOVED_STATUS_CONSTANTS = (
     'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REQUESTER_PAYS_AUTH_EXPIRED',
     'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_NAMESPACE_NOT_FOUND',
@@ -205,14 +224,22 @@ def test_wrapper_reexports_all_required_symbols_via_package_and_runner():
 
 
 def test_package_all_matches_runner_exports_for_all_names():
-    pkg = importlib.import_module(PACKAGE_MODULE)
-    runner = importlib.import_module(RUNNER_MODULE)
-    exported = tuple(getattr(pkg, '__all__', ()))
-    assert exported
-    for name in exported:
-        assert hasattr(pkg, name), f'package missing exported symbol {name}'
-        assert hasattr(runner, name), f'runner missing exported symbol {name}'
-        assert getattr(pkg, name) is getattr(runner, name), name
+    result = _run_import_probe(
+        f"""
+import importlib
+pkg = importlib.import_module({PACKAGE_MODULE!r})
+runner = importlib.import_module({RUNNER_MODULE!r})
+exported = tuple(getattr(pkg, '__all__', ()))
+assert exported
+for name in exported:
+    assert hasattr(pkg, name), f'package missing exported symbol {{name}}'
+    assert hasattr(runner, name), f'runner missing exported symbol {{name}}'
+    assert getattr(pkg, name) is getattr(runner, name), name
+print('export_count', len(exported))
+"""
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'export_count' in result.stdout
 
 
 def test_forbidden_import_scan_passes_for_wrapper_and_package():
@@ -249,12 +276,20 @@ def test_compat_module_exports_required_fixture_symbols():
 
 
 def test_compat_export_namespace_resolves_runner_objects():
-    compat = importlib.import_module(f'{PACKAGE_MODULE}.compat')
-    runner = importlib.import_module(RUNNER_MODULE)
-    namespace = compat.export_namespace()
-    assert set(namespace) == set(compat.__all__)
-    for name, value in namespace.items():
-        assert value is getattr(runner, name), name
+    result = _run_import_probe(
+        f"""
+import importlib
+compat = importlib.import_module({f'{PACKAGE_MODULE}.compat'!r})
+runner = importlib.import_module({RUNNER_MODULE!r})
+namespace = compat.export_namespace()
+assert set(namespace) == set(compat.__all__)
+for name, value in namespace.items():
+    assert value is getattr(runner, name), name
+print('namespace_count', len(namespace))
+"""
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'namespace_count' in result.stdout
 
 
 def test_wall2_source_probe_method_resolves_runner_globals() -> None:
