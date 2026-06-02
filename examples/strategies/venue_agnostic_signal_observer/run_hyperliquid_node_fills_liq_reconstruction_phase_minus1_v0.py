@@ -123,6 +123,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--replica-cmds-selection-mode", default="chronology_strict_newest_prior",
                         choices=["chronology_strict_newest_prior"],
                         help="Object selection mode for replica_cmds backscan (Wall 2)")
+    parser.add_argument("--resume-targeted-backscan", action="store_true",
+                        help="Resume targeted replica_cmds backscan from checkpoint")
+    parser.add_argument("--memory-audit", action="store_true",
+                        help="Record lightweight per-object RSS audit fields during targeted backscan")
+    parser.add_argument("--progress-every-objects", type=int, default=1,
+                        help="Write targeted backscan progress row every N processed objects")
 
     return parser.parse_args(argv)
 
@@ -162,6 +168,9 @@ def build_config(args: argparse.Namespace) -> probe_mod.StudyConfig:
         target_symbol=args.target_symbol.upper(),
         target_top_n=args.target_top_n,
         replica_cmds_selection_mode=args.replica_cmds_selection_mode,
+        resume_targeted_backscan=args.resume_targeted_backscan,
+        memory_audit=args.memory_audit,
+        progress_every_objects=args.progress_every_objects,
     )
 
 

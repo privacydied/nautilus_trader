@@ -2133,11 +2133,11 @@ def test_insufficient_coverage_under_cap_emits_backscan_insufficient_coverage_un
     assert probe._terminal_for_targeted_margin_mode_lookup().endswith('MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP')
 
 
-def test_cap_exhaustion_emits_backscan_cap_exhausted():
+def test_cap_exhaustion_emits_backscan_insufficient_coverage_under_cap():
     probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
     probe.targeted_backward_lookup_summary = probe_mod.TargetedBackwardLookupSummary(target_notional_resolved_fraction=0.59, cap_exhausted=True)
     probe.targeted_margin_mode_classification_summary = probe_mod.TargetedMarginModeClassificationSummary()
-    assert probe._terminal_for_targeted_margin_mode_lookup().endswith('BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED')
+    assert probe._terminal_for_targeted_margin_mode_lookup().endswith('MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP')
 
 
 def test_targeted_backward_summary_has_required_backscan_fields():
@@ -2898,3 +2898,171 @@ def test_targeted_backscan_terminal_insufficient_coverage_under_cap_when_no_pair
 # ===========================================================================
 # Helper types for Wall 2 identity tests — uses probe module's OpenNamedPosition
 # ===========================================================================
+
+
+def test_targeted_backscan_streams_object_audit_rows_without_holding_all_actions(tmp_path, monkeypatch):
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.out_root = tmp_path
+    audit = probe_mod.TargetedBackwardLookupObjectAudit(key='k1', actions_decoded_total=1)
+    probe._append_targeted_backscan_object_audit(audit)
+    rows = probe_mod._jsonl_read(tmp_path / 'targeted_backward_lookup_object_audit.jsonl')
+    assert len(rows) == 1
+    assert rows[0]['key'] == 'k1'
+    assert probe.targeted_backward_lookup_object_audit == []
+
+
+def test_targeted_backscan_does_not_store_non_target_actions(tmp_path, monkeypatch):
+    cache_dir = Path('.local_data/targeted_replica_cmds_cache')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    obj = {'key': 'hl-mainnet-node-data/replica_cmds/2025-07-27/non_target.jsonl', 'size': 0, 'date': '2025-07-27'}
+    rows = [
+        {'type': 'transfer', 'asset': 5, 'identity': '0xnope'},
+        {'type': 'updateLeverage', 'asset': 5, 'isCross': False, 'leverage': 3, 'identity': '0xabc', 'block': 10, 'timestamp': 1000},
+    ]
+    (cache_dir / 'non_target.jsonl').write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    monkeypatch.setattr(probe_mod, '_decompress_lz4_best_effort', lambda raw: (raw, 'plain'))
+    audit, matches, blocker = probe_mod._parse_replica_cmds_target_object(
+        obj,
+        probe_mod.StudyConfig(out_root=str(tmp_path)),
+        {('0xabc', 'SOL'): _make_target_position('0xabc', block=10, ts_ns=1000)},
+        {'SOL': '5'},
+        {('0xabc', 'SOL'): (10, 1000)},
+    )
+    assert blocker is None
+    assert audit.actions_decoded_total == 2
+    assert len(matches) == 1
+    assert matches[0]['address_redacted'] == probe_mod.redact_address('0xabc')
+
+
+def test_targeted_backscan_releases_object_state_between_objects(tmp_path, monkeypatch):
+    seen = []
+    orig = probe_mod._parse_replica_cmds_target_object
+    def wrapped(*args, **kwargs):
+        out = orig(*args, **kwargs)
+        seen.append(len(out[1]))
+        return out
+    monkeypatch.setattr(probe_mod, '_parse_replica_cmds_target_object', wrapped)
+    cache_dir = Path('.local_data/targeted_replica_cmds_cache')
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    for name, block in [('a.jsonl', 10), ('b.jsonl', 9)]:
+        (cache_dir / name).write_text(json.dumps({'type': 'updateLeverage', 'asset': 5, 'isCross': False, 'leverage': 2, 'identity': '0xabc', 'block': block, 'timestamp': block * 100}) + "\n")
+    unresolved = {('0xabc', 'SOL'): _make_target_position('0xabc', block=10, ts_ns=1000)}
+    for key in ['a.jsonl', 'b.jsonl']:
+        probe_mod._parse_replica_cmds_target_object(
+            {'key': f'hl-mainnet-node-data/replica_cmds/2025-07-27/{key}', 'size': 0, 'date': '2025-07-27'},
+            probe_mod.StudyConfig(out_root=str(tmp_path)),
+            unresolved,
+            {'SOL': '5'},
+            {('0xabc', 'SOL'): (10, 1000)},
+        )
+    assert seen == [1, 1]
+
+
+def test_targeted_backscan_writes_checkpoint_after_each_object(tmp_path):
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out', max_download_bytes=123))
+    probe.out_root = tmp_path
+    selection_plan = probe_mod.Wall2TargetSelectionPlan(target_symbol='SOL', target_top_n=30, selected_target_notional=Decimal('1000'))
+    scan_plan = probe_mod.TargetedBackwardLookupScanPlan(selection_mode='chronology_strict_newest_prior')
+    pos = [_make_target_position('0xabc')]
+    probe._write_targeted_backscan_checkpoint(
+        selection_plan=selection_plan,
+        scan_plan=scan_plan,
+        selected_positions=pos,
+        selected_objects=[{'key': 'a'}],
+        processed_keys=['a'],
+        match_lookup={(probe_mod.redact_address('0xabc'), 'SOL'): {'address_redacted': probe_mod.redact_address('0xabc'), 'symbol': 'SOL'}},
+        unresolved={},
+        bytes_downloaded=55,
+        stop_rule_if_any='',
+        safe_to_resume=True,
+        last_completed_object_key='a',
+        last_completed_object_timestamp='123',
+    )
+    ckpt = probe_mod._json_loads((tmp_path / 'targeted_backward_lookup_checkpoint.json').read_bytes())
+    assert ckpt['objects_processed_count'] == 1
+    assert ckpt['last_completed_object_key'] == 'a'
+
+
+def test_targeted_backscan_resume_skips_completed_objects(tmp_path):
+    ckpt = probe_mod.TargetedBackwardLookupCheckpoint(target_symbol='SOL', target_top_n=30, cap=10, objects_processed_keys=['a'], selection_mode='chronology_strict_newest_prior')
+    p = tmp_path / 'targeted_backward_lookup_checkpoint.json'
+    p.write_bytes(probe_mod._json_dumps(probe_mod.dataclasses.asdict(ckpt)))
+    loaded = probe_mod._load_targeted_backscan_checkpoint(p)
+    assert loaded.objects_processed_keys == ['a']
+
+
+def test_targeted_backscan_resume_preserves_resolved_pairs(tmp_path):
+    ckpt = probe_mod.TargetedBackwardLookupCheckpoint(
+        target_symbol='SOL',
+        target_top_n=30,
+        cap=10,
+        objects_processed_keys=['a'],
+        selection_mode='chronology_strict_newest_prior',
+        resolved_pair_states=[{'pair_key': '0xabc|SOL', 'match': {'address_redacted': probe_mod.redact_address('0xabc'), 'symbol': 'SOL', 'isCross': False}}],
+    )
+    p = tmp_path / 'targeted_backward_lookup_checkpoint.json'
+    p.write_bytes(probe_mod._json_dumps(probe_mod.dataclasses.asdict(ckpt)))
+    loaded = probe_mod._load_targeted_backscan_checkpoint(p)
+    assert loaded.resolved_pair_states[0]['pair_key'] == '0xabc|SOL'
+
+
+def test_targeted_backscan_resume_rejects_mismatched_target_symbol(tmp_path):
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root=str(tmp_path), max_download_bytes=10))
+    with pytest.raises(RuntimeError, match='CHECKPOINT_MISMATCH'):
+        probe._validate_targeted_backscan_checkpoint(
+            probe_mod.TargetedBackwardLookupCheckpoint(target_symbol='BTC', target_top_n=30, cap=10, selection_mode='chronology_strict_newest_prior'),
+            probe_mod.Wall2TargetSelectionPlan(target_symbol='SOL', target_top_n=30),
+            probe_mod.TargetedBackwardLookupScanPlan(selection_mode='chronology_strict_newest_prior'),
+            probe_mod.StudyConfig(out_root=str(tmp_path), max_download_bytes=10),
+        )
+
+
+def test_targeted_backscan_resume_rejects_mismatched_target_top_n(tmp_path):
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root=str(tmp_path), max_download_bytes=10))
+    with pytest.raises(RuntimeError, match='CHECKPOINT_MISMATCH'):
+        probe._validate_targeted_backscan_checkpoint(
+            probe_mod.TargetedBackwardLookupCheckpoint(target_symbol='SOL', target_top_n=31, cap=10, selection_mode='chronology_strict_newest_prior'),
+            probe_mod.Wall2TargetSelectionPlan(target_symbol='SOL', target_top_n=30),
+            probe_mod.TargetedBackwardLookupScanPlan(selection_mode='chronology_strict_newest_prior'),
+            probe_mod.StudyConfig(out_root=str(tmp_path), max_download_bytes=10),
+        )
+
+
+def test_targeted_backscan_resume_rejects_mismatched_selection_mode(tmp_path):
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root=str(tmp_path), max_download_bytes=10))
+    with pytest.raises(RuntimeError, match='CHECKPOINT_MISMATCH'):
+        probe._validate_targeted_backscan_checkpoint(
+            probe_mod.TargetedBackwardLookupCheckpoint(target_symbol='SOL', target_top_n=30, cap=10, selection_mode='other'),
+            probe_mod.Wall2TargetSelectionPlan(target_symbol='SOL', target_top_n=30),
+            probe_mod.TargetedBackwardLookupScanPlan(selection_mode='chronology_strict_newest_prior'),
+            probe_mod.StudyConfig(out_root=str(tmp_path), max_download_bytes=10),
+        )
+
+
+def test_targeted_backscan_progress_jsonl_written_incrementally(tmp_path):
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.out_root = tmp_path
+    probe._append_targeted_backscan_progress({'object_key': 'x', 'objects_processed_cumulative': 1})
+    rows = probe_mod._jsonl_read(tmp_path / 'targeted_backward_lookup_progress.jsonl')
+    assert rows[-1]['object_key'] == 'x'
+
+
+def test_targeted_backscan_partial_artifacts_survive_mid_run_exception(tmp_path):
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.out_root = tmp_path
+    probe._append_targeted_backscan_object_audit(probe_mod.TargetedBackwardLookupObjectAudit(key='k1'))
+    assert (tmp_path / 'targeted_backward_lookup_object_audit.jsonl').exists()
+
+
+def test_targeted_backscan_mid_run_exception_terminal_is_runtime_interrupted_not_science_result():
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.targeted_backward_lookup_summary = probe_mod.TargetedBackwardLookupSummary(objects_processed_count=1, stop_rule='RUNTIME_INTERRUPTED')
+    probe.targeted_margin_mode_classification_summary = probe_mod.TargetedMarginModeClassificationSummary()
+    assert probe._terminal_for_targeted_margin_mode_lookup() == 'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_RUNTIME_INTERRUPTED'
+
+
+def test_targeted_backscan_zero_completed_artifacts_cannot_emit_margin_mode_result():
+    probe = probe_mod.NodeFillsLiqReconstructionProbe(probe_mod.StudyConfig(out_root='/tmp/out'))
+    probe.targeted_backward_lookup_summary = probe_mod.TargetedBackwardLookupSummary(objects_processed_count=0)
+    probe.targeted_margin_mode_classification_summary = probe_mod.TargetedMarginModeClassificationSummary()
+    assert probe._terminal_for_targeted_margin_mode_lookup() == 'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_RUNTIME_INTERRUPTED'

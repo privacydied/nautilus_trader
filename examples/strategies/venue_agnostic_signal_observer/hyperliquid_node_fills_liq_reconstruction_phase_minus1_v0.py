@@ -21,9 +21,12 @@ import dataclasses
 import hashlib
 import io
 import json
+import gc
 import os
+import resource
 import re
 import subprocess
+import time
 import sys
 from collections import defaultdict
 from collections import deque
@@ -82,6 +85,82 @@ def _jsonl_write(path: Path, records: Sequence[dict]) -> None:
             else:
                 f.write(json.dumps(r).encode())
             f.write(b"\n")
+
+def _jsonl_append(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "ab") as f:
+        if _orjson_module is not None:
+            f.write(_orjson_module.dumps(record))
+        else:
+            f.write(json.dumps(record, default=str).encode())
+        f.write(b"\n")
+
+
+def _jsonl_read(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in path.read_bytes().splitlines():
+        if not line.strip():
+            continue
+        rows.append(_json_loads(line))
+    return rows
+
+
+def _get_rss_mb() -> float | None:
+    try:
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    except Exception:
+        return None
+    if rss <= 0:
+        return None
+    if sys.platform == "darwin":
+        return float(rss) / (1024 * 1024)
+    return float(rss) / 1024.0
+
+
+def _checkpoint_pair_key(address: str, symbol: str) -> str:
+    return f"{_normalize_address(address)}|{symbol.upper()}"
+
+
+def _parse_checkpoint_pair_key(value: str) -> tuple[str, str]:
+    addr, sep, symbol = value.partition("|")
+    if not sep:
+        raise ValueError(f"invalid checkpoint pair key: {value}")
+    return addr, symbol.upper()
+
+
+def _checkpoint_match_state(match: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'address_redacted': match.get('address_redacted', ''),
+        'symbol': match.get('symbol', ''),
+        'asset_id': match.get('asset_id', ''),
+        'isCross': match.get('isCross'),
+        'leverage': match.get('leverage'),
+        'block': int(match.get('block') or 0),
+        'nonce_or_timestamp': int(match.get('nonce_or_timestamp') or 0),
+        'object_key': match.get('object_key', ''),
+        'date_prefix': match.get('date_prefix', ''),
+        'identity': match.get('identity', ''),
+        'vaultAddress': match.get('vaultAddress', ''),
+    }
+
+
+def _load_targeted_backscan_checkpoint(path: Path) -> TargetedBackwardLookupCheckpoint | None:
+    if not path.exists():
+        return None
+    return TargetedBackwardLookupCheckpoint(**_json_loads(path.read_bytes()))
+
+
+def _serialize_checkpoint(checkpoint: TargetedBackwardLookupCheckpoint) -> dict[str, Any]:
+    return dataclasses.asdict(checkpoint)
+
+
+def _runtime_blocked_status(oom_or_killed: bool = False) -> str:
+    if oom_or_killed:
+        return 'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_OOM_OR_PROCESS_KILLED'
+    return 'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_RUNTIME_INTERRUPTED'
+
 
 # ---------------------------------------------------------------------------
 # Adapter import (reuse existing logic where possible)
@@ -207,6 +286,9 @@ class StudyStatus(str, Enum):
 
     # Replica cmds object discovery / listing blockers
     NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY = "BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_RUNTIME_INTERRUPTED = "BLOCKED_BACKSCAN_RUNTIME_INTERRUPTED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_OOM_OR_PROCESS_KILLED = "BLOCKED_BACKSCAN_OOM_OR_PROCESS_KILLED"
+    NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH = "BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH"
 
     # Error
     NODE_FILLS_LIQ_PHASE_MINUS1_ERROR_INVALID_OUTPUT = "ERROR_INVALID_OUTPUT"
@@ -359,6 +441,9 @@ class StudyConfig:
     target_symbol: str = "SOL"
     target_top_n: int = 30
     replica_cmds_selection_mode: str = "chronology_strict_newest_prior"
+    resume_targeted_backscan: bool = False
+    memory_audit: bool = False
+    progress_every_objects: int = 1
 
     def effective_leverage_mode(self) -> LeverageMode:
         if self.bound_diagnostic:
@@ -695,6 +780,30 @@ class Wall2TargetSelectionPlan:
 
 
 @dataclass
+class TargetedBackwardLookupCheckpoint:
+    run_id: str = ""
+    selection_mode: str = "chronology_strict_newest_prior"
+    target_symbol: str = "SOL"
+    target_top_n: int = 30
+    cap: int = 0
+    compressed_bytes_downloaded: int = 0
+    objects_planned_total: int = 0
+    objects_processed_count: int = 0
+    objects_processed_keys: list[str] = field(default_factory=list)
+    last_completed_object_key: str = ""
+    last_completed_object_timestamp: str = ""
+    target_pairs_total: int = 0
+    target_pairs_resolved: int = 0
+    target_pairs_unresolved: int = 0
+    target_notional_resolved: Decimal = field(default_factory=lambda: Decimal(0))
+    target_notional_unresolved: Decimal = field(default_factory=lambda: Decimal(0))
+    resolved_pair_states: list[dict[str, Any]] = field(default_factory=list)
+    unresolved_pair_keys: list[str] = field(default_factory=list)
+    stop_rule_if_any: str = ""
+    safe_to_resume: bool = True
+
+
+@dataclass
 class TargetedBackwardLookupScanPlan:
     target_symbol: str = "SOL"
     target_asset_id: str = ""
@@ -755,9 +864,16 @@ class TargetedBackwardLookupObjectAudit:
     unresolved_pairs_after: int = 0
     newest_prior_matches_selected: int = 0
     coverage_start_pair_candidates: list[str] = field(default_factory=list)
-    # Wall 2 chronology tracking fields.
     object_timestamp_ms: int = 0
     chronological_rank: int = 0
+    downloaded: bool = False
+    new_pairs_resolved: int = 0
+    compressed_bytes_downloaded_cumulative: int = 0
+    objects_processed_cumulative: int = 0
+    rss_mb_before_object_if_available: float | None = None
+    rss_mb_after_object_if_available: float | None = None
+    rss_mb_peak_if_available: float | None = None
+    duration_seconds: float = 0.0
 
 
 @dataclass
@@ -806,6 +922,12 @@ class TargetedBackwardLookupSummary:
     chronology_strict: bool = False
     selected_objects_are_newest_prior_sequence: bool = False
     identity_join_verdict: str = "UNVERIFIED"
+    objects_planned_total: int = 0
+    objects_processed_count: int = 0
+    last_completed_object_key: str = ""
+    last_completed_object_timestamp: str = ""
+    safe_to_resume: bool = False
+    rss_mb_peak_if_available: float | None = None
 
 
 @dataclass
@@ -1690,7 +1812,12 @@ def build_source_plan(
 
 def fetch_s3_object(key: str, dest_path: Path, requester_pays: bool = True) -> tuple[int, str]:
     """Download one S3 object. Returns (bytes_downloaded, sha256_hex)."""
-    s3_uri = f"s3://{key}" if not key.startswith("s3://") else key
+    if key.startswith("s3://"):
+        s3_uri = key
+    elif key.startswith("hl-mainnet-node-data/"):
+        s3_uri = f"s3://{key}"
+    else:
+        s3_uri = f"s3://hl-mainnet-node-data/{key}"
     cmd_parts = ["aws", "s3", "cp", s3_uri, str(dest_path)]
     if requester_pays:
         cmd_parts.extend(["--request-payer", "requester"])
@@ -4247,7 +4374,9 @@ class NodeFillsLiqReconstructionProbe:
         self.targeted_backward_lookup_scan_plan: TargetedBackwardLookupScanPlan | None = None
         self.targeted_backward_lookup_object_audit: list[TargetedBackwardLookupObjectAudit] = []
         self.targeted_backward_lookup_matches: list[dict[str, Any]] = []
+        self.targeted_backward_lookup_progress_rows: list[dict[str, Any]] = []
         self.targeted_backward_lookup_summary: TargetedBackwardLookupSummary | None = None
+        self.targeted_backward_lookup_checkpoint: TargetedBackwardLookupCheckpoint | None = None
         self.targeted_margin_mode_classification: list[TargetedMarginModePairClassification] = []
         self.targeted_margin_mode_classification_summary: TargetedMarginModeClassificationSummary | None = None
         self.targeted_oi_completeness_proxy_audit: dict[str, Any] | None = None
@@ -4604,105 +4733,6 @@ class NodeFillsLiqReconstructionProbe:
         scan_plan.bucket = 'hl-mainnet-node-data'
         scan_plan.root_prefix = 'replica_cmds/'
 
-        listing = _run_aws([
-            'aws', 's3api', 'list-objects-v2', '--bucket', 'hl-mainnet-node-data',
-            '--prefix', 'replica_cmds/', '--request-payer', 'requester', '--output', 'json'
-        ], timeout=120)
-        if listing.returncode != 0:
-            scan_plan.listing_errors.append(f'aws exit {listing.returncode}')
-            self.targeted_margin_mode_continuation_plan = {
-                'current_task_cap': config.max_download_bytes,
-                'compressed_bytes_downloaded': 0,
-                'remaining_cap': config.max_download_bytes,
-                'target_notional_resolved_fraction': 0.0,
-                'target_notional_unresolved_fraction': 1.0,
-                'estimated_bytes_to_resolve_80pct_top30_SOL_notional': None,
-                'estimated_bytes_to_resolve_all_top30_SOL': None,
-                'estimated_bytes_for_top250_SOL': None,
-                'estimated_bytes_for_all_open_positions': None,
-                'estimated_download_cost_if_known': None,
-                'approval_required_before_more_download': True,
-                'recommended_next_action': 'FIX_SOURCE_OR_DECODER',
-            }
-            return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED.value
-        payload = json.loads(listing.stdout or '{}')
-        objects = payload.get('Contents', [])
-
-        # Paginate if truncated (S3 returns max 1000 per page, but we used --max-keys 500)
-        continuation_token = payload.get('NextContinuationToken')
-        while continuation_token and payload.get('IsTruncated', False):
-            list_more = _run_aws([
-                'aws', 's3api', 'list-objects-v2', '--bucket', 'hl-mainnet-node-data',
-                '--prefix', 'replica_cmds/', '--request-payer', 'requester',
-                '--continuation-token', continuation_token, '--max-keys', '500', '--output', 'json'
-            ], timeout=120)
-            if list_more.returncode != 0:
-                scan_plan.listing_errors.append(f'pagination aws exit {list_more.returncode}')
-                break
-            more = json.loads(list_more.stdout or '{}')
-            objects.extend(more.get('Contents', []))
-            continuation_token = more.get('NextContinuationToken')
-            if not more.get('IsTruncated', False):
-                break
-
-        scan_plan.objects_listed_total = len(objects)
-
-        # Record listing statistics (first 5 keys redacted for privacy)
-        sizes = [int(o.get('Size', 0) or 0) for o in objects if o.get('Size') is not None]
-        if sizes:
-            scan_plan.smallest_listed_object_size = min(sizes)
-            scan_plan.largest_listed_object_size = max(sizes)
-        for obj in objects[:5]:
-            key = obj.get('Key', '')
-            parts = key.split('/')
-            # Redact the last filename component but keep date prefix visible
-            if len(parts) >= 3:
-                scan_plan.first_listed_keys_redacted.append(f'replica_cmds/{parts[1]}/{parts[2][:8]}...')
-            else:
-                scan_plan.first_listed_keys_redacted.append(key[:60])
-
-        # Extract YYYYMMDD from S3 key for proper date-range filtering.
-        # Key format: replica_cmds/YYYY-MM-DDThh:mm:ssZ/YYYYMMDD/<timestamp>.lz4
-        def _extract_key_date(key: str) -> str:
-            """Extract YYYYMMDD from replica_cmds ISO-timestamp key."""
-            parts = key.split('/')
-            # parts[0] = 'replica_cmds', parts[1] = 'YYYY-MM-DDThh:mm:ssZ', parts[2] = 'YYYYMMDD'
-            if len(parts) >= 3:
-                return parts[2]
-            return ''
-
-        # Derive date-range bounds from the scan plan's ISO-timestamp prefixes
-        # reverse_scan_start_prefix -> start boundary (most recent)
-        # reverse_scan_end_prefix -> end boundary (oldest, coverage start)
-        def _extract_date_from_prefix(prefix: str) -> str:
-            """Extract YYYYMMDD from an ISO-timestamp prefix like replica_cmds/2025-07-27T12:00:27Z/"""
-            clean = prefix.removeprefix('hl-mainnet-node-data/')
-            parts = clean.split('/')
-            # parts[1] = 'YYYY-MM-DDThh:mm:ssZ' -> extract YYYYMMDD
-            if len(parts) >= 2:
-                iso_date = parts[1]  # e.g. '2025-07-27T12:00:27Z'
-                return iso_date[:10].replace('-', '')  # '20250727'
-            return ''
-
-        start_date_str = _extract_date_from_prefix(scan_plan.reverse_scan_start_prefix)
-        end_date_str = _extract_date_from_prefix(scan_plan.reverse_scan_end_prefix)
-
-        # Count date prefixes for audit
-        all_dates = set()
-        dates_in_range = set()
-        for obj in objects:
-            key_date = _extract_key_date(obj.get('Key', ''))
-            if key_date:
-                all_dates.add(key_date)
-                if end_date_str <= key_date <= start_date_str:
-                    dates_in_range.add(key_date)
-
-        scan_plan.date_prefixes_generated = len(dates_in_range)
-        scan_plan.date_prefixes_queried = len(all_dates)
-        scan_plan.date_prefixes_with_objects = len(dates_in_range)
-        scan_plan.date_prefixes_empty = max(0, len(all_dates) - len(dates_in_range))
-
-        selected_objects: list[dict[str, Any]] = []
         selected_asset_id = symbol_to_asset_id.get(selection_plan.target_symbol, '')
         unresolved: dict[tuple[str, str], OpenNamedPosition] = {}
         latest_cutoffs: dict[tuple[str, str], tuple[int, int]] = {}
@@ -4717,40 +4747,72 @@ class NodeFillsLiqReconstructionProbe:
                     ts = 0
             latest_cutoffs[pair] = (pos.last_fill_block, ts)
 
-        # Wall 2: chronology-strict selection using explicit timestamp extraction.
-        # Sort by filename timestamp descending so newest objects come first.
-        def _sort_key(obj):
-            key = obj.get('Key', '')
-            _, ts_int = _extract_replica_cmds_object_timestamp(key)
-            return ts_int
+        # Extract YYYYMMDD from S3 key for proper date-range filtering.
+        # Key format: replica_cmds/YYYY-MM-DDThh:mm:ssZ/YYYYMMDD/<timestamp>.lz4
+        def _extract_key_date(key: str) -> str:
+            """Extract YYYYMMDD from replica_cmds ISO-timestamp key."""
+            parts = key.split('/')
+            if len(parts) >= 3:
+                return parts[2]
+            return ''
 
-        sorted_objects = sorted(objects, key=_sort_key, reverse=True)
+        # Derive date-range bounds from the scan plan's ISO-timestamp prefixes
+        def _extract_date_from_prefix(prefix: str) -> str:
+            """Extract YYYYMMDD from an ISO-timestamp prefix like replica_cmds/2025-07-27T12:00:27Z/"""
+            clean = prefix.removeprefix('hl-mainnet-node-data/')
+            parts = clean.split('/')
+            if len(parts) >= 2:
+                iso_date = parts[1]
+                return iso_date[:10].replace('-', '')
+            return ''
 
-        # Track chronological gaps and future exclusions for audit.
-        last_selected_ts: int = 0
+        start_date_str = _extract_date_from_prefix(scan_plan.reverse_scan_start_prefix)
+        end_date_str = _extract_date_from_prefix(scan_plan.reverse_scan_end_prefix)
+        max_cutoff_ms = max((cutoff[1] for cutoff in latest_cutoffs.values()), default=0) // 1_000_000
+
+        selected_objects: list[dict[str, Any]] = []
         selected_chronological_ranks: list[int] = []
+        all_dates: set[str] = set()
+        dates_in_range: set[str] = set()
+        first_listed_keys_redacted: list[str] = []
+        listed_count = 0
+        chronological_rank = 0
+        last_selected_ts: int = 0
+        smallest_size: int | None = None
+        largest_size: int | None = None
 
-        for rank, obj in enumerate(sorted_objects, start=1):
-            key = obj.get('Key', '')
+        def _consider_listing_object(key: str, size: int) -> None:
+            nonlocal listed_count, chronological_rank, last_selected_ts, smallest_size, largest_size
+            listed_count += 1
+            if smallest_size is None or size < smallest_size:
+                smallest_size = size
+            if largest_size is None or size > largest_size:
+                largest_size = size
+            if len(first_listed_keys_redacted) < 5:
+                parts = key.split('/')
+                if len(parts) >= 3:
+                    first_listed_keys_redacted.append(f'replica_cmds/{parts[1]}/{parts[2][:8]}...')
+                else:
+                    first_listed_keys_redacted.append(key[:60])
+
+            key_date = _extract_key_date(key)
+            if key_date:
+                all_dates.add(key_date)
+                if end_date_str <= key_date <= start_date_str:
+                    dates_in_range.add(key_date)
             if not key.startswith('replica_cmds/'):
                 scan_plan.objects_skipped_non_data += 1
-                continue
-            size = int(obj.get('Size') or 0)
+                return
             if size <= 0:
                 scan_plan.objects_skipped_missing_size += 1
-                continue
-
+                return
             ts_date, ts_int = _extract_replica_cmds_object_timestamp(key)
-            if ts_int > 0:
-                cutoff_ms = max((cutoff[1] for cutoff in latest_cutoffs.values()), default=0) // 1_000_000
-                if cutoff_ms and ts_int > cutoff_ms:
-                    continue
-
-            # Date-range filter using extracted YYYYMMDD from key path.
-            key_date = _extract_key_date(key)
+            if ts_int > 0 and max_cutoff_ms and ts_int > max_cutoff_ms:
+                return
             if not key_date or key_date < end_date_str or key_date > start_date_str:
-                continue
+                return
 
+            chronological_rank += 1
             scan_plan.objects_considered += 1
             if size > config.max_download_bytes:
                 scan_plan.objects_skipped_over_cap += 1
@@ -4760,7 +4822,7 @@ class NodeFillsLiqReconstructionProbe:
                     'size_bytes': size,
                     'reason': 'single_object_exceeds_cap',
                 })
-                continue
+                return
             if scan_plan.estimated_compressed_bytes + size > config.max_download_bytes:
                 scan_plan.objects_skipped_budget_exhausted += 1
                 scan_plan.skipped_oversized_objects.append({
@@ -4769,22 +4831,64 @@ class NodeFillsLiqReconstructionProbe:
                     'size_bytes': size,
                     'reason': 'skipped_over_remaining_cap',
                 })
-                continue
+                return
             if selected_objects and ts_int > 0 and last_selected_ts > 0 and last_selected_ts > ts_int:
                 gap_seconds = (last_selected_ts - ts_int) / 1_000
                 if gap_seconds > 3600:
                     scan_plan.chronological_gap_count += 1
-            selected_objects.append({
-                'key': key,
-                'size': size,
-                'date': key_date,
-            })
+            selected_objects.append({'key': key, 'size': size, 'date': key_date})
             scan_plan.estimated_compressed_bytes += size
             scan_plan.objects_selected += 1
-            selected_chronological_ranks.append(rank)
+            selected_chronological_ranks.append(chronological_rank)
             if ts_int > 0:
                 last_selected_ts = ts_int
 
+        continuation_token: str | None = None
+        while True:
+            cmd = [
+                'aws', 's3api', 'list-objects-v2', '--bucket', 'hl-mainnet-node-data',
+                '--prefix', 'replica_cmds/', '--request-payer', 'requester', '--max-keys', '500', '--output', 'json'
+            ]
+            if continuation_token:
+                cmd.extend(['--continuation-token', continuation_token])
+            listing = _run_aws(cmd, timeout=120)
+            if listing.returncode != 0:
+                scan_plan.listing_errors.append(f'aws exit {listing.returncode}')
+                self.targeted_margin_mode_continuation_plan = {
+                    'current_task_cap': config.max_download_bytes,
+                    'compressed_bytes_downloaded': 0,
+                    'remaining_cap': config.max_download_bytes,
+                    'target_notional_resolved_fraction': 0.0,
+                    'target_notional_unresolved_fraction': 1.0,
+                    'estimated_bytes_to_resolve_80pct_top30_SOL_notional': None,
+                    'estimated_bytes_to_resolve_all_top30_SOL': None,
+                    'estimated_bytes_for_top250_SOL': None,
+                    'estimated_bytes_for_all_open_positions': None,
+                    'estimated_download_cost_if_known': None,
+                    'approval_required_before_more_download': True,
+                    'recommended_next_action': 'FIX_SOURCE_OR_DECODER',
+                }
+                return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED.value
+            payload = _json_loads((listing.stdout or '{}').encode())
+            for raw_obj in payload.get('Contents', []) or []:
+                key = raw_obj.get('Key', '')
+                if not key or key.endswith('/'):
+                    continue
+                _consider_listing_object(key, int(raw_obj.get('Size') or 0))
+            continuation_token = payload.get('NextContinuationToken') if payload.get('IsTruncated', False) else None
+            del payload
+            gc.collect()
+            if not continuation_token:
+                break
+
+        scan_plan.objects_listed_total = listed_count
+        scan_plan.first_listed_keys_redacted = first_listed_keys_redacted
+        scan_plan.smallest_listed_object_size = smallest_size or 0
+        scan_plan.largest_listed_object_size = largest_size or 0
+        scan_plan.date_prefixes_generated = len(dates_in_range)
+        scan_plan.date_prefixes_queried = len(all_dates)
+        scan_plan.date_prefixes_with_objects = len(dates_in_range)
+        scan_plan.date_prefixes_empty = max(0, len(all_dates) - len(dates_in_range))
         scan_plan.chronological_ranks_selected = selected_chronological_ranks
 
         # Copy listing audit to summary for cross-reference
@@ -4878,77 +4982,265 @@ class NodeFillsLiqReconstructionProbe:
             self.targeted_backward_lookup_summary.cap_exhausted = False
             return StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY.value
 
-        all_matches: list[dict[str, Any]] = []
+        checkpoint_path = self._targeted_backscan_paths()['checkpoint']
+        if config.resume_targeted_backscan and checkpoint_path.exists():
+            checkpoint = _load_targeted_backscan_checkpoint(checkpoint_path)
+            if checkpoint is None:
+                raise RuntimeError('NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH')
+            self._validate_targeted_backscan_checkpoint(checkpoint, selection_plan, scan_plan, config)
+        elif config.resume_targeted_backscan:
+            candidates = sorted(
+                Path(self.config.out_root).glob('*/targeted_backward_lookup_checkpoint.json'),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            checkpoint = None
+            for candidate in candidates:
+                loaded = _load_targeted_backscan_checkpoint(candidate)
+                if loaded is None:
+                    continue
+                try:
+                    self._validate_targeted_backscan_checkpoint(loaded, selection_plan, scan_plan, config)
+                except RuntimeError:
+                    continue
+                checkpoint = loaded
+                self.run_id = loaded.run_id
+                self.out_root = Path(self.config.out_root) / self.run_id
+                self.out_root.mkdir(parents=True, exist_ok=True)
+                checkpoint_path = candidate
+                break
+            if checkpoint is None:
+                raise RuntimeError('NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH')
+        else:
+            checkpoint = None
+            self._clear_targeted_backscan_streaming_files()
+
+        if checkpoint and self.run_id != checkpoint.run_id:
+            self.run_id = checkpoint.run_id
+            self.out_root = Path(self.config.out_root) / self.run_id
+            self.out_root.mkdir(parents=True, exist_ok=True)
+
+        processed_keys: list[str] = list(checkpoint.objects_processed_keys) if checkpoint else []
+        processed_key_set = set(processed_keys)
+        match_lookup: dict[tuple[str, str], dict[str, Any]] = {}
+        bytes_downloaded = checkpoint.compressed_bytes_downloaded if checkpoint else 0
         total_actions = 0
         total_update = 0
         total_target_matches = 0
-        bytes_downloaded = 0
         cap_exhausted = False
         source_or_decoder_blocked = False
         source_or_decoder_blocked_pairs: set[tuple[str, str]] = set()
         coverage_start_reached_pairs: set[tuple[str, str]] = set()
-
-        # Track chronological ranks during download for object audit enrichment.
-        download_rank = 0
-
-        for obj in selected_objects:
-            if not unresolved:
-                break
-            projected = bytes_downloaded + int(obj.get('size', 0) or 0)
-            if projected > config.max_download_bytes:
-                cap_exhausted = True
-                break
-            audit, matches, blocker = _parse_replica_cmds_target_object(obj, config, unresolved, symbol_to_asset_id, latest_cutoffs)
-            # Populate Wall 2 chronology tracking fields on the audit.
-            _, ts_int = _extract_replica_cmds_object_timestamp(audit.key)
-            audit.object_timestamp_ms = ts_int
-            audit.chronological_rank = download_rank
-            download_rank += 1
-            if unresolved and obj.get('date') == scan_plan.replica_cmds_coverage_start:
-                audit.coverage_start_pair_candidates = [f'{redact_address(addr)}:{sym}' for addr, sym in unresolved.keys()]
-                coverage_start_reached_pairs.update(unresolved.keys())
-            self.targeted_backward_lookup_object_audit.append(audit)
-            total_actions += audit.actions_decoded_total
-            total_update += audit.updateLeverage_count
-            total_target_matches += audit.target_updateLeverage_matches
-            bytes_downloaded += audit.size_compressed
-            if blocker:
-                source_or_decoder_blocked = True
-                source_or_decoder_blocked_pairs.update(unresolved.keys())
-            chosen = _resolve_most_recent_prior_leverage(matches)
-            chosen_pairs: set[tuple[str, str]] = set()
-            for real_pair, pos in list(unresolved.items()):
-                red = redact_address(real_pair[0])
-                resolved_match = chosen.get((red, real_pair[1]))
-                if resolved_match is None:
-                    continue
-                all_matches.append(resolved_match)
-                chosen_pairs.add(real_pair)
-            for pair in chosen_pairs:
-                unresolved.pop(pair, None)
-            if bytes_downloaded >= config.max_download_bytes and unresolved:
-                cap_exhausted = True
-                break
-
-        coverage_start_reached = bool(unresolved) and coverage_start_reached_pairs.issuperset(set(unresolved.keys()))
-
-        # Wall 2: chronology timestamp tracking for selected objects
         newest_ts = 0
         oldest_ts = 0
-        for obj_audit in self.targeted_backward_lookup_object_audit:
-            _, ts_int = _extract_replica_cmds_object_timestamp(obj_audit.key)
-            if ts_int > newest_ts:
-                newest_ts = ts_int
-            if oldest_ts == 0 or ts_int < oldest_ts:
-                oldest_ts = ts_int
+        peak_rss = _get_rss_mb()
+        unresolved = dict(unresolved)
 
-        # Wall 2: address identity join audit
-        identity_join_audit = _build_identity_join_audit(
-            selected_positions, all_matches, unresolved,
+        if checkpoint:
+            existing_object_rows = [TargetedBackwardLookupObjectAudit(**row) for row in _jsonl_read(self._targeted_backscan_paths()['object_audit'])]
+            self.targeted_backward_lookup_object_audit = existing_object_rows
+            for row in existing_object_rows:
+                total_actions += row.actions_decoded_total
+                total_update += row.updateLeverage_count
+                total_target_matches += row.target_updateLeverage_matches
+                if row.object_timestamp_ms:
+                    newest_ts = max(newest_ts, row.object_timestamp_ms)
+                    oldest_ts = row.object_timestamp_ms if oldest_ts == 0 else min(oldest_ts, row.object_timestamp_ms)
+                if row.rss_mb_peak_if_available is not None:
+                    peak_rss = max(peak_rss or 0.0, row.rss_mb_peak_if_available)
+            for entry in checkpoint.resolved_pair_states:
+                pair = _parse_checkpoint_pair_key(entry['pair_key'])
+                match = dict(entry['match'])
+                red = redact_address(pair[0])
+                match_lookup[(red, pair[1])] = match
+                unresolved.pop(pair, None)
+            for key in checkpoint.objects_processed_keys:
+                obj_meta = next((o for o in selected_objects if o.get('key') == key), None)
+                if obj_meta and obj_meta.get('date') == scan_plan.replica_cmds_coverage_start:
+                    for pair in list(unresolved.keys()):
+                        coverage_start_reached_pairs.add(pair)
+            existing_matches = _jsonl_read(self._targeted_backscan_paths()['matches'])
+            self.targeted_backward_lookup_matches = existing_matches
+            self.targeted_backward_lookup_progress_rows = _jsonl_read(self._targeted_backscan_paths()['progress'])
+        else:
+            self.targeted_backward_lookup_object_audit = []
+            self.targeted_backward_lookup_matches = []
+            self.targeted_backward_lookup_progress_rows = []
+            self._write_targeted_backscan_checkpoint(
+                selection_plan=selection_plan,
+                scan_plan=scan_plan,
+                selected_positions=selected_positions,
+                selected_objects=selected_objects,
+                processed_keys=processed_keys,
+                match_lookup=match_lookup,
+                unresolved=unresolved,
+                bytes_downloaded=bytes_downloaded,
+                stop_rule_if_any='',
+                safe_to_resume=True,
+                last_completed_object_key='',
+                last_completed_object_timestamp='',
+            )
+
+        self.targeted_backward_lookup_summary = TargetedBackwardLookupSummary(
+            target_symbol=selection_plan.target_symbol,
+            target_asset_id=selected_asset_id,
+            target_top_n=selection_plan.target_top_n,
+            selected_target_pairs=len(selected_positions),
+            selected_target_notional=selection_plan.selected_target_notional,
+            selected_target_notional_fraction=selection_plan.selected_target_notional_fraction,
+            selected_target_notional_fraction_of_SOL=selection_plan.selected_SOL_notional_fraction_of_SOL,
+            selected_target_notional_fraction_of_total_open=selection_plan.selected_SOL_notional_fraction_of_total_open,
+            selected_unique_addresses=len({p.address for p in selected_positions}),
+            objects_considered=scan_plan.objects_considered,
+            objects_selected=scan_plan.objects_selected,
+            objects_downloaded=len(processed_keys),
+            compressed_bytes_downloaded=bytes_downloaded,
+            cap=config.max_download_bytes,
+            remaining_cap=max(0, config.max_download_bytes - bytes_downloaded),
+            cap_exhausted=False,
+            coverage_start_reached=False,
+            stop_rule='',
+            actions_decoded_total=total_actions,
+            updateLeverage_count_total=total_update,
+            target_updateLeverage_matches_total=total_target_matches,
+            target_pairs_resolved=len(match_lookup),
+            target_pairs_unresolved=len(unresolved),
+            target_notional_resolved=Decimal(0),
+            target_notional_unresolved=selection_plan.selected_target_notional,
+            target_notional_resolved_fraction=0.0,
+            coverage_start_reached_for_unresolved_pairs=False,
+            source_or_decoder_blocked=False,
+            objects_listed_total=scan_plan.objects_listed_total,
+            objects_skipped_over_cap=scan_plan.objects_skipped_over_cap,
+            objects_skipped_missing_size=scan_plan.objects_skipped_missing_size,
+            objects_skipped_non_data=scan_plan.objects_skipped_non_data,
+            smallest_listed_object_size=scan_plan.smallest_listed_object_size,
+            largest_listed_object_size=scan_plan.largest_listed_object_size,
+            selection_mode=scan_plan.selection_mode,
+            chronology_strict=True,
+            selected_objects_are_newest_prior_sequence=True,
+            objects_planned_total=len(selected_objects),
+            objects_processed_count=len(processed_keys),
+            safe_to_resume=True,
+            rss_mb_peak_if_available=peak_rss,
         )
-        self._identity_join_audit = identity_join_audit
 
-        match_lookup = _resolve_most_recent_prior_leverage(all_matches)
+        try:
+            for obj in selected_objects:
+                if obj.get('key') in processed_key_set:
+                    continue
+                if not unresolved:
+                    break
+                projected = bytes_downloaded + int(obj.get('size', 0) or 0)
+                if projected > config.max_download_bytes:
+                    cap_exhausted = True
+                    break
+                rss_before = _get_rss_mb() if config.memory_audit else None
+                started = time.time()
+                audit, matches, blocker = _parse_replica_cmds_target_object(obj, config, unresolved, symbol_to_asset_id, latest_cutoffs)
+                _, ts_int = _extract_replica_cmds_object_timestamp(audit.key)
+                audit.object_timestamp_ms = ts_int
+                audit.chronological_rank = len(processed_keys)
+                audit.downloaded = True
+                if unresolved and obj.get('date') == scan_plan.replica_cmds_coverage_start:
+                    audit.coverage_start_pair_candidates = [f'{redact_address(addr)}:{sym}' for addr, sym in unresolved.keys()]
+                    coverage_start_reached_pairs.update(unresolved.keys())
+                chosen = _resolve_most_recent_prior_leverage(matches)
+                chosen_pairs: set[tuple[str, str]] = set()
+                for real_pair, pos in list(unresolved.items()):
+                    red = redact_address(real_pair[0])
+                    resolved_match = chosen.get((red, real_pair[1]))
+                    if resolved_match is None:
+                        continue
+                    match_lookup[(red, real_pair[1])] = resolved_match
+                    self._append_targeted_backscan_match(resolved_match)
+                    chosen_pairs.add(real_pair)
+                for pair in chosen_pairs:
+                    unresolved.pop(pair, None)
+                total_actions += audit.actions_decoded_total
+                total_update += audit.updateLeverage_count
+                total_target_matches += audit.target_updateLeverage_matches
+                bytes_downloaded += audit.size_compressed
+                if blocker:
+                    source_or_decoder_blocked = True
+                    source_or_decoder_blocked_pairs.update(unresolved.keys())
+                processed_keys.append(audit.key)
+                processed_key_set.add(audit.key)
+                newest_ts = max(newest_ts, ts_int) if ts_int else newest_ts
+                oldest_ts = ts_int if ts_int and oldest_ts == 0 else (min(oldest_ts, ts_int) if ts_int and oldest_ts else oldest_ts)
+                rss_after = _get_rss_mb() if config.memory_audit else None
+                peak_rss = max(peak_rss or 0.0, rss_after or 0.0, rss_before or 0.0) if config.memory_audit else peak_rss
+                audit.new_pairs_resolved = len(chosen_pairs)
+                audit.compressed_bytes_downloaded_cumulative = bytes_downloaded
+                audit.objects_processed_cumulative = len(processed_keys)
+                audit.rss_mb_before_object_if_available = rss_before
+                audit.rss_mb_after_object_if_available = rss_after
+                audit.rss_mb_peak_if_available = peak_rss
+                audit.duration_seconds = max(0.0, time.time() - started)
+                self.targeted_backward_lookup_object_audit.append(audit)
+                self._append_targeted_backscan_object_audit(audit)
+                progress_row = {
+                    'object_key': audit.key,
+                    'object_timestamp': audit.object_timestamp_ms,
+                    'compressed_size': audit.size_compressed,
+                    'downloaded': audit.downloaded,
+                    'actions_decoded': audit.actions_decoded_total,
+                    'updateLeverage_decoded': audit.updateLeverage_count,
+                    'target_matches': audit.target_updateLeverage_matches,
+                    'new_pairs_resolved': audit.new_pairs_resolved,
+                    'compressed_bytes_downloaded_cumulative': bytes_downloaded,
+                    'objects_processed_cumulative': len(processed_keys),
+                    'rss_mb_before_object_if_available': rss_before,
+                    'rss_mb_after_object_if_available': rss_after,
+                    'rss_mb_peak_if_available': peak_rss,
+                    'duration_seconds': audit.duration_seconds,
+                }
+                if config.progress_every_objects <= 1 or len(processed_keys) % max(1, config.progress_every_objects) == 0:
+                    self._append_targeted_backscan_progress(progress_row)
+                self._write_targeted_backscan_checkpoint(
+                    selection_plan=selection_plan,
+                    scan_plan=scan_plan,
+                    selected_positions=selected_positions,
+                    selected_objects=selected_objects,
+                    processed_keys=processed_keys,
+                    match_lookup=match_lookup,
+                    unresolved=unresolved,
+                    bytes_downloaded=bytes_downloaded,
+                    stop_rule_if_any='',
+                    safe_to_resume=True,
+                    last_completed_object_key=audit.key,
+                    last_completed_object_timestamp=str(ts_int) if ts_int else '',
+                )
+                del matches
+                gc.collect()
+                if bytes_downloaded >= config.max_download_bytes and unresolved:
+                    cap_exhausted = True
+                    break
+        except BaseException as exc:
+            oom_or_killed = isinstance(exc, MemoryError) or '137' in str(exc)
+            runtime_status = _runtime_blocked_status(oom_or_killed)
+            self.status = runtime_status
+            self._write_targeted_backscan_checkpoint(
+                selection_plan=selection_plan,
+                scan_plan=scan_plan,
+                selected_positions=selected_positions,
+                selected_objects=selected_objects,
+                processed_keys=processed_keys,
+                match_lookup=match_lookup,
+                unresolved=unresolved,
+                bytes_downloaded=bytes_downloaded,
+                stop_rule_if_any='RUNTIME_INTERRUPTED',
+                safe_to_resume=True,
+                last_completed_object_key=processed_keys[-1] if processed_keys else '',
+                last_completed_object_timestamp=str(newest_ts) if newest_ts else '',
+            )
+            if isinstance(exc, KeyboardInterrupt):
+                return runtime_status
+            raise
+
+        coverage_start_reached = bool(unresolved) and coverage_start_reached_pairs.issuperset(set(unresolved.keys()))
+        identity_join_audit = _build_identity_join_audit(selected_positions, list(match_lookup.values()), unresolved)
+        self._identity_join_audit = identity_join_audit
         classification_rows, classification_summary, oi_proxy = _classify_target_margin_modes(
             selected_positions,
             symbol_to_asset_id,
@@ -4983,7 +5275,7 @@ class NodeFillsLiqReconstructionProbe:
             selected_unique_addresses=len({p.address for p in selected_positions}),
             objects_considered=scan_plan.objects_considered,
             objects_selected=scan_plan.objects_selected,
-            objects_downloaded=len(self.targeted_backward_lookup_object_audit),
+            objects_downloaded=len(processed_keys),
             compressed_bytes_downloaded=bytes_downloaded,
             cap=config.max_download_bytes,
             remaining_cap=max(0, config.max_download_bytes - bytes_downloaded),
@@ -4999,25 +5291,42 @@ class NodeFillsLiqReconstructionProbe:
             target_notional_unresolved=unresolved_notional,
             target_notional_resolved_fraction=classification_summary.target_notional_resolved_fraction,
             coverage_start_reached_for_unresolved_pairs=coverage_start_reached,
-            # Chronology-strict selection audit fields
             selection_mode=scan_plan.selection_mode,
             chronology_strict=True,
             selected_objects_are_newest_prior_sequence=True,
             source_or_decoder_blocked=source_or_decoder_blocked,
-            # Listing audit fields (mirrors scan plan for cross-reference)
             objects_listed_total=scan_plan.objects_listed_total,
             objects_skipped_over_cap=scan_plan.objects_skipped_over_cap,
             objects_skipped_missing_size=scan_plan.objects_skipped_missing_size,
             objects_skipped_non_data=scan_plan.objects_skipped_non_data,
             smallest_listed_object_size=scan_plan.smallest_listed_object_size,
             largest_listed_object_size=scan_plan.largest_listed_object_size,
-            # Wall 2 chronology tracking: ms timestamps from object audits.
             newest_downloaded_object_timestamp=str(newest_ts) if newest_ts else '',
             oldest_downloaded_object_timestamp=str(oldest_ts) if oldest_ts else '',
             scan_span_hours=(newest_ts - oldest_ts) / 3_600_000 if (newest_ts and oldest_ts and newest_ts > oldest_ts) else 0.0,
             scan_span_days=((newest_ts - oldest_ts) / 3_600_000 / 24.0) if (newest_ts and oldest_ts and newest_ts > oldest_ts) else 0.0,
+            objects_planned_total=len(selected_objects),
+            objects_processed_count=len(processed_keys),
+            last_completed_object_key=processed_keys[-1] if processed_keys else '',
+            last_completed_object_timestamp=str(newest_ts) if newest_ts else '',
+            safe_to_resume=bool(unresolved),
+            rss_mb_peak_if_available=peak_rss,
         )
         self.targeted_backward_lookup_matches = list(match_lookup.values())
+        self._write_targeted_backscan_checkpoint(
+            selection_plan=selection_plan,
+            scan_plan=scan_plan,
+            selected_positions=selected_positions,
+            selected_objects=selected_objects,
+            processed_keys=processed_keys,
+            match_lookup=match_lookup,
+            unresolved=unresolved,
+            bytes_downloaded=bytes_downloaded,
+            stop_rule_if_any=stop_rule,
+            safe_to_resume=bool(unresolved),
+            last_completed_object_key=processed_keys[-1] if processed_keys else '',
+            last_completed_object_timestamp=str(newest_ts) if newest_ts else '',
+        )
 
         remaining_cap = max(0, config.max_download_bytes - bytes_downloaded)
         unresolved_fraction = 1.0 - self.targeted_backward_lookup_summary.target_notional_resolved_fraction
@@ -5052,25 +5361,121 @@ class NodeFillsLiqReconstructionProbe:
         return self._terminal_for_targeted_margin_mode_lookup()
 
 
+    def _targeted_backscan_paths(self) -> dict[str, Path]:
+        out = self.out_root
+        return {
+            'object_audit': out / 'targeted_backward_lookup_object_audit.jsonl',
+            'matches': out / 'targeted_backward_lookup_matches.jsonl',
+            'progress': out / 'targeted_backward_lookup_progress.jsonl',
+            'checkpoint': out / 'targeted_backward_lookup_checkpoint.json',
+        }
+
+    def _append_targeted_backscan_object_audit(self, audit: TargetedBackwardLookupObjectAudit) -> None:
+        _jsonl_append(self._targeted_backscan_paths()['object_audit'], dataclasses.asdict(audit))
+
+    def _append_targeted_backscan_match(self, match: dict[str, Any]) -> None:
+        _jsonl_append(self._targeted_backscan_paths()['matches'], match)
+
+    def _append_targeted_backscan_progress(self, row: dict[str, Any]) -> None:
+        self.targeted_backward_lookup_progress_rows.append(row)
+        _jsonl_append(self._targeted_backscan_paths()['progress'], row)
+
+    def _clear_targeted_backscan_streaming_files(self) -> None:
+        for path in self._targeted_backscan_paths().values():
+            if path.exists():
+                path.unlink()
+
+    def _validate_targeted_backscan_checkpoint(
+        self,
+        checkpoint: TargetedBackwardLookupCheckpoint,
+        selection_plan: Wall2TargetSelectionPlan,
+        scan_plan: TargetedBackwardLookupScanPlan,
+        config: StudyConfig,
+    ) -> None:
+        if checkpoint.target_symbol != selection_plan.target_symbol:
+            raise RuntimeError('NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH')
+        if checkpoint.target_top_n != selection_plan.target_top_n:
+            raise RuntimeError('NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH')
+        if checkpoint.selection_mode != scan_plan.selection_mode:
+            raise RuntimeError('NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH')
+        if checkpoint.cap != config.max_download_bytes:
+            raise RuntimeError('NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH')
+        if not checkpoint.safe_to_resume:
+            raise RuntimeError('NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH')
+
+    def _write_targeted_backscan_checkpoint(
+        self,
+        *,
+        selection_plan: Wall2TargetSelectionPlan,
+        scan_plan: TargetedBackwardLookupScanPlan,
+        selected_positions: list[OpenNamedPosition],
+        selected_objects: list[dict[str, Any]],
+        processed_keys: list[str],
+        match_lookup: dict[tuple[str, str], dict[str, Any]],
+        unresolved: dict[tuple[str, str], OpenNamedPosition],
+        bytes_downloaded: int,
+        stop_rule_if_any: str,
+        safe_to_resume: bool,
+        last_completed_object_key: str,
+        last_completed_object_timestamp: str,
+    ) -> None:
+        total_notional = selection_plan.selected_target_notional
+        resolved_notional = sum(
+            (pos.position_notional_at_last_fill_px for pos in selected_positions if (redact_address(pos.address), pos.symbol) in match_lookup),
+            Decimal(0),
+        )
+        unresolved_notional = total_notional - resolved_notional
+        checkpoint = TargetedBackwardLookupCheckpoint(
+            run_id=self.run_id,
+            selection_mode=scan_plan.selection_mode,
+            target_symbol=selection_plan.target_symbol,
+            target_top_n=selection_plan.target_top_n,
+            cap=self.config.max_download_bytes,
+            compressed_bytes_downloaded=bytes_downloaded,
+            objects_planned_total=len(selected_objects),
+            objects_processed_count=len(processed_keys),
+            objects_processed_keys=list(processed_keys),
+            last_completed_object_key=last_completed_object_key,
+            last_completed_object_timestamp=last_completed_object_timestamp,
+            target_pairs_total=len(selected_positions),
+            target_pairs_resolved=len(match_lookup),
+            target_pairs_unresolved=len(unresolved),
+            target_notional_resolved=resolved_notional,
+            target_notional_unresolved=unresolved_notional,
+            resolved_pair_states=[
+                {
+                    'pair_key': _checkpoint_pair_key(pos.address, pos.symbol),
+                    'match': _checkpoint_match_state(match_lookup[(redact_address(pos.address), pos.symbol)]),
+                }
+                for pos in selected_positions
+                if (redact_address(pos.address), pos.symbol) in match_lookup
+            ],
+            unresolved_pair_keys=sorted(_checkpoint_pair_key(addr, sym) for addr, sym in unresolved.keys()),
+            stop_rule_if_any=stop_rule_if_any,
+            safe_to_resume=safe_to_resume,
+        )
+        self.targeted_backward_lookup_checkpoint = checkpoint
+        atomic_write_json(self._targeted_backscan_paths()['checkpoint'], _serialize_checkpoint(checkpoint))
+
     def _terminal_for_targeted_margin_mode_lookup(self) -> str:
         if self.targeted_backward_lookup_summary is None:
             raise RuntimeError('targeted backward lookup summary missing')
         if self.targeted_margin_mode_classification_summary is None:
             raise RuntimeError('targeted margin mode classification summary missing')
 
-        resolved_fraction = self.targeted_backward_lookup_summary.target_notional_resolved_fraction
-        resolved_isolated_fraction = (
-            self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_resolved_notional
-        )
-        target_isolated_fraction = (
-            self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_target_notional
-        )
-        cap_exhausted = self.targeted_backward_lookup_summary.cap_exhausted
+        summary = self.targeted_backward_lookup_summary
+        if summary.objects_processed_count == 0 and summary.target_notional_resolved_fraction == 0 and not summary.cap_exhausted:
+            return _runtime_blocked_status(False)
+        if summary.stop_rule in {'RUNTIME_INTERRUPTED', 'OOM_OR_PROCESS_KILLED'}:
+            return _runtime_blocked_status(summary.stop_rule == 'OOM_OR_PROCESS_KILLED')
 
-        if cap_exhausted and resolved_fraction == 0:
-            return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP.value
+        resolved_fraction = summary.target_notional_resolved_fraction
+        resolved_isolated_fraction = self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_resolved_notional
+        target_isolated_fraction = self.targeted_margin_mode_classification_summary.computable_isolated_fraction_of_target_notional
+        cap_exhausted = summary.cap_exhausted
+
         if cap_exhausted and resolved_fraction < 0.60:
-            return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_TARGETED_LEVERAGE_BACKSCAN_CAP_EXHAUSTED.value
+            return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP.value
         if resolved_fraction < 0.60:
             return 'NODE_FILLS_LIQ_PHASE_MINUS1_' + StudyStatus.NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP.value
         if resolved_isolated_fraction >= 0.25 or target_isolated_fraction >= 0.25:
@@ -5362,14 +5767,24 @@ class NodeFillsLiqReconstructionProbe:
             atomic_write_json(out / 'asset_id_symbol_mapping_audit.json', self.asset_id_symbol_mapping_audit)
         if self.targeted_backward_lookup_scan_plan:
             atomic_write_json(out / 'targeted_backward_lookup_scan_plan.json', dataclasses.asdict(self.targeted_backward_lookup_scan_plan))
-        if self.targeted_backward_lookup_object_audit:
-            _jsonl_write(out / 'targeted_backward_lookup_object_audit.jsonl', [dataclasses.asdict(a) for a in self.targeted_backward_lookup_object_audit])
-        elif self.targeted_backward_lookup_scan_plan:
-            _jsonl_write(out / 'targeted_backward_lookup_object_audit.jsonl', [])
-        if self.targeted_backward_lookup_matches:
-            _jsonl_write(out / 'targeted_backward_lookup_matches.jsonl', self.targeted_backward_lookup_matches)
-        elif self.targeted_backward_lookup_scan_plan:
-            _jsonl_write(out / 'targeted_backward_lookup_matches.jsonl', [])
+        object_audit_path = out / 'targeted_backward_lookup_object_audit.jsonl'
+        matches_path = out / 'targeted_backward_lookup_matches.jsonl'
+        progress_path = out / 'targeted_backward_lookup_progress.jsonl'
+        checkpoint_path = out / 'targeted_backward_lookup_checkpoint.json'
+        if self.targeted_backward_lookup_object_audit and not object_audit_path.exists():
+            _jsonl_write(object_audit_path, [dataclasses.asdict(a) for a in self.targeted_backward_lookup_object_audit])
+        elif self.targeted_backward_lookup_scan_plan and not object_audit_path.exists():
+            _jsonl_write(object_audit_path, [])
+        if self.targeted_backward_lookup_matches and not matches_path.exists():
+            _jsonl_write(matches_path, self.targeted_backward_lookup_matches)
+        elif self.targeted_backward_lookup_scan_plan and not matches_path.exists():
+            _jsonl_write(matches_path, [])
+        if self.targeted_backward_lookup_progress_rows and not progress_path.exists():
+            _jsonl_write(progress_path, self.targeted_backward_lookup_progress_rows)
+        elif self.targeted_backward_lookup_scan_plan and not progress_path.exists():
+            _jsonl_write(progress_path, [])
+        if self.targeted_backward_lookup_checkpoint:
+            atomic_write_json(checkpoint_path, _serialize_checkpoint(self.targeted_backward_lookup_checkpoint))
         if self.targeted_backward_lookup_summary:
              # Enrich summary with chronology and identity join fields before writing.
              enriched = dict(dataclasses.asdict(self.targeted_backward_lookup_summary))
@@ -6778,7 +7193,6 @@ def _parse_replica_cmds_target_object(
         decode_errors.append(compression_mode)
         decoder_audit.decode_error_count += 1
     decode_errors.extend(parse_errors[:20])
-    # Wall 2: normalize target addresses to lowercase with 0x prefix for identity matching.
     target_addresses_normalized = {_normalize_address(p.address) for p in unresolved_pairs.values()}
     target_asset_ids = {symbol_to_asset_id[p.symbol] for p in unresolved_pairs.values() if p.symbol in symbol_to_asset_id}
     asset_id_to_symbol = {aid: sym for sym, aid in symbol_to_asset_id.items()}
@@ -6793,7 +7207,6 @@ def _parse_replica_cmds_target_object(
         update_count += 1
         asset_id = str(action.get('asset')) if action.get('asset') is not None else ''
         identity = str(action.get('identity') or action.get('signer') or action.get('vaultAddress') or action.get('user') or action.get('address') or '')
-        # Normalize identity for comparison
         identity_norm = _normalize_address(identity) if identity else ''
         if identity_norm in target_addresses_normalized:
             target_address_matches += 1
@@ -6803,8 +7216,6 @@ def _parse_replica_cmds_target_object(
         if symbol is None:
             continue
         pair = (identity_norm, symbol)
-        # Map back to original address for unresolved_pairs lookup.
-        # unresolved_pairs keys are (address, symbol) tuples; iterate properly.
         original_pair = None
         for orig_key, pos in unresolved_pairs.items():
             orig_addr_str, orig_symbol = orig_key[0], orig_key[1]
@@ -6828,6 +7239,8 @@ def _parse_replica_cmds_target_object(
             'nonce_or_timestamp': int(action.get('nonce') or action.get('timestamp') or 0),
             'object_key': key,
             'date_prefix': date_prefix,
+            'identity': identity_norm,
+            'vaultAddress': _normalize_address(str(action.get('vaultAddress') or '')) if action.get('vaultAddress') else '',
         })
     resolved = _resolve_most_recent_prior_leverage(matches)
     newest_matches = list(resolved.values())
@@ -6849,6 +7262,10 @@ def _parse_replica_cmds_target_object(
         newest_prior_matches_selected=len(newest_matches),
     )
     blocker = 'UNKNOWN_DECODER_OR_SOURCE_BLOCKED' if audit.decode_errors and not actions else None
+    del actions
+    del raw_bytes
+    del raw_compressed
+    gc.collect()
     return audit, newest_matches, blocker
 
 

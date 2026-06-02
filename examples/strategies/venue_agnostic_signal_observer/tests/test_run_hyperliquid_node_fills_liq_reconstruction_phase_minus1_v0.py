@@ -166,3 +166,16 @@ def test_runner_writes_state_samples(tmp_path: Path):
     _run_probe(out)
     # Dry-run: no records → no state samples expected
     pass
+
+
+def test_build_config_includes_streaming_resume_flags(tmp_path):
+    args = runner.parse_args([
+        '--out-root', str(tmp_path),
+        '--resume-targeted-backscan',
+        '--memory-audit',
+        '--progress-every-objects', '3',
+    ])
+    config = runner.build_config(args)
+    assert config.resume_targeted_backscan is True
+    assert config.memory_audit is True
+    assert config.progress_every_objects == 3
