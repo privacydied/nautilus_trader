@@ -38,9 +38,7 @@ _repo_root = str(Path(__file__).resolve().parent.parent.parent.parent)
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
-from examples.strategies.venue_agnostic_signal_observer import (
-    hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0 as probe_mod,
-)
+from examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.node_fills_liq_reconstruction import runner as probe_mod
 from examples.strategies.venue_agnostic_signal_observer.adapters.node_fills_by_block_adapter import (
     NodeFillRecord,
     signed_delta_for_side,
