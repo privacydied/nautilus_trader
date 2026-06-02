@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from importlib import import_module
+from types import ModuleType
+
 from examples.strategies.venue_agnostic_signal_observer.hypotheses.base import HypothesisRunner
 from examples.strategies.venue_agnostic_signal_observer.runners.base import RegisteredRunner
+
+# ---------------------------------------------------------------------------
+# Runtime runner registry (HypothesisRunner instances)
+# ---------------------------------------------------------------------------
 
 _RUNNERS_BY_NAME: dict[str, RegisteredRunner] = {}
 _RUNNER_NAMES_BY_STUDY_ID: dict[str, str] = {}
@@ -33,3 +41,129 @@ def list_runners() -> list[RegisteredRunner]:
 def clear_runner_registry_for_tests() -> None:
     _RUNNERS_BY_NAME.clear()
     _RUNNER_NAMES_BY_STUDY_ID.clear()
+
+
+# ---------------------------------------------------------------------------
+# Metadata-only runner spec registry (lazy import, no heavy imports at load)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class RunnerSpec:
+    """Lightweight, import-time-safe descriptor for a runner.
+
+    Holds only strings — no module imports happen until an explicit
+    ``import_*`` helper is called.
+    """
+
+    key: str
+    family: str
+    venue: str
+    study_id: str
+    description: str
+    cli_module: str
+    implementation_module: str
+    package_module: str
+    legacy_module: str
+    tags: tuple[str, ...] = ()
+
+    def import_cli_module(self) -> ModuleType:
+        """Lazily import the CLI entrypoint module."""
+        return import_module(self.cli_module)
+
+    def import_implementation_module(self) -> ModuleType:
+        """Lazily import the heavy implementation module."""
+        return import_module(self.implementation_module)
+
+    def import_package_module(self) -> ModuleType:
+        """Lazily import the package ``__init__`` module."""
+        return import_module(self.package_module)
+
+    def import_legacy_module(self) -> ModuleType:
+        """Lazily import the legacy wrapper module."""
+        return import_module(self.legacy_module)
+
+
+# ---------------------------------------------------------------------------
+# Single registered spec — node fills liquidation reconstruction
+# ---------------------------------------------------------------------------
+
+_NODE_FILLS_KEY = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+
+NODE_FILLS_LIQ_RECONSTRUCTION = RunnerSpec(
+    key=_NODE_FILLS_KEY,
+    family="node_fills_liq_reconstruction",
+    venue="hyperliquid",
+    study_id=_NODE_FILLS_KEY,
+    description=(
+        "Hyperliquid node-fills liquidation reconstruction "
+        "Phase -1 compatibility runner."
+    ),
+    cli_module=(
+        "examples.strategies.venue_agnostic_signal_observer."
+        "run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+    ),
+    implementation_module=(
+        "examples.strategies.venue_agnostic_signal_observer."
+        "hypotheses.hyperliquid.node_fills_liq_reconstruction.runner"
+    ),
+    package_module=(
+        "examples.strategies.venue_agnostic_signal_observer."
+        "hypotheses.hyperliquid.node_fills_liq_reconstruction"
+    ),
+    legacy_module=(
+        "examples.strategies.venue_agnostic_signal_observer."
+        "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+    ),
+    tags=(
+        "observer_only",
+        "hyperliquid",
+        "node_fills",
+        "liquidation_reconstruction",
+        "phase_minus1",
+        "compatibility_cli",
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# Registry internals
+# ---------------------------------------------------------------------------
+
+_REGISTERED_SPECS: tuple[RunnerSpec, ...] = (
+    NODE_FILLS_LIQ_RECONSTRUCTION,
+)
+
+
+def _build_registry_by_key(specs: tuple[RunnerSpec, ...]) -> dict[str, RunnerSpec]:
+    by_key: dict[str, RunnerSpec] = {}
+    for spec in specs:
+        if spec.key in by_key:
+            msg = f"duplicate runner registry key: {spec.key}"
+            raise ValueError(msg)
+        by_key[spec.key] = spec
+    return by_key
+
+
+_REGISTRY_BY_KEY: dict[str, RunnerSpec] = _build_registry_by_key(_REGISTERED_SPECS)
+
+
+# ---------------------------------------------------------------------------
+# Public query helpers
+# ---------------------------------------------------------------------------
+
+def iter_runner_specs() -> tuple[RunnerSpec, ...]:
+    """Return all registered ``RunnerSpec`` instances in deterministic order."""
+    return _REGISTERED_SPECS
+
+
+def get_runner_spec(key: str) -> RunnerSpec | None:
+    """Return the spec for *key*, or ``None`` if not registered."""
+    return _REGISTRY_BY_KEY.get(key)
+
+
+def require_runner_spec(key: str) -> RunnerSpec:
+    """Return the spec for *key*, raising ``KeyError`` if missing."""
+    spec = _REGISTRY_BY_KEY.get(key)
+    if spec is None:
+        raise KeyError(f"Unknown runner spec: {key!r}")
+    return spec
