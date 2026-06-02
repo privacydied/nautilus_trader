@@ -24,6 +24,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[6]
 
 _NODE_FILLS_KEY = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
 _COST_FEASIBILITY_KEY = "hyperliquid_cost_feasibility"
+_OI_KEY = "hyperliquid_oi_velocity_compression_phase0"
 _HEAVY_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
     "hypotheses.hyperliquid.node_fills_liq_reconstruction.runner"
@@ -91,7 +92,7 @@ class TestFilterSpecs:
         )
 
         specs = filter_specs(iter_runner_specs())
-        assert len(specs) == 2
+        assert len(specs) == 3
 
     def test_venue_filter_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -99,7 +100,7 @@ class TestFilterSpecs:
         )
 
         specs = filter_specs(iter_runner_specs(), venue="hyperliquid")
-        assert len(specs) == 2
+        assert len(specs) == 3
         assert all(spec.venue == "hyperliquid" for spec in specs)
 
     def test_venue_filter_no_match(self) -> None:
@@ -142,7 +143,7 @@ class TestFilterSpecs:
         )
 
         specs = filter_specs(iter_runner_specs(), tag="observer_only")
-        assert len(specs) == 2
+        assert len(specs) == 3
 
     def test_tag_filter_no_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -162,7 +163,7 @@ class TestFilterSpecs:
             venue="hyperliquid",
             tag="observer_only",
         )
-        assert len(specs) == 2
+        assert len(specs) == 3
 
     def test_combined_filters_no_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -189,7 +190,7 @@ class TestFormatRunnerListText:
         )
 
         text = format_runner_list_text(iter_runner_specs())
-        assert text.startswith("Registered runner specs: 2")
+        assert text.startswith("Registered runner specs: 3")
 
     def test_output_ends_with_newline(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -260,10 +261,11 @@ class TestFormatJsonPayload:
         raw = format_json_payload(iter_runner_specs())
         data = json.loads(raw)
         assert "runners" in data
-        assert len(data["runners"]) == 2
+        assert len(data["runners"]) == 3
         assert [runner["key"] for runner in data["runners"]] == [
             _NODE_FILLS_KEY,
             _COST_FEASIBILITY_KEY,
+            _OI_KEY,
         ]
 
     def test_empty_list_json(self) -> None:
@@ -298,10 +300,11 @@ class TestRegistryCliMain:
         out = capsys.readouterr().out
         data = json.loads(out)
         assert "runners" in data
-        assert len(data["runners"]) == 2
+        assert len(data["runners"]) == 3
         assert [runner["key"] for runner in data["runners"]] == [
             _NODE_FILLS_KEY,
             _COST_FEASIBILITY_KEY,
+            _OI_KEY,
         ]
 
     def test_key_detail(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -343,10 +346,11 @@ class TestRegistryCliMain:
         rc = main(["--venue", "hyperliquid", "--json"])
         assert rc == 0
         data = json.loads(capsys.readouterr().out)
-        assert len(data["runners"]) == 2
+        assert len(data["runners"]) == 3
         assert [runner["key"] for runner in data["runners"]] == [
             _NODE_FILLS_KEY,
             _COST_FEASIBILITY_KEY,
+            _OI_KEY,
         ]
 
     def test_venue_filter_empty(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -373,7 +377,7 @@ class TestRegistryCliMain:
         rc = main(["--tag", "observer_only", "--json"])
         assert rc == 0
         data = json.loads(capsys.readouterr().out)
-        assert len(data["runners"]) == 2
+        assert len(data["runners"]) == 3
 
     def test_tag_filter_empty(self, capsys: pytest.CaptureFixture[str]) -> None:
         rc = main(["--tag", "nonexistent", "--json"])
@@ -487,3 +491,4 @@ class TestRegistryCliLazyImports:
             f"subprocess failed:\nstdout={result.stdout}\nstderr={result.stderr}"
         )
         assert "OK: lazy import verified for cost-feasibility key mode" in result.stdout
+

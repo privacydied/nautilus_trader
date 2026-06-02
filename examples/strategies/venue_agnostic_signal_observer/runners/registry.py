@@ -12,6 +12,9 @@ from examples.strategies.venue_agnostic_signal_observer.hypotheses.package_contr
 from examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.cost_feasibility.metadata import (
     METADATA as HYPERLIQUID_COST_FEASIBILITY_METADATA,
 )
+from examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.oi_velocity_compression_phase0.metadata import (
+    METADATA as HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_METADATA,
+)
 from examples.strategies.venue_agnostic_signal_observer.runners.base import RegisteredRunner
 
 # ---------------------------------------------------------------------------
@@ -174,6 +177,10 @@ HYPERLIQUID_COST_FEASIBILITY = RunnerSpec.from_hypothesis_metadata(
     HYPERLIQUID_COST_FEASIBILITY_METADATA
 )
 
+HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0 = RunnerSpec.from_hypothesis_metadata(
+    HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_METADATA
+)
+
 
 # ---------------------------------------------------------------------------
 # Registry internals
@@ -182,6 +189,7 @@ HYPERLIQUID_COST_FEASIBILITY = RunnerSpec.from_hypothesis_metadata(
 _REGISTERED_SPECS: tuple[RunnerSpec, ...] = (
     NODE_FILLS_LIQ_RECONSTRUCTION,
     HYPERLIQUID_COST_FEASIBILITY,
+    HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0,
 )
 
 

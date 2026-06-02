@@ -55,8 +55,49 @@ HYPERLIQUID_COST_FEASIBILITY_CLI_SPEC = validate_runner_cli_spec(
     )
 )
 
+HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC = validate_runner_cli_spec(
+    RunnerCliSpec(
+        key="hyperliquid_oi_velocity_compression_phase0",
+        description="Hyperliquid OI velocity compression Phase 0 study.",
+        entry_module=(
+            "examples.strategies.venue_agnostic_signal_observer."
+            "run_hyperliquid_oi_velocity_compression_phase0"
+        ),
+        implementation_module=(
+            "examples.strategies.venue_agnostic_signal_observer."
+            "hypotheses.hyperliquid.oi_velocity_compression_phase0.runner"
+        ),
+        metadata_module=(
+            "examples.strategies.venue_agnostic_signal_observer."
+            "hypotheses.hyperliquid.oi_velocity_compression_phase0.metadata"
+        ),
+        build_parser_callable=None,
+        main_callable=None,
+        level=RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA,
+        risk=RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY,
+        supports_help_only=True,
+        import_safe=True,
+        writes_artifacts=False,
+        requires_network=False,
+        requires_archive_data=False,
+        requires_reports_dir=False,
+        observer_only=True,
+        paper_or_governance_sensitive=False,
+        live_or_service_sensitive=False,
+        registered=True,
+        legacy_entrypoint_path=(
+            "examples/strategies/venue_agnostic_signal_observer/"
+            "run_hyperliquid_oi_velocity_compression_phase0.py"
+        ),
+        test_modules=(
+            "examples.strategies.venue_agnostic_signal_observer.tests.unit.hypotheses.hyperliquid.test_hyperliquid_oi_velocity_compression_package_contract",
+        ),
+    )
+)
+
 ALL_RUNNER_CLI_SPECS: tuple[RunnerCliSpec, ...] = (
     HYPERLIQUID_COST_FEASIBILITY_CLI_SPEC,
+    HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC,
 )
 
 
@@ -82,6 +123,7 @@ def require_runner_cli_spec(key: str) -> RunnerCliSpec:
 __all__ = (
     "ALL_RUNNER_CLI_SPECS",
     "HYPERLIQUID_COST_FEASIBILITY_CLI_SPEC",
+    "HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC",
     "get_runner_cli_spec",
     "iter_runner_cli_specs",
     "require_runner_cli_spec",

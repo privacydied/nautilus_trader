@@ -10,7 +10,10 @@ from examples.strategies.venue_agnostic_signal_observer.runners.cli_specs import
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[6]
-_ACCEPTED_HELP_KEYS = ("hyperliquid_cost_feasibility",)
+_ACCEPTED_HELP_KEYS = (
+    "hyperliquid_cost_feasibility",
+    "hyperliquid_oi_velocity_compression_phase0",
+)
 _HELP_DIRS = (
     Path("examples/strategies/venue_agnostic_signal_observer/reports"),
     Path("examples/strategies/venue_agnostic_signal_observer/data"),
@@ -97,3 +100,30 @@ class TestRunnerCliSpecHelpContract:
         assert "registry_cli" not in result.stdout
         assert "registry_cli" not in result.stderr
         assert "run_dir" not in result.stdout
+
+    def test_oi_velocity_help_subprocess_contract(self) -> None:
+        spec = ALL_RUNNER_CLI_SPECS[1]
+        before = _snapshot_help_dirs()
+
+        result = _run_help_subprocess(spec.entry_module)
+
+        after = _snapshot_help_dirs()
+        assert result.returncode == 0, result.stderr
+        assert result.stderr.strip() == ""
+        assert "usage:" in result.stdout
+        assert "run_hyperliquid_oi_velocity_compression_phase0" in result.stdout
+        assert "--data-dir DATA_DIR" in result.stdout
+        assert len(result.stdout.splitlines()) == 14
+        assert before == after
+        assert "registry_cli" not in result.stdout
+        assert "registry_cli" not in result.stderr
+        assert "report_dir" not in result.stdout
+
+    def test_every_help_only_spec_runs_cleanly_without_writes(self) -> None:
+        for spec in ALL_RUNNER_CLI_SPECS:
+            before = _snapshot_help_dirs()
+            result = _run_help_subprocess(spec.entry_module)
+            after = _snapshot_help_dirs()
+            assert result.returncode == 0, (spec.key, result.stderr)
+            assert before == after
+

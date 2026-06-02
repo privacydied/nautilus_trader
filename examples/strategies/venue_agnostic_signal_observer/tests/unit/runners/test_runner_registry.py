@@ -96,6 +96,7 @@ def test_get_runner_returns_registered_entry() -> None:
 
 from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
     HYPERLIQUID_COST_FEASIBILITY,
+    HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0,
     NODE_FILLS_LIQ_RECONSTRUCTION,
     RunnerSpec,
     _build_registry_by_key,
@@ -106,9 +107,14 @@ from examples.strategies.venue_agnostic_signal_observer.runners.registry import 
 
 _NODE_FILLS_KEY = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
 _COST_FEASIBILITY_KEY = "hyperliquid_cost_feasibility"
+_OI_KEY = "hyperliquid_oi_velocity_compression_phase0"
 _COST_FEASIBILITY_RUNNER_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
     "hypotheses.hyperliquid.cost_feasibility.runner"
+)
+_OI_RUNNER_MODULE = (
+    "examples.strategies.venue_agnostic_signal_observer."
+    "hypotheses.hyperliquid.oi_velocity_compression_phase0.runner"
 )
 
 
@@ -117,9 +123,13 @@ def _clear_lazy_modules() -> None:
 
     for module_name in (
         _COST_FEASIBILITY_RUNNER_MODULE,
+        _OI_RUNNER_MODULE,
         "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_cost_feasibility",
+        "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_oi_velocity_compression_phase0",
         "examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.cost_feasibility",
+        "examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.oi_velocity_compression_phase0",
         "examples.strategies.venue_agnostic_signal_observer.hyperliquid_cost_feasibility",
+        "examples.strategies.venue_agnostic_signal_observer.hyperliquid_oi_velocity_compression_phase0",
     ):
         sys.modules.pop(module_name, None)
 
@@ -163,21 +173,24 @@ class TestRunnerSpecRegistry:
         # Remove from cache to test fresh import
         sys.modules.pop(heavy_module, None)
         sys.modules.pop(_COST_FEASIBILITY_RUNNER_MODULE, None)
+        sys.modules.pop(_OI_RUNNER_MODULE, None)
 
         from examples.strategies.venue_agnostic_signal_observer.runners import registry
 
         assert heavy_module not in sys.modules
         assert _COST_FEASIBILITY_RUNNER_MODULE not in sys.modules
+        assert _OI_RUNNER_MODULE not in sys.modules
 
         # require_runner_spec should still not import the heavy modules
         spec = registry.require_runner_spec(_NODE_FILLS_KEY)
         assert heavy_module not in sys.modules
         assert _COST_FEASIBILITY_RUNNER_MODULE not in sys.modules
+        assert _OI_RUNNER_MODULE not in sys.modules
 
     def test_exactly_one_runner_registered(self) -> None:
-        """3. Exactly two real runner specs are registered after Unit 7D."""
+        """3. Exactly three real runner specs are registered after Unit 9C."""
         specs = iter_runner_specs()
-        assert len(specs) == 2
+        assert len(specs) == 3
 
     def test_registered_key_is_stable(self) -> None:
         """4. Registered key matches the expected stable value."""
@@ -187,6 +200,10 @@ class TestRunnerSpecRegistry:
     def test_cost_feasibility_key_is_registered(self) -> None:
         spec = require_runner_spec(_COST_FEASIBILITY_KEY)
         assert spec.key == _COST_FEASIBILITY_KEY
+
+    def test_oi_velocity_key_is_registered(self) -> None:
+        spec = require_runner_spec(_OI_KEY)
+        assert spec.key == _OI_KEY
 
     def test_iter_runner_specs_returns_tuple(self) -> None:
         """5. iter_runner_specs() returns a tuple."""
@@ -205,6 +222,12 @@ class TestRunnerSpecRegistry:
         assert spec is not None
         assert spec.key == _COST_FEASIBILITY_KEY
         assert spec is HYPERLIQUID_COST_FEASIBILITY
+
+    def test_get_runner_spec_returns_oi_velocity_spec(self) -> None:
+        spec = get_runner_spec(_OI_KEY)
+        assert spec is not None
+        assert spec.key == _OI_KEY
+        assert spec is HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0
 
     def test_get_runner_spec_missing_returns_none(self) -> None:
         """7. get_runner_spec('missing') returns None."""
@@ -430,3 +453,4 @@ class TestRunnerSpecLazyImports:
             "NodeFillsLiqReconstructionProbe",
         ]:
             assert hasattr(legacy, name), f"missing symbol in legacy: {name}"
+

@@ -239,5 +239,9 @@ def test_metadata_fields_match_expected_contract() -> None:
     assert metadata.legacy_module == LEGACY_MODULE
 
 
-def test_registry_entry_absent_before_manual_unit9c_admission() -> None:
-    assert get_runner_spec("hyperliquid_oi_velocity_compression_phase0") is None
+def test_registry_entry_matches_manual_unit9c_admission() -> None:
+    spec = get_runner_spec("hyperliquid_oi_velocity_compression_phase0")
+    assert spec is not None
+    assert spec.key == "hyperliquid_oi_velocity_compression_phase0"
+    assert spec.family == "oi_velocity_compression"
+    assert spec.venue == "hyperliquid"
