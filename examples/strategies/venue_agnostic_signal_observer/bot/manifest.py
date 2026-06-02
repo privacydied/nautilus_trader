@@ -11,23 +11,13 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-
-def _parse_expiry_datetime(value: str) -> datetime:
-    """Parse an ISO datetime string into a timezone-aware datetime.
-
-    Normalizes trailing 'Z' to '+00:00' for fromisoformat compatibility.
-    Naive datetimes (no offset) are assumed UTC.
-    Raises ValueError or TypeError on malformed input.
-    """
-    normalized = value.rstrip("Z") if value.endswith("Z") else value
-    dt = datetime.fromisoformat(normalized)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt
+from examples.strategies.venue_agnostic_signal_observer.core.time_utils import (
+    is_expired_at,
+)
 
 
 @dataclass
@@ -44,16 +34,10 @@ class ManifestRecord:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
-    def is_expired(self) -> bool:
+    def is_expired(self, *, now: datetime | None = None) -> bool:
         if self.expires_at_utc is None:
             return False
-        now = datetime.now(timezone.utc)
-        try:
-            expires_dt = _parse_expiry_datetime(self.expires_at_utc)
-        except (ValueError, TypeError):
-            # Malformed expiry → fail closed: treat as expired
-            return True
-        return now >= expires_dt
+        return is_expired_at(self.expires_at_utc, now=now, malformed_is_expired=True)
 
 
 @dataclass
