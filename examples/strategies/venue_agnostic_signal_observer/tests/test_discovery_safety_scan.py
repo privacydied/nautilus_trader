@@ -241,3 +241,113 @@ import ccxt
         a = SafetyFinding("file.py", 10, "FORBIDDEN_IMPORT", "test")
         s = {a}
         assert len(s) == 1
+
+
+# ===================================================================
+# BARE SUBPROCESS IMPORT DETECTION (Unit 4F)
+# ===================================================================
+
+
+class TestBareSubprocessImportDetection:
+    """Detect bare subprocess imports that bypass attribute-based scanning."""
+
+    def _scan_ast(self, source, filepath="<test>"):
+        """Parse source and find violations using the same logic as safety_scan."""
+        from examples.strategies.venue_agnostic_signal_observer.discovery.safety_scan import (
+            _scan_file,
+        )
+        temp_path = Path(filepath)
+        temp_path.write_text(source)
+        return _scan_file(temp_path)
+
+    def test_bare_from_subprocess_import_run(self, tmp_path):
+        """from subprocess import run; run([...]) must be flagged."""
+        content = textwrap.dedent("""
+        from subprocess import run
+        run(["echo", "x"])
+        """)
+        violations = self._scan_ast(content, str(tmp_path / "bare_run.py"))
+        subprocess_violations = [v for v in violations if v.kind == "FORBIDDEN_SUBPROCESS"]
+        assert len(subprocess_violations) >= 1, (
+            f"Expected at least 1 FORBIDDEN_SUBPROCESS for bare 'from subprocess import run', "
+            f"got {len(subprocess_violations)}: {subprocess_violations}"
+        )
+
+    def test_bare_from_subprocess_import_popen(self, tmp_path):
+        """from subprocess import Popen; Popen([...]) must be flagged."""
+        content = textwrap.dedent("""
+        from subprocess import Popen
+        Popen(["echo", "x"])
+        """)
+        violations = self._scan_ast(content, str(tmp_path / "bare_popen.py"))
+        subprocess_violations = [v for v in violations if v.kind == "FORBIDDEN_SUBPROCESS"]
+        assert len(subprocess_violations) >= 1, (
+            f"Expected at least 1 FORBIDDEN_SUBPROCESS for bare 'from subprocess import Popen', "
+            f"got {len(subprocess_violations)}: {subprocess_violations}"
+        )
+
+    def test_bare_from_subprocess_import_call(self, tmp_path):
+        """from subprocess import call; call([...]) must be flagged."""
+        content = textwrap.dedent("""
+        from subprocess import call
+        call(["echo", "x"])
+        """)
+        violations = self._scan_ast(content, str(tmp_path / "bare_call.py"))
+        subprocess_violations = [v for v in violations if v.kind == "FORBIDDEN_SUBPROCESS"]
+        assert len(subprocess_violations) >= 1, (
+            f"Expected at least 1 FORBIDDEN_SUBPROCESS for bare 'from subprocess import call', "
+            f"got {len(subprocess_violations)}: {subprocess_violations}"
+        )
+
+    def test_aliased_import_subprocess_as_sp(self, tmp_path):
+        """import subprocess as sp; sp.run([...]) must be flagged."""
+        content = textwrap.dedent("""
+        import subprocess as sp
+        sp.run(["echo", "x"])
+        """)
+        violations = self._scan_ast(content, str(tmp_path / "aliased_sp.py"))
+        subprocess_violations = [v for v in violations if v.kind == "FORBIDDEN_SUBPROCESS"]
+        assert len(subprocess_violations) >= 1, (
+            f"Expected at least 1 FORBIDDEN_SUBPROCESS for 'import subprocess as sp; sp.run()', "
+            f"got {len(subprocess_violations)}: {subprocess_violations}"
+        )
+
+    def test_from_subprocess_import_run_as_r(self, tmp_path):
+        """from subprocess import run as r; r([...]) must be flagged."""
+        content = textwrap.dedent("""
+        from subprocess import run as r
+        r(["echo", "x"])
+        """)
+        violations = self._scan_ast(content, str(tmp_path / "aliased_run.py"))
+        subprocess_violations = [v for v in violations if v.kind == "FORBIDDEN_SUBPROCESS"]
+        assert len(subprocess_violations) >= 1, (
+            f"Expected at least 1 FORBIDDEN_SUBPROCESS for 'from subprocess import run as r', "
+            f"got {len(subprocess_violations)}: {subprocess_violations}"
+        )
+
+    def test_local_run_not_flagged(self, tmp_path):
+        """A local run() not imported from subprocess must not be flagged."""
+        content = textwrap.dedent("""
+        def run(x):
+            pass
+        run(["echo", "x"])
+        """)
+        violations = self._scan_ast(content, str(tmp_path / "local_run.py"))
+        subprocess_violations = [v for v in violations if v.kind == "FORBIDDEN_SUBPROCESS"]
+        assert len(subprocess_violations) == 0, (
+            f"Expected 0 FORBIDDEN_SUBPROCESS for local run(), "
+            f"got {len(subprocess_violations)}: {subprocess_violations}"
+        )
+
+    def test_allowlisted_bare_run_git_rev_parse(self, tmp_path):
+        """Bare 'from subprocess import run; run(["git", "rev-parse", "HEAD"])' must be allowed."""
+        content = textwrap.dedent("""
+        from subprocess import run
+        run(["git", "rev-parse", "HEAD"])
+        """)
+        violations = self._scan_ast(content, str(tmp_path / "bare_git.py"))
+        subprocess_violations = [v for v in violations if v.kind == "FORBIDDEN_SUBPROCESS"]
+        assert len(subprocess_violations) == 0, (
+            f"Expected 0 FORBIDDEN_SUBPROCESS for allowlisted bare run(git rev-parse HEAD), "
+            f"got {len(subprocess_violations)}: {subprocess_violations}"
+        )

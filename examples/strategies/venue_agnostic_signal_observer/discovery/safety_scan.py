@@ -178,6 +178,9 @@ def _scan_file(file_path: Path) -> list[SafetyFinding]:
         )
         return findings
 
+    # Collect subprocess import aliases for bare-name resolution
+    subprocess_aliases: dict[str, str] = _collect_subprocess_aliases(tree)
+
     for node in ast.walk(tree):
         # Static imports
         if isinstance(node, ast.Import):
@@ -212,7 +215,7 @@ def _scan_file(file_path: Path) -> list[SafetyFinding]:
         # Dynamic imports, subprocess, env access (all Call-based checks)
         if isinstance(node, ast.Call):
             findings.extend(_check_dynamic_import(str(file_path), node))
-            findings.extend(_check_subprocess(str(file_path), node))
+            findings.extend(_check_subprocess(str(file_path), node, subprocess_aliases))
             findings.extend(_check_env_access_call(str(file_path), node))
 
         # os.environ subscript access: os.environ["KEY"]
@@ -220,6 +223,29 @@ def _scan_file(file_path: Path) -> list[SafetyFinding]:
             findings.extend(_check_env_access_subscript(str(file_path), node))
 
     return findings
+
+
+def _collect_subprocess_aliases(tree: ast.Module) -> dict[str, str]:
+    """Collect subprocess import aliases from AST for bare-name resolution.
+
+    Handles:
+        import subprocess as sp  →  {"sp": "subprocess"}
+        from subprocess import run  →  {"run": "subprocess.run"}
+        from subprocess import Popen as P  →  {"P": "subprocess.Popen"}
+    """
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "subprocess":
+                    local_name = alias.asname or "subprocess"
+                    aliases[local_name] = "subprocess"
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "subprocess":
+                for alias in node.names:
+                    local_name = alias.asname or alias.name
+                    aliases[local_name] = f"subprocess.{alias.name}"
+    return aliases
 
 
 def _check_import(file_path: str, module_name: str, lineno: int) -> list[SafetyFinding]:
@@ -368,7 +394,9 @@ def _check_env_access_subscript(file_path: str, node: ast.Subscript) -> list[Saf
     return findings
 
 
-def _check_subprocess(file_path: str, node: ast.Call) -> list[SafetyFinding]:
+def _check_subprocess(
+    file_path: str, node: ast.Call, subprocess_aliases: dict[str, str] | None = None,
+) -> list[SafetyFinding]:
     """Check subprocess usage.
 
     Only allow:
@@ -384,6 +412,23 @@ def _check_subprocess(file_path: str, node: ast.Call) -> list[SafetyFinding]:
     """
     findings: list[SafetyFinding] = []
     func = _get_call_func_name(node)
+
+    # Resolve bare names via subprocess import aliases.
+    # Handles both bare names ("run" → "subprocess.run") and
+    # dotted attribute access ("sp.run" → "subprocess.run" when
+    # "import subprocess as sp" is present).
+    if subprocess_aliases:
+        if func in subprocess_aliases:
+            # Bare name: "run" → "subprocess.run"
+            alias_val = subprocess_aliases[func]
+            func = f"{alias_val}.run" if alias_val == "subprocess" else alias_val
+        elif "." in func:
+            prefix, _, attr = func.partition(".")
+            if prefix in subprocess_aliases:
+                # Dotted: "sp.run" → "subprocess.run"
+                module_alias = subprocess_aliases[prefix]
+                if module_alias == "subprocess":
+                    func = f"subprocess.{attr}"
 
     # Check for os.system and os.popen (they take string commands)
     if func in ("os.system", "os.popen"):
