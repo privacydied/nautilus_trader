@@ -34,6 +34,7 @@ PACKAGE_MODULE = (
 RUNNER_MODULE = f"{PACKAGE_MODULE}.runner"
 STATUSES_MODULE = f"{PACKAGE_MODULE}.statuses"
 CONFIG_MODULE = f"{PACKAGE_MODULE}.config"
+MODELS_MODULE = f"{PACKAGE_MODULE}.models"
 MOVED_STATUS_CONSTANTS = (
     'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REQUESTER_PAYS_AUTH_EXPIRED',
     'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_NAMESPACE_NOT_FOUND',
@@ -46,6 +47,29 @@ MOVED_STATUS_CONSTANTS = (
     'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH',
     'NODE_FILLS_LIQ_PHASE_MINUS1_ERROR_INVALID_OUTPUT',
 )
+MOVED_MODEL_NAMES = (
+    'StudyConfig',
+    'TargetedBackwardLookupCheckpoint',
+    'TargetedBackwardLookupSummary',
+)
+MODEL_FIELD_EXPECTATIONS = {
+    'StudyConfig': {
+        'study_id': ('hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0', False),
+        'target_top_n': (30, False),
+        'progress_every_objects': (1, False),
+    },
+    'TargetedBackwardLookupCheckpoint': {
+        'objects_processed_keys': (None, True),
+        'target_notional_resolved': (None, True),
+        'safe_to_resume': (True, False),
+    },
+    'TargetedBackwardLookupSummary': {
+        'selected_target_notional': (None, True),
+        'identity_join_verdict': ('UNVERIFIED', False),
+        'safe_to_resume': (False, False),
+    },
+}
+
 MOVED_CONFIG_CONSTANTS = (
     'FORBIDDEN_STATUSES',
     'STUDY_SALT',
@@ -258,3 +282,48 @@ def test_moved_constants_resolve_to_same_objects_from_source_modules():
         assert getattr(runner, name) is getattr(config, name), name
         assert getattr(pkg, name) is getattr(runner, name), name
         assert getattr(legacy, name) is getattr(runner, name), name
+
+
+def test_models_module_exports_moved_models():
+    models = importlib.import_module(MODELS_MODULE)
+    assert tuple(getattr(models, '__all__', ())) == MOVED_MODEL_NAMES
+    for name in MOVED_MODEL_NAMES:
+        assert hasattr(models, name), name
+
+
+def test_moved_models_remain_exposed_via_runner_package_and_legacy_wrapper():
+    legacy = importlib.import_module(LEGACY_MODULE)
+    pkg = importlib.import_module(PACKAGE_MODULE)
+    runner = importlib.import_module(RUNNER_MODULE)
+    for name in MOVED_MODEL_NAMES:
+        assert hasattr(runner, name), f'runner missing {name}'
+        assert hasattr(pkg, name), f'package missing {name}'
+        assert hasattr(legacy, name), f'legacy missing {name}'
+
+
+def test_moved_models_resolve_to_same_objects_from_models_module():
+    legacy = importlib.import_module(LEGACY_MODULE)
+    pkg = importlib.import_module(PACKAGE_MODULE)
+    runner = importlib.import_module(RUNNER_MODULE)
+    models = importlib.import_module(MODELS_MODULE)
+    for name in MOVED_MODEL_NAMES:
+        assert getattr(runner, name) is getattr(models, name), name
+        assert getattr(pkg, name) is getattr(runner, name), name
+        assert getattr(legacy, name) is getattr(runner, name), name
+
+
+def test_moved_model_dataclass_fields_match_expected_defaults_and_factories():
+    import dataclasses
+
+    models = importlib.import_module(MODELS_MODULE)
+    for name, expectations in MODEL_FIELD_EXPECTATIONS.items():
+        cls = getattr(models, name)
+        fields = {field.name: field for field in dataclasses.fields(cls)}
+        for field_name, (expected_default, expect_factory) in expectations.items():
+            field = fields[field_name]
+            if expect_factory:
+                assert field.default is dataclasses.MISSING
+                assert field.default_factory is not dataclasses.MISSING
+            else:
+                assert field.default == expected_default
+                assert field.default_factory is dataclasses.MISSING
