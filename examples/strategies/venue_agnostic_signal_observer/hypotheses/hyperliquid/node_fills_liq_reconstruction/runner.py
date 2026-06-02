@@ -72,6 +72,7 @@ from .parsing import _extract_replica_cmds_object_timestamp
 from .parsing import _extract_action_order_key
 from .parsing import _decimal_str
 from .bars import _date_bucket_from_key
+from .s3_probe import _redact_error
 
 
 def _get_rss_mb() -> float | None:
@@ -6569,10 +6570,7 @@ def _run_aws(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
 
 
-def _redact_error(text: str, limit: int = 500) -> str:
-    text = re.sub(r"AKIA[0-9A-Z]{16}", "<AWS_ACCESS_KEY_REDACTED>", text or "")
-    text = re.sub(r"(?i)(secret|token|credential)[^\s]*", "<REDACTED>", text)
-    return text.strip()[:limit]
+# _redact_error moved to .s3_probe
 
 
 # _decimal_str moved to .parsing

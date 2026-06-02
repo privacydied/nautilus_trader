@@ -457,3 +457,36 @@ def test_parsing_module_has_all():
 def test_bars_module_has_all():
     bars = importlib.import_module(f'{PACKAGE_MODULE}.bars')
     assert set(getattr(bars, '__all__', ())) == set(MOVED_BARS_HELPERS)
+
+
+MOVED_S3_PROBE_HELPERS = (
+    '_redact_error',
+)
+
+
+def test_moved_s3_probe_helpers_remain_exposed_via_runner_package_and_legacy_wrapper():
+    legacy = importlib.import_module(LEGACY_MODULE)
+    pkg = importlib.import_module(PACKAGE_MODULE)
+    runner = importlib.import_module(RUNNER_MODULE)
+    s3_probe = importlib.import_module(f'{PACKAGE_MODULE}.s3_probe')
+    for name in MOVED_S3_PROBE_HELPERS:
+        assert hasattr(s3_probe, name), f's3_probe missing {name}'
+        assert hasattr(runner, name), f'runner missing {name}'
+        assert hasattr(pkg, name), f'package missing {name}'
+        assert hasattr(legacy, name), f'legacy missing {name}'
+        assert getattr(runner, name) is getattr(s3_probe, name), name
+        assert getattr(pkg, name) is getattr(s3_probe, name), name
+        assert getattr(legacy, name) is getattr(s3_probe, name), name
+
+
+def test_moved_s3_probe_helper_smoke():
+    s3_probe = importlib.import_module(f'{PACKAGE_MODULE}.s3_probe')
+    result = s3_probe._redact_error('AKIAIOSFODNN7EXAMPLE secret=abc123')
+    assert 'AKIA' not in result
+    assert 'secret' not in result
+    assert 'REDACTED' in result
+
+
+def test_s3_probe_module_has_all():
+    s3_probe = importlib.import_module(f'{PACKAGE_MODULE}.s3_probe')
+    assert set(getattr(s3_probe, '__all__', ())) == set(MOVED_S3_PROBE_HELPERS)
