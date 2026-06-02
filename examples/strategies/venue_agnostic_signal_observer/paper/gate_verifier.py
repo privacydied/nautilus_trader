@@ -86,6 +86,8 @@ def verify_promotion_gates(
     precommitment_hash: str,
     ledger_path: Path,
     artifacts_dir: Path,
+    *,
+    group_id: str | None = None,
 ) -> list[GateResult]:
     """Run the five promotion gates against available evidence.
 
@@ -106,7 +108,7 @@ def verify_promotion_gates(
     results.append(gate2)
 
     # Gate 3: Group survives in locked-run summary
-    gate3 = _check_group_survives(artifacts_dir, precommitment_hash)
+    gate3 = _check_group_survives(artifacts_dir, precommitment_hash, group_id=group_id)
     results.append(gate3)
 
     # Gate 4: Null test (optional)
@@ -184,7 +186,10 @@ def _check_artifact_exists(artifacts_dir: Path) -> GateResult:
 
 
 def _check_group_survives(
-    artifacts_dir: Path, precommitment_hash: str
+    artifacts_dir: Path,
+    precommitment_hash: str,
+    *,
+    group_id: str | None = None,
 ) -> GateResult:
     summary_path = artifacts_dir / "summary.json"
     if not summary_path.is_file():
@@ -207,6 +212,38 @@ def _check_group_survives(
     # Try to find the precommitment's group in the summary
     # Look in groups or evaluated_groups
     groups = summary.get("groups") or summary.get("evaluated_groups") or []
+
+    if group_id is not None:
+        # Target-group mode: evaluate only the intended promoted group.
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            if group.get("group_id") != group_id:
+                continue
+            mean_net = group.get("mean_net_bps")
+            if isinstance(mean_net, (int, float)) and mean_net > 0:
+                return GateResult(
+                    gate_id="group_survives_in_locked_run",
+                    passed=True,
+                    detail=f"GROUP_POSITIVE group_id={group_id} mean_net_bps={mean_net}",
+                    evidence_path=summary_path,
+                )
+            # Target group found but not positive
+            return GateResult(
+                gate_id="group_survives_in_locked_run",
+                passed=False,
+                detail=f"TARGET_GROUP_NOT_POSITIVE group_id={group_id} mean_net_bps={mean_net}",
+                evidence_path=summary_path,
+            )
+        # Target group not found in summary
+        return GateResult(
+            gate_id="group_survives_in_locked_run",
+            passed=False,
+            detail=f"TARGET_GROUP_MISSING group_id={group_id}",
+            evidence_path=summary_path,
+        )
+
+    # Legacy fallback: no group_id provided, accept any positive group
     for group in groups:
         if not isinstance(group, dict):
             continue
