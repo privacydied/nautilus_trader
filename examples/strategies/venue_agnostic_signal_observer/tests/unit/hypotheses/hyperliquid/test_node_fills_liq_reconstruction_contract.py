@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+from decimal import Decimal
 from pathlib import Path
 
 FIXTURE_PATH = (
@@ -46,6 +47,16 @@ MOVED_STATUS_CONSTANTS = (
     'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_OOM_OR_PROCESS_KILLED',
     'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH',
     'NODE_FILLS_LIQ_PHASE_MINUS1_ERROR_INVALID_OUTPUT',
+)
+MOVED_ARTIFACT_HELPERS = (
+    'HAS_ORJSON',
+    '_json_dumps',
+    '_json_loads',
+    '_jsonl_write',
+    '_jsonl_append',
+    '_jsonl_read',
+    'atomic_write_json',
+    'atomic_write_text',
 )
 MOVED_MODEL_NAMES = (
     'StudyConfig',
@@ -282,6 +293,55 @@ def test_moved_constants_resolve_to_same_objects_from_source_modules():
         assert getattr(runner, name) is getattr(config, name), name
         assert getattr(pkg, name) is getattr(runner, name), name
         assert getattr(legacy, name) is getattr(runner, name), name
+
+
+def test_moved_artifact_helpers_remain_exposed_via_runner_package_and_legacy_wrapper():
+    legacy = importlib.import_module(LEGACY_MODULE)
+    pkg = importlib.import_module(PACKAGE_MODULE)
+    runner = importlib.import_module(RUNNER_MODULE)
+    artifacts = importlib.import_module(f'{PACKAGE_MODULE}.artifacts')
+    for name in MOVED_ARTIFACT_HELPERS:
+        assert hasattr(artifacts, name), f'artifacts missing {name}'
+        assert hasattr(runner, name), f'runner missing {name}'
+        assert hasattr(pkg, name), f'package missing {name}'
+        assert hasattr(legacy, name), f'legacy missing {name}'
+        assert getattr(runner, name) is getattr(artifacts, name), name
+        assert getattr(pkg, name) is getattr(artifacts, name), name
+        assert getattr(legacy, name) is getattr(artifacts, name), name
+
+
+def test_moved_artifact_helpers_preserve_signatures():
+    import inspect
+
+    artifacts = importlib.import_module(f'{PACKAGE_MODULE}.artifacts')
+    expected = {
+        '_json_dumps': "(obj: 'Any') -> 'bytes'",
+        '_json_loads': "(data: 'bytes | str') -> 'Any'",
+        '_jsonl_write': "(path: 'Path', records: 'Sequence[dict]') -> 'None'",
+        '_jsonl_append': "(path: 'Path', record: 'dict[str, Any]') -> 'None'",
+        '_jsonl_read': "(path: 'Path') -> 'list[dict[str, Any]]'",
+        'atomic_write_json': "(path: 'Path', obj: 'Any') -> 'None'",
+        'atomic_write_text': "(path: 'Path', text: 'str') -> 'None'",
+    }
+    for name, signature in expected.items():
+        assert str(inspect.signature(getattr(artifacts, name))) == signature
+
+
+def test_moved_artifact_helper_smoke_round_trip(tmp_path):
+    artifacts = importlib.import_module(f'{PACKAGE_MODULE}.artifacts')
+
+    json_path = tmp_path / 'sample.json'
+    artifacts.atomic_write_json(json_path, {'b': 2, 'a': Decimal('1.5')})
+    assert artifacts._json_loads(json_path.read_bytes()) == {'a': '1.5', 'b': 2}
+
+    text_path = tmp_path / 'sample.txt'
+    artifacts.atomic_write_text(text_path, 'hello\n')
+    assert text_path.read_text() == 'hello\n'
+
+    jsonl_path = tmp_path / 'sample.jsonl'
+    artifacts._jsonl_write(jsonl_path, [{'x': 1}, {'y': 'z'}])
+    artifacts._jsonl_append(jsonl_path, {'tail': 3})
+    assert artifacts._jsonl_read(jsonl_path) == [{'x': 1}, {'y': 'z'}, {'tail': 3}]
 
 
 def test_models_module_exports_moved_models():
