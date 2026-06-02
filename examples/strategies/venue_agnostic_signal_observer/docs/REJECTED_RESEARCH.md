@@ -1274,6 +1274,40 @@ The frozen v0 representative real-strategy diagnostic failed validation calibrat
 
 ---
 
+
+---
+
+## Hyperliquid Liquidation-Cluster Prepositioning — Node Fills Reconstruction Phase -1 v0
+
+Status: NEEDS_MORE_DATA / TARGET_MARGIN_HISTORY_UNMEASURED_UNDER_25GB_CAP
+
+Verdict: NOT_TESTED_ARCHIVE_RECONSTRUCTION_INCOMPLETE
+
+Date: 2026-06-01
+
+Summary:
+This pass does not reject the liquidation-cluster prepositioning hypothesis. It closes the current public/requester-pays archive reconstruction attempt as incomplete under the approved 25GB chronology-strict leverage-history cap. The result is not promotable, not Phase 0, and unresolved is unknown, not cross/default-cross. Zero isolated in the tiny resolved subset is not zero isolated coverage.
+
+Evidence:
+- Wall 1 position mechanics passed for the frozen named-symbol universe.
+- The reliable Wall 1 reconciliation figure is 75,880 / 75,880 predecessor-present transitions reconciled.
+- Builder @XXX markets were excluded because they were outside the frozen named universe and exhibited vault-level startPosition semantics.
+- The real replica_cmds data plane exists and decodes.
+- The chronology-strict SOL top-30 holder leverage/margin-mode backscan completed under the approved 25GB compressed cap.
+- The backscan resolved only 3 / 30 target pairs, approximately 1.99% of selected SOL notional.
+- The resolved pairs were explicit cross.
+- The observed zero isolated-margin pairs are not a valid isolated-coverage estimate because the resolved notional fraction was too small.
+- The remaining 27 / 30 target pairs remain unknown-history-not-scanned, not default-cross.
+
+Terminal:
+NODE_FILLS_LIQ_PHASE_MINUS1_MARGIN_MODE_TARGETED_BACKSCAN_INSUFFICIENT_COVERAGE_UNDER_CAP
+
+Why this is not REJECTED:
+The exact liquidation-cluster map was not built and the hypothesis was not tested. A rejection would require a valid exact-map Phase 0 or an explicit future closure showing that reconstruction completeness is impossible or economically infeasible under approved constraints. This pass only shows that the approved 25GB targeted backscan did not resolve enough margin-mode history to measure isolated-margin coverage.
+
+Future unblocker:
+A materially larger chronology-strict leverage-history backfill, a better margin-mode/leverage source, or a node-derived per-address position-state source would be required before a genuine Phase 0 can be authorized. Any future run must continue to restrict exact liquidation-price computation to isolated-margin positions unless cross-margin equity state is available.
+
 ### FLX Stale-Oracle Funding Distortion B-slow — CLOSED_UPSTREAM / PREMISE_FALSIFIED_DECODER_ARTIFACT
 
 **Tag:** `hip3-flx-stale-oracle-bslow-closed-upstream-decoder-artifact`
