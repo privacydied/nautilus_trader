@@ -41,6 +41,20 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from .config import CANDIDATE_NAMESPACES
+from .config import FORBIDDEN_STATUSES
+from .config import STUDY_SALT
+from .statuses import NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH
+from .statuses import NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_OOM_OR_PROCESS_KILLED
+from .statuses import NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_RUNTIME_INTERRUPTED
+from .statuses import NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_NAMESPACE_NOT_FOUND
+from .statuses import NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY
+from .statuses import NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REQUESTER_PAYS_AUTH_EXPIRED
+from .statuses import NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED
+from .statuses import NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_NOT_OBSERVED_IN_REPLICA_CMDS_SAMPLE
+from .statuses import NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_SOURCE_TOO_SPARSE_SAMPLE
+from .statuses import NODE_FILLS_LIQ_PHASE_MINUS1_ERROR_INVALID_OUTPUT
+
 
 # ---------------------------------------------------------------------------
 # Optional orjson (preferred for JSONL I/O)
@@ -292,15 +306,6 @@ class StudyStatus(str, Enum):
 
     # Error
     NODE_FILLS_LIQ_PHASE_MINUS1_ERROR_INVALID_OUTPUT = "ERROR_INVALID_OUTPUT"
-
-
-# Forbidden statuses — must never be emitted
-FORBIDDEN_STATUSES = frozenset([
-    "REJECTED", "PROFITABLE", "ALPHA_FOUND", "EDGE_CONFIRMED",
-    "TRADE_READY", "EXECUTION_READY", "LIVE_READY", "PAPER_READY", "SHADOW_READY",
-    "CANDIDATE_FOR_LIVE", "CANDIDATE_FOR_PAPER", "PAPER_STRATEGY_PROMOTED",
-    "PROMOTION_AUTHORIZED", "READY_FOR_PHASE_0",
-])
 
 
 class ArchivePartitioning(str, Enum):
@@ -1657,9 +1662,6 @@ def _git_dirty() -> bool:
 # Address redaction
 # ---------------------------------------------------------------------------
 
-STUDY_SALT = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
-
-
 def redact_address(addr: str, truncate: int = 4) -> str:
     """Redact address to first truncate + ... + last truncate chars."""
     if not addr or len(addr) <= 2 * truncate:
@@ -1670,13 +1672,6 @@ def redact_address(addr: str, truncate: int = 4) -> str:
 # ---------------------------------------------------------------------------
 # Phase A — Archive coverage & partition discovery
 # ---------------------------------------------------------------------------
-
-CANDIDATE_NAMESPACES = [
-    "node_fills_by_block/hourly/",
-    "hyperliquid/node_fills_by_block/hourly/",
-    "hl-mainnet-node-data/node_fills_by_block/hourly/",
-]
-
 
 def discover_local_cache(data_root: str | None) -> tuple[bool, list[str]]:
     """Check for cached node_fills_by_block data locally."""

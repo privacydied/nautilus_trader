@@ -32,6 +32,25 @@ PACKAGE_MODULE = (
     "hyperliquid.node_fills_liq_reconstruction"
 )
 RUNNER_MODULE = f"{PACKAGE_MODULE}.runner"
+STATUSES_MODULE = f"{PACKAGE_MODULE}.statuses"
+CONFIG_MODULE = f"{PACKAGE_MODULE}.config"
+MOVED_STATUS_CONSTANTS = (
+    'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REQUESTER_PAYS_AUTH_EXPIRED',
+    'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_NAMESPACE_NOT_FOUND',
+    'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_DECODER_UNVERIFIED',
+    'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_NOT_OBSERVED_IN_REPLICA_CMDS_SAMPLE',
+    'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_UPDATE_LEVERAGE_SOURCE_TOO_SPARSE_SAMPLE',
+    'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_REPLICA_CMDS_OBJECT_DISCOVERY_EMPTY',
+    'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_RUNTIME_INTERRUPTED',
+    'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_OOM_OR_PROCESS_KILLED',
+    'NODE_FILLS_LIQ_PHASE_MINUS1_BLOCKED_BACKSCAN_CHECKPOINT_MISMATCH',
+    'NODE_FILLS_LIQ_PHASE_MINUS1_ERROR_INVALID_OUTPUT',
+)
+MOVED_CONFIG_CONSTANTS = (
+    'FORBIDDEN_STATUSES',
+    'STUDY_SALT',
+    'CANDIDATE_NAMESPACES',
+)
 FORBIDDEN_TERMS = {
     'paper',
     'paper_dashboard',
@@ -197,3 +216,45 @@ def test_wall2_source_probe_method_resolves_runner_globals() -> None:
     runner = importlib.import_module(RUNNER_MODULE)
     method = runner.NodeFillsLiqReconstructionProbe.run_wall2_update_leverage_source_probe
     assert method.__globals__['__name__'] == runner.__name__
+
+
+def test_statuses_module_exports_moved_status_constants():
+    statuses = importlib.import_module(STATUSES_MODULE)
+    assert tuple(getattr(statuses, '__all__', ())) == MOVED_STATUS_CONSTANTS
+    for name in MOVED_STATUS_CONSTANTS:
+        assert hasattr(statuses, name), name
+
+
+def test_config_module_exports_moved_config_constants():
+    config = importlib.import_module(CONFIG_MODULE)
+    assert tuple(getattr(config, '__all__', ())) == MOVED_CONFIG_CONSTANTS
+    for name in MOVED_CONFIG_CONSTANTS:
+        assert hasattr(config, name), name
+
+
+def test_moved_constants_remain_exposed_via_runner_package_and_legacy_wrapper():
+    legacy = importlib.import_module(LEGACY_MODULE)
+    pkg = importlib.import_module(PACKAGE_MODULE)
+    runner = importlib.import_module(RUNNER_MODULE)
+    for name in (*MOVED_STATUS_CONSTANTS, *MOVED_CONFIG_CONSTANTS):
+        assert hasattr(runner, name), f'runner missing {name}'
+        assert hasattr(pkg, name), f'package missing {name}'
+        assert hasattr(legacy, name), f'legacy missing {name}'
+
+
+def test_moved_constants_resolve_to_same_objects_from_source_modules():
+    legacy = importlib.import_module(LEGACY_MODULE)
+    pkg = importlib.import_module(PACKAGE_MODULE)
+    runner = importlib.import_module(RUNNER_MODULE)
+    statuses = importlib.import_module(STATUSES_MODULE)
+    config = importlib.import_module(CONFIG_MODULE)
+
+    for name in MOVED_STATUS_CONSTANTS:
+        assert getattr(runner, name) is getattr(statuses, name), name
+        assert getattr(pkg, name) is getattr(runner, name), name
+        assert getattr(legacy, name) is getattr(runner, name), name
+
+    for name in MOVED_CONFIG_CONSTANTS:
+        assert getattr(runner, name) is getattr(config, name), name
+        assert getattr(pkg, name) is getattr(runner, name), name
+        assert getattr(legacy, name) is getattr(runner, name), name
