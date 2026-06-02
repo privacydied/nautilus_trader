@@ -180,7 +180,7 @@ class TestCliSpecsCatalog:
         )
 
     def test_oi_velocity_spec_has_level1_help_safe_metadata(self) -> None:
-        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.level is RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA
+        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.level is RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES
 
     def test_oi_velocity_spec_has_help_safe_risk(self) -> None:
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.risk is RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY
@@ -189,7 +189,13 @@ class TestCliSpecsCatalog:
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.build_parser_callable is None
 
     def test_oi_velocity_spec_does_not_claim_main_callable(self) -> None:
-        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.main_callable is None
+        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.main_callable == (
+            "examples.strategies.venue_agnostic_signal_observer."
+            "run_hyperliquid_oi_velocity_compression_phase0:main"
+        )
+
+    def test_oi_velocity_spec_still_does_not_claim_build_parser_callable(self) -> None:
+        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.build_parser_callable is None
 
     def test_oi_velocity_spec_modules_match_expected_strings(self) -> None:
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.entry_module == _OI_ENTRY_MODULE

@@ -72,8 +72,11 @@ HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC = validate_runner_cli_spec(
             "hypotheses.hyperliquid.oi_velocity_compression_phase0.metadata"
         ),
         build_parser_callable=None,
-        main_callable=None,
-        level=RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA,
+        main_callable=(
+            "examples.strategies.venue_agnostic_signal_observer."
+            "run_hyperliquid_oi_velocity_compression_phase0:main"
+        ),
+        level=RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES,
         risk=RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY,
         supports_help_only=True,
         import_safe=True,

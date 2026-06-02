@@ -92,10 +92,13 @@ class TestUnit9SecondPackagedRunnerClosure:
         assert HYPERLIQUID_COST_FEASIBILITY_CLI_SPEC.build_parser_callable is None
         assert HYPERLIQUID_COST_FEASIBILITY_CLI_SPEC.main_callable is None
 
-    def test_oi_velocity_is_level1_with_no_callable_strings(self) -> None:
-        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.level is RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA
+    def test_oi_velocity_is_level2_with_main_callable_only(self) -> None:
+        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.level is RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.build_parser_callable is None
-        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.main_callable is None
+        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.main_callable == (
+            "examples.strategies.venue_agnostic_signal_observer."
+            "run_hyperliquid_oi_velocity_compression_phase0:main"
+        )
 
     def test_registry_import_does_not_import_oi_runner(self) -> None:
         code = textwrap.dedent(

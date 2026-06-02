@@ -226,11 +226,18 @@ class TestRunnerCliSpecRegistryContract:
     def test_oi_velocity_cli_spec_registered_flag_is_true(self) -> None:
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.registered is True
 
-    def test_oi_velocity_cli_spec_level_remains_help_safe_metadata(self) -> None:
+    def test_oi_velocity_cli_spec_level_promotes_to_level2_exposes_callables(self) -> None:
         assert (
             HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.level
-            is RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA
+            is RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES
         )
+
+    def test_oi_velocity_cli_spec_main_callable_is_explicit_and_build_parser_remains_none(self) -> None:
+        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.main_callable == (
+            "examples.strategies.venue_agnostic_signal_observer."
+            "run_hyperliquid_oi_velocity_compression_phase0:main"
+        )
+        assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.build_parser_callable is None
 
     def test_oi_velocity_cli_spec_risk_is_thin_cli_with_safe_help_only(self) -> None:
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.risk is RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY
