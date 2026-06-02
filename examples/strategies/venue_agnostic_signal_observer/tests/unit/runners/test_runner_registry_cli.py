@@ -23,9 +23,14 @@ from examples.strategies.venue_agnostic_signal_observer.runners.registry_cli imp
 _REPO_ROOT = Path(__file__).resolve().parents[6]
 
 _NODE_FILLS_KEY = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+_COST_FEASIBILITY_KEY = "hyperliquid_cost_feasibility"
 _HEAVY_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
     "hypotheses.hyperliquid.node_fills_liq_reconstruction.runner"
+)
+_COST_FEASIBILITY_HEAVY_MODULE = (
+    "examples.strategies.venue_agnostic_signal_observer."
+    "hypotheses.hyperliquid.cost_feasibility.runner"
 )
 
 
@@ -86,7 +91,7 @@ class TestFilterSpecs:
         )
 
         specs = filter_specs(iter_runner_specs())
-        assert len(specs) == 1
+        assert len(specs) == 2
 
     def test_venue_filter_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -94,8 +99,8 @@ class TestFilterSpecs:
         )
 
         specs = filter_specs(iter_runner_specs(), venue="hyperliquid")
-        assert len(specs) == 1
-        assert specs[0].venue == "hyperliquid"
+        assert len(specs) == 2
+        assert all(spec.venue == "hyperliquid" for spec in specs)
 
     def test_venue_filter_no_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -112,6 +117,16 @@ class TestFilterSpecs:
 
         specs = filter_specs(iter_runner_specs(), family="node_fills_liq_reconstruction")
         assert len(specs) == 1
+        assert specs[0].key == _NODE_FILLS_KEY
+
+    def test_cost_feasibility_family_filter_match(self) -> None:
+        from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
+            iter_runner_specs,
+        )
+
+        specs = filter_specs(iter_runner_specs(), family="cost_feasibility")
+        assert len(specs) == 1
+        assert specs[0].key == _COST_FEASIBILITY_KEY
 
     def test_family_filter_no_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -127,7 +142,7 @@ class TestFilterSpecs:
         )
 
         specs = filter_specs(iter_runner_specs(), tag="observer_only")
-        assert len(specs) == 1
+        assert len(specs) == 2
 
     def test_tag_filter_no_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -147,7 +162,7 @@ class TestFilterSpecs:
             venue="hyperliquid",
             tag="observer_only",
         )
-        assert len(specs) == 1
+        assert len(specs) == 2
 
     def test_combined_filters_no_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -174,7 +189,7 @@ class TestFormatRunnerListText:
         )
 
         text = format_runner_list_text(iter_runner_specs())
-        assert text.startswith("Registered runner specs: 1")
+        assert text.startswith("Registered runner specs: 2")
 
     def test_output_ends_with_newline(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -191,6 +206,7 @@ class TestFormatRunnerListText:
 
         text = format_runner_list_text(iter_runner_specs())
         assert _NODE_FILLS_KEY in text
+        assert _COST_FEASIBILITY_KEY in text
 
     def test_empty_list(self) -> None:
         text = format_runner_list_text(())
@@ -237,11 +253,18 @@ class TestFormatJsonPayload:
             NODE_FILLS_LIQ_RECONSTRUCTION,
         )
 
-        raw = format_json_payload((NODE_FILLS_LIQ_RECONSTRUCTION,))
+        from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
+            iter_runner_specs,
+        )
+
+        raw = format_json_payload(iter_runner_specs())
         data = json.loads(raw)
         assert "runners" in data
-        assert len(data["runners"]) == 1
-        assert data["runners"][0]["key"] == _NODE_FILLS_KEY
+        assert len(data["runners"]) == 2
+        assert [runner["key"] for runner in data["runners"]] == [
+            _NODE_FILLS_KEY,
+            _COST_FEASIBILITY_KEY,
+        ]
 
     def test_empty_list_json(self) -> None:
         raw = format_json_payload(())
@@ -260,12 +283,14 @@ class TestRegistryCliMain:
         assert rc == 0
         out = capsys.readouterr().out
         assert _NODE_FILLS_KEY in out
+        assert _COST_FEASIBILITY_KEY in out
 
     def test_list_mode(self, capsys: pytest.CaptureFixture[str]) -> None:
         rc = main(["--list"])
         assert rc == 0
         out = capsys.readouterr().out
         assert _NODE_FILLS_KEY in out
+        assert _COST_FEASIBILITY_KEY in out
 
     def test_list_json(self, capsys: pytest.CaptureFixture[str]) -> None:
         rc = main(["--list", "--json"])
@@ -273,7 +298,11 @@ class TestRegistryCliMain:
         out = capsys.readouterr().out
         data = json.loads(out)
         assert "runners" in data
-        assert len(data["runners"]) == 1
+        assert len(data["runners"]) == 2
+        assert [runner["key"] for runner in data["runners"]] == [
+            _NODE_FILLS_KEY,
+            _COST_FEASIBILITY_KEY,
+        ]
 
     def test_key_detail(self, capsys: pytest.CaptureFixture[str]) -> None:
         rc = main(["--key", _NODE_FILLS_KEY])
@@ -289,6 +318,14 @@ class TestRegistryCliMain:
         data = json.loads(out)
         assert "runner" in data
         assert data["runner"]["key"] == _NODE_FILLS_KEY
+
+    def test_cost_feasibility_key_json(self, capsys: pytest.CaptureFixture[str]) -> None:
+        rc = main(["--key", _COST_FEASIBILITY_KEY, "--json"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert "runner" in data
+        assert data["runner"]["key"] == _COST_FEASIBILITY_KEY
 
     def test_unknown_key_returns_2(self, capsys: pytest.CaptureFixture[str]) -> None:
         rc = main(["--key", "definitely_missing_key"])
@@ -306,7 +343,11 @@ class TestRegistryCliMain:
         rc = main(["--venue", "hyperliquid", "--json"])
         assert rc == 0
         data = json.loads(capsys.readouterr().out)
-        assert len(data["runners"]) == 1
+        assert len(data["runners"]) == 2
+        assert [runner["key"] for runner in data["runners"]] == [
+            _NODE_FILLS_KEY,
+            _COST_FEASIBILITY_KEY,
+        ]
 
     def test_venue_filter_empty(self, capsys: pytest.CaptureFixture[str]) -> None:
         rc = main(["--venue", "binance", "--json"])
@@ -319,12 +360,20 @@ class TestRegistryCliMain:
         assert rc == 0
         data = json.loads(capsys.readouterr().out)
         assert len(data["runners"]) == 1
+        assert data["runners"][0]["key"] == _NODE_FILLS_KEY
+
+    def test_cost_feasibility_family_filter(self, capsys: pytest.CaptureFixture[str]) -> None:
+        rc = main(["--family", "cost_feasibility", "--json"])
+        assert rc == 0
+        data = json.loads(capsys.readouterr().out)
+        assert len(data["runners"]) == 1
+        assert data["runners"][0]["key"] == _COST_FEASIBILITY_KEY
 
     def test_tag_filter(self, capsys: pytest.CaptureFixture[str]) -> None:
         rc = main(["--tag", "observer_only", "--json"])
         assert rc == 0
         data = json.loads(capsys.readouterr().out)
-        assert len(data["runners"]) == 1
+        assert len(data["runners"]) == 2
 
     def test_tag_filter_empty(self, capsys: pytest.CaptureFixture[str]) -> None:
         rc = main(["--tag", "nonexistent", "--json"])
@@ -344,15 +393,18 @@ class TestRegistryCliMain:
 
 class TestRegistryCliLazyImports:
     def test_list_json_does_not_import_heavy_module_subprocess(self) -> None:
-        """Verify list --json does not import the heavy runner implementation."""
+        """Verify list --json does not import heavy runner implementations."""
         code = textwrap.dedent(f"""\
             import sys
             from examples.strategies.venue_agnostic_signal_observer.runners.registry_cli import main
-            heavy = "{_HEAVY_MODULE}"
-            sys.modules.pop(heavy, None)
+            node_fills_heavy = "{_HEAVY_MODULE}"
+            cost_heavy = "{_COST_FEASIBILITY_HEAVY_MODULE}"
+            sys.modules.pop(node_fills_heavy, None)
+            sys.modules.pop(cost_heavy, None)
             rc = main(["--list", "--json"])
             assert rc == 0, rc
-            assert heavy not in sys.modules, f"heavy module imported: {{heavy}}"
+            assert node_fills_heavy not in sys.modules, f"heavy module imported: {{node_fills_heavy}}"
+            assert cost_heavy not in sys.modules, f"heavy module imported: {{cost_heavy}}"
             print("OK: lazy import verified")
         """)
         script = _REPO_ROOT / "_test_registry_cli_lazy.py"
@@ -373,15 +425,18 @@ class TestRegistryCliLazyImports:
         assert "OK: lazy import verified" in result.stdout
 
     def test_key_json_does_not_import_heavy_module_subprocess(self) -> None:
-        """Verify --key --json does not import the heavy runner implementation."""
+        """Verify --key --json does not import the heavy node-fills implementation."""
         code = textwrap.dedent(f"""\
             import sys
             from examples.strategies.venue_agnostic_signal_observer.runners.registry_cli import main
-            heavy = "{_HEAVY_MODULE}"
-            sys.modules.pop(heavy, None)
+            node_fills_heavy = "{_HEAVY_MODULE}"
+            cost_heavy = "{_COST_FEASIBILITY_HEAVY_MODULE}"
+            sys.modules.pop(node_fills_heavy, None)
+            sys.modules.pop(cost_heavy, None)
             rc = main(["--key", "{_NODE_FILLS_KEY}", "--json"])
             assert rc == 0, rc
-            assert heavy not in sys.modules, f"heavy module imported: {{heavy}}"
+            assert node_fills_heavy not in sys.modules, f"heavy module imported: {{node_fills_heavy}}"
+            assert cost_heavy not in sys.modules, f"heavy module imported: {{cost_heavy}}"
             print("OK: lazy import verified for key mode")
         """)
         script = _REPO_ROOT / "_test_registry_cli_lazy_key.py"
@@ -400,3 +455,35 @@ class TestRegistryCliLazyImports:
             f"subprocess failed:\nstdout={result.stdout}\nstderr={result.stderr}"
         )
         assert "OK: lazy import verified for key mode" in result.stdout
+
+    def test_cost_feasibility_key_json_does_not_import_heavy_module_subprocess(self) -> None:
+        """Verify cost-feasibility key lookup stays metadata-only."""
+        code = textwrap.dedent(f"""\
+            import sys
+            from examples.strategies.venue_agnostic_signal_observer.runners.registry_cli import main
+            node_fills_heavy = "{_HEAVY_MODULE}"
+            cost_heavy = "{_COST_FEASIBILITY_HEAVY_MODULE}"
+            sys.modules.pop(node_fills_heavy, None)
+            sys.modules.pop(cost_heavy, None)
+            rc = main(["--key", "{_COST_FEASIBILITY_KEY}", "--json"])
+            assert rc == 0, rc
+            assert node_fills_heavy not in sys.modules, f"heavy module imported: {{node_fills_heavy}}"
+            assert cost_heavy not in sys.modules, f"heavy module imported: {{cost_heavy}}"
+            print("OK: lazy import verified for cost-feasibility key mode")
+        """)
+        script = _REPO_ROOT / "_test_registry_cli_lazy_cost_key.py"
+        script.write_text(code)
+        try:
+            result = subprocess.run(
+                [sys.executable, str(script)],
+                cwd=_REPO_ROOT,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        finally:
+            script.unlink(missing_ok=True)
+        assert result.returncode == 0, (
+            f"subprocess failed:\nstdout={result.stdout}\nstderr={result.stderr}"
+        )
+        assert "OK: lazy import verified for cost-feasibility key mode" in result.stdout

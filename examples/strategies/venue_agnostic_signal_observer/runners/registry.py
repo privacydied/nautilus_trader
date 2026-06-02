@@ -9,6 +9,9 @@ from examples.strategies.venue_agnostic_signal_observer.hypotheses.package_contr
     HypothesisPackageMetadata,
     validate_hypothesis_metadata,
 )
+from examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.cost_feasibility.metadata import (
+    METADATA as HYPERLIQUID_COST_FEASIBILITY_METADATA,
+)
 from examples.strategies.venue_agnostic_signal_observer.runners.base import RegisteredRunner
 
 # ---------------------------------------------------------------------------
@@ -167,6 +170,10 @@ NODE_FILLS_LIQ_RECONSTRUCTION = RunnerSpec(
     ),
 )
 
+HYPERLIQUID_COST_FEASIBILITY = RunnerSpec.from_hypothesis_metadata(
+    HYPERLIQUID_COST_FEASIBILITY_METADATA
+)
+
 
 # ---------------------------------------------------------------------------
 # Registry internals
@@ -174,6 +181,7 @@ NODE_FILLS_LIQ_RECONSTRUCTION = RunnerSpec(
 
 _REGISTERED_SPECS: tuple[RunnerSpec, ...] = (
     NODE_FILLS_LIQ_RECONSTRUCTION,
+    HYPERLIQUID_COST_FEASIBILITY,
 )
 
 

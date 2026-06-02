@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +95,7 @@ def test_get_runner_returns_registered_entry() -> None:
 # ---------------------------------------------------------------------------
 
 from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
+    HYPERLIQUID_COST_FEASIBILITY,
     NODE_FILLS_LIQ_RECONSTRUCTION,
     RunnerSpec,
     _build_registry_by_key,
@@ -103,6 +105,23 @@ from examples.strategies.venue_agnostic_signal_observer.runners.registry import 
 )
 
 _NODE_FILLS_KEY = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+_COST_FEASIBILITY_KEY = "hyperliquid_cost_feasibility"
+_COST_FEASIBILITY_RUNNER_MODULE = (
+    "examples.strategies.venue_agnostic_signal_observer."
+    "hypotheses.hyperliquid.cost_feasibility.runner"
+)
+
+
+def _clear_lazy_modules() -> None:
+    import sys
+
+    for module_name in (
+        _COST_FEASIBILITY_RUNNER_MODULE,
+        "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_cost_feasibility",
+        "examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.cost_feasibility",
+        "examples.strategies.venue_agnostic_signal_observer.hyperliquid_cost_feasibility",
+    ):
+        sys.modules.pop(module_name, None)
 
 
 def _synthetic_metadata(**overrides: object) -> HypothesisPackageMetadata:
@@ -134,7 +153,7 @@ class TestRunnerSpecRegistry:
         assert hasattr(registry, "iter_runner_specs")
 
     def test_registry_import_is_lazy(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """2. Importing the registry does not import the heavy implementation module."""
+        """2. Importing the registry does not import heavy implementation modules."""
         import sys
 
         heavy_module = (
@@ -143,24 +162,31 @@ class TestRunnerSpecRegistry:
         )
         # Remove from cache to test fresh import
         sys.modules.pop(heavy_module, None)
+        sys.modules.pop(_COST_FEASIBILITY_RUNNER_MODULE, None)
 
         from examples.strategies.venue_agnostic_signal_observer.runners import registry
 
         assert heavy_module not in sys.modules
+        assert _COST_FEASIBILITY_RUNNER_MODULE not in sys.modules
 
-        # require_runner_spec should still not import the heavy module
+        # require_runner_spec should still not import the heavy modules
         spec = registry.require_runner_spec(_NODE_FILLS_KEY)
         assert heavy_module not in sys.modules
+        assert _COST_FEASIBILITY_RUNNER_MODULE not in sys.modules
 
     def test_exactly_one_runner_registered(self) -> None:
-        """3. Exactly one real runner is registered for now."""
+        """3. Exactly two real runner specs are registered after Unit 7D."""
         specs = iter_runner_specs()
-        assert len(specs) == 1
+        assert len(specs) == 2
 
     def test_registered_key_is_stable(self) -> None:
         """4. Registered key matches the expected stable value."""
         spec = require_runner_spec(_NODE_FILLS_KEY)
         assert spec.key == _NODE_FILLS_KEY
+
+    def test_cost_feasibility_key_is_registered(self) -> None:
+        spec = require_runner_spec(_COST_FEASIBILITY_KEY)
+        assert spec.key == _COST_FEASIBILITY_KEY
 
     def test_iter_runner_specs_returns_tuple(self) -> None:
         """5. iter_runner_specs() returns a tuple."""
@@ -173,6 +199,12 @@ class TestRunnerSpecRegistry:
         assert spec is not None
         assert spec.key == _NODE_FILLS_KEY
         assert spec is NODE_FILLS_LIQ_RECONSTRUCTION
+
+    def test_get_runner_spec_returns_cost_feasibility_spec(self) -> None:
+        spec = get_runner_spec(_COST_FEASIBILITY_KEY)
+        assert spec is not None
+        assert spec.key == _COST_FEASIBILITY_KEY
+        assert spec is HYPERLIQUID_COST_FEASIBILITY
 
     def test_get_runner_spec_missing_returns_none(self) -> None:
         """7. get_runner_spec('missing') returns None."""
@@ -224,6 +256,23 @@ class TestRunnerSpecRegistry:
         assert spec.venue == "hyperliquid"
         assert spec.study_id == _NODE_FILLS_KEY
         assert "Hyperliquid node-fills" in spec.description
+
+    def test_cost_feasibility_spec_fields_match_metadata(self) -> None:
+        from examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.cost_feasibility.metadata import (
+            METADATA,
+        )
+
+        spec = HYPERLIQUID_COST_FEASIBILITY
+        assert spec.key == METADATA.key
+        assert spec.family == METADATA.family
+        assert spec.venue == METADATA.venue
+        assert spec.study_id == METADATA.study_id
+        assert spec.description == METADATA.description
+        assert spec.cli_module == METADATA.cli_module
+        assert spec.package_module == METADATA.package_module
+        assert spec.implementation_module == METADATA.implementation_module
+        assert spec.legacy_module == METADATA.legacy_module
+        assert spec.tags == METADATA.tags
 
     def test_metadata_tags_include_observer_only(self) -> None:
         """16. Registry metadata tags include 'observer_only'."""
@@ -297,6 +346,22 @@ class TestRunnerSpecLazyImports:
         spec = NODE_FILLS_LIQ_RECONSTRUCTION
         module = spec.import_implementation_module()
         assert module.__name__ == spec.implementation_module
+
+    def test_cost_feasibility_import_cli_module(self) -> None:
+        _clear_lazy_modules()
+        module = HYPERLIQUID_COST_FEASIBILITY.import_cli_module()
+        assert module.__name__ == HYPERLIQUID_COST_FEASIBILITY.cli_module
+
+    def test_cost_feasibility_import_package_module(self) -> None:
+        _clear_lazy_modules()
+        module = HYPERLIQUID_COST_FEASIBILITY.import_package_module()
+        assert module.__name__ == HYPERLIQUID_COST_FEASIBILITY.package_module
+        assert hasattr(module, "compute_cost_feasibility")
+
+    def test_cost_feasibility_import_implementation_module(self) -> None:
+        _clear_lazy_modules()
+        module = HYPERLIQUID_COST_FEASIBILITY.import_implementation_module()
+        assert module.__name__ == HYPERLIQUID_COST_FEASIBILITY.implementation_module
 
     def test_import_cli_module(self) -> None:
         """11a. import_cli_module loads the CLI module."""

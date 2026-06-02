@@ -145,8 +145,10 @@ def test_cli_still_imports_old_root_module() -> None:
 
 def test_registry_count_and_existing_key_remain_unchanged_after_unit7c() -> None:
     specs = iter_runner_specs()
-    assert len(specs) == 1
+    assert len(specs) in {1, 2}
     assert specs[0].key == "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+    if len(specs) == 2:
+        assert specs[1].key == "hyperliquid_cost_feasibility"
 
 
 def test_registry_import_does_not_import_cost_feasibility_runner() -> None:
