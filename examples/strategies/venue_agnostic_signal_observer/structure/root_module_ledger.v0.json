@@ -330,15 +330,15 @@
     {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/generic_altcoin_stress_regime_ablation_phase0b.py",
       "module_name": "generic_altcoin_stress_regime_ablation_phase0b",
-      "category": "hypothesis_module",
-      "status": "move_to_hypothesis_candidate",
+      "category": "legacy_compat_wrapper",
+      "status": "already_packaged_wrapper",
       "target_package": "examples/strategies/venue_agnostic_signal_observer/hypotheses/legacy/generic_altcoin_stress_regime_ablation_phase0b",
-      "migration_unit": "unit12_candidate",
+      "migration_unit": "unit15",
       "compatibility_wrapper_required": true,
       "paired_cli": "examples/strategies/venue_agnostic_signal_observer/run_generic_altcoin_stress_regime_ablation_phase0b.py",
       "registry_key": null,
       "cli_spec_key": null,
-      "notes": "Standalone study module candidate for future package migration."
+      "notes": "Unit 15 packaged implementation under hypotheses/legacy/generic_altcoin_stress_regime_ablation_phase0b; legacy root path retained as compatibility wrapper re-exporting packaged runner symbols."
     },
     {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/generic_stress_comparison_audit.py",
