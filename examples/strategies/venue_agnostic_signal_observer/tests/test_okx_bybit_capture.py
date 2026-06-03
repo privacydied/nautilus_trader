@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer import symbol_aliases
-from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_tick_capture import (
     _CaptureStats,
     _FEED_TASKS,
     _map_bybit_symbol,
@@ -280,7 +280,7 @@ def test_manifest_zero_tick_stream_excluded_from_pairwise(tmp_path):
 def test_no_auth_or_order_strings_in_capture_module():
     src = Path(
         __file__
-    ).parent.parent / "run_tick_capture.py"
+    ).parent.parent / "runners" / "legacy_cli" / "run_tick_capture.py"
     text = src.read_text()
     # Build forbidden tokens from fragments so this scan test does not itself
     # contain literal occurrences that trip the package-wide guard tests.

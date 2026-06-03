@@ -777,7 +777,7 @@ class TestDryRunNoNetwork:
         result = subprocess.run(
             [
                 "python", "-m",
-                "examples.strategies.venue_agnostic_signal_observer.run_liquidation_overshoot_snapback_phase0a",
+                "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_liquidation_overshoot_snapback_phase0a",
                 "--dry-run",
                 "--run-phase-minus2",
                 "--out-root", "/tmp/test_liq_overshoot_dry",

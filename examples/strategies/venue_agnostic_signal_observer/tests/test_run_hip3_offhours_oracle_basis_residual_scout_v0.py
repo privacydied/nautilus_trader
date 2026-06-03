@@ -25,7 +25,7 @@ from typing import Any
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.run_hip3_offhours_oracle_basis_residual_scout_v0 import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_offhours_oracle_basis_residual_scout_v0 import (
     build_parser,
     main,
 )
@@ -155,7 +155,7 @@ def test_cli_per_symbol_l2_budget_default():
 
 def test_no_direct_network_imports_in_cli():
     """CLI runner does not import network libraries directly."""
-    cli_path = Path(__file__).resolve().parent.parent / "run_hip3_offhours_oracle_basis_residual_scout_v0.py"
+    cli_path = Path(__file__).resolve().parent.parent / "runners" / "legacy_cli" / "run_hip3_offhours_oracle_basis_residual_scout_v0.py"
     content = cli_path.read_text()
     # Check no network library imports
     network_imports = ["import urllib", "import requests", "import httpx", "import boto3", "import aiohttp"]
@@ -247,7 +247,7 @@ def test_safety_grep_new_files():
     scout_dir = Path(__file__).resolve().parent.parent
     new_files = [
         scout_dir / "hip3_offhours_oracle_basis_residual_scout_v0.py",
-        scout_dir / "run_hip3_offhours_oracle_basis_residual_scout_v0.py",
+        scout_dir / "runners" / "legacy_cli" / "run_hip3_offhours_oracle_basis_residual_scout_v0.py",
     ]
 
     for file_path in new_files:
@@ -298,7 +298,7 @@ def test_safety_grep_new_files():
 
 def test_no_registry_writes_in_cli():
     """CLI does not write registry, ledger, paper, or promotion artifacts."""
-    cli_path = Path(__file__).resolve().parent.parent / "run_hip3_offhours_oracle_basis_residual_scout_v0.py"
+    cli_path = Path(__file__).resolve().parent.parent / "runners" / "legacy_cli" / "run_hip3_offhours_oracle_basis_residual_scout_v0.py"
     content = cli_path.read_text()
     registry_terms = ["registry", "ledger", "paper", "promotion"]
     for term in registry_terms:
@@ -534,7 +534,7 @@ def test_static_import_grep_over_new_files():
     """Static-grep test finds direct network imports outside chokepoint."""
     new_files = [
         Path(__file__).resolve().parent.parent / "hip3_offhours_oracle_basis_residual_scout_v0.py",
-        Path(__file__).resolve().parent.parent / "run_hip3_offhours_oracle_basis_residual_scout_v0.py",
+        Path(__file__).resolve().parent.parent / "runners" / "legacy_cli" / "run_hip3_offhours_oracle_basis_residual_scout_v0.py",
     ]
     for file_path in new_files:
         content = file_path.read_text()
@@ -692,13 +692,13 @@ class TestSubprocessException:
 
     def test_cli_has_no_subprocess(self):
         """CLI runner has no subprocess import or usage."""
-        cli_path = Path(__file__).resolve().parent.parent / "run_hip3_offhours_oracle_basis_residual_scout_v0.py"
+        cli_path = Path(__file__).resolve().parent.parent / "runners" / "legacy_cli" / "run_hip3_offhours_oracle_basis_residual_scout_v0.py"
         content = cli_path.read_text()
         assert 'subprocess' not in content, "CLI must not import or use subprocess"
 
     def test_cli_has_no_network_imports(self):
         """CLI runner has no direct network library imports."""
-        cli_path = Path(__file__).resolve().parent.parent / "run_hip3_offhours_oracle_basis_residual_scout_v0.py"
+        cli_path = Path(__file__).resolve().parent.parent / "runners" / "legacy_cli" / "run_hip3_offhours_oracle_basis_residual_scout_v0.py"
         content = cli_path.read_text()
         for lib in ('urllib', 'requests', 'httpx', 'boto3', 'aiohttp'):
             assert lib not in content, f"CLI must not import {lib}"

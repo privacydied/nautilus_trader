@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_liq_cluster_prepositioning_phase0_v0 import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_liq_cluster_prepositioning_phase0_v0 import (
     parse_args,
     main,
     get_git_info,

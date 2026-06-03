@@ -462,7 +462,7 @@ def test_forbidden_strings_not_in_core():
 
 def test_forbidden_strings_not_in_runner():
     """Runner does not contain forbidden API strings."""
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_absorption_phase0a_star_coverage as run_mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_absorption_phase0a_star_coverage as run_mod
     mod_path = run_mod.__file__
     assert mod_path is not None
     content = Path(mod_path).read_text()

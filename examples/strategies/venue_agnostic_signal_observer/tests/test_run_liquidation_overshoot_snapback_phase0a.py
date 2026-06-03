@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-MODULE = "examples.strategies.venue_agnostic_signal_observer.run_liquidation_overshoot_snapback_phase0a"
+MODULE = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_liquidation_overshoot_snapback_phase0a"
 MAIN_MODULE = "examples.strategies.venue_agnostic_signal_observer.liquidation_overshoot_snapback_phase0a"
 
 

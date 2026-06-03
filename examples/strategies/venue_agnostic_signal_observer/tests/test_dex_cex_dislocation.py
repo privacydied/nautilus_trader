@@ -455,7 +455,7 @@ class TestNoLookahead:
 
 class TestOutputFilesWritten:
     def test_all_files_created(self, tmp_path: Path):
-        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_dex_cex_dislocation import (
             DexCexDislocationSummary,
             _write_outputs,
         )
@@ -491,7 +491,7 @@ class TestCandidateGate:
     def test_gate_rejects_low_sample_count(self):
         """Candidate gate should fire when events are below min_events."""
         from examples.strategies.venue_agnostic_signal_observer.event_study import evaluate_candidate_group
-        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import _r2tfr
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_dex_cex_dislocation import _r2tfr
         from examples.strategies.venue_agnostic_signal_observer.dex_models import DexCexForwardResult
 
         # Only 10 valid events - below threshold
@@ -522,7 +522,7 @@ class TestCandidateGate:
 
     def test_gate_rejects_positive_gross_negative_net(self):
         """Gross positive but net negative should not be candidate."""
-        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import DexCexForwardResult
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_dex_cex_dislocation import DexCexForwardResult
 
         # Build results with positive gross but negative net
         results = []
@@ -584,7 +584,7 @@ class TestMalformedPayload:
 
 class TestReportGuardrails:
     def test_report_contains_observer_warning(self, tmp_path: Path):
-        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_dex_cex_dislocation import (
             DexCexDislocationSummary,
             _write_outputs,
         )
@@ -616,7 +616,7 @@ class TestReportGuardrails:
 
     def test_report_verdict_never_says_profitable(self, tmp_path: Path):
         """The report must never output PROFITABLE, TRADE_NOW, or ACCEPTED_FOR_TRADING."""
-        from examples.strategies.venue_agnostic_signal_observer.run_dex_cex_dislocation import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_dex_cex_dislocation import (
             DexCexDislocationSummary,
             _write_outputs,
         )

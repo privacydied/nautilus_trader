@@ -763,7 +763,7 @@ def test_biased_reachability_passed():
 
 def test_summary_forbids_paper_live_trade_flags():
     """Summary.json has paper_or_live_allowed=False and registry_mutation_allowed=False."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         run_probe,
         build_parser,
     )
@@ -806,7 +806,7 @@ def test_dry_run_without_network():
     """--dry-run flag works without network."""
     result = subprocess.run(
         [sys.executable, "-m",
-         "examples.strategies.venue_agnostic_signal_observer."
+         "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli."
          "run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0",
          "--dry-run",
          "--out-root", "/tmp/test_dry_run"],
@@ -835,7 +835,7 @@ def test_20gb_budget_via_cli_override():
     """20GB budget is allowed via explicit --download-budget-bytes."""
     result = subprocess.run(
         [sys.executable, "-m",
-         "examples.strategies.venue_agnostic_signal_observer."
+         "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli."
          "run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0",
          "--dry-run",
          "--download-budget-bytes", "20000000000",
@@ -1290,7 +1290,7 @@ def test_biased_reachability_blocked_if_any_gate_fails():
 
 def test_estimate_s3_bytes_returns_tuple():
     """_estimate_s3_bytes returns (total_bytes, listed_count) tuple."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         _estimate_s3_bytes,
     )
     result = _estimate_s3_bytes([])
@@ -1307,7 +1307,7 @@ def test_estimate_s3_bytes_sums_sizes():
     """list-objects-v2 estimator correctly sums ContentLength from listing."""
     from unittest.mock import patch
     import json
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         _estimate_s3_bytes,
     )
 
@@ -1344,7 +1344,7 @@ def test_estimate_s3_bytes_sums_sizes():
 def test_estimator_no_head_object_calls():
     """The estimator uses list-objects-v2, not head-object."""
     from unittest.mock import patch, call
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         _estimate_s3_bytes,
     )
     import json
@@ -1383,7 +1383,7 @@ def test_estimator_no_head_object_calls():
 
 def test_estimator_respects_budget():
     """The caller checks budget against estimator result."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         _estimate_s3_bytes,
     )
     total, count = _estimate_s3_bytes([])
@@ -1399,7 +1399,7 @@ def test_estimator_selects_max_files():
     """_list_s3_replica_cmds respects max_keys."""
     from unittest.mock import patch, MagicMock
     import json
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         _list_s3_replica_cmds,
     )
 
@@ -1642,7 +1642,7 @@ def test_dry_run_still_works():
     import sys
     result = subprocess.run(
         [sys.executable, "-m",
-         "examples.strategies.venue_agnostic_signal_observer."
+         "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli."
          "run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0",
          "--dry-run",
          "--out-root", "/tmp/test_dry_run_freq"],
@@ -1664,7 +1664,7 @@ def test_plan_only_no_head_object():
     import sys
     result = subprocess.run(
         [sys.executable, "-m",
-         "examples.strategies.venue_agnostic_signal_observer."
+         "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli."
          "run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0",
          "--dry-run",
          "--stop-after-plan",
@@ -1869,7 +1869,7 @@ def test_frequency_scan_status_diagnostic_only():
 
 def test_frequency_scan_records_all_flx_keys():
     """Frequency scan summary includes all_flx_update_counts for every flx:* key seen."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         run_frequency_scan,
         build_parser,
     )
@@ -1947,7 +1947,7 @@ def test_frequency_scan_records_all_flx_keys():
 
 def test_flx_btc_not_target_for_equities():
     """flx:BTC updates exist but flx:TSLA and flx:NVDA remain zero."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         run_frequency_scan,
         build_parser,
     )
@@ -2030,7 +2030,7 @@ def test_flx_btc_not_target_for_equities():
 
 def test_frequency_scan_emits_per_day_counts():
     """Frequency scan summary includes flx_target_counts_by_date with per-day target counts."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         run_frequency_scan,
         build_parser,
     )
@@ -2108,7 +2108,7 @@ def test_frequency_scan_emits_per_day_counts():
 
 def test_frequency_scan_btc_only_is_target_absent():
     """When only flx:BTC exists, frequency scan reports TARGET_ABSENT for TSLA/NVDA."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         run_frequency_scan,
         build_parser,
     )
@@ -2179,7 +2179,7 @@ def test_frequency_scan_btc_only_is_target_absent():
 
 def test_frequency_scan_never_sets_phase0_review_allowed():
     """Frequency scan always has phase0_review_allowed=False."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         run_frequency_scan,
         build_parser,
     )
@@ -2251,7 +2251,7 @@ def test_frequency_scan_never_sets_phase0_review_allowed():
 
 def test_frequency_scan_never_emits_forbidden_statuses():
     """Frequency scan summary status is never in FORBIDDEN_STATUSES."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0 import (
         run_frequency_scan,
         build_parser,
     )

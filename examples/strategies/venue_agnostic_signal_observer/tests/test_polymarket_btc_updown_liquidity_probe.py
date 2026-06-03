@@ -100,7 +100,7 @@ class TestSafetyNoOrders:
     ]
 
     MODULE_PATH = Path(__file__).resolve().parent.parent / "polymarket_btc_updown_liquidity_probe.py"
-    RUNNER_PATH = Path(__file__).resolve().parent.parent / "run_polymarket_btc_updown_liquidity_probe.py"
+    RUNNER_PATH = Path(__file__).resolve().parent.parent / "runners" / "legacy_cli" / "run_polymarket_btc_updown_liquidity_probe.py"
 
     @staticmethod
     def _code_lines(source: str) -> list[str]:

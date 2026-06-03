@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.run_hlp_child_vault_role_probe import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_child_vault_role_probe import (
     main,
     run_id,
     human_bytes,
@@ -342,7 +342,7 @@ def test_per_address_signed_delta():
 
 def test_no_user_fills_by_time_in_cli():
     """CLI does not use userFillsByTime in execution code."""
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_child_vault_role_probe as mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_child_vault_role_probe as mod
     content = open(mod.__file__).read()
     # The string is in the FORBIDDEN_STRINGS tuple only — not in execution code
     occurrences = content.count("userFillsByTime")
@@ -351,7 +351,7 @@ def test_no_user_fills_by_time_in_cli():
 
 def test_forbidden_strings_not_in_execution():
     """CLI does not contain forbidden execution strings outside definitions."""
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_child_vault_role_probe as mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_child_vault_role_probe as mod
     content = open(mod.__file__).read()
     lines = content.split("\n")
     for forbidden in FORBIDDEN_STRINGS:
@@ -376,7 +376,7 @@ def test_forbidden_strings_not_in_execution():
 
 def test_no_rejected_research_md():
     """CLI does not write REJECTED_RESEARCH.md."""
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_child_vault_role_probe as mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_child_vault_role_probe as mod
     content = open(mod.__file__).read()
     assert "REJECTED_RESEARCH" not in content or "REJECTED_RESEARCH.md" not in content
 
@@ -427,6 +427,6 @@ def test_summary_safety_block():
 
 def test_download_cap_default():
     """Default max download GB is reasonable."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hlp_child_vault_role_probe import MAX_DOWNLOAD_BYTES
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_child_vault_role_probe import MAX_DOWNLOAD_BYTES
     assert MAX_DOWNLOAD_BYTES > 0
     assert MAX_DOWNLOAD_BYTES <= 5 * 1024**3

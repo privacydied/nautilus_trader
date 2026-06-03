@@ -11,9 +11,13 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, UTC
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from examples.strategies.venue_agnostic_signal_observer.core.time_utils import (
+    is_expired_at,
+)
 
 
 @dataclass
@@ -30,11 +34,10 @@ class ManifestRecord:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
-    def is_expired(self) -> bool:
+    def is_expired(self, *, now: datetime | None = None) -> bool:
         if self.expires_at_utc is None:
             return False
-        now = datetime.now(UTC).isoformat()
-        return now > self.expires_at_utc
+        return is_expired_at(self.expires_at_utc, now=now, malformed_is_expired=True)
 
 
 @dataclass

@@ -654,7 +654,7 @@ class TestSyntheticEndToEnd:
 class TestReportOutput:
     def test_markdown_report_created(self, tmp_path: Path):
         """Run the sweep runner with synthetic data and verify report output."""
-        from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_tick_lead_lag import (
             run_sweep, build_parser,
         )
         # Create synthetic tick data
@@ -688,7 +688,7 @@ class TestReportOutput:
 
         # The sweep runner only returns the summary; the main() function
         # handles file writing. Call the output writers directly:
-        from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_tick_lead_lag import (
             _write_outputs, generate_markdown_report, _determine_verdict,
         )
         verdict = _determine_verdict(summary, data_loaded=True)

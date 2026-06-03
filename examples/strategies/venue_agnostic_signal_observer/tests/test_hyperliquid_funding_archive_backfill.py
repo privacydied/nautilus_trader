@@ -307,7 +307,7 @@ def test_pagination_logic(tmp_path: Path) -> None:
 
 def test_cli_argument_parsing() -> None:
     """Test CLI argument parsing."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_archive_backfill import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_archive_backfill import (
         build_parser,
     )
     
@@ -329,7 +329,7 @@ def test_cli_argument_parsing() -> None:
 
 def test_cli_multiple_assets() -> None:
     """Test CLI with multiple assets."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_archive_backfill import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_archive_backfill import (
         build_parser,
     )
     
@@ -347,7 +347,7 @@ def test_cli_multiple_assets() -> None:
 
 def test_cli_sleep_ms() -> None:
     """Test CLI sleep-ms argument."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_archive_backfill import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_archive_backfill import (
         build_parser,
     )
     
@@ -365,7 +365,7 @@ def test_cli_sleep_ms() -> None:
 
 def test_date_validation() -> None:
     """Test date validation in CLI."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_archive_backfill import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_archive_backfill import (
         _validate_date,
     )
     
@@ -429,7 +429,7 @@ def test_timestamp_sorting(tmp_path: Path) -> None:
 
 def test_cli_runner_smoke(tmp_path: Path) -> None:
     """Smoke test for CLI runner with mocked API."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_archive_backfill import main
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_archive_backfill import main
     
     with patch.object(backfill, 'fetch_funding_history', return_value=[]):
         rc = main([
@@ -447,7 +447,7 @@ def test_cli_runner_smoke(tmp_path: Path) -> None:
 
 def test_cli_invalid_asset() -> None:
     """Test CLI rejects invalid assets."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_archive_backfill import main
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_archive_backfill import main
     
     rc = main([
         "--asset", "INVALID",
@@ -461,7 +461,7 @@ def test_cli_invalid_asset() -> None:
 
 def test_cli_date_before_end() -> None:
     """Test CLI rejects end-date before start-date."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_archive_backfill import main
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_archive_backfill import main
     
     rc = main([
         "--asset", "BTC",
@@ -475,7 +475,7 @@ def test_cli_date_before_end() -> None:
 
 def test_cli_invalid_date_format() -> None:
     """Test CLI rejects invalid date format."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_archive_backfill import main
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_archive_backfill import main
     
     rc = main([
         "--asset", "BTC",

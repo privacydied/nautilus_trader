@@ -78,10 +78,21 @@ def main() -> None:
 
     if args.dry_run:
         # Also show gate results
+        # Read precommitment to extract target group_id for gate checks
+        from .conductor.atomic_io import read_json
+
+        try:
+            pc_payload = read_json(
+                precommitment_dir / f"{hash_val}.json"
+            )
+        except Exception:
+            pc_payload = {}
+
         gate_results = verify_promotion_gates(
             precommitment_hash=hash_val,
             ledger_path=Path(args.evidence_ledger),
             artifacts_dir=artifacts_base,
+            group_id=pc_payload.get("group_id"),
         )
         for g in gate_results:
             print(f"  Gate '{g.gate_id}': passed={g.passed} detail={g.detail}")

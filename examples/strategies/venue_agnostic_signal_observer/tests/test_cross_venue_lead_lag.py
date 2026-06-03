@@ -23,7 +23,7 @@ from examples.strategies.venue_agnostic_signal_observer.event_study import (
     generate_synthetic_no_edge_ticks,
     generate_synthetic_positive_lead_lag_ticks,
 )
-from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_tick_lead_lag import (
     build_parser,
     run_sweep,
 )
@@ -241,7 +241,7 @@ class TestCrossVenuePairing:
 
     def test_no_cross_venue_data_verdict(self, tmp_path):
         """When no cross-venue data is available, verdict is NEEDS_MORE_DATA."""
-        from examples.strategies.venue_agnostic_signal_observer.run_tick_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_tick_lead_lag import (
             _determine_verdict,
         )
 

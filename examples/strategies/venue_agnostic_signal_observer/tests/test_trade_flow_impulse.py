@@ -309,7 +309,7 @@ class TestNoOrderGuard:
 
     def test_no_forbidden_code_in_runner(self):
         """Verify run_trade_flow_impulse.py contains no order, key, or PnL code."""
-        module_path = Path(__file__).parent.parent / "run_trade_flow_impulse.py"
+        module_path = Path(__file__).parent.parent / "runners" / "legacy_cli" / "run_trade_flow_impulse.py"
         content = module_path.read_text()
         forbidden = [
             "order_submit",

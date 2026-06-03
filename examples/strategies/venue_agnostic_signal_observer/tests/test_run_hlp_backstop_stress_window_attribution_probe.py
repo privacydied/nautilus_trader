@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_stress_window_attribution_probe import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_stress_window_attribution_probe import (
     main,
     run_id,
     human_bytes,
@@ -269,13 +269,13 @@ def test_per_coin_turnover():
 
 
 def test_no_user_fills_by_time():
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_stress_window_attribution_probe as mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_stress_window_attribution_probe as mod
     c = open(mod.__file__).read()
     assert c.count("userFillsByTime") <= 2
 
 
 def test_forbidden_outside_definition():
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_stress_window_attribution_probe as mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_stress_window_attribution_probe as mod
     content = open(mod.__file__).read()
     for forbidden in FORBIDDEN_STRINGS:
         cnt = content.count(forbidden)
@@ -289,7 +289,7 @@ def test_forbidden_outside_definition():
 
 
 def test_no_rejected_research():
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_stress_window_attribution_probe as mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_stress_window_attribution_probe as mod
     c = open(mod.__file__).read()
     assert "REJECTED_RESEARCH.md" not in c
 

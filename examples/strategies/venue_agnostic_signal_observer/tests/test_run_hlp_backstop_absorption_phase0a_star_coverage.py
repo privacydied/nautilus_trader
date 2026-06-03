@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_absorption_phase0a_star_coverage import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_absorption_phase0a_star_coverage import (
     parse_args,
     main,
     run_diagnostic,
@@ -270,7 +270,7 @@ def test_output_stays_within_reports_root(tmp_precommitment, tmp_data_root):
 
 def test_forbidden_strings_not_in_cli(tmp_precommitment, tmp_data_root):
     """Runner does not contain forbidden conductor/promotion paths."""
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_absorption_phase0a_star_coverage as run_mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_absorption_phase0a_star_coverage as run_mod
     from examples.strategies.venue_agnostic_signal_observer.hlp_backstop_absorption_phase0a_star_coverage import FORBIDDEN_STRINGS
     mod_path = run_mod.__file__
     assert mod_path is not None
@@ -282,7 +282,7 @@ def test_forbidden_strings_not_in_cli(tmp_precommitment, tmp_data_root):
 
 def test_no_rejected_research_mutation(tmp_precommitment, tmp_data_root):
     """Runner does not reference REJECTED_RESEARCH.md."""
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_absorption_phase0a_star_coverage as run_mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_absorption_phase0a_star_coverage as run_mod
     mod_path = run_mod.__file__
     assert mod_path is not None
     from pathlib import Path

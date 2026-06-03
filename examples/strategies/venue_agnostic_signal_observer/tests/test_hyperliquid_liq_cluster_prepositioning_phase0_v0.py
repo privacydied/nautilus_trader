@@ -1092,7 +1092,7 @@ def test_summary_json_provenance(tmp_path):
 
 def test_cli_writes_expected_artifacts(tmp_data_dir, tmp_path):
     """Test 51: CLI writes all expected artifacts for synthetic pass fixture."""
-    from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_liq_cluster_prepositioning_phase0_v0 import main
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_liq_cluster_prepositioning_phase0_v0 import main
     import io
     from contextlib import redirect_stdout
 
