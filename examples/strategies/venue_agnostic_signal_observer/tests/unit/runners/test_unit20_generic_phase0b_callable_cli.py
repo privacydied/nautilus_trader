@@ -34,7 +34,7 @@ _OI_KEY = "hyperliquid_oi_velocity_compression_phase0"
 
 _ENTRY_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
-    "run_generic_altcoin_stress_regime_ablation_phase0b"
+    "runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b"
 )
 _RUNNER_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
@@ -42,7 +42,7 @@ _RUNNER_MODULE = (
 )
 _EXPECTED_MAIN_CALLABLE = (
     "examples.strategies.venue_agnostic_signal_observer."
-    "run_generic_altcoin_stress_regime_ablation_phase0b:main"
+    "runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b:main"
 )
 _EXPECTED_HELP_LINES = 15
 
@@ -81,7 +81,7 @@ def _snapshot_help_dirs() -> dict[str, tuple[str, ...]]:
 
 
 def test_phase0b_cli_exposes_build_parser() -> None:
-    from examples.strategies.venue_agnostic_signal_observer import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli import (
         run_generic_altcoin_stress_regime_ablation_phase0b as cli,
     )
 
@@ -91,7 +91,7 @@ def test_phase0b_cli_exposes_build_parser() -> None:
 
 
 def test_phase0b_cli_exposes_main() -> None:
-    from examples.strategies.venue_agnostic_signal_observer import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli import (
         run_generic_altcoin_stress_regime_ablation_phase0b as cli,
     )
 
@@ -100,7 +100,7 @@ def test_phase0b_cli_exposes_main() -> None:
 
 
 def test_phase0b_main_help_is_help_safe_and_exits_zero() -> None:
-    from examples.strategies.venue_agnostic_signal_observer import (
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli import (
         run_generic_altcoin_stress_regime_ablation_phase0b as cli,
     )
 
@@ -191,7 +191,7 @@ def test_other_runners_unchanged_and_node_fills_has_no_cli_spec() -> None:
     assert oi.level is RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES
     assert oi.main_callable == (
         "examples.strategies.venue_agnostic_signal_observer."
-        "run_hyperliquid_oi_velocity_compression_phase0:main"
+        "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0:main"
     )
 
     assert get_runner_cli_spec(_NODE_FILLS_KEY) is None

@@ -239,7 +239,7 @@ class TestRunnerCliSpecRegistryContract:
     def test_oi_velocity_cli_spec_main_callable_is_explicit_and_build_parser_remains_none(self) -> None:
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.main_callable == (
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_hyperliquid_oi_velocity_compression_phase0:main"
+            "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0:main"
         )
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.build_parser_callable is None
 

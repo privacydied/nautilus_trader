@@ -4,12 +4,19 @@ import argparse
 import json
 from pathlib import Path
 
-from .hyperliquid_cost_feasibility import compute_cost_feasibility
-from .hyperliquid_cost_feasibility import write_cost_outputs
+from examples.strategies.venue_agnostic_signal_observer.hyperliquid_cost_feasibility import (
+    compute_cost_feasibility,
+)
+from examples.strategies.venue_agnostic_signal_observer.hyperliquid_cost_feasibility import (
+    write_cost_outputs,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Compute Hyperliquid cost feasibility from captured/archive Parquet.")
+    parser = argparse.ArgumentParser(
+        prog="python -m examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_cost_feasibility",
+        description="Compute Hyperliquid cost feasibility from captured/archive Parquet.",
+    )
     parser.add_argument("--data-dir", type=Path, default=Path("data/hyperliquid_live/v0"))
     parser.add_argument("--archive-data-dir", type=Path, default=Path("data/hyperliquid_archive/v0"))
     parser.add_argument("--data-source", choices=["live", "archive", "both"], default="live")

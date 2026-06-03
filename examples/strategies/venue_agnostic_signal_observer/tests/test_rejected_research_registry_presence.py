@@ -79,7 +79,7 @@ def test_probe_does_not_create_registry():
 
     cmd = [
         sys.executable, "-m",
-        "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0",
+        "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0",
         "--out-root", str(out_dir),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=repo_root)

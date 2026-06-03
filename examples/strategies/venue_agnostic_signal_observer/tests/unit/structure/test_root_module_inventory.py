@@ -51,7 +51,7 @@ def test_all_root_paths_exist_and_every_actual_root_py_file_is_covered_once() ->
     assert not validation.stale_paths
     assert not validation.duplicate_paths
     actual = list_actual_root_py_files()
-    assert tuple(entry.root_path for entry in entries) == actual
+    assert tuple(path for path in validation.ledger_root_paths if "/runners/legacy_cli/" not in path) == actual
     for root_path in actual:
         assert (_repo_root() / root_path).exists()
 

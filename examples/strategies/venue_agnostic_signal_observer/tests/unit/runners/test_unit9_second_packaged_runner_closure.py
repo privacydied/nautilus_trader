@@ -36,7 +36,7 @@ _OI_LEGACY_MODULE = (
 )
 _OI_RUN_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
-    "run_hyperliquid_oi_velocity_compression_phase0"
+    "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0"
 )
 _COST_RUNNER_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
@@ -103,7 +103,7 @@ class TestUnit9SecondPackagedRunnerClosure:
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.build_parser_callable is None
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.main_callable == (
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_hyperliquid_oi_velocity_compression_phase0:main"
+            "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0:main"
         )
 
     def test_registry_import_does_not_import_oi_runner(self) -> None:

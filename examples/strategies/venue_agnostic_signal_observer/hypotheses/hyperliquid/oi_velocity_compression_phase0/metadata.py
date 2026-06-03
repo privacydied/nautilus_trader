@@ -23,7 +23,7 @@ METADATA = HypothesisPackageMetadata(
     ),
     cli_module=(
         "examples.strategies.venue_agnostic_signal_observer."
-        "run_hyperliquid_oi_velocity_compression_phase0"
+        "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0"
     ),
     implementation_module=(
         "examples.strategies.venue_agnostic_signal_observer."

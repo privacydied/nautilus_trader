@@ -114,6 +114,13 @@ def list_actual_root_py_files() -> tuple[str, ...]:
 def validate_root_module_ledger() -> RootModuleLedgerValidation:
     entries = load_root_module_ledger()
     actual_paths = list_actual_root_py_files()
+    moved_paths = tuple(
+        sorted(
+            str(path.relative_to(_repo_root()))
+            for path in (package_root() / "runners" / "legacy_cli").glob("run_*.py")
+            if path.is_file()
+        )
+    )
     ledger_paths = tuple(entry.root_path for entry in entries)
 
     seen: set[str] = set()
@@ -123,7 +130,7 @@ def validate_root_module_ledger() -> RootModuleLedgerValidation:
             duplicates.append(path)
         seen.add(path)
 
-    actual_set = set(actual_paths)
+    actual_set = set(actual_paths) | set(moved_paths)
     ledger_set = set(ledger_paths)
     invalid_categories = tuple(sorted(entry.root_path for entry in entries if entry.category not in _ALLOWED_CATEGORIES))
     invalid_statuses = tuple(sorted(entry.root_path for entry in entries if entry.status not in _ALLOWED_STATUSES))

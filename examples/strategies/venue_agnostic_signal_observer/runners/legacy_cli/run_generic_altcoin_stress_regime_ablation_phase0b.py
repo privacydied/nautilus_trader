@@ -25,6 +25,11 @@ DEFAULT_OUT_ROOT = Path(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
+        prog=(
+            "python -m "
+            "examples.strategies.venue_agnostic_signal_observer."
+            "run_generic_altcoin_stress_regime_ablation_phase0b"
+        ),
         description="Generic altcoin stress regime ablation Phase 0B return diagnostic",
     )
     parser.add_argument(

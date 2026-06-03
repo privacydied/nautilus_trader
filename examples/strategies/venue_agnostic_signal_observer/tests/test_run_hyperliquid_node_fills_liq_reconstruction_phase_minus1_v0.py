@@ -28,7 +28,7 @@ def _run_probe(out_root: str, data_root: str | None = None) -> subprocess.Comple
     """Run the probe runner and return the completed process."""
     cmd = [
         sys.executable, "-m",
-        "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0",
+        "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0",
         "--out-root", out_root,
     ]
     if data_root:

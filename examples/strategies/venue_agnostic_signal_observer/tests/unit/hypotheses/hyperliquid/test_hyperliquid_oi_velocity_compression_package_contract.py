@@ -23,7 +23,7 @@ METADATA_MODULE = f"{PACKAGE_MODULE}.metadata"
 COMPAT_MODULE = f"{PACKAGE_MODULE}.compat"
 CLI_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
-    "run_hyperliquid_oi_velocity_compression_phase0"
+    "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0"
 )
 REPO_ROOT = Path(__file__).resolve().parents[7]
 LEGACY_PATH = (

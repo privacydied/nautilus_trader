@@ -31,19 +31,18 @@ _LEGACY_CLI_MODULE_PREFIX = f"{_PACKAGE}.runners.legacy_cli."
 _ROOT_MODULE_PREFIX = f"{_PACKAGE}."
 _ROOT_PREFIX = "examples/strategies/venue_agnostic_signal_observer/"
 _EXPECTED_RETAINED_BLOCKERS = {
-    "metadata_pinned_cli_module": 6,
     "shared_infrastructure_not_cli": 1,
     "watcher_systemd_subprocess_coupling": 12,
     "forbidden_behavior_area": 7,
     "scaffold_forbidden_term_collision": 1,
 }
 _METADATA_PINNED_ROOT_FILES = (
-    "run_hyperliquid_cost_feasibility.py",
-    "run_hyperliquid_funding_divergence_phase0.py",
-    "run_hyperliquid_oi_velocity_compression_phase0.py",
-    "run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0.py",
     "run_generic_altcoin_stress_regime_ablation_phase0a.py",
     "run_generic_altcoin_stress_regime_ablation_phase0b.py",
+    "run_hyperliquid_cost_feasibility.py",
+    "run_hyperliquid_funding_divergence_phase0.py",
+    "run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0.py",
+    "run_hyperliquid_oi_velocity_compression_phase0.py",
 )
 _RETAINED_HELP_EXPECTATIONS = {
     "generic_altcoin_stress_regime_ablation_phase0a": (18, "Phase0A"),
@@ -70,10 +69,6 @@ _ALLOWED_RETAINED_ROOT_MODULE_REFERENCES = {
     f"{_PACKAGE}.run_artifacts",
     f"{_PACKAGE}.run_index",
     f"{_PACKAGE}.run_hyperliquid_asset_ctxs_archive",
-    f"{_PACKAGE}.run_hyperliquid_funding_divergence_phase0",
-    f"{_PACKAGE}.run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0",
-    f"{_PACKAGE}.run_generic_altcoin_stress_regime_ablation_phase0a",
-    f"{_PACKAGE}.run_generic_altcoin_stress_regime_ablation_phase0b",
     f"{_PACKAGE}.run_conductor",
     f"{_PACKAGE}.run_paper_promotion",
     f"{_PACKAGE}.run_paper_refalsification",
@@ -191,23 +186,23 @@ def test_catalog_counts_and_blocker_categories_match_unit28_surface() -> None:
 
     assert not validation.missing, validation.missing
     assert not validation.stale, validation.stale
-    assert len(moved) == 38
-    assert len(retained) == 27
+    assert len(moved) == 44
+    assert len(retained) == 21
     assert dict(blocker_counts) == _EXPECTED_RETAINED_BLOCKERS
 
 
-def test_metadata_pinned_flagship_clis_remain_root_only() -> None:
+def test_track_a_flagship_clis_are_moved_under_legacy_cli() -> None:
     for filename in _METADATA_PINNED_ROOT_FILES:
         key = filename.removesuffix(".py")
         spec = get_legacy_entrypoint(key)
         assert spec is not None, key
-        assert spec.root_removed is False, key
-        assert spec.blocker == "metadata_pinned_cli_module", key
-        assert spec.path == f"{_ROOT_PREFIX}{filename}"
-        assert spec.replacement_module is None
+        assert spec.root_removed is True, key
+        assert spec.blocker is None, key
+        assert spec.path == f"{_ROOT_PREFIX}runners/legacy_cli/{filename}"
+        assert spec.old_root_path == f"{_ROOT_PREFIX}{filename}"
+        assert spec.replacement_module == f"{_PACKAGE}.runners.legacy_cli.{key}"
+        assert not (_REPO_ROOT / spec.old_root_path).exists(), spec.old_root_path
         assert (_REPO_ROOT / spec.path).exists(), spec.path
-        replacement = _REPO_ROOT / "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli" / filename
-        assert not replacement.exists(), str(replacement)
 
 
 def test_moved_entries_have_replacement_modules_and_old_root_is_gone() -> None:
@@ -235,13 +230,13 @@ def test_retained_root_entries_still_exist_with_blockers_and_notes() -> None:
         assert spec.notes is not None
 
 
-def test_registry_backed_cli_modules_intentionally_remain_root_paths() -> None:
+def test_registry_backed_cli_modules_intentionally_use_track_a_legacy_cli_paths() -> None:
     expected = {
-        "hyperliquid_cost_feasibility": f"{_ROOT_MODULE_PREFIX}run_hyperliquid_cost_feasibility",
-        "hyperliquid_oi_velocity_compression_phase0": f"{_ROOT_MODULE_PREFIX}run_hyperliquid_oi_velocity_compression_phase0",
-        "generic_altcoin_stress_regime_ablation_phase0b": f"{_ROOT_MODULE_PREFIX}run_generic_altcoin_stress_regime_ablation_phase0b",
-        "generic_altcoin_stress_regime_ablation_phase0a": f"{_ROOT_MODULE_PREFIX}run_generic_altcoin_stress_regime_ablation_phase0a",
-        "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0": f"{_ROOT_MODULE_PREFIX}run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0",
+        "hyperliquid_cost_feasibility": f"{_PACKAGE}.runners.legacy_cli.run_hyperliquid_cost_feasibility",
+        "hyperliquid_oi_velocity_compression_phase0": f"{_PACKAGE}.runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0",
+        "generic_altcoin_stress_regime_ablation_phase0b": f"{_PACKAGE}.runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b",
+        "generic_altcoin_stress_regime_ablation_phase0a": f"{_PACKAGE}.runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0a",
+        "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0": f"{_PACKAGE}.runners.legacy_cli.run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0",
     }
     for key, cli_module in expected.items():
         spec = get_runner_spec(key)
@@ -250,15 +245,15 @@ def test_registry_backed_cli_modules_intentionally_remain_root_paths() -> None:
 
     funding = get_legacy_entrypoint("run_hyperliquid_funding_divergence_phase0")
     assert funding is not None
-    assert funding.root_removed is False
-    assert funding.blocker == "metadata_pinned_cli_module"
+    assert funding.root_removed is True
+    assert funding.blocker is None
     assert len(iter_runner_specs()) == 5
     assert len(ALL_RUNNER_CLI_SPECS) == 4
 
 
-def test_known_retained_root_help_outputs_still_work() -> None:
+def test_track_a_migrated_help_outputs_work_from_legacy_cli() -> None:
     for key, (line_count, _label) in _RETAINED_HELP_EXPECTATIONS.items():
-        proc = _run_help(f"{_ROOT_MODULE_PREFIX}run_{key}")
+        proc = _run_help(f"{_LEGACY_CLI_MODULE_PREFIX}run_{key}")
         assert proc.returncode == 0, (key, proc.stderr)
         assert len(proc.stdout.splitlines()) == line_count, key
 
@@ -316,8 +311,8 @@ def test_repo_owned_old_root_references_are_controlled() -> None:
 def test_no_root_count_zero_claim_root_count_is_27_by_design() -> None:
     root_files = list_actual_run_py_files()
     moved_files = list_moved_run_py_files()
-    assert len(root_files) == 27
-    assert len(moved_files) == 38
+    assert len(root_files) == 21
+    assert len(moved_files) == 44
     assert len(root_files) != 0
 
 

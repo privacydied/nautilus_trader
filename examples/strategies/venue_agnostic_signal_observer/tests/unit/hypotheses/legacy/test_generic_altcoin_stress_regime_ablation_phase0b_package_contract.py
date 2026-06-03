@@ -8,7 +8,7 @@ from pathlib import Path
 
 PACKAGE = "examples.strategies.venue_agnostic_signal_observer.hypotheses.legacy.generic_altcoin_stress_regime_ablation_phase0b"
 LEGACY = "examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0b"
-CLI = "examples.strategies.venue_agnostic_signal_observer.run_generic_altcoin_stress_regime_ablation_phase0b"
+CLI = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b"
 
 EXPECTED_HELP_LINES = 15
 HELP_KEY_SUBSTRINGS = (

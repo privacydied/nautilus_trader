@@ -12,7 +12,7 @@ class GenericAltcoinStressRegimeAblationPhase0AMetadata:
     description: str = (
         "Generic altcoin stress regime ablation Phase 0A feasibility/coverage audit."
     )
-    cli_module: str = "examples.strategies.venue_agnostic_signal_observer.run_generic_altcoin_stress_regime_ablation_phase0a"
+    cli_module: str = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0a"
     implementation_module: str = "examples.strategies.venue_agnostic_signal_observer.hypotheses.legacy.generic_altcoin_stress_regime_ablation_phase0a.runner"
     package_module: str = "examples.strategies.venue_agnostic_signal_observer.hypotheses.legacy.generic_altcoin_stress_regime_ablation_phase0a"
     legacy_module: str = "examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0a"

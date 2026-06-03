@@ -52,20 +52,10 @@ _PACKAGED_PAIRED_SPECS: dict[str, str | None] = {
     "hyperliquid_oi_velocity_compression_phase0": "hyperliquid_oi_velocity_compression_phase0",
 }
 
-# Unit 28: run_*.py files intentionally retained at root, with their blocker.
-# These are NOT moved into runners/legacy_cli because doing so would change
-# forbidden behavior areas (registry output, watcher/systemd subprocess wiring,
-# shared infrastructure, or paper/conductor/observer surfaces).
+# run_*.py files intentionally retained at root, with their blocker.
+# Track A explicitly migrated the metadata-pinned flagship CLIs into
+# runners/legacy_cli, so they no longer appear in this retained blocker map.
 _ROOT_RETAINED_BLOCKERS: dict[str, str] = {
-    # Registry/metadata-pinned: root module path is frozen through hypothesis
-    # metadata/RunnerSpec registry JSON and tests; moving requires a separate
-    # explicit registry-output migration unit.
-    "run_hyperliquid_cost_feasibility.py": "metadata_pinned_cli_module",
-    "run_hyperliquid_funding_divergence_phase0.py": "metadata_pinned_cli_module",
-    "run_hyperliquid_oi_velocity_compression_phase0.py": "metadata_pinned_cli_module",
-    "run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0.py": "metadata_pinned_cli_module",
-    "run_generic_altcoin_stress_regime_ablation_phase0a.py": "metadata_pinned_cli_module",
-    "run_generic_altcoin_stress_regime_ablation_phase0b.py": "metadata_pinned_cli_module",
     # Shared infrastructure despite the run_ prefix; imported as a library by
     # many hypothesis/runner modules. Not a CLI entrypoint.
     "run_artifacts.py": "shared_infrastructure_not_cli",
@@ -266,12 +256,15 @@ def iter_root_retained_entrypoints() -> tuple[LegacyEntrypointSpec, ...]:
 
 
 def validate_legacy_entrypoint_catalog() -> LegacyEntrypointValidation:
-    actual = set(list_actual_run_py_files())
+    actual_root = set(list_actual_run_py_files())
+    actual_moved = set(list_moved_run_py_files())
+    actual = actual_root | actual_moved
     cataloged = {
         entry.root_path
         for entry in _load_ledger()
         if entry.category == "canonical_cli" and entry.root_path.endswith(".py")
     }
-    missing = tuple(sorted(actual - cataloged))
+    moved_cataloged = {path for path in cataloged if "/runners/legacy_cli/" in path}
+    missing = tuple(sorted((actual_root - cataloged) | (actual_moved - moved_cataloged)))
     stale = tuple(sorted(cataloged - actual))
     return LegacyEntrypointValidation(missing=missing, stale=stale)
