@@ -28,7 +28,7 @@ _PHASE0B_KEY = "generic_altcoin_stress_regime_ablation_phase0b"
 _PHASE0A_KEY = "generic_altcoin_stress_regime_ablation_phase0a"
 _ENTRY_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
-    "run_hyperliquid_cost_feasibility"
+    "runners.legacy_cli.run_hyperliquid_cost_feasibility"
 )
 _IMPLEMENTATION_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
@@ -44,7 +44,7 @@ _LEGACY_ENTRYPOINT_PATH = (
 )
 _OI_ENTRY_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
-    "run_hyperliquid_oi_velocity_compression_phase0"
+    "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0"
 )
 _OI_IMPLEMENTATION_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
@@ -200,7 +200,7 @@ class TestCliSpecsCatalog:
     def test_oi_velocity_spec_does_not_claim_main_callable(self) -> None:
         assert HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC.main_callable == (
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_hyperliquid_oi_velocity_compression_phase0:main"
+            "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0:main"
         )
 
     def test_oi_velocity_spec_still_does_not_claim_build_parser_callable(self) -> None:
@@ -264,7 +264,7 @@ class TestCliSpecsCatalog:
         assert spec.risk is RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY
         assert spec.main_callable == (
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_generic_altcoin_stress_regime_ablation_phase0b:main"
+            "runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b:main"
         )
         assert spec.build_parser_callable is None
         assert spec.registered is True

@@ -19,7 +19,7 @@ HYPERLIQUID_COST_FEASIBILITY_CLI_SPEC = validate_runner_cli_spec(
         description="Hyperliquid cost-feasibility CLI metadata.",
         entry_module=(
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_hyperliquid_cost_feasibility"
+            "runners.legacy_cli.run_hyperliquid_cost_feasibility"
         ),
         implementation_module=(
             "examples.strategies.venue_agnostic_signal_observer."
@@ -61,7 +61,7 @@ HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC = validate_runner_cli_spec(
         description="Hyperliquid OI velocity compression Phase 0 study.",
         entry_module=(
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_hyperliquid_oi_velocity_compression_phase0"
+            "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0"
         ),
         implementation_module=(
             "examples.strategies.venue_agnostic_signal_observer."
@@ -74,7 +74,7 @@ HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC = validate_runner_cli_spec(
         build_parser_callable=None,
         main_callable=(
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_hyperliquid_oi_velocity_compression_phase0:main"
+            "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0:main"
         ),
         level=RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES,
         risk=RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY,
@@ -107,7 +107,7 @@ GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0B_CLI_SPEC = validate_runner_cli_sp
         ),
         entry_module=(
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_generic_altcoin_stress_regime_ablation_phase0b"
+            "runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b"
         ),
         implementation_module=(
             "examples.strategies.venue_agnostic_signal_observer."
@@ -120,7 +120,7 @@ GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0B_CLI_SPEC = validate_runner_cli_sp
         build_parser_callable=None,
         main_callable=(
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_generic_altcoin_stress_regime_ablation_phase0b:main"
+            "runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b:main"
         ),
         level=RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES,
         risk=RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY,
@@ -155,7 +155,7 @@ GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_CLI_SPEC = validate_runner_cli_sp
         ),
         entry_module=(
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_generic_altcoin_stress_regime_ablation_phase0a"
+            "runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0a"
         ),
         implementation_module=(
             "examples.strategies.venue_agnostic_signal_observer."

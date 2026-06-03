@@ -28,6 +28,11 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
+        prog=(
+            "python -m "
+            "examples.strategies.venue_agnostic_signal_observer."
+            "run_generic_altcoin_stress_regime_ablation_phase0a"
+        ),
         description="Generic altcoin stress regime ablation Phase 0A",
     )
     parser.add_argument(

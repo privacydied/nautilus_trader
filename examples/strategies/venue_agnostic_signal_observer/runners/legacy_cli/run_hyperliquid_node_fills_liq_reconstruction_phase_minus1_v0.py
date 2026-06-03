@@ -54,6 +54,11 @@ from examples.strategies.venue_agnostic_signal_observer import (  # noqa: E402
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(
+        prog=(
+            "python -m "
+            "examples.strategies.venue_agnostic_signal_observer."
+            "run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+        ),
         description="Hyperliquid node fills liquidation reconstruction Phase -1 v0 probe",
     )
 

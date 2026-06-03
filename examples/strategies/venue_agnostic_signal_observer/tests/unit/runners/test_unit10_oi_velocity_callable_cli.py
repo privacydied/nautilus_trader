@@ -26,7 +26,7 @@ from examples.strategies.venue_agnostic_signal_observer.runners.registry import 
 _REPO_ROOT = Path(__file__).resolve().parents[6]
 _OI_RUN_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
-    "run_hyperliquid_oi_velocity_compression_phase0"
+    "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0"
 )
 _OI_RUNNER_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
@@ -119,7 +119,7 @@ class TestUnit10OiVelocityCallableCli:
         spec = HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC
         assert spec.main_callable == (
             "examples.strategies.venue_agnostic_signal_observer."
-            "run_hyperliquid_oi_velocity_compression_phase0:main"
+            "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0:main"
         )
         assert spec.build_parser_callable is None
         assert spec.level is RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES
@@ -178,7 +178,7 @@ class TestUnit10OiVelocityCallableCli:
             after = set(sys.modules)
             new = after - before
             print('target_callable', callable(target))
-            print('oi_cli_imported', {_OI_RUN_MODULE!r} in new or {_OI_RUN_MODULE!r} in after)
+            print('oi_cli_imported', module_name in new or module_name in after)
             print('registry_cli_imported', {_REGISTRY_CLI_MODULE!r} in new)
             raise SystemExit(1 if {_REGISTRY_CLI_MODULE!r} in new else 0)
             """
@@ -207,7 +207,7 @@ class TestUnit10OiVelocityCallableCli:
             import sys
             mod = importlib.import_module({_OI_RUN_MODULE!r})
             sys.argv = [
-                'python -m examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_oi_velocity_compression_phase0'
+                'python -m examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0'
             ]
             print(mod.build_parser().format_help(), end='')
             """
@@ -235,13 +235,13 @@ class TestUnit10OiVelocityCallableCli:
     def test_cost_feasibility_remains_level1_and_help_22_lines(self) -> None:
         assert HYPERLIQUID_COST_FEASIBILITY_CLI_SPEC.level is RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA
         assert HYPERLIQUID_COST_FEASIBILITY_CLI_SPEC.main_callable is None
-        result = _run_help("examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_cost_feasibility")
+        result = _run_help("examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_cost_feasibility")
         assert result.returncode == 0, result.stderr
         assert len(result.stdout.splitlines()) == 22
 
     def test_node_fills_remains_without_cli_spec_and_help_84_lines(self) -> None:
         assert get_runner_cli_spec("hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0") is None
-        result = _run_help("examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0")
+        result = _run_help("examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0")
         assert result.returncode == 0, result.stderr
         assert len(result.stdout.splitlines()) == 84
 

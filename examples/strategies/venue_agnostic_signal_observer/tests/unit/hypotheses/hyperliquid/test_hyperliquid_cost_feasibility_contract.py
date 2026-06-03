@@ -21,7 +21,7 @@ PACKAGE_MODULE = (
 RUNNER_MODULE = f"{PACKAGE_MODULE}.runner"
 METADATA_MODULE = f"{PACKAGE_MODULE}.metadata"
 CLI_MODULE = (
-    "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_cost_feasibility"
+    "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_cost_feasibility"
 )
 NODE_FILLS_RUNNER_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."

@@ -21,7 +21,10 @@ DEFAULT_HASH = Path(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Observer-only Hyperliquid OI velocity compression Phase 0")
+    parser = argparse.ArgumentParser(
+        prog="python -m examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_oi_velocity_compression_phase0",
+        description="Observer-only Hyperliquid OI velocity compression Phase 0",
+    )
     parser.add_argument("--data-dir", type=Path, required=True, help="Local deterministic historical archive directory")
     parser.add_argument("--out", type=Path, default=Path("reports/hyperliquid_oi_velocity_compression_phase0"))
     parser.add_argument("--precommitment", type=Path, default=DEFAULT_DOC)

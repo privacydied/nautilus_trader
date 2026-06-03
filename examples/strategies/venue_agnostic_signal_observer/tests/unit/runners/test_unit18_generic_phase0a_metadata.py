@@ -29,7 +29,7 @@ _PHASE0A_KEY = "generic_altcoin_stress_regime_ablation_phase0a"
 _PHASE0B_KEY = "generic_altcoin_stress_regime_ablation_phase0b"
 _ENTRY_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
-    "run_generic_altcoin_stress_regime_ablation_phase0a"
+    "runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0a"
 )
 _IMPLEMENTATION_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."

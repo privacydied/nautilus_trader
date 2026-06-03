@@ -13,7 +13,7 @@ class GenericAltcoinStressRegimeAblationPhase0BMetadata:
         "Forward-return diagnostic ablation for a price-only generic altcoin "
         "stress regime detector (Phase 0B)."
     )
-    cli_module: str = "examples.strategies.venue_agnostic_signal_observer.run_generic_altcoin_stress_regime_ablation_phase0b"
+    cli_module: str = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b"
     implementation_module: str = "examples.strategies.venue_agnostic_signal_observer.hypotheses.legacy.generic_altcoin_stress_regime_ablation_phase0b.runner"
     package_module: str = "examples.strategies.venue_agnostic_signal_observer.hypotheses.legacy.generic_altcoin_stress_regime_ablation_phase0b"
     legacy_module: str = "examples.strategies.venue_agnostic_signal_observer.generic_altcoin_stress_regime_ablation_phase0b"

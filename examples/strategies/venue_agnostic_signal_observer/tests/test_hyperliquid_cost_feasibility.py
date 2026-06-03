@@ -48,7 +48,7 @@ def test_no_execution_side_hyperliquid_classes_imported_anywhere() -> None:
         root / "hyperliquid_s3_archive.py",
         root / "runners" / "legacy_cli" / "run_hyperliquid_s3_archive.py",
         root / "hyperliquid_cost_feasibility.py",
-        root / "run_hyperliquid_cost_feasibility.py",
+        root / "runners" / "legacy_cli" / "run_hyperliquid_cost_feasibility.py",
         root / "hypotheses" / "hyperliquid" / "cost_feasibility" / "runner.py",
         root / "hypotheses" / "hyperliquid" / "cost_feasibility" / "compat.py",
         root / "hypotheses" / "hyperliquid" / "cost_feasibility" / "__init__.py",

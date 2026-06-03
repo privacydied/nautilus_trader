@@ -10,7 +10,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import hyperliquid_funding_divergence_phase0 as h
+from examples.strategies.venue_agnostic_signal_observer import (
+    hyperliquid_funding_divergence_phase0 as h,
+)
 
 
 def _git(args: list[str]) -> str:
@@ -21,7 +23,10 @@ def _git(args: list[str]) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Hyperliquid funding divergence Phase 0 distribution-only audit")
+    p = argparse.ArgumentParser(
+        prog="python -m examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_divergence_phase0",
+        description="Hyperliquid funding divergence Phase 0 distribution-only audit",
+    )
     p.add_argument("--output-root", default="reports/hyperliquid_funding_divergence_phase0")
     for venue in ["hyperliquid", "binance", "bybit"]:
         for asset in ["btc", "eth"]:

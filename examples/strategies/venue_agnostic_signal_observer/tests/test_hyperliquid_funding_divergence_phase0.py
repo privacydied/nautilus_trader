@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer import hyperliquid_funding_divergence_phase0 as h
-from examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_divergence_phase0 import main
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_divergence_phase0 import main
 
 
 def _ts(hour: int) -> str:

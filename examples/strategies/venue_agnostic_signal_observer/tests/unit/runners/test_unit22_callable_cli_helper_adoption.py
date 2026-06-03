@@ -50,7 +50,7 @@ def test_helper_parses_oi_main_callable():
     )
     assert ref.dotted == (
         "examples.strategies.venue_agnostic_signal_observer."
-        "run_hyperliquid_oi_velocity_compression_phase0:main"
+        "runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0:main"
     )
 
 
@@ -60,7 +60,7 @@ def test_helper_parses_phase0b_main_callable():
     )
     assert ref.dotted == (
         "examples.strategies.venue_agnostic_signal_observer."
-        "run_generic_altcoin_stress_regime_ablation_phase0b:main"
+        "runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b:main"
     )
 
 

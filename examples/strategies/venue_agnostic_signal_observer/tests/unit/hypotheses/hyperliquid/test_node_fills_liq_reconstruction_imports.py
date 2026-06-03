@@ -22,7 +22,7 @@ PACKAGE_MODULE = (
 )
 CLI_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
-    "run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
+    "runners.legacy_cli.run_hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
 )
 
 

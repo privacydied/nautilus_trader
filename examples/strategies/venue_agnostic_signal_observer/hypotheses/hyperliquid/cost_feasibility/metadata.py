@@ -35,7 +35,7 @@ METADATA = validate_hypothesis_metadata(
             "feasibility",
             "compatibility_cli",
         ),
-        cli_module="examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_cost_feasibility",
+        cli_module="examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_cost_feasibility",
         implementation_module="examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.cost_feasibility.runner",
         package_module="examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.cost_feasibility",
         legacy_module="examples.strategies.venue_agnostic_signal_observer.hyperliquid_cost_feasibility",

@@ -141,7 +141,7 @@ def test_resolve_imports_lazily_only_when_called():
 
     ref = parse_callable_ref(
         "examples.strategies.venue_agnostic_signal_observer."
-        f"{target}:main"
+        f"runners.legacy_cli.{target}:main"
     )
     # Parsing must not import the module.
     if not loaded():

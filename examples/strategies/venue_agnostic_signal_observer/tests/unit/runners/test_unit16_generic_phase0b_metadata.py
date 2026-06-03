@@ -29,7 +29,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[6]
 _PHASE0B_KEY = "generic_altcoin_stress_regime_ablation_phase0b"
 _ENTRY_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
-    "run_generic_altcoin_stress_regime_ablation_phase0b"
+    "runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b"
 )
 _IMPLEMENTATION_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
@@ -148,7 +148,7 @@ def test_phase0b_cli_spec_is_level1_help_safe_only() -> None:
     assert spec.risk is RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY
     assert spec.main_callable == (
         "examples.strategies.venue_agnostic_signal_observer."
-        "run_generic_altcoin_stress_regime_ablation_phase0b:main"
+        "runners.legacy_cli.run_generic_altcoin_stress_regime_ablation_phase0b:main"
     )
     assert spec.build_parser_callable is None
     assert spec.registered is True

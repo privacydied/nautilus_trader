@@ -59,7 +59,7 @@ def test_legacy_root_wrapper_exports_runner_symbols() -> None:
 
 
 def test_old_cli_help_matches_baseline_and_import_still_works() -> None:
-    import examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_divergence_phase0 as cli
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_divergence_phase0 as cli
 
     assert callable(cli.main)
     baseline = Path("/tmp/hyperliquid_funding_divergence_phase0_help_before_unit12.txt").read_text(encoding="utf-8")
@@ -67,7 +67,7 @@ def test_old_cli_help_matches_baseline_and_import_still_works() -> None:
         [
             sys.executable,
             "-m",
-            "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_divergence_phase0",
+            "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_divergence_phase0",
             "--help",
         ],
         capture_output=True,

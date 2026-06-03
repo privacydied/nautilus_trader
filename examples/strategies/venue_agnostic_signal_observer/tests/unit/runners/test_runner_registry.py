@@ -124,8 +124,8 @@ def _clear_lazy_modules() -> None:
     for module_name in (
         _COST_FEASIBILITY_RUNNER_MODULE,
         _OI_RUNNER_MODULE,
-        "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_cost_feasibility",
-        "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_oi_velocity_compression_phase0",
+        "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_cost_feasibility",
+        "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_oi_velocity_compression_phase0",
         "examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.cost_feasibility",
         "examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.oi_velocity_compression_phase0",
         "examples.strategies.venue_agnostic_signal_observer.hyperliquid_cost_feasibility",

@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[4]
 PKG = ROOT / "examples/strategies/venue_agnostic_signal_observer"
 NEW_FILES = [
     PKG / "hyperliquid_oi_velocity_compression_phase0.py",
-    PKG / "run_hyperliquid_oi_velocity_compression_phase0.py",
+    PKG / "runners" / "legacy_cli" / "run_hyperliquid_oi_velocity_compression_phase0.py",
 ]
 
 

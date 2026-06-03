@@ -94,11 +94,12 @@ def test_phase0a_and_phase0b_are_already_packaged_wrappers():
 def test_run_py_entries_remain_canonical_legacy_entrypoints():
     canonical = iter_entries_by_status("canonical_legacy_cli")
     assert len(canonical) >= 1
-    # Legacy run_*.py files are catalogued as canonical legacy entrypoints.
+    # Legacy run_*.py files remain catalogued as canonical legacy entrypoints, including moved legacy_cli files.
     run_entries = [
         e for e in canonical if e.root_path.rsplit("/", 1)[-1].startswith("run_")
     ]
     assert len(run_entries) >= 4
+    assert any("runners/legacy_cli/run_" in e.root_path for e in run_entries)
 
 
 def test_remaining_migration_candidates_explicit_and_nonempty():

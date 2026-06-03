@@ -10,7 +10,7 @@ class HyperliquidFundingDivergencePhase0Metadata:
     family: str = "funding_divergence"
     venue: str = "hyperliquid"
     description: str = "Distribution-only Hyperliquid funding divergence Phase 0 audit."
-    cli_module: str = "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_funding_divergence_phase0"
+    cli_module: str = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_funding_divergence_phase0"
     implementation_module: str = "examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.funding_divergence_phase0.runner"
     package_module: str = "examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.funding_divergence_phase0"
     legacy_module: str = "examples.strategies.venue_agnostic_signal_observer.hyperliquid_funding_divergence_phase0"
