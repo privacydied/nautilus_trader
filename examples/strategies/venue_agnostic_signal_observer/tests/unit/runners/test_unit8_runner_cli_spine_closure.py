@@ -16,6 +16,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[6]
 _NODE_FILLS_KEY = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
 _COST_KEY = "hyperliquid_cost_feasibility"
 _OI_KEY = "hyperliquid_oi_velocity_compression_phase0"
+_PHASE0B_KEY = "generic_altcoin_stress_regime_ablation_phase0b"
 _OI_PACKAGE_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
     "hypotheses.hyperliquid.oi_velocity_compression_phase0"
@@ -122,22 +123,24 @@ class TestUnit8RunnerCliSpineClosure:
         )
         assert result.returncode == 0, result.stdout + result.stderr
         assert "hits []" in result.stdout
-        assert "count 3" in result.stdout
+        assert "count 4" in result.stdout
 
     def test_registered_runner_spec_count_and_keys_remain_strict_after_unit9(self) -> None:
         specs = iter_runner_specs()
-        assert len(specs) == 3
+        assert len(specs) == 4
         assert tuple(spec.key for spec in specs) == (
             _NODE_FILLS_KEY,
             _COST_KEY,
             _OI_KEY,
+            _PHASE0B_KEY,
         )
 
     def test_cli_spec_catalog_count_and_keys_remain_strict_after_unit9(self) -> None:
-        assert len(ALL_RUNNER_CLI_SPECS) == 2
+        assert len(ALL_RUNNER_CLI_SPECS) == 3
         assert tuple(spec.key for spec in ALL_RUNNER_CLI_SPECS) == (
             _COST_KEY,
             _OI_KEY,
+            _PHASE0B_KEY,
         )
 
     def test_node_fills_intentionally_has_no_cli_spec(self) -> None:
@@ -148,6 +151,7 @@ class TestUnit8RunnerCliSpineClosure:
         assert help_keys == (
             _COST_KEY,
             _OI_KEY,
+            _PHASE0B_KEY,
         )
 
     def test_registry_cli_json_output_remains_registry_only(self) -> None:

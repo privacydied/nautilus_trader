@@ -39,10 +39,12 @@ _EXPECTED_RUNNER_KEYS = (
     "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0",
     "hyperliquid_cost_feasibility",
     "hyperliquid_oi_velocity_compression_phase0",
+    "generic_altcoin_stress_regime_ablation_phase0b",
 )
 _EXPECTED_CLI_SPEC_KEYS = (
     "hyperliquid_cost_feasibility",
     "hyperliquid_oi_velocity_compression_phase0",
+    "generic_altcoin_stress_regime_ablation_phase0b",
 )
 _HELP_DIRS = (
     Path("examples/strategies/venue_agnostic_signal_observer/reports"),

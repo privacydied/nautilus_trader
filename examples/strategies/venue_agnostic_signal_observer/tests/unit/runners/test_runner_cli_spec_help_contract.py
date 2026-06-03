@@ -13,6 +13,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[6]
 _ACCEPTED_HELP_KEYS = (
     "hyperliquid_cost_feasibility",
     "hyperliquid_oi_velocity_compression_phase0",
+    "generic_altcoin_stress_regime_ablation_phase0b",
 )
 _HELP_DIRS = (
     Path("examples/strategies/venue_agnostic_signal_observer/reports"),
@@ -118,6 +119,23 @@ class TestRunnerCliSpecHelpContract:
         assert "registry_cli" not in result.stdout
         assert "registry_cli" not in result.stderr
         assert "report_dir" not in result.stdout
+
+    def test_generic_phase0b_help_subprocess_contract(self) -> None:
+        spec = ALL_RUNNER_CLI_SPECS[2]
+        assert spec.key == "generic_altcoin_stress_regime_ablation_phase0b"
+        before = _snapshot_help_dirs()
+
+        result = _run_help_subprocess(spec.entry_module)
+
+        after = _snapshot_help_dirs()
+        assert result.returncode == 0, result.stderr
+        assert result.stderr.strip() == ""
+        assert "usage:" in result.stdout
+        assert "run_generic_altcoin_stress_regime_ablation_phase0b" in result.stdout
+        assert len(result.stdout.splitlines()) == 15
+        assert before == after
+        assert "registry_cli" not in result.stdout
+        assert "registry_cli" not in result.stderr
 
     def test_every_help_only_spec_runs_cleanly_without_writes(self) -> None:
         for spec in ALL_RUNNER_CLI_SPECS:

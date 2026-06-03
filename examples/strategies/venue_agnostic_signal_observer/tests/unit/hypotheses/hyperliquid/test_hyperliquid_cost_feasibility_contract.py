@@ -106,11 +106,12 @@ def test_cli_still_imports_old_root_module() -> None:
 
 def test_registry_count_and_existing_keys_remain_strict_after_unit9c() -> None:
     specs = iter_runner_specs()
-    assert len(specs) == 3
+    assert len(specs) == 4
     assert tuple(spec.key for spec in specs) == (
         "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0",
         "hyperliquid_cost_feasibility",
         "hyperliquid_oi_velocity_compression_phase0",
+        "generic_altcoin_stress_regime_ablation_phase0b",
     )
 
 

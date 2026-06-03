@@ -75,6 +75,10 @@ def test_known_packaged_wrappers_are_classified_correctly() -> None:
     assert cost.cli_spec_key == "hyperliquid_cost_feasibility"
     assert oi.registry_key == "hyperliquid_oi_velocity_compression_phase0"
     assert oi.cli_spec_key == "hyperliquid_oi_velocity_compression_phase0"
+    phase0b = wrappers["generic_altcoin_stress_regime_ablation_phase0b"]
+    assert phase0b.category == "legacy_compat_wrapper"
+    assert phase0b.registry_key == "generic_altcoin_stress_regime_ablation_phase0b"
+    assert phase0b.cli_spec_key == "generic_altcoin_stress_regime_ablation_phase0b"
 
 
 def test_migration_candidates_have_target_package_and_wrapper_flag() -> None:

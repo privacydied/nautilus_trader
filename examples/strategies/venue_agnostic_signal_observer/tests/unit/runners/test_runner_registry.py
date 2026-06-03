@@ -188,9 +188,9 @@ class TestRunnerSpecRegistry:
         assert _OI_RUNNER_MODULE not in sys.modules
 
     def test_exactly_one_runner_registered(self) -> None:
-        """3. Exactly three real runner specs are registered after Unit 9C."""
+        """3. Exactly four real runner specs are registered after Unit 16."""
         specs = iter_runner_specs()
-        assert len(specs) == 3
+        assert len(specs) == 4
 
     def test_registered_key_is_stable(self) -> None:
         """4. Registered key matches the expected stable value."""
