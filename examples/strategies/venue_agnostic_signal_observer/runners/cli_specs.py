@@ -118,8 +118,11 @@ GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0B_CLI_SPEC = validate_runner_cli_sp
             "hypotheses.legacy.generic_altcoin_stress_regime_ablation_phase0b.metadata"
         ),
         build_parser_callable=None,
-        main_callable=None,
-        level=RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA,
+        main_callable=(
+            "examples.strategies.venue_agnostic_signal_observer."
+            "run_generic_altcoin_stress_regime_ablation_phase0b:main"
+        ),
+        level=RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES,
         risk=RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY,
         supports_help_only=True,
         import_safe=True,
