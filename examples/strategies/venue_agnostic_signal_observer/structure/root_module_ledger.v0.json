@@ -336,9 +336,9 @@
       "migration_unit": "unit15",
       "compatibility_wrapper_required": true,
       "paired_cli": "examples/strategies/venue_agnostic_signal_observer/run_generic_altcoin_stress_regime_ablation_phase0b.py",
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Unit 15 packaged implementation under hypotheses/legacy/generic_altcoin_stress_regime_ablation_phase0b; legacy root path retained as compatibility wrapper re-exporting packaged runner symbols."
+      "registry_key": "generic_altcoin_stress_regime_ablation_phase0b",
+      "cli_spec_key": "generic_altcoin_stress_regime_ablation_phase0b",
+      "notes": "Unit 15 packaged implementation under hypotheses/legacy/generic_altcoin_stress_regime_ablation_phase0b; legacy root path retained as compatibility wrapper re-exporting packaged runner symbols. Unit 16 registered metadata-only RunnerSpec and a Level-1 help-safe CLI spec."
     },
     {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/generic_stress_comparison_audit.py",
