@@ -15,7 +15,7 @@ class TestRunnerCLI(unittest.TestCase):
     def test_help_works(self):
         result = subprocess.run(
             [sys.executable, "-m",
-             "examples.strategies.venue_agnostic_signal_observer.run_hip3_builder_dex_tradfi_offhours_scout_v0",
+             "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_builder_dex_tradfi_offhours_scout_v0",
              "--help"],
             capture_output=True, text=True, timeout=30,
             cwd=str(Path(__file__).resolve().parent.parent.parent.parent))
@@ -30,7 +30,7 @@ class TestRunnerCLI(unittest.TestCase):
         """Runner must not have --write-registry-correction flag."""
         result = subprocess.run(
             [sys.executable, "-m",
-             "examples.strategies.venue_agnostic_signal_observer.run_hip3_builder_dex_tradfi_offhours_scout_v0",
+             "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_builder_dex_tradfi_offhours_scout_v0",
              "--help"],
             capture_output=True, text=True, timeout=30,
             cwd=str(Path(__file__).resolve().parent.parent.parent.parent))
@@ -42,7 +42,7 @@ class TestRunnerSafety(unittest.TestCase):
 
     def test_runner_no_registry_write_import(self):
         """Runner must not import the registry writer."""
-        runner_path = Path(__file__).resolve().parent.parent / "run_hip3_builder_dex_tradfi_offhours_scout_v0.py"
+        runner_path = Path(__file__).resolve().parent.parent / "runners" / "legacy_cli" / "run_hip3_builder_dex_tradfi_offhours_scout_v0.py"
         content = runner_path.read_text()
         self.assertNotIn("write_hip3_builder_dex_registry_correction", content)
 
@@ -53,7 +53,7 @@ class TestRunnerArgumentParsing(unittest.TestCase):
     def test_parser_accepts_all_flags(self):
         result = subprocess.run(
             [sys.executable, "-m",
-             "examples.strategies.venue_agnostic_signal_observer.run_hip3_builder_dex_tradfi_offhours_scout_v0",
+             "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hip3_builder_dex_tradfi_offhours_scout_v0",
              "--help"],
             capture_output=True, text=True, timeout=30,
             cwd=str(Path(__file__).resolve().parent.parent.parent.parent))

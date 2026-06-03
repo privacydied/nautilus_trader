@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_archive_availability_probe import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_archive_availability_probe import (
     main,
     run_id,
     human_bytes,
@@ -300,7 +300,7 @@ def test_report_artifacts_include_all_schemas():
 
 def test_report_artifacts_no_registry_strings():
     """Report does not contain registry-write or promotion strings."""
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_archive_availability_probe as mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_archive_availability_probe as mod
     content = open(mod.__file__).read()
     assert "submit_order" not in content
     assert "private_key" not in content
@@ -309,7 +309,7 @@ def test_report_artifacts_no_registry_strings():
 
 def test_no_user_fills_by_time():
     """CLI does not contain userFillsByTime."""
-    import examples.strategies.venue_agnostic_signal_observer.run_hlp_backstop_archive_availability_probe as mod
+    import examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hlp_backstop_archive_availability_probe as mod
     content = open(mod.__file__).read()
     assert "userFillsByTime" not in content
 

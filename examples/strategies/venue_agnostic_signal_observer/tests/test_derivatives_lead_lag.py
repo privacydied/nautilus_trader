@@ -198,7 +198,7 @@ class TestConservativeVerdict:
     This is verified via the runner's decision logic directly.
     """
     def test_needs_more_data_on_no_events(self, tmp_path: Path):
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import DerivativesLeadLagSummary
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import DerivativesLeadLagSummary
         summary = DerivativesLeadLagSummary()
         summary.total_signals = 0
         summary.valid_evaluations = 0
@@ -215,7 +215,7 @@ class TestConservativeVerdict:
         assert verdict == "NEEDS_MORE_DATA"
 
     def test_rejected_on_events_but_no_candidate(self, tmp_path: Path):
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import DerivativesLeadLagSummary
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import DerivativesLeadLagSummary
         summary = DerivativesLeadLagSummary()
         summary.total_signals = 10
         summary.valid_evaluations = 30
@@ -257,7 +257,7 @@ class TestMalformedDataTolerance:
 # -- Net bps calculation --
 
 def test_net_bps_calculation():
-    from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import DerivativesLeadLagSummary
+    from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import DerivativesLeadLagSummary
     """Verify that the summary total_cost is consistent with fee params."""
     s = DerivativesLeadLagSummary(
         fee_bps=12.0, slippage_bps=2.0,
@@ -307,7 +307,7 @@ class TestInstrumentTypeMetadata:
     """Ensure source/target instrument type metadata flows through the pipeline."""
 
     def test_summary_has_instrument_types(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
         )
         s = DerivativesLeadLagSummary(
@@ -318,7 +318,7 @@ class TestInstrumentTypeMetadata:
         assert s.target_instrument_type == "spot"
 
     def test_default_instrument_types_are_unknown(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
         )
         s = DerivativesLeadLagSummary()
@@ -326,7 +326,7 @@ class TestInstrumentTypeMetadata:
         assert s.target_instrument_type == "unknown"
 
     def test_cli_flags_parse(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             _build_parser,
         )
         parser = _build_parser()
@@ -340,7 +340,7 @@ class TestInstrumentTypeMetadata:
         assert args.target_instrument_type == "spot"
 
     def test_cli_flags_default_to_unknown(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             _build_parser,
         )
         parser = _build_parser()
@@ -352,7 +352,7 @@ class TestInstrumentTypeMetadata:
         assert args.target_instrument_type == "unknown"
 
     def test_valid_instrument_types_constant(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             VALID_INSTRUMENT_TYPES,
         )
         assert VALID_INSTRUMENT_TYPES == {"spot", "perp", "futures", "unknown"}
@@ -367,7 +367,7 @@ class TestSpotSpotGuard:
 
     def test_spot_spot_verdict_is_pair_specific(self, tmp_path: Path):
         import json
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
             _write_outputs,
         )
@@ -406,7 +406,7 @@ class TestSpotSpotGuard:
 
     def test_spot_spot_json_includes_instrument_types(self, tmp_path: Path):
         import json
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
             _write_outputs,
         )
@@ -439,7 +439,7 @@ class TestSpotSpotGuard:
         """A run with perp source should be allowed to reject without the
         'NOT a rejection of the derivatives thesis' disclaimer."""
         import json
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
             _write_outputs,
         )
@@ -480,7 +480,7 @@ class TestBackwardCompatibility:
     """Old-style calls without instrument type flags should still work."""
 
     def test_summary_defaults_for_old_code(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
         )
         s = DerivativesLeadLagSummary(
@@ -493,7 +493,7 @@ class TestBackwardCompatibility:
 
     def test_json_output_omits_nothing_for_defaults(self, tmp_path: Path):
         import json
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
             _write_outputs,
         )
@@ -555,7 +555,7 @@ class TestSyntheticPerpToSpot:
         Verify the run can be labelled as a derivatives-source test.
         Does NOT imply profitability."""
         import json
-        from examples.strategies.venue_agnostic_signal_observer.run_derivatives_lead_lag import (
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_lead_lag import (
             DerivativesLeadLagSummary,
             _write_outputs,
         )

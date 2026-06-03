@@ -34,7 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 PRECOMMITMENT = REPO_ROOT / "examples/strategies/venue_agnostic_signal_observer/docs/LIQUIDATION_FLUSH_AFTERSHOCK_REVERSAL_V0_PHASE0A_PRECOMMITMENT.md"
 PY_FILES = [
     REPO_ROOT / "examples/strategies/venue_agnostic_signal_observer/liquidation_flush_aftershock_reversal_phase0a.py",
-    REPO_ROOT / "examples/strategies/venue_agnostic_signal_observer/run_liquidation_flush_aftershock_reversal_phase0a.py",
+    REPO_ROOT / "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_liquidation_flush_aftershock_reversal_phase0a.py",
 ]
 MD_FILES = [PRECOMMITMENT]
 

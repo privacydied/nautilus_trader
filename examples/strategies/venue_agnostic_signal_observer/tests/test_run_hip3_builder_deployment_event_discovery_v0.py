@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 repo_root = Path(__file__).resolve().parents[5]
-script_path = repo_root / "examples" / "strategies" / "venue_agnostic_signal_observer" / "run_hip3_builder_deployment_event_discovery_v0.py"
+script_path = repo_root / "examples" / "strategies" / "venue_agnostic_signal_observer" / "runners" / "legacy_cli" / "run_hip3_builder_deployment_event_discovery_v0.py"
 
 def test_cli_dry_run():
     """Run the CLI with --dry-run and ensure it exits cleanly (status 0)."""

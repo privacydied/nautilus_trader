@@ -33,9 +33,9 @@ DISCOVERY_DIR = (
 )
 
 CLI_SCRIPTS = [
-    DISCOVERY_DIR / "run_lock_discovery_grid.py",
-    DISCOVERY_DIR / "run_validate_discovery_grid_lock.py",
-    DISCOVERY_DIR / "run_lock_discovery_candidate.py",
+    DISCOVERY_DIR / "runners" / "legacy_cli" / "run_lock_discovery_grid.py",
+    DISCOVERY_DIR / "runners" / "legacy_cli" / "run_validate_discovery_grid_lock.py",
+    DISCOVERY_DIR / "runners" / "legacy_cli" / "run_lock_discovery_candidate.py",
 ]
 
 

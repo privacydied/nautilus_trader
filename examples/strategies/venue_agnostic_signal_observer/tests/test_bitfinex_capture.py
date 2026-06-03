@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from examples.strategies.venue_agnostic_signal_observer import symbol_aliases
-from examples.strategies.venue_agnostic_signal_observer.run_tick_capture import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_tick_capture import (
     _CaptureStats,
     _FEED_TASKS,
     _map_bitfinex_symbol,
@@ -190,7 +190,7 @@ def test_manifest_records_bitfinex_stream_health(tmp_path):
 
 
 def test_no_auth_or_order_strings_in_capture_module():
-    src = Path(__file__).parent.parent / "run_tick_capture.py"
+    src = Path(__file__).parent.parent / "runners" / "legacy_cli" / "run_tick_capture.py"
     text = src.read_text()
     # Build tokens from fragments so this scan test does not itself trip the
     # package-wide TestNoOrderGuard scan.
@@ -208,7 +208,7 @@ def test_no_auth_or_order_strings_in_capture_module():
 
 
 def test_bitfinex_uses_public_endpoint_only():
-    src = Path(__file__).parent.parent / "run_tick_capture.py"
+    src = Path(__file__).parent.parent / "runners" / "legacy_cli" / "run_tick_capture.py"
     text = src.read_text()
     assert "api-pub.bitfinex.com" in text
     # Authenticated bitfinex endpoint root must not appear.

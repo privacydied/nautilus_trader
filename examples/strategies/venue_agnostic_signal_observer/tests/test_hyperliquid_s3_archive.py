@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from examples.strategies.venue_agnostic_signal_observer import run_hyperliquid_s3_archive
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli import run_hyperliquid_s3_archive
 from examples.strategies.venue_agnostic_signal_observer.hyperliquid_s3_archive import (
     S3ProbeUnavailable,
 )

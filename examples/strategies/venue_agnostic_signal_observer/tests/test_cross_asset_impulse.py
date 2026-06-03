@@ -839,7 +839,7 @@ class TestNoForbiddenImports:
 
     def test_run_cross_asset_impulse_no_forbidden(self):
         import inspect
-        from examples.strategies.venue_agnostic_signal_observer import run_cross_asset_impulse
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli import run_cross_asset_impulse
 
         source = inspect.getsource(run_cross_asset_impulse)
         for mod in self.FORBIDDEN_MODULES:
@@ -942,7 +942,7 @@ class TestCliParser:
     """Verify CLI parser has all required arguments."""
 
     def test_parser_has_fee_args(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import build_parser
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_cross_asset_impulse import build_parser
         parser = build_parser()
         args = parser.parse_args(["--ticks", "data/test"])
         assert args.fee_bps == 40.0
@@ -950,20 +950,20 @@ class TestCliParser:
         assert args.quote_mismatch_buffer_bps == 5.0
 
     def test_parser_has_range_args(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import build_parser
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_cross_asset_impulse import build_parser
         parser = build_parser()
         args = parser.parse_args(["--ticks", "data/test"])
         assert args.min_source_range_bps == 30.0
         assert args.min_target_range_bps == 30.0
 
     def test_parser_has_min_events_arg(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import build_parser
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_cross_asset_impulse import build_parser
         parser = build_parser()
         args = parser.parse_args(["--ticks", "data/test"])
         assert args.min_events == 50
 
     def test_parser_has_baseline_window_arg(self):
-        from examples.strategies.venue_agnostic_signal_observer.run_cross_asset_impulse import build_parser
+        from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_cross_asset_impulse import build_parser
         parser = build_parser()
         args = parser.parse_args(["--ticks", "data/test"])
         assert args.baseline_window_ms == 60000

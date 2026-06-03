@@ -115,10 +115,23 @@ def evaluate_promotion(
 
     # Run five promotion gates
     artifacts_dir = artifacts_base_dir
+
+    # Read precommitment to extract target group_id for gate checks
+    from ..conductor.atomic_io import read_json
+
+    precommitment_path = precommitment_dir / f"{precommitment_hash}.json"
+    try:
+        precommitment_payload = read_json(precommitment_path)
+    except Exception:
+        precommitment_payload = {}
+
+    target_group_id = precommitment_payload.get("group_id")
+
     gate_results = verify_promotion_gates(
         precommitment_hash=precommitment_hash,
         ledger_path=evidence_ledger_path,
         artifacts_dir=artifacts_dir,
+        group_id=target_group_id,
     )
 
     all_passed = all(g.passed for g in gate_results)

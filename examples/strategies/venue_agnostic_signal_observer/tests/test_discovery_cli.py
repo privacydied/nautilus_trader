@@ -55,7 +55,7 @@ class TestGridLockCLI:
     def _run_cli(self, script_name, *args):
         """Run a CLI script and return (returncode, stdout, stderr)."""
         base = Path(__file__).resolve().parent.parent
-        script = base / script_name
+        script = base / "runners" / "legacy_cli" / script_name
         cmd = [sys.executable, str(script)] + list(args)
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         return result.returncode, result.stdout, result.stderr
@@ -155,9 +155,9 @@ class TestGridLockCLI:
         """No --force option exists in the CLI scripts."""
         base = Path(__file__).resolve().parent.parent
         cli_scripts = [
-            base / "run_lock_discovery_grid.py",
-            base / "run_validate_discovery_grid_lock.py",
-            base / "run_lock_discovery_candidate.py",
+            base / "runners" / "legacy_cli" / "run_lock_discovery_grid.py",
+            base / "runners" / "legacy_cli" / "run_validate_discovery_grid_lock.py",
+            base / "runners" / "legacy_cli" / "run_lock_discovery_candidate.py",
         ]
         for script in cli_scripts:
             if script.exists():
@@ -221,7 +221,7 @@ class TestCandidateLockCLI:
     def grid_lock_json(self, golden_grid_json, tmp_path):
         """Create a grid lock file."""
         base = Path(__file__).resolve().parent.parent
-        script = base / "run_lock_discovery_grid.py"
+        script = base / "runners" / "legacy_cli" / "run_lock_discovery_grid.py"
         lock_path = tmp_path / "grid_lock.json"
         result = subprocess.run(
             [sys.executable, str(script), str(golden_grid_json), str(lock_path)],
@@ -264,7 +264,7 @@ class TestCandidateLockCLI:
     def _run_cli(self, script_name, *args):
         """Run a CLI script and return (returncode, stdout, stderr)."""
         base = Path(__file__).resolve().parent.parent
-        script = base / script_name
+        script = base / "runners" / "legacy_cli" / script_name
         cmd = [sys.executable, str(script)] + list(args)
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         return result.returncode, result.stdout, result.stderr
@@ -476,7 +476,7 @@ class TestRuntimeSafety:
 
             # Run lock command
             base = Path(__file__).resolve().parent.parent
-            from examples.strategies.venue_agnostic_signal_observer.run_lock_discovery_grid import (
+            from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_lock_discovery_grid import (
                 main as lock_main,
             )
             import sys
@@ -598,7 +598,7 @@ class TestRuntimeSafety:
     @pytest.fixture
     def grid_lock_json(self, golden_grid_json, tmp_path):
         base = Path(__file__).resolve().parent.parent
-        script = base / "run_lock_discovery_grid.py"
+        script = base / "runners" / "legacy_cli" / "run_lock_discovery_grid.py"
         lock_path = tmp_path / "grid_lock.json"
         result = subprocess.run(
             [sys.executable, str(script), str(golden_grid_json), str(lock_path)],

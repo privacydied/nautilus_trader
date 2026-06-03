@@ -47,15 +47,20 @@ class RefalsificationDecision:
 
 
 def _find_latest_artifact(artifacts_root: Path, study_id: str) -> Path | None:
-    """Find the latest artifact directory for a given study_id under artifacts_root."""
+    """Find the latest artifact directory for a given study_id under artifacts_root.
+
+    Matches directories whose name is exactly the study_id (case-insensitive).
+    Does not use substring, prefix, or suffix matching.
+    """
     if not artifacts_root.is_dir():
         return None
     candidates = []
+    study_lower = study_id.lower()
     for child in artifacts_root.iterdir():
         if not child.is_dir():
             continue
-        # Match directories containing the study_id in their name
-        if study_id.lower() in child.name.lower():
+        # Exact match only — no substring, prefix, or suffix matching
+        if child.name.lower() == study_lower:
             candidates.append(child)
     if not candidates:
         return None

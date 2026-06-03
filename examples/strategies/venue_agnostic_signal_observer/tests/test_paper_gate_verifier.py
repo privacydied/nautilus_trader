@@ -198,3 +198,81 @@ class TestVerifyPromotionGates:
             ledger_path.read_text() if ledger_path.is_file() else ""
         )
         assert ledger_after == ledger_before
+
+
+class TestGroupSurvivalTargetGroup:
+    """Regression tests for the group survival target-group bug.
+
+    The gate must evaluate the intended promoted group, not merely any
+    group with positive mean_net_bps.
+    """
+
+    def _write_summary_with_groups(
+        self, artifacts_dir: Path, groups: list[dict]
+    ) -> None:
+        write_json_atomic(
+            artifacts_dir / "summary.json",
+            {"groups": groups},
+        )
+
+    def _write_conductor(self, artifacts_dir: Path) -> None:
+        write_json_atomic(
+            artifacts_dir / "conductor_result.json",
+            {"job_id": "test", "status": "COMPLETED"},
+        )
+
+    def _gate3(
+        self, results: list
+    ):
+        return next(
+            g for g in results if g.gate_id == "group_survives_in_locked_run"
+        )
+
+    def test_fails_when_only_unrelated_group_is_positive(self, tmp_path: Path) -> None:
+        """Unrelated group is positive, target group absent -> must fail."""
+        self._write_summary_with_groups(tmp_path, [
+            {"group_id": "other_group", "mean_net_bps": 20.0, "valid_count": 100},
+        ])
+        self._write_conductor(tmp_path)
+        results = verify_promotion_gates(
+            "abc123", tmp_path, tmp_path, group_id="group_a",
+        )
+        gate3 = self._gate3(results)
+        assert not gate3.passed, (
+            f"gate should fail when target group is absent, "
+            f"got passed={gate3.passed} detail={gate3.detail!r}"
+        )
+
+    def test_fails_when_first_positive_is_unrelated_and_target_is_negative(
+        self, tmp_path: Path
+    ) -> None:
+        """First group positive but unrelated, target negative -> must fail."""
+        self._write_summary_with_groups(tmp_path, [
+            {"group_id": "unrelated_positive", "mean_net_bps": 15.0, "valid_count": 50},
+            {"group_id": "group_a", "mean_net_bps": -5.0, "valid_count": 30},
+        ])
+        self._write_conductor(tmp_path)
+        results = verify_promotion_gates(
+            "abc123", tmp_path, tmp_path, group_id="group_a",
+        )
+        gate3 = self._gate3(results)
+        assert not gate3.passed, (
+            f"gate should fail when target group is negative, "
+            f"got passed={gate3.passed} detail={gate3.detail!r}"
+        )
+
+    def test_passes_when_target_group_is_positive(self, tmp_path: Path) -> None:
+        """Target group positive, unrelated groups exist -> must pass."""
+        self._write_summary_with_groups(tmp_path, [
+            {"group_id": "noise", "mean_net_bps": -10.0, "valid_count": 20},
+            {"group_id": "group_a", "mean_net_bps": 12.0, "valid_count": 80},
+        ])
+        self._write_conductor(tmp_path)
+        results = verify_promotion_gates(
+            "abc123", tmp_path, tmp_path, group_id="group_a",
+        )
+        gate3 = self._gate3(results)
+        assert gate3.passed, (
+            f"gate should pass when target group is positive, "
+            f"got passed={gate3.passed} detail={gate3.detail!r}"
+        )
