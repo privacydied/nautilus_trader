@@ -25,8 +25,9 @@ from glob import glob
 from pathlib import Path
 from typing import Any
 
-from .artifact_metadata import build_metadata, check_schema_version, get_metadata_field
-from .quarantine import get_quarantined_run_ids, read_quarantine
+from ...artifact_metadata import build_metadata, check_schema_version, get_metadata_field
+from ...quarantine import get_quarantined_run_ids, read_quarantine
+from ._prog import set_legacy_prog
 
 
 def _sanitize_for_json(obj: Any) -> Any:
@@ -562,6 +563,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Aggregate evaluation reports across multiple captures into a corpus summary."
     )
+    set_legacy_prog(p, __name__)
     p.add_argument(
         "--report-dirs",
         type=str,

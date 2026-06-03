@@ -46,7 +46,7 @@ from venue_agnostic_signal_observer.lead_lag_heatmap_gpu import (
     compute_lead_lag_heatmap,
     write_heatmap_reports,
 )
-from venue_agnostic_signal_observer.run_lead_lag_heatmap import build_parser
+from venue_agnostic_signal_observer.runners.legacy_cli.run_lead_lag_heatmap import build_parser
 
 # ---------------------------------------------------------------------------
 # Helpers

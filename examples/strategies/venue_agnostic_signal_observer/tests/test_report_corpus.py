@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from venue_agnostic_signal_observer.run_report_corpus import (
+from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import (
     CorpusAggregation,
     aggregate_corpus,
     corpus_config_key,

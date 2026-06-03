@@ -27,8 +27,8 @@ from .artifact_metadata import check_schema_version
 from .run_artifacts import atomic_write_json
 from .run_artifacts import atomic_write_text
 from .run_artifacts import safe_output_dir
-from .run_index import append_run_index_row
-from .run_index import build_run_index_row
+from .runners.legacy_cli.run_index import append_run_index_row
+from .runners.legacy_cli.run_index import build_run_index_row
 
 
 # ---------------------------------------------------------------------------

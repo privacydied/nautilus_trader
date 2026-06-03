@@ -23,7 +23,7 @@ import math
 import sys
 from pathlib import Path
 
-from .mcpt_export import (
+from ...mcpt_export import (
     DEFAULT_COST_FLOOR_BPS,
     DEFAULT_MAX_GROUPS,
     DEFAULT_MIN_EVENTS,
@@ -31,6 +31,7 @@ from .mcpt_export import (
     export_mcpt_summary,
     select_mcpt_candidate_groups,
 )
+from ._prog import set_legacy_prog
 
 
 def _format_optional_bps(value: object) -> str:
@@ -44,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="MCPT export adapter: select candidate groups and export return series."
     )
+    set_legacy_prog(p, __name__)
     p.add_argument(
         "--report-dir",
         type=str,

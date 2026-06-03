@@ -35,7 +35,7 @@ from venue_agnostic_signal_observer.forward_returns_gpu import (
     gpu_unavailable_diagnostic,
 )
 from venue_agnostic_signal_observer.event_study import evaluate_tick_signal
-from venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import build_parser
+from venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_spot_lead_lag import build_parser
 from venue_agnostic_signal_observer.tick_models import (
     TickSignalEvent,
     TradeTickLite,

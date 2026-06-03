@@ -29,7 +29,7 @@ from venue_agnostic_signal_observer.run_artifacts import (
     create_run_id,
     safe_output_dir,
 )
-from venue_agnostic_signal_observer.run_index import (
+from venue_agnostic_signal_observer.runners.legacy_cli.run_index import (
     append_run_index_row,
     build_run_index_row,
     get_latest_status,
@@ -497,13 +497,13 @@ class TestCaptureManifestHardening:
 class TestCampaignRunner:
     def test_campaign_runner_module_imports(self):
         """Campaign runner module imports cleanly."""
-        from venue_agnostic_signal_observer import run_derivatives_capture_campaign as mod
+        from venue_agnostic_signal_observer.runners.legacy_cli import run_derivatives_capture_campaign as mod
         assert hasattr(mod, "build_parser")
         assert hasattr(mod, "main")
 
     def test_campaign_runner_parser(self):
         """Campaign runner CLI has expected arguments."""
-        from venue_agnostic_signal_observer import run_derivatives_capture_campaign as mod
+        from venue_agnostic_signal_observer.runners.legacy_cli import run_derivatives_capture_campaign as mod
         parser = mod.build_parser()
         # Test known args
         args = parser.parse_args(["--campaign-id", "test_camp", "--captures", "3"])
@@ -515,7 +515,7 @@ class TestCampaignRunner:
 
     def test_campaign_runner_with_gate(self):
         """Campaign runner parser accepts volatility gate flags."""
-        from venue_agnostic_signal_observer import run_derivatives_capture_campaign as mod
+        from venue_agnostic_signal_observer.runners.legacy_cli import run_derivatives_capture_campaign as mod
         parser = mod.build_parser()
         args = parser.parse_args(["--campaign-id", "gate_test", "--captures", "5",
                                    "--use-volatility-gate", "--volatility-threshold-bps", "50",
@@ -533,7 +533,7 @@ class TestCampaignRunner:
 class TestReportCorpusGlobDiscovery:
     def test_discover_report_dirs(self, tmp_path):
         """discover_report_dirs finds matching report directories."""
-        from venue_agnostic_signal_observer.run_report_corpus import discover_report_dirs
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import discover_report_dirs
 
         reports_root = tmp_path / "reports"
         reports_root.mkdir()
@@ -553,7 +553,7 @@ class TestReportCorpusGlobDiscovery:
 
     def test_discover_empty_glob(self, tmp_path):
         """Empty glob returns empty list."""
-        from venue_agnostic_signal_observer.run_report_corpus import discover_report_dirs
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import discover_report_dirs
 
         reports_root = tmp_path / "empty_reports"
         reports_root.mkdir()
@@ -564,7 +564,7 @@ class TestReportCorpusGlobDiscovery:
 class TestReportCorpusFiltering:
     def test_skip_missing_summary(self, tmp_path):
         """Report without summary.json is skipped."""
-        from venue_agnostic_signal_observer.run_report_corpus import filter_report_dir
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import filter_report_dir
 
         rdir = tmp_path / "no_summary"
         rdir.mkdir()
@@ -575,7 +575,7 @@ class TestReportCorpusFiltering:
 
     def test_skip_fast_diagnostic(self, tmp_path):
         """FAST_DIAGNOSTIC reports are skipped."""
-        from venue_agnostic_signal_observer.run_report_corpus import filter_report_dir
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import filter_report_dir
 
         rdir = tmp_path / "fast_diag"
         rdir.mkdir()
@@ -596,7 +596,7 @@ class TestReportCorpusFiltering:
 
     def test_skip_unsupported_schema(self, tmp_path):
         """Unsupported schema version is skipped."""
-        from venue_agnostic_signal_observer.run_report_corpus import filter_report_dir
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import filter_report_dir
 
         rdir = tmp_path / "bad_schema"
         rdir.mkdir()
@@ -617,7 +617,7 @@ class TestReportCorpusFiltering:
 
     def test_skip_quarantined_by_default(self, tmp_path):
         """Quarantined run is skipped unless include_quarantined=True."""
-        from venue_agnostic_signal_observer.run_report_corpus import filter_report_dir
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import filter_report_dir
 
         rdir = tmp_path / "quarantined_report"
         rdir.mkdir()
@@ -640,7 +640,7 @@ class TestReportCorpusFiltering:
 
     def test_include_quarantined_with_flag(self, tmp_path):
         """include_quarantined=True allows quarantined runs."""
-        from venue_agnostic_signal_observer.run_report_corpus import filter_report_dir
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import filter_report_dir
 
         rdir = tmp_path / "quarantined_but_ok"
         rdir.mkdir()
@@ -663,7 +663,7 @@ class TestReportCorpusFiltering:
 
     def test_skip_missing_git_sha(self, tmp_path):
         """Missing git_sha is skipped unless allow_missing=True."""
-        from venue_agnostic_signal_observer.run_report_corpus import filter_report_dir
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import filter_report_dir
 
         rdir = tmp_path / "no_git"
         rdir.mkdir()
@@ -684,7 +684,7 @@ class TestReportCorpusFiltering:
 
     def test_allow_missing_git_sha(self, tmp_path):
         """allow_missing_git_sha=True passes through."""
-        from venue_agnostic_signal_observer.run_report_corpus import filter_report_dir
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import filter_report_dir
 
         rdir = tmp_path / "no_git_allowed"
         rdir.mkdir()
@@ -704,7 +704,7 @@ class TestReportCorpusFiltering:
 
     def test_pass_valid_report(self, tmp_path):
         """Valid report passes all filters."""
-        from venue_agnostic_signal_observer.run_report_corpus import filter_report_dir
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import filter_report_dir
 
         rdir = tmp_path / "valid_report"
         rdir.mkdir()

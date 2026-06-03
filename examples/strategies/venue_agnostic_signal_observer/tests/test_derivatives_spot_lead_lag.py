@@ -13,7 +13,7 @@ import pytest
 
 from ..symbol_aliases import resolve_symbol, quote_mismatch, same_asset
 from ..tick_models import TradeTickLite, TickSignalEvent, TickForwardReturn
-from ..run_derivatives_spot_lead_lag import (
+from ..runners.legacy_cli.run_derivatives_spot_lead_lag import (
     OverlapWindow,
     compute_pair_overlap,
     clip_ticks,
@@ -329,7 +329,7 @@ class TestSafetyScan:
     ])
     def test_no_forbidden_strings(self, fname):
         base = Path(__file__).parent.parent
-        fpath = base / fname
+        fpath = base / "runners" / "legacy_cli" / fname
         if not fpath.exists():
             pytest.skip(f"{fname} not found")
         content = fpath.read_text()
@@ -457,20 +457,20 @@ class TestParseAndValidateDevices:
 
 class TestForwardDevicesCliArg:
     def test_forward_devices_appears_in_help(self):
-        from ..run_derivatives_spot_lead_lag import build_parser
+        from ..runners.legacy_cli.run_derivatives_spot_lead_lag import build_parser
         parser = build_parser()
         help_text = parser.format_help()
         assert "--forward-devices" in help_text
         assert "Multi-GPU" in help_text
 
     def test_forward_devices_default_empty(self):
-        from ..run_derivatives_spot_lead_lag import build_parser
+        from ..runners.legacy_cli.run_derivatives_spot_lead_lag import build_parser
         parser = build_parser()
         args = parser.parse_args(["--capture-dir", "/tmp", "--out", "/tmp"])
         assert args.forward_devices == ""
 
     def test_forward_devices_parsed(self):
-        from ..run_derivatives_spot_lead_lag import build_parser
+        from ..runners.legacy_cli.run_derivatives_spot_lead_lag import build_parser
         parser = build_parser()
         args = parser.parse_args(["--capture-dir", "/tmp", "--out", "/tmp",
                                   "--forward-engine", "gpu",
@@ -478,7 +478,7 @@ class TestForwardDevicesCliArg:
         assert args.forward_devices == "cuda:0,cuda:1"
 
     def test_single_forward_device_still_works(self):
-        from ..run_derivatives_spot_lead_lag import build_parser
+        from ..runners.legacy_cli.run_derivatives_spot_lead_lag import build_parser
         parser = build_parser()
         args = parser.parse_args(["--capture-dir", "/tmp", "--out", "/tmp",
                                   "--forward-engine", "gpu",

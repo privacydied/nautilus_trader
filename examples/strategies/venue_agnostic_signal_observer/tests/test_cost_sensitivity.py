@@ -463,14 +463,14 @@ class TestDiagnosis:
 
 class TestCLIArgParsing:
     def test_defaults(self):
-        from venue_agnostic_signal_observer.run_cost_sensitivity import build_parser
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_cost_sensitivity import build_parser
         parser = build_parser()
         args = parser.parse_args(["--report-dir", "/tmp/rpt", "--out", "/tmp/out"])
         assert args.cost_levels_bps == "50,10,5,1,0.5"
         assert args.min_events == 0
 
     def test_custom_cost_levels(self):
-        from venue_agnostic_signal_observer.run_cost_sensitivity import build_parser
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_cost_sensitivity import build_parser
         parser = build_parser()
         args = parser.parse_args([
             "--report-dir", "/tmp/rpt", "--out", "/tmp/out",
@@ -479,7 +479,7 @@ class TestCLIArgParsing:
         assert args.cost_levels_bps == "100,50,10,1"
 
     def test_min_events(self):
-        from venue_agnostic_signal_observer.run_cost_sensitivity import build_parser
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_cost_sensitivity import build_parser
         parser = build_parser()
         args = parser.parse_args([
             "--report-dir", "/tmp/rpt", "--out", "/tmp/out",

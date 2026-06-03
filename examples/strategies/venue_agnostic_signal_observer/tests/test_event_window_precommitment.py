@@ -1057,7 +1057,7 @@ class TestStage2UtilitiesImportable:
         )
 
     def test_run_report_corpus_importable(self):
-        from venue_agnostic_signal_observer.run_report_corpus import main as rc_main
+        from venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus import main as rc_main
 
 
 # ===========================================================================

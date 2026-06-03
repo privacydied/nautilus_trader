@@ -25,15 +25,16 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .tick_models import TradeTickLite
-from .symbol_aliases import resolve_symbol
-from .artifact_metadata import inject_metadata_into_manifest
-from .run_artifacts import (
+from ...tick_models import TradeTickLite
+from ...symbol_aliases import resolve_symbol
+from ...artifact_metadata import inject_metadata_into_manifest
+from ...run_artifacts import (
     atomic_write_json,
     create_run_id,
     safe_output_dir,
 )
 from .run_index import append_run_index_row, build_run_index_row
+from ._prog import set_legacy_prog
 
 _MS_TO_NS = 1_000_000
 
@@ -983,6 +984,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Combined derivatives-source + spot-target capture runner. "
                     "Public data only, no auth, no orders."
     )
+    set_legacy_prog(p, __name__)
     p.add_argument("--run-id", type=str, default=None,
                     help="Optional run ID. Auto-generated if not provided.")
     p.add_argument("--source-venue", type=str, default="binance_perp")

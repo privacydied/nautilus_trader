@@ -156,10 +156,10 @@ def check_readiness(
     # --- Core module imports ---
     modules_to_check = [
         "examples.strategies.venue_agnostic_signal_observer.run_artifacts",
-        "examples.strategies.venue_agnostic_signal_observer.run_derivatives_capture_campaign",
+        "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_capture_campaign",
         "examples.strategies.venue_agnostic_signal_observer.validate_capture",
-        "examples.strategies.venue_agnostic_signal_observer.run_report_corpus",
-        "examples.strategies.venue_agnostic_signal_observer.run_index",
+        "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_report_corpus",
+        "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_index",
         "examples.strategies.venue_agnostic_signal_observer.quarantine",
         "examples.strategies.venue_agnostic_signal_observer.burn",
     ]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from ._prog import set_legacy_prog
 
 try:
     from venue_agnostic_signal_observer.candidate_falsification import (
@@ -22,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Combine existing diagnostic reports into a candidate falsification matrix.",
     )
+    set_legacy_prog(parser, __name__)
     parser.add_argument("--evaluated-report-dir", help="Existing evaluated derivatives spot lead-lag report dir.")
     parser.add_argument("--cost-sensitivity-dir", help="Existing cost sensitivity report dir.")
     parser.add_argument("--permutation-null-dir", help="Existing permutation/null report dir.")

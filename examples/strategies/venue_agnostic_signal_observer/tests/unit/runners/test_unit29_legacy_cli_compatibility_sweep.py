@@ -32,7 +32,6 @@ _ROOT_MODULE_PREFIX = f"{_PACKAGE}."
 _ROOT_PREFIX = "examples/strategies/venue_agnostic_signal_observer/"
 _EXPECTED_RETAINED_BLOCKERS = {
     "shared_infrastructure_not_cli": 1,
-    "watcher_systemd_subprocess_coupling": 12,
     "forbidden_behavior_area": 7,
     "scaffold_forbidden_term_collision": 1,
 }
@@ -186,8 +185,8 @@ def test_catalog_counts_and_blocker_categories_match_unit28_surface() -> None:
 
     assert not validation.missing, validation.missing
     assert not validation.stale, validation.stale
-    assert len(moved) == 44
-    assert len(retained) == 21
+    assert len(moved) == 56
+    assert len(retained) == 9
     assert dict(blocker_counts) == _EXPECTED_RETAINED_BLOCKERS
 
 
@@ -308,11 +307,11 @@ def test_repo_owned_old_root_references_are_controlled() -> None:
     assert not violations, violations
 
 
-def test_no_root_count_zero_claim_root_count_is_27_by_design() -> None:
+def test_no_root_count_zero_claim_root_count_is_9_by_design() -> None:
     root_files = list_actual_run_py_files()
     moved_files = list_moved_run_py_files()
-    assert len(root_files) == 21
-    assert len(moved_files) == 44
+    assert len(root_files) == 9
+    assert len(moved_files) == 56
     assert len(root_files) != 0
 
 

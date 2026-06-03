@@ -196,7 +196,7 @@ def test_data_fetcher_empty_csv_has_header(tmp_path):
 
 
 def test_run_derivatives_spot_report_top_groups_filters_non_finite_group_means(tmp_path):
-    from ..run_derivatives_spot_lead_lag import EvalSummary, _write_md
+    from ..runners.legacy_cli.run_derivatives_spot_lead_lag import EvalSummary, _write_md
 
     summary = EvalSummary(
         capture_dir="capture",
@@ -219,7 +219,7 @@ def test_run_derivatives_spot_report_top_groups_filters_non_finite_group_means(t
 
 
 def test_run_mcpt_export_skip_reason_ignores_nan_group_means(tmp_path, capsys):
-    from ..run_mcpt_export import main
+    from ..runners.legacy_cli.run_mcpt_export import main
 
     report_dir = tmp_path / "report"
     report_dir.mkdir()
