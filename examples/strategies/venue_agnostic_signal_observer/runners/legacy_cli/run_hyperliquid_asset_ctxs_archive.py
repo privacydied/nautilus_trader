@@ -16,6 +16,7 @@ from examples.strategies.venue_agnostic_signal_observer.hyperliquid_oi_velocity_
     FROZEN_SYMBOLS,
     sha256_file,
 )
+from ._prog import set_legacy_prog
 
 DEFAULT_PRECOMMITMENT = Path(
     "examples/strategies/venue_agnostic_signal_observer/docs/"

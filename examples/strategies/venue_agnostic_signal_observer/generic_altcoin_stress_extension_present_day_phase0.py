@@ -1256,7 +1256,7 @@ def extend_archive_if_needed(
 
     # Download using run_hyperliquid_asset_ctxs_archive
     cmd = [
-        sys.executable, "-m", "examples.strategies.venue_agnostic_signal_observer.run_hyperliquid_asset_ctxs_archive",
+        sys.executable, "-m", "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_hyperliquid_asset_ctxs_archive",
         "--date-list", str(date_list_path),
         "--out", str(staging),
         "--max-usd-budget", str(max_budget_usd),

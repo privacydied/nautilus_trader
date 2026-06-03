@@ -59,21 +59,6 @@ _ROOT_RETAINED_BLOCKERS: dict[str, str] = {
     # Shared infrastructure despite the run_ prefix; imported as a library by
     # many hypothesis/runner modules. Not a CLI entrypoint.
     "run_artifacts.py": "shared_infrastructure_not_cli",
-    # Referenced as `python -m ...` subprocess strings by the stage2 gate
-    # watcher / readiness check / capture campaign; moving changes watcher and
-    # systemd behavior.
-    "run_candidate_falsification.py": "watcher_systemd_subprocess_coupling",
-    "run_cost_sensitivity.py": "watcher_systemd_subprocess_coupling",
-    "run_cross_capture_consistency.py": "watcher_systemd_subprocess_coupling",
-    "run_derivatives_capture_campaign.py": "watcher_systemd_subprocess_coupling",
-    "run_derivatives_spot_capture.py": "watcher_systemd_subprocess_coupling",
-    "run_derivatives_spot_lead_lag.py": "watcher_systemd_subprocess_coupling",
-    "run_hyperliquid_asset_ctxs_archive.py": "watcher_systemd_subprocess_coupling",
-    "run_index.py": "watcher_systemd_subprocess_coupling",
-    "run_lead_lag_heatmap.py": "watcher_systemd_subprocess_coupling",
-    "run_mcpt_export.py": "watcher_systemd_subprocess_coupling",
-    "run_permutation_null.py": "watcher_systemd_subprocess_coupling",
-    "run_report_corpus.py": "watcher_systemd_subprocess_coupling",
     # Module name collides with a scaffold forbidden-import substring ("order"
     # inside "recorder"); migrating under runners/ trips the core safety
     # contract scan. Retained at root to avoid weakening that safety test.

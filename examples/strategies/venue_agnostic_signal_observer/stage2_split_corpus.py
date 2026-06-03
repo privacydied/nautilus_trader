@@ -35,7 +35,7 @@ from .stage2_precommitment_utils import (
     _get_git_sha,
 )
 from .run_artifacts import atomic_write_json
-from .run_index import read_run_index, get_latest_status
+from .runners.legacy_cli.run_index import read_run_index, get_latest_status
 from .quarantine import get_quarantined_run_ids
 from .burn import get_burned_run_ids
 

@@ -23,14 +23,14 @@ from typing import Any
 _LOG_DIR = Path("reports", "stage2_gate_watcher_logs")
 _LOCK_PATH = Path("reports", "stage2_collection.lock")
 _VOLATILITY_GATE_MODULE = "examples.strategies.volatility_gate"
-_CAPTURE_MODULE = "examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture"
-_EVALUATION_MODULE = "examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_lead_lag"
-_COST_SENSITIVITY_MODULE = "examples.strategies.venue_agnostic_signal_observer.run_cost_sensitivity"
-_HEATMAP_MODULE = "examples.strategies.venue_agnostic_signal_observer.run_lead_lag_heatmap"
-_PERMUTATION_NULL_MODULE = "examples.strategies.venue_agnostic_signal_observer.run_permutation_null"
-_MCPT_EXPORT_MODULE = "examples.strategies.venue_agnostic_signal_observer.run_mcpt_export"
-_CONSISTENCY_MODULE = "examples.strategies.venue_agnostic_signal_observer.run_cross_capture_consistency"
-_FALSIFICATION_MODULE = "examples.strategies.venue_agnostic_signal_observer.run_candidate_falsification"
+_CAPTURE_MODULE = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_spot_capture"
+_EVALUATION_MODULE = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_spot_lead_lag"
+_COST_SENSITIVITY_MODULE = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_cost_sensitivity"
+_HEATMAP_MODULE = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_lead_lag_heatmap"
+_PERMUTATION_NULL_MODULE = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_permutation_null"
+_MCPT_EXPORT_MODULE = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_mcpt_export"
+_CONSISTENCY_MODULE = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_cross_capture_consistency"
+_FALSIFICATION_MODULE = "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_candidate_falsification"
 
 # ---------------------------------------------------------------------------
 # Logging setup

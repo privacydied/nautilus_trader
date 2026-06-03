@@ -29,12 +29,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .artifact_metadata import build_metadata
-from .run_artifacts import atomic_write_json
-from .run_artifacts import create_run_id
-from .run_artifacts import safe_output_dir
+from ...artifact_metadata import build_metadata
+from ...run_artifacts import atomic_write_json
+from ...run_artifacts import create_run_id
+from ...run_artifacts import safe_output_dir
 from .run_index import append_run_index_row
 from .run_index import build_run_index_row
+from ._prog import set_legacy_prog
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run repeated derivatives-source -> spot-target captures as a campaign. "
                     "Each attempt is a subprocess. One failure does not crash the campaign.",
     )
+    set_legacy_prog(p, __name__)
     p.add_argument("--campaign-id", type=str, required=True,
                     help="Unique campaign identifier (used in output directory name).")
     p.add_argument("--captures", type=int, required=True,
@@ -234,7 +236,7 @@ def _run_single_attempt(
     cmd = [
         str(args.python_executable),
         "-m",
-        "examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture",
+        "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_spot_capture",
         "--source-venue", "binance_perp",
         "--source-symbols", args.symbols,
         "--target-venues", args.target_venues,
@@ -578,7 +580,7 @@ def main() -> None:
                     "behavior": f"Campaign aborts with {CAMPAIGN_ABORTED_LOW_VOLATILITY} status when consecutive skips exceed max_skip_streak.",
                 },
             },
-            "capture_script": "examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture",
+            "capture_script": "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_spot_capture",
         },
     }
 

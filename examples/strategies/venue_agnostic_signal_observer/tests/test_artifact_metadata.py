@@ -31,7 +31,7 @@ from ..mcpt_export import (
     is_mcpt_worthy_group,
     select_mcpt_candidate_groups,
 )
-from ..run_derivatives_spot_lead_lag import EvalSummary, write_reports
+from ..runners.legacy_cli.run_derivatives_spot_lead_lag import EvalSummary, write_reports
 from ..tick_models import TickSignalEvent, TickForwardReturn
 
 

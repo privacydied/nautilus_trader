@@ -232,7 +232,7 @@ class TestCaptureExceptionLogging:
         by inspecting that the source file contains the fix."""
         import inspect
         from pathlib import Path
-        from .. import run_derivatives_spot_capture
+        from ..runners.legacy_cli import run_derivatives_spot_capture
         source = inspect.getsource(run_derivatives_spot_capture)
         assert "isinstance(r, BaseException)" in source, (
             "run_derivatives_spot_capture should log exceptions from gather(). "
@@ -339,12 +339,12 @@ class TestReconnectLoop:
 
     def test_with_reconnect_function_exists(self):
         """_with_reconnect_loop must exist in the capture module."""
-        from ..run_derivatives_spot_capture import _with_reconnect_loop
+        from ..runners.legacy_cli.run_derivatives_spot_capture import _with_reconnect_loop
         assert callable(_with_reconnect_loop)
 
     def test_reconnect_constants_defined(self):
         """Bounded reconnect constants must be present."""
-        from .. import run_derivatives_spot_capture as cap
+        from ..runners.legacy_cli import run_derivatives_spot_capture as cap
         assert hasattr(cap, "_RECONNECT_MAX_ATTEMPTS")
         assert hasattr(cap, "_RECONNECT_BUDGET_S")
         assert cap._RECONNECT_MAX_ATTEMPTS <= 5
@@ -353,7 +353,7 @@ class TestReconnectLoop:
     def test_capture_functions_return_str_or_none(self):
         """Capture functions must return str|None (reconnect reason)."""
         import inspect
-        from ..run_derivatives_spot_capture import (
+        from ..runners.legacy_cli.run_derivatives_spot_capture import (
             capture_binance_perp,
             capture_kraken_spot,
             capture_coinbase_spot,
@@ -375,7 +375,7 @@ class TestSessionCleanup:
     def test_ws_close_cleans_session(self):
         """_ws_close must look for _aiohttp_session attribute."""
         import inspect
-        from ..run_derivatives_spot_capture import _ws_close
+        from ..runners.legacy_cli.run_derivatives_spot_capture import _ws_close
         src = inspect.getsource(_ws_close)
         assert "_aiohttp_session" in src, (
             "_ws_close does not clean up aiohttp session — session leak risk"
@@ -390,7 +390,7 @@ class TestTaskExceptionSurfacing:
 
     def test_task_exceptions_in_manifest_structure(self):
         """The manifest must include 'task_exceptions' key."""
-        from .. import run_derivatives_spot_capture as cap
+        from ..runners.legacy_cli import run_derivatives_spot_capture as cap
         path = cap.__file__
         with open(path) as f:
             src = f.read()
@@ -403,7 +403,7 @@ class TestTaskExceptionSurfacing:
 
     def test_exception_branch_uses_task_name(self):
         """Exception handling must use Task.get_name() for identification."""
-        from .. import run_derivatives_spot_capture as cap
+        from ..runners.legacy_cli import run_derivatives_spot_capture as cap
         import inspect
         src = inspect.getsource(cap)
         assert "task_name = t.get_name()" in src, (
@@ -418,7 +418,7 @@ class TestReconnectOverlapPreservesUnion:
     """Verify first_tick_ts survives reconnect and overlap is computed as union."""
 
     def _make_stats(self, **kwargs):
-        from ..run_derivatives_spot_capture import StreamStats
+        from ..runners.legacy_cli.run_derivatives_spot_capture import StreamStats
         s = StreamStats(kwargs.pop("name", "test"))
         for k, v in kwargs.items():
             setattr(s, k, v)
@@ -426,7 +426,7 @@ class TestReconnectOverlapPreservesUnion:
 
     def test_post_reconnect_first_tick_ts_not_overwritten(self):
         """first_tick_ts must survive reconnect via 'is None' guard."""
-        from .. import run_derivatives_spot_capture as cap
+        from ..runners.legacy_cli import run_derivatives_spot_capture as cap
         import inspect
         # The guard pattern must exist in all three handlers
         src = inspect.getsource(cap)
@@ -447,7 +447,7 @@ class TestReconnectOverlapPreservesUnion:
 
     def test_overlap_uses_min_max_across_reconnect(self):
         """compute_overlap_windows must use min/max of first/last across targets."""
-        from ..run_derivatives_spot_capture import (
+        from ..runners.legacy_cli.run_derivatives_spot_capture import (
             StreamStats,
             compute_overlap_windows,
         )

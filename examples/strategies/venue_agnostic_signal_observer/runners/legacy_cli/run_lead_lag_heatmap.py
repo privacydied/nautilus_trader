@@ -8,13 +8,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .lead_lag_heatmap_gpu import (
+from ...lead_lag_heatmap_gpu import (
     compute_lead_lag_heatmap,
     write_heatmap_reports,
     check_cuda_available,
 )
-from .gpu_devices import parse_cuda_devices, validate_cuda_devices
+from ...gpu_devices import parse_cuda_devices, validate_cuda_devices
 from .run_derivatives_spot_lead_lag import load_capture_data, _split_strings
+from ._prog import set_legacy_prog
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -104,7 +105,7 @@ def main() -> int:
         print("No capture data loaded. Exiting with NO_SIGNAL_SERIES.")
         return 1
 
-    from .symbol_aliases import resolve_symbol
+    from ...symbol_aliases import resolve_symbol
 
     summaries = []
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from ._prog import set_legacy_prog
 
 try:
     from venue_agnostic_signal_observer.cross_capture_consistency import (
@@ -27,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Cross-capture consistency aggregation for derivatives spot lead-lag reports.",
     )
+    set_legacy_prog(parser, __name__)
     parser.add_argument(
         "--report-dirs",
         nargs="+",

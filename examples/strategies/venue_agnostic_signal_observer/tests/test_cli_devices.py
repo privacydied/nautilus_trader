@@ -17,13 +17,13 @@ from examples.strategies.venue_agnostic_signal_observer.gpu_devices import (
     parse_cuda_devices,
     validate_cuda_devices,
 )
-from examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_lead_lag import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_spot_lead_lag import (
     build_parser as build_forward_parser,
 )
-from examples.strategies.venue_agnostic_signal_observer.run_permutation_null import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_permutation_null import (
     build_parser as build_null_parser,
 )
-from examples.strategies.venue_agnostic_signal_observer.run_lead_lag_heatmap import (
+from examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_lead_lag_heatmap import (
     build_parser as build_heatmap_parser,
 )
 

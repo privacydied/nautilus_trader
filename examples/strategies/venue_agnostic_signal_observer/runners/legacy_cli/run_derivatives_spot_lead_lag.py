@@ -23,17 +23,18 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .tick_models import TradeTickLite, TickSignalEvent, TickForwardReturn
-from .tick_store import load_trades_jsonl
-from .symbol_aliases import resolve_symbol, quote_mismatch as sym_quote_mismatch
-from .trade_flow_impulse import TradeFlowImpulseConfig, TradeFlowImpulseSignalGenerator
-from .event_study import evaluate_tick_signal, generate_random_baseline, evaluate_candidate_group
-from .forward_returns_gpu import (
+from ...tick_models import TradeTickLite, TickSignalEvent, TickForwardReturn
+from ...tick_store import load_trades_jsonl
+from ...symbol_aliases import resolve_symbol, quote_mismatch as sym_quote_mismatch
+from ...trade_flow_impulse import TradeFlowImpulseConfig, TradeFlowImpulseSignalGenerator
+from ...event_study import evaluate_tick_signal, generate_random_baseline, evaluate_candidate_group
+from ...forward_returns_gpu import (
     check_cuda_available as _frgpu_check_cuda,
     batch_evaluate_signals_gpu as _frgpu_batch,
     batch_evaluate_signals_multi_gpu as _frgpu_multi,
 )
-from .artifact_metadata import build_metadata
+from ...artifact_metadata import build_metadata
+from ._prog import set_legacy_prog
 
 _MS_TO_NS = 1_000_000
 
@@ -71,7 +72,7 @@ def _parse_and_validate_devices(devices_str: str, engine: str) -> list[str]:
             print(f"ERROR: duplicate device: {d}", file=_sys.stderr)
             _sys.exit(1)
         seen.add(d)
-        from .forward_returns_gpu import check_cuda_available as _check_dev
+        from ...forward_returns_gpu import check_cuda_available as _check_dev
         avail, reason = _check_dev(d)
         if not avail:
             print(f"ERROR: device {d} unavailable: {reason}", file=_sys.stderr)
@@ -83,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Derivatives-source -> spot-target lead-lag evaluator."
     )
+    set_legacy_prog(p, __name__)
     p.add_argument("--capture-dir", type=str, default="data/derivatives_spot_capture_v2")
     p.add_argument("--source-venues", type=str, default="binance_perp")
     p.add_argument("--target-venues", type=str, default="kraken,coinbase")
@@ -420,10 +422,10 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
     signal_engine = getattr(args, "signal_engine", "cpu")
     signal_device = getattr(args, "signal_devices", "cuda:0")
     if signal_engine == "gpu":
-        from .trade_flow_impulse_gpu import generate_signals_gpu as _gpu_signal_check
+        from ...trade_flow_impulse_gpu import generate_signals_gpu as _gpu_signal_check
         if callable(_gpu_signal_check):
             import sys as _sys
-            from .trade_flow_impulse_gpu import check_cuda_available as _sig_check
+            from ...trade_flow_impulse_gpu import check_cuda_available as _sig_check
             for _d in _split_strings(signal_device):
                 _sig_ok, _sig_reason = _sig_check(_d)
                 if not _sig_ok:
@@ -612,7 +614,7 @@ def run_evaluation(args: argparse.Namespace) -> tuple[EvalSummary, list[TickSign
 
                         if signal_engine == "gpu" and sig_type == "signed_imbalance":
                             # GPU signal generation (signed_imbalance only — confirmed vectorized)
-                            from .trade_flow_impulse_gpu import signed_imbalance_gpu as _gpu_signal_fn
+                            from ...trade_flow_impulse_gpu import signed_imbalance_gpu as _gpu_signal_fn
                             events = _gpu_signal_fn(
                                 src_clipped, cfg,
                                 device=_pair_device if len(devices) > 1 else signal_device,

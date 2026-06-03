@@ -742,7 +742,7 @@ def _run_capture(log: WatcherLogger) -> str | None:
     # The existing run_derivatives_spot_capture captures public source + spot ticks.
     cmd = [
         str(_get_python_exe()),
-        "-m", "examples.strategies.venue_agnostic_signal_observer.run_derivatives_spot_capture",
+        "-m", "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_derivatives_spot_capture",
         "--source-venue", "binance_perp",
         "--source-symbols", source_symbols,
         "--target-venues", "kraken,coinbase",

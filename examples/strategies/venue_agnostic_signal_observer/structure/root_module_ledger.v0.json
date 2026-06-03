@@ -965,19 +965,6 @@
       "notes": "Canonical legacy CLI retained for compatibility and cataloging."
     },
     {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_candidate_falsification.py",
-      "module_name": "run_candidate_falsification",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/run_conductor.py",
       "module_name": "run_conductor",
       "category": "canonical_cli",
@@ -991,86 +978,8 @@
       "notes": "Explicit conductor path; do not move in root organization."
     },
     {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_cost_sensitivity.py",
-      "module_name": "run_cost_sensitivity",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_cross_capture_consistency.py",
-      "module_name": "run_cross_capture_consistency",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_derivatives_capture_campaign.py",
-      "module_name": "run_derivatives_capture_campaign",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_derivatives_spot_capture.py",
-      "module_name": "run_derivatives_spot_capture",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_derivatives_spot_lead_lag.py",
-      "module_name": "run_derivatives_spot_lead_lag",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/run_hip3_builder_dex_tradfi_forward_recorder_v0.py",
       "module_name": "run_hip3_builder_dex_tradfi_forward_recorder_v0",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_hyperliquid_asset_ctxs_archive.py",
-      "module_name": "run_hyperliquid_asset_ctxs_archive",
       "category": "canonical_cli",
       "status": "canonical_legacy_cli",
       "target_package": null,
@@ -1108,45 +1017,6 @@
       "notes": "Canonical legacy CLI retained for compatibility and cataloging."
     },
     {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_index.py",
-      "module_name": "run_index",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_lead_lag_heatmap.py",
-      "module_name": "run_lead_lag_heatmap",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_mcpt_export.py",
-      "module_name": "run_mcpt_export",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/run_paper_promotion.py",
       "module_name": "run_paper_promotion",
       "category": "canonical_cli",
@@ -1171,32 +1041,6 @@
       "registry_key": null,
       "cli_spec_key": null,
       "notes": "Paper/refalsification path; separate audit only."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_permutation_null.py",
-      "module_name": "run_permutation_null",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_report_corpus.py",
-      "module_name": "run_report_corpus",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Canonical legacy CLI retained for compatibility and cataloging."
     },
     {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/run_signal_observer.py",
@@ -1225,6 +1069,32 @@
       "notes": "Operational watcher CLI; separate audit only."
     },
     {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_candidate_falsification.py",
+      "module_name": "run_candidate_falsification",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_cost_sensitivity.py",
+      "module_name": "run_cost_sensitivity",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_cross_asset_impulse.py",
       "module_name": "run_cross_asset_impulse",
       "category": "canonical_cli",
@@ -1238,6 +1108,32 @@
       "notes": "Legacy CLI moved under runners/legacy_cli."
     },
     {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_cross_capture_consistency.py",
+      "module_name": "run_cross_capture_consistency",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_derivatives_capture_campaign.py",
+      "module_name": "run_derivatives_capture_campaign",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_derivatives_lead_lag.py",
       "module_name": "run_derivatives_lead_lag",
       "category": "canonical_cli",
@@ -1246,6 +1142,32 @@
       "migration_unit": "unit28",
       "compatibility_wrapper_required": false,
       "paired_cli": "examples/strategies/venue_agnostic_signal_observer/derivatives_lead_lag.py",
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_derivatives_spot_capture.py",
+      "module_name": "run_derivatives_spot_capture",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_derivatives_spot_lead_lag.py",
+      "module_name": "run_derivatives_spot_lead_lag",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
       "registry_key": null,
       "cli_spec_key": null,
       "notes": "Legacy CLI moved under runners/legacy_cli."
@@ -1459,6 +1381,19 @@
       "notes": "Canonical legacy CLI entrypoint under runners/legacy_cli."
     },
     {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_hyperliquid_asset_ctxs_archive.py",
+      "module_name": "run_hyperliquid_asset_ctxs_archive",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_hyperliquid_btc_eth_ml_atr_2025_window_smoke_v0.py",
       "module_name": "run_hyperliquid_btc_eth_ml_atr_2025_window_smoke_v0",
       "category": "canonical_cli",
@@ -1615,6 +1550,19 @@
       "notes": "Legacy CLI moved under runners/legacy_cli."
     },
     {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_index.py",
+      "module_name": "run_index",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_lead_lag.py",
       "module_name": "run_lead_lag",
       "category": "canonical_cli",
@@ -1623,6 +1571,19 @@
       "migration_unit": "unit28",
       "compatibility_wrapper_required": false,
       "paired_cli": "examples/strategies/venue_agnostic_signal_observer/lead_lag.py",
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_lead_lag_heatmap.py",
+      "module_name": "run_lead_lag_heatmap",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
       "registry_key": null,
       "cli_spec_key": null,
       "notes": "Legacy CLI moved under runners/legacy_cli."
@@ -1732,6 +1693,32 @@
       "notes": "Canonical legacy CLI entrypoint under runners/legacy_cli."
     },
     {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_mcpt_export.py",
+      "module_name": "run_mcpt_export",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_permutation_null.py",
+      "module_name": "run_permutation_null",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_polymarket_btc_updown_liquidity_probe.py",
       "module_name": "run_polymarket_btc_updown_liquidity_probe",
       "category": "canonical_cli",
@@ -1740,6 +1727,19 @@
       "migration_unit": "unit28",
       "compatibility_wrapper_required": false,
       "paired_cli": "examples/strategies/venue_agnostic_signal_observer/polymarket_btc_updown_liquidity_probe.py",
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Legacy CLI moved under runners/legacy_cli."
+    },
+    {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_report_corpus.py",
+      "module_name": "run_report_corpus",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
       "registry_key": null,
       "cli_spec_key": null,
       "notes": "Legacy CLI moved under runners/legacy_cli."

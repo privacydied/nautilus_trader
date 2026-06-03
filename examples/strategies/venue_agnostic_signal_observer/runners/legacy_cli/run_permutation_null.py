@@ -23,22 +23,23 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .permutation_null import (
+from ...permutation_null import (
     select_null_candidate_groups,
     compute_null_distribution,
     DEFAULT_COST_FLOOR_BPS,
     DEFAULT_MIN_EVENTS,
 )
-from .permutation_null_gpu import (
+from ...permutation_null_gpu import (
     check_cuda_available,
     compute_null_distribution_gpu,
     compute_null_distribution_multi_gpu,
     gpu_unavailable_diagnostic,
 )
-from .gpu_devices import parse_cuda_devices, validate_cuda_devices
-from .mcpt_export import _load_jsonl, _load_summary_json, _slugify
-from .artifact_metadata import build_metadata, get_metadata, get_metadata_field
+from ...gpu_devices import parse_cuda_devices, validate_cuda_devices
+from ...mcpt_export import _load_jsonl, _load_summary_json, _slugify
+from ...artifact_metadata import build_metadata, get_metadata, get_metadata_field
 from .run_derivatives_spot_lead_lag import load_capture_data
+from ._prog import set_legacy_prog
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Run permutation null tests on candidate signal groups from an evaluation report."
     )
+    set_legacy_prog(p, __name__)
     p.add_argument(
         "--capture-dir",
         type=str,
@@ -487,7 +489,7 @@ def main() -> None:
         # Also check from summary-level or symbols
         if not has_qm and source_symbol and target_symbol:
             try:
-                from .symbol_aliases import quote_mismatch as sym_qm
+                from ...symbol_aliases import quote_mismatch as sym_qm
                 has_qm = sym_qm(source_symbol, target_symbol)
             except (ValueError, ImportError):
                 pass

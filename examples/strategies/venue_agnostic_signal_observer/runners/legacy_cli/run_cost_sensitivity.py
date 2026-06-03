@@ -20,19 +20,21 @@ import json
 import sys
 from pathlib import Path
 
-from .cost_sensitivity import (
+from ...cost_sensitivity import (
     SAFETY_MODE,
     compute_cost_sensitivity,
     load_report_groups,
     write_cost_sensitivity_reports,
     DEFAULT_COST_LEVELS_BPS,
 )
+from ._prog import set_legacy_prog
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Cost-sensitivity / breakeven diagnostic for derivatives spot lead-lag reports.",
     )
+    set_legacy_prog(parser, __name__)
     parser.add_argument(
         "--report-dir",
         required=True,
