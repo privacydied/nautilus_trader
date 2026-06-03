@@ -33,11 +33,13 @@ EXPECTED_REGISTRY_KEYS = (
     "hyperliquid_cost_feasibility",
     "hyperliquid_oi_velocity_compression_phase0",
     "generic_altcoin_stress_regime_ablation_phase0b",
+    "generic_altcoin_stress_regime_ablation_phase0a",
 )
 EXPECTED_CLI_SPEC_KEYS = (
     "hyperliquid_cost_feasibility",
     "hyperliquid_oi_velocity_compression_phase0",
     "generic_altcoin_stress_regime_ablation_phase0b",
+    "generic_altcoin_stress_regime_ablation_phase0a",
 )
 _COST_KEY = "hyperliquid_cost_feasibility"
 _OI_KEY = "hyperliquid_oi_velocity_compression_phase0"
@@ -288,7 +290,7 @@ class TestRunnerCliSpecRegistryContract:
             )
             payload = json.loads(result.stdout)
             assert list(payload) == ["runners"]
-            assert len(payload["runners"]) == 4
+            assert len(payload["runners"]) == 5
             for runner in payload["runners"]:
                 assert "key" in runner
                 assert "cli_module" in runner

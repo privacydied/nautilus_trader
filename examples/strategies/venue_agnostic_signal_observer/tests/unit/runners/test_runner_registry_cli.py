@@ -26,6 +26,7 @@ _NODE_FILLS_KEY = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
 _COST_FEASIBILITY_KEY = "hyperliquid_cost_feasibility"
 _OI_KEY = "hyperliquid_oi_velocity_compression_phase0"
 _PHASE0B_KEY = "generic_altcoin_stress_regime_ablation_phase0b"
+_PHASE0A_KEY = "generic_altcoin_stress_regime_ablation_phase0a"
 _HEAVY_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
     "hypotheses.hyperliquid.node_fills_liq_reconstruction.runner"
@@ -93,7 +94,7 @@ class TestFilterSpecs:
         )
 
         specs = filter_specs(iter_runner_specs())
-        assert len(specs) == 4
+        assert len(specs) == 5
 
     def test_venue_filter_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -101,7 +102,7 @@ class TestFilterSpecs:
         )
 
         specs = filter_specs(iter_runner_specs(), venue="hyperliquid")
-        assert len(specs) == 4
+        assert len(specs) == 5
         assert all(spec.venue == "hyperliquid" for spec in specs)
 
     def test_venue_filter_no_match(self) -> None:
@@ -144,7 +145,7 @@ class TestFilterSpecs:
         )
 
         specs = filter_specs(iter_runner_specs(), tag="observer_only")
-        assert len(specs) == 4
+        assert len(specs) == 5
 
     def test_tag_filter_no_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -164,7 +165,7 @@ class TestFilterSpecs:
             venue="hyperliquid",
             tag="observer_only",
         )
-        assert len(specs) == 4
+        assert len(specs) == 5
 
     def test_combined_filters_no_match(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -191,7 +192,7 @@ class TestFormatRunnerListText:
         )
 
         text = format_runner_list_text(iter_runner_specs())
-        assert text.startswith("Registered runner specs: 4")
+        assert text.startswith("Registered runner specs: 5")
 
     def test_output_ends_with_newline(self) -> None:
         from examples.strategies.venue_agnostic_signal_observer.runners.registry import (
@@ -262,12 +263,13 @@ class TestFormatJsonPayload:
         raw = format_json_payload(iter_runner_specs())
         data = json.loads(raw)
         assert "runners" in data
-        assert len(data["runners"]) == 4
+        assert len(data["runners"]) == 5
         assert [runner["key"] for runner in data["runners"]] == [
             _NODE_FILLS_KEY,
             _COST_FEASIBILITY_KEY,
             _OI_KEY,
             _PHASE0B_KEY,
+            _PHASE0A_KEY,
         ]
 
     def test_empty_list_json(self) -> None:
@@ -302,12 +304,13 @@ class TestRegistryCliMain:
         out = capsys.readouterr().out
         data = json.loads(out)
         assert "runners" in data
-        assert len(data["runners"]) == 4
+        assert len(data["runners"]) == 5
         assert [runner["key"] for runner in data["runners"]] == [
             _NODE_FILLS_KEY,
             _COST_FEASIBILITY_KEY,
             _OI_KEY,
             _PHASE0B_KEY,
+            _PHASE0A_KEY,
         ]
 
     def test_key_detail(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -349,12 +352,13 @@ class TestRegistryCliMain:
         rc = main(["--venue", "hyperliquid", "--json"])
         assert rc == 0
         data = json.loads(capsys.readouterr().out)
-        assert len(data["runners"]) == 4
+        assert len(data["runners"]) == 5
         assert [runner["key"] for runner in data["runners"]] == [
             _NODE_FILLS_KEY,
             _COST_FEASIBILITY_KEY,
             _OI_KEY,
             _PHASE0B_KEY,
+            _PHASE0A_KEY,
         ]
 
     def test_venue_filter_empty(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -381,7 +385,7 @@ class TestRegistryCliMain:
         rc = main(["--tag", "observer_only", "--json"])
         assert rc == 0
         data = json.loads(capsys.readouterr().out)
-        assert len(data["runners"]) == 4
+        assert len(data["runners"]) == 5
 
     def test_tag_filter_empty(self, capsys: pytest.CaptureFixture[str]) -> None:
         rc = main(["--tag", "nonexistent", "--json"])

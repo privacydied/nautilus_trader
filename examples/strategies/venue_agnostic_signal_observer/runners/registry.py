@@ -15,6 +15,9 @@ from examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.c
 from examples.strategies.venue_agnostic_signal_observer.hypotheses.hyperliquid.oi_velocity_compression_phase0.metadata import (
     METADATA as HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_METADATA,
 )
+from examples.strategies.venue_agnostic_signal_observer.hypotheses.legacy.generic_altcoin_stress_regime_ablation_phase0a.metadata import (
+    METADATA as GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA,
+)
 from examples.strategies.venue_agnostic_signal_observer.hypotheses.legacy.generic_altcoin_stress_regime_ablation_phase0b.metadata import (
     METADATA as GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0B_METADATA,
 )
@@ -201,6 +204,23 @@ GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0B = RunnerSpec(
 )
 
 
+# The packaged Phase 0A study uses the same dedicated metadata dataclass style as
+# Phase 0B (no ``phase`` field), so its spec is built directly from the metadata
+# string fields rather than via ``from_hypothesis_metadata``.
+GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A = RunnerSpec(
+    key=GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA.key,
+    family=GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA.family,
+    venue=GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA.venue,
+    study_id=GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA.study_id,
+    description=GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA.description,
+    cli_module=GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA.cli_module,
+    implementation_module=GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA.implementation_module,
+    package_module=GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA.package_module,
+    legacy_module=GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA.legacy_module,
+    tags=GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_METADATA.tags,
+)
+
+
 # ---------------------------------------------------------------------------
 # Registry internals
 # ---------------------------------------------------------------------------
@@ -210,6 +230,7 @@ _REGISTERED_SPECS: tuple[RunnerSpec, ...] = (
     HYPERLIQUID_COST_FEASIBILITY,
     HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0,
     GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0B,
+    GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A,
 )
 
 

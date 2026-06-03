@@ -40,11 +40,13 @@ _EXPECTED_RUNNER_KEYS = (
     "hyperliquid_cost_feasibility",
     "hyperliquid_oi_velocity_compression_phase0",
     "generic_altcoin_stress_regime_ablation_phase0b",
+    "generic_altcoin_stress_regime_ablation_phase0a",
 )
 _EXPECTED_CLI_SPEC_KEYS = (
     "hyperliquid_cost_feasibility",
     "hyperliquid_oi_velocity_compression_phase0",
     "generic_altcoin_stress_regime_ablation_phase0b",
+    "generic_altcoin_stress_regime_ablation_phase0a",
 )
 _HELP_DIRS = (
     Path("examples/strategies/venue_agnostic_signal_observer/reports"),

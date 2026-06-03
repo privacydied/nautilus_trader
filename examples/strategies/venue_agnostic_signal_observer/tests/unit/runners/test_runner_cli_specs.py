@@ -13,6 +13,7 @@ from examples.strategies.venue_agnostic_signal_observer.runners.cli_contract imp
 )
 from examples.strategies.venue_agnostic_signal_observer.runners.cli_specs import (
     ALL_RUNNER_CLI_SPECS,
+    GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_CLI_SPEC,
     GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0B_CLI_SPEC,
     HYPERLIQUID_COST_FEASIBILITY_CLI_SPEC,
     HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC,
@@ -24,6 +25,7 @@ from examples.strategies.venue_agnostic_signal_observer.runners.cli_specs import
 _COST_KEY = "hyperliquid_cost_feasibility"
 _OI_KEY = "hyperliquid_oi_velocity_compression_phase0"
 _PHASE0B_KEY = "generic_altcoin_stress_regime_ablation_phase0b"
+_PHASE0A_KEY = "generic_altcoin_stress_regime_ablation_phase0a"
 _ENTRY_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
     "run_hyperliquid_cost_feasibility"
@@ -119,13 +121,14 @@ class TestCliSpecsCatalog:
         assert isinstance(ALL_RUNNER_CLI_SPECS, tuple)
 
     def test_catalog_contains_exactly_three_specs_in_unit16(self) -> None:
-        assert len(ALL_RUNNER_CLI_SPECS) == 3
+        assert len(ALL_RUNNER_CLI_SPECS) == 4
 
     def test_keys_are_hyperliquid_cost_feasibility_and_oi_velocity(self) -> None:
         assert tuple(spec.key for spec in ALL_RUNNER_CLI_SPECS) == (
             _COST_KEY,
             _OI_KEY,
             _PHASE0B_KEY,
+            _PHASE0A_KEY,
         )
 
     def test_cost_feasibility_spec_validates_under_validate_runner_cli_spec(self) -> None:
@@ -249,6 +252,7 @@ class TestCliSpecsCatalog:
             HYPERLIQUID_COST_FEASIBILITY_CLI_SPEC,
             HYPERLIQUID_OI_VELOCITY_COMPRESSION_PHASE0_CLI_SPEC,
             GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0B_CLI_SPEC,
+            GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0A_CLI_SPEC,
         )
 
     def test_phase0b_spec_is_level1_help_safe_only(self) -> None:

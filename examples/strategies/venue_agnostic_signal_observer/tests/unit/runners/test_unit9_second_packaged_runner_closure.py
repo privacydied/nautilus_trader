@@ -22,6 +22,7 @@ _NODE_FILLS_KEY = "hyperliquid_node_fills_liq_reconstruction_phase_minus1_v0"
 _COST_KEY = "hyperliquid_cost_feasibility"
 _OI_KEY = "hyperliquid_oi_velocity_compression_phase0"
 _PHASE0B_KEY = "generic_altcoin_stress_regime_ablation_phase0b"
+_PHASE0A_KEY = "generic_altcoin_stress_regime_ablation_phase0a"
 _OI_PACKAGE_MODULE = (
     "examples.strategies.venue_agnostic_signal_observer."
     "hypotheses.hyperliquid.oi_velocity_compression_phase0"
@@ -71,20 +72,22 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 class TestUnit9SecondPackagedRunnerClosure:
     def test_registered_runner_spec_count_and_keys_are_exact(self) -> None:
         specs = iter_runner_specs()
-        assert len(specs) == 4
+        assert len(specs) == 5
         assert tuple(spec.key for spec in specs) == (
             _NODE_FILLS_KEY,
             _COST_KEY,
             _OI_KEY,
             _PHASE0B_KEY,
+            _PHASE0A_KEY,
         )
 
     def test_cli_spec_catalog_count_and_keys_are_exact(self) -> None:
-        assert len(ALL_RUNNER_CLI_SPECS) == 3
+        assert len(ALL_RUNNER_CLI_SPECS) == 4
         assert tuple(spec.key for spec in ALL_RUNNER_CLI_SPECS) == (
             _COST_KEY,
             _OI_KEY,
             _PHASE0B_KEY,
+            _PHASE0A_KEY,
         )
 
     def test_node_fills_still_intentionally_has_no_cli_spec(self) -> None:
