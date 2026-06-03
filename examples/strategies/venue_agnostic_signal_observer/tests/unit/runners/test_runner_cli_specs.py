@@ -256,12 +256,16 @@ class TestCliSpecsCatalog:
         )
 
     def test_phase0b_spec_is_level1_help_safe_only(self) -> None:
+        # Promoted to Level-2 callable metadata in Unit 20 (main_callable exposed).
         spec = GENERIC_ALTCOIN_STRESS_REGIME_ABLATION_PHASE0B_CLI_SPEC
         assert spec.key == _PHASE0B_KEY
-        assert spec.level is RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA
-        assert spec.level is not RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES
+        assert spec.level is RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES
+        assert spec.level is not RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA
         assert spec.risk is RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY
-        assert spec.main_callable is None
+        assert spec.main_callable == (
+            "examples.strategies.venue_agnostic_signal_observer."
+            "run_generic_altcoin_stress_regime_ablation_phase0b:main"
+        )
         assert spec.build_parser_callable is None
         assert spec.registered is True
         assert spec.supports_help_only is True

@@ -131,6 +131,7 @@ def test_phase0b_runner_spec_is_registered_from_metadata() -> None:
 
 
 def test_phase0b_cli_spec_is_level1_help_safe_only() -> None:
+    # Promoted to Level-2 callable metadata in Unit 20 (main_callable exposed).
     from examples.strategies.venue_agnostic_signal_observer.runners.cli_specs import (
         get_runner_cli_spec,
         iter_runner_cli_specs,
@@ -142,10 +143,13 @@ def test_phase0b_cli_spec_is_level1_help_safe_only() -> None:
 
     spec = get_runner_cli_spec(_PHASE0B_KEY)
     assert spec is not None
-    assert spec.level is RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA
-    assert spec.level is not RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES
+    assert spec.level is RunnerCliLevel.LEVEL_2_EXPOSES_CALLABLES
+    assert spec.level is not RunnerCliLevel.LEVEL_1_HELP_SAFE_METADATA
     assert spec.risk is RunnerCliRisk.THIN_CLI_WITH_SAFE_HELP_ONLY
-    assert spec.main_callable is None
+    assert spec.main_callable == (
+        "examples.strategies.venue_agnostic_signal_observer."
+        "run_generic_altcoin_stress_regime_ablation_phase0b:main"
+    )
     assert spec.build_parser_callable is None
     assert spec.registered is True
     assert spec.observer_only is True
