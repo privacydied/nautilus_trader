@@ -434,15 +434,15 @@
     {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/hip3_flx_stale_oracle_funding_bias_phase_minus2_v0.py",
       "module_name": "hip3_flx_stale_oracle_funding_bias_phase_minus2_v0",
-      "category": "hypothesis_module",
-      "status": "move_to_hypothesis_candidate",
+      "category": "legacy_compat_wrapper",
+      "status": "already_packaged_wrapper",
       "target_package": "examples/strategies/venue_agnostic_signal_observer/hypotheses/legacy/hip3_flx_stale_oracle_funding_bias_phase_minus2_v0",
-      "migration_unit": "unit12_candidate",
+      "migration_unit": "trackD_candidate",
       "compatibility_wrapper_required": true,
       "paired_cli": "examples/strategies/venue_agnostic_signal_observer/run_hip3_flx_stale_oracle_funding_bias_phase_minus2_v0.py",
       "registry_key": null,
       "cli_spec_key": null,
-      "notes": "Standalone study module candidate for future package migration."
+      "notes": "Track D packaged implementation under hypotheses/legacy/hip3_flx_stale_oracle_funding_bias_phase_minus2_v0; legacy root path retained as compatibility wrapper re-exporting packaged runner symbols. No registry/CLI-spec registration (observer-only candidate)."
     },
     {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/hip3_hl_oracle_audit.py",
