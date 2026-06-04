@@ -46,7 +46,7 @@ class TestRunPaperPromotionCLI:
             [
                 sys.executable,
                 "-m",
-                "examples.strategies.venue_agnostic_signal_observer.run_paper_promotion",
+                "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_paper_promotion",
                 "--help",
             ],
             capture_output=True,
@@ -75,7 +75,7 @@ class TestRunPaperPromotionCLI:
         cmd = [
             sys.executable,
             "-m",
-            "examples.strategies.venue_agnostic_signal_observer.run_paper_promotion",
+            "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_paper_promotion",
             "--precommitment-hash",
             "abc123",
             "--precommitment-dir",
@@ -103,7 +103,7 @@ class TestRunPaperPromotionCLI:
 
         path = Path(
             __file__
-        ).parent.parent / "run_paper_promotion.py"
+        ).parent.parent / "runners" / "legacy_cli" / "run_paper_promotion.py"
         assert path.is_file()
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
@@ -118,7 +118,7 @@ class TestRunPaperPromotionCLI:
 
         path = Path(
             __file__
-        ).parent.parent / "run_paper_promotion.py"
+        ).parent.parent / "runners" / "legacy_cli" / "run_paper_promotion.py"
         assert path.is_file()
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):

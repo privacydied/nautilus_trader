@@ -7,10 +7,13 @@ Local file-fed simulated-paper ledger only.
 """
 
 import argparse
+from ._prog import set_legacy_prog
 import sys
 from pathlib import Path
 
-_here = Path(__file__).resolve().parent
+# File moved under runners/legacy_cli; the paired algorithm module still lives
+# at the package root, so resolve sys.path to the package root (parents[2]).
+_here = Path(__file__).resolve().parents[2]
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 
@@ -27,6 +30,7 @@ def _parse_args(argv=None):
         description="Hyperliquid BTC/ETH ML+ATR Paper v0 — simulated-paper diagnostic (Task A)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    set_legacy_prog(p)
 
     p.add_argument("--model-bundle", required=True, type=Path)
     p.add_argument("--bars-path", required=True, type=Path)

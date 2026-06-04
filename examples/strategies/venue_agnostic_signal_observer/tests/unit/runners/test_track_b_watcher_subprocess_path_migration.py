@@ -44,7 +44,8 @@ _EXPECTED_HELP_LINES = {
     "run_report_corpus": 42,
 }
 _EXPECTED_SUBPROCESS_MODULES = {
-    "examples/strategies/venue_agnostic_signal_observer/run_stage2_gate_watcher.py": (
+    # run_stage2_gate_watcher.py was itself migrated under runners/legacy_cli by Track C.
+    "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_stage2_gate_watcher.py": (
         f"{_PACKAGE}.runners.legacy_cli.run_derivatives_spot_capture",
         f"{_PACKAGE}.runners.legacy_cli.run_derivatives_spot_lead_lag",
         f"{_PACKAGE}.runners.legacy_cli.run_cost_sensitivity",
@@ -96,8 +97,10 @@ def test_track_b_targets_are_moved_and_root_removed() -> None:
     assert validation.stale == ()
     assert ledger_validation.missing_paths == ()
     assert ledger_validation.stale_paths == ()
-    assert len(root_run_files) == 9
-    assert len(moved_run_files) == 56
+    # Global aggregate counts move as later tracks migrate more CLIs
+    # (Track C migrated 6 paper/conductor/observer CLIs: root 9->3, moved 56->62).
+    assert len(root_run_files) == 3
+    assert len(moved_run_files) == 62
 
     for key in _WATCHER_TARGETS:
         spec = specs[key]
@@ -125,7 +128,7 @@ def test_track_b_retained_blocker_counts_are_reduced_to_non_watcher_entries() ->
     retained_primary = tuple(spec for spec in primary_specs if not spec.root_removed)
     retained_blockers = Counter(spec.blocker for spec in retained_primary if spec.blocker)
     assert dict(retained_blockers) == {
-        "forbidden_behavior_area": 7,
+        "forbidden_behavior_area": 1,
         "shared_infrastructure_not_cli": 1,
         "scaffold_forbidden_term_collision": 1,
     }

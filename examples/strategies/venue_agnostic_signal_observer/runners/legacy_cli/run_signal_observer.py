@@ -8,6 +8,7 @@ Usage (real CSV data):
     python run_signal_observer.py --bars-csv data.csv --signals-csv signals.csv --out reports/signal_observer
 """
 import argparse
+from ._prog import set_legacy_prog
 import math
 import sys
 from pathlib import Path
@@ -25,6 +26,7 @@ from examples.strategies.venue_agnostic_signal_observer.reports import write_out
 
 def main():
     parser = argparse.ArgumentParser(description="Venue-agnostic signal observer")
+    set_legacy_prog(parser)
     parser.add_argument("--synthetic", action="store_true", help="Run deterministic synthetic smoke test")
     parser.add_argument("--signals-csv", type=str, default=None, help="Path to signals CSV")
     parser.add_argument("--bars-csv", type=str, default=None, help="Path to target bars CSV")

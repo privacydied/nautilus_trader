@@ -51,7 +51,7 @@ class TestRunConductorCLI:
             [
                 sys.executable,
                 "-m",
-                "examples.strategies.venue_agnostic_signal_observer.run_conductor",
+                "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_conductor",
                 "--help",
             ],
             capture_output=True,
@@ -88,7 +88,7 @@ class TestRunConductorCLI:
             [
                 sys.executable,
                 "-m",
-                "examples.strategies.venue_agnostic_signal_observer.run_conductor",
+                "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_conductor",
                 "--config",
                 str(config_path),
                 "--once",
