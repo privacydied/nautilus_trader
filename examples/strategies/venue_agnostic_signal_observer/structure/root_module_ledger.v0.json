@@ -978,6 +978,19 @@
       "notes": "Canonical legacy CLI retained for compatibility and cataloging."
     },
     {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_hyperliquid_btc_eth_ml_atr_paper_v0.py",
+      "module_name": "run_hyperliquid_btc_eth_ml_atr_paper_v0",
+      "category": "canonical_cli",
+      "status": "canonical_legacy_cli",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Retained at root: imports paper.* modules; scaffold safety contract forbids paper imports under runners/."
+    },
+    {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/run_hyperliquid_observer.py",
       "module_name": "run_hyperliquid_observer",
       "category": "canonical_cli",
@@ -989,6 +1002,32 @@
       "registry_key": null,
       "cli_spec_key": null,
       "notes": "Canonical legacy CLI retained for compatibility and cataloging."
+    },
+    {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_paper_promotion.py",
+      "module_name": "run_paper_promotion",
+      "category": "canonical_cli",
+      "status": "quarantine_review_candidate",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Retained at root: imports paper.* modules; scaffold safety contract forbids paper imports under runners/."
+    },
+    {
+      "root_path": "examples/strategies/venue_agnostic_signal_observer/run_paper_refalsification.py",
+      "module_name": "run_paper_refalsification",
+      "category": "canonical_cli",
+      "status": "quarantine_review_candidate",
+      "target_package": null,
+      "migration_unit": null,
+      "compatibility_wrapper_required": false,
+      "paired_cli": null,
+      "registry_key": null,
+      "cli_spec_key": null,
+      "notes": "Retained at root: imports paper.* modules; scaffold safety contract forbids paper imports under runners/."
     },
     {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_candidate_falsification.py",
@@ -1368,19 +1407,6 @@
       "notes": "Legacy CLI moved under runners/legacy_cli."
     },
     {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_hyperliquid_btc_eth_ml_atr_paper_v0.py",
-      "module_name": "run_hyperliquid_btc_eth_ml_atr_paper_v0",
-      "category": "canonical_cli",
-      "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Legacy CLI moved under runners/legacy_cli."
-    },
-    {
       "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_hyperliquid_btc_eth_ml_atr_representative_real_strategy_v0.py",
       "module_name": "run_hyperliquid_btc_eth_ml_atr_representative_real_strategy_v0",
       "category": "canonical_cli",
@@ -1645,32 +1671,6 @@
       "module_name": "run_mcpt_export",
       "category": "canonical_cli",
       "status": "canonical_legacy_cli",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Legacy CLI moved under runners/legacy_cli."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_paper_promotion.py",
-      "module_name": "run_paper_promotion",
-      "category": "canonical_cli",
-      "status": "quarantine_review_candidate",
-      "target_package": null,
-      "migration_unit": null,
-      "compatibility_wrapper_required": false,
-      "paired_cli": null,
-      "registry_key": null,
-      "cli_spec_key": null,
-      "notes": "Legacy CLI moved under runners/legacy_cli."
-    },
-    {
-      "root_path": "examples/strategies/venue_agnostic_signal_observer/runners/legacy_cli/run_paper_refalsification.py",
-      "module_name": "run_paper_refalsification",
-      "category": "canonical_cli",
-      "status": "quarantine_review_candidate",
       "target_package": null,
       "migration_unit": null,
       "compatibility_wrapper_required": false,

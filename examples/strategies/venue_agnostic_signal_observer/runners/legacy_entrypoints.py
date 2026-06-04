@@ -67,9 +67,16 @@ _ROOT_RETAINED_BLOCKERS: dict[str, str] = {
     # imports psutil (unavailable here, so --help parity cannot be verified)
     # and because it is wired into a live systemd unit
     # (systemd/nautilus-hyperliquid-observer-v0.service) that must not break.
-    # The other paper/conductor/observer CLIs were migrated under
-    # runners/legacy_cli by Track C (help-safe, no live coupling).
+    # Track C migrated the help-safe, scaffold-clean CLIs (run_conductor,
+    # run_signal_observer, run_stage2_gate_watcher) under runners/legacy_cli.
     "run_hyperliquid_observer.py": "forbidden_behavior_area",
+    # Paper CLIs import paper.* modules. The scaffold safety contract
+    # (test_scaffold_modules_do_not_import_forbidden_terms) forbids any module
+    # under runners/ from importing a "paper"-named target, so these cannot be
+    # migrated under runners/legacy_cli without weakening that safety test.
+    "run_paper_promotion.py": "scaffold_forbidden_term_collision",
+    "run_paper_refalsification.py": "scaffold_forbidden_term_collision",
+    "run_hyperliquid_btc_eth_ml_atr_paper_v0.py": "scaffold_forbidden_term_collision",
 }
 
 

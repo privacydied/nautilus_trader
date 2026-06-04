@@ -39,15 +39,20 @@ _REPO_ROOT = Path(__file__).resolve().parents[6]
 # Targets migrated under runners/legacy_cli by Track C (help-safe, no live coupling).
 _MOVED_TARGETS = {
     "run_conductor": 12,
-    "run_hyperliquid_btc_eth_ml_atr_paper_v0": 37,
-    "run_paper_promotion": 25,
-    "run_paper_refalsification": 21,
     "run_signal_observer": 19,
     "run_stage2_gate_watcher": 61,
 }
-# Retained at root: psutil import (cannot verify --help here) AND wired into a
-# live systemd unit (systemd/nautilus-hyperliquid-observer-v0.service).
+# Retained at root with forbidden_behavior_area: psutil import (cannot verify
+# --help here) AND wired into a live systemd unit
+# (systemd/nautilus-hyperliquid-observer-v0.service).
 _RETAINED_TARGET = "run_hyperliquid_observer"
+# Retained at root with scaffold_forbidden_term_collision: these import paper.*
+# modules, which the scaffold safety contract forbids under runners/.
+_RETAINED_PAPER_TARGETS = (
+    "run_paper_promotion",
+    "run_paper_refalsification",
+    "run_hyperliquid_btc_eth_ml_atr_paper_v0",
+)
 
 
 def _run_help(module: str) -> subprocess.CompletedProcess[str]:
@@ -91,20 +96,29 @@ def test_track_c_retained_observer_stays_blocked_at_root() -> None:
     assert spec.path == f"{_PACKAGE.replace('.', '/')}/{_RETAINED_TARGET}.py"
 
 
+def test_track_c_retained_paper_clis_blocked_by_scaffold_collision() -> None:
+    for key in _RETAINED_PAPER_TARGETS:
+        spec = get_legacy_entrypoint(key)
+        assert spec is not None, key
+        assert spec.root_removed is False, key
+        assert spec.blocker == "scaffold_forbidden_term_collision", key
+        assert spec.path == f"{_PACKAGE.replace('.', '/')}/{key}.py", key
+
+
 def test_track_c_retained_blocker_distribution() -> None:
     counts = Counter(spec.blocker for spec in iter_root_retained_entrypoints())
     assert dict(counts) == {
         "forbidden_behavior_area": 1,
         "shared_infrastructure_not_cli": 1,
-        "scaffold_forbidden_term_collision": 1,
+        "scaffold_forbidden_term_collision": 4,
     }
 
 
 def test_track_c_counts_after_migration() -> None:
     root_run_files = list_actual_run_py_files()
     moved_run_files = list_moved_run_py_files()
-    assert len(root_run_files) == 3
-    assert len(moved_run_files) == 62
+    assert len(root_run_files) == 6
+    assert len(moved_run_files) == 59
 
 
 @pytest.mark.parametrize("key", sorted(_MOVED_TARGETS))
@@ -128,8 +142,9 @@ def test_track_c_help_matches_pre_move_line_counts(key: str, expected_lines: int
 
 
 def test_track_c_paper_promotion_help_is_default_deny_phrasing() -> None:
+    # run_paper_promotion is retained at root (scaffold_forbidden_term_collision).
     # Help-only: must not contain any indication of live/enabled execution.
-    proc = _run_help(f"{_PACKAGE}.runners.legacy_cli.run_paper_promotion")
+    proc = _run_help(f"{_PACKAGE}.run_paper_promotion")
     assert proc.returncode == 0, proc.stderr
     lowered = proc.stdout.lower()
     for forbidden in ("submit_order", "place_order", "private_key", "api_secret"):
