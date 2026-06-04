@@ -58,7 +58,7 @@ _EXPECTED_CLI_MAIN_CALLABLES = {
 _EXPECTED_REMAINING_BLOCKERS = {
     "forbidden_behavior_area": 1,
     "shared_infrastructure_not_cli": 1,
-    "scaffold_forbidden_term_collision": 1,
+    "scaffold_forbidden_term_collision": 4,
 }
 
 
@@ -131,13 +131,13 @@ def test_counts_and_catalog_state_match_track_a_expectations() -> None:
     retained_primary = tuple(spec for spec in primary_entries if not spec.root_removed)
     retained_blockers = Counter(spec.blocker for spec in retained_primary if spec.blocker)
 
-    assert len(root_run_files) == 3
-    assert len(moved_run_files) == 62
+    assert len(root_run_files) == 6
+    assert len(moved_run_files) == 59
     assert retained_blockers["metadata_pinned_cli_module"] == 0
     assert retained_blockers["shared_infrastructure_not_cli"] == 1
     assert retained_blockers["watcher_systemd_subprocess_coupling"] == 0
     assert retained_blockers["forbidden_behavior_area"] == 1
-    assert retained_blockers["scaffold_forbidden_term_collision"] == 1
+    assert retained_blockers["scaffold_forbidden_term_collision"] == 4
 
 def test_legacy_entrypoint_catalog_marks_track_a_targets_as_root_removed() -> None:
     for module_name in _TARGET_MODULES:

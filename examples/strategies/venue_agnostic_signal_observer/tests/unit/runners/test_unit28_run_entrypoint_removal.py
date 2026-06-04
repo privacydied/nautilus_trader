@@ -29,7 +29,7 @@ _LEGACY_CLI_MODULE_PREFIX = f"{_PKG}.runners.legacy_cli.run_"
 _EXPECTED_RETAINED_BLOCKERS = {
     "shared_infrastructure_not_cli": 1,
     "forbidden_behavior_area": 1,
-    "scaffold_forbidden_term_collision": 1,
+    "scaffold_forbidden_term_collision": 4,
 }
 _MOVED_HELP_SAFE_SAMPLE = ("run_lead_lag", "run_tick_lead_lag", "run_dex_cex_dislocation")
 _REMOVED_OLD_ROOT_MODULES = (
@@ -40,7 +40,7 @@ _REMOVED_OLD_ROOT_MODULES = (
 
 def test_moved_files_live_only_under_legacy_cli() -> None:
     moved = list_moved_run_py_files()
-    assert len(moved) == 62, moved
+    assert len(moved) == 59, moved
     for path in moved:
         assert path.startswith(_LEGACY_CLI_PREFIX), path
 
@@ -50,7 +50,7 @@ def test_root_run_files_are_all_safety_blocked() -> None:
     # Root removal did NOT go to zero by design: every remaining file is blocked.
     assert root  # non-empty by design
     retained = iter_root_retained_entrypoints()
-    assert len(retained) == len(root) == 3, (len(retained), len(root))
+    assert len(retained) == len(root) == 6, (len(retained), len(root))
     for spec in retained:
         assert spec.root_removed is False, spec.key
         assert spec.blocker is not None, spec.key

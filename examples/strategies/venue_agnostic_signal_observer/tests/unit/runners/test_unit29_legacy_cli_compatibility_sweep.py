@@ -33,7 +33,7 @@ _ROOT_PREFIX = "examples/strategies/venue_agnostic_signal_observer/"
 _EXPECTED_RETAINED_BLOCKERS = {
     "shared_infrastructure_not_cli": 1,
     "forbidden_behavior_area": 1,
-    "scaffold_forbidden_term_collision": 1,
+    "scaffold_forbidden_term_collision": 4,
 }
 _METADATA_PINNED_ROOT_FILES = (
     "run_generic_altcoin_stress_regime_ablation_phase0a.py",
@@ -185,8 +185,8 @@ def test_catalog_counts_and_blocker_categories_match_unit28_surface() -> None:
 
     assert not validation.missing, validation.missing
     assert not validation.stale, validation.stale
-    assert len(moved) == 62
-    assert len(retained) == 3
+    assert len(moved) == 59
+    assert len(retained) == 6
     assert dict(blocker_counts) == _EXPECTED_RETAINED_BLOCKERS
 
 
@@ -307,11 +307,11 @@ def test_repo_owned_old_root_references_are_controlled() -> None:
     assert not violations, violations
 
 
-def test_no_root_count_zero_claim_root_count_is_3_by_design() -> None:
+def test_no_root_count_zero_claim_root_count_is_6_by_design() -> None:
     root_files = list_actual_run_py_files()
     moved_files = list_moved_run_py_files()
-    assert len(root_files) == 3
-    assert len(moved_files) == 62
+    assert len(root_files) == 6
+    assert len(moved_files) == 59
     assert len(root_files) != 0
 
 

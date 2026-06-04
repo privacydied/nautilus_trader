@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import argparse
-from ._prog import set_legacy_prog
 import sys
 from pathlib import Path
 
-from ...paper.refalsification import (
+from .paper.refalsification import (
     RefalsificationConfig,
     run_refalsification_once,
 )
@@ -17,7 +16,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run paper strategy re-falsification pass"
     )
-    set_legacy_prog(parser)
     parser.add_argument(
         "--registry-dir",
         type=str,

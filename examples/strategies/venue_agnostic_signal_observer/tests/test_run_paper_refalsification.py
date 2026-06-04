@@ -15,7 +15,7 @@ class TestRunPaperRefalsificationCLI:
             [
                 sys.executable,
                 "-m",
-                "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_paper_refalsification",
+                "examples.strategies.venue_agnostic_signal_observer.run_paper_refalsification",
                 "--help",
             ],
             capture_output=True,
@@ -35,7 +35,7 @@ class TestRunPaperRefalsificationCLI:
         cmd = [
             sys.executable,
             "-m",
-            "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_paper_refalsification",
+            "examples.strategies.venue_agnostic_signal_observer.run_paper_refalsification",
             "--registry-dir",
             str(registry_dir),
             "--ledger-path",
@@ -55,7 +55,7 @@ class TestRunPaperRefalsificationCLI:
 
         path = Path(
             __file__
-        ).parent.parent / "runners" / "legacy_cli" / "run_paper_refalsification.py"
+        ).parent.parent / "run_paper_refalsification.py"
         assert path.is_file()
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
@@ -112,7 +112,7 @@ class TestRunPaperRefalsificationCLI:
         cmd = [
             sys.executable,
             "-m",
-            "examples.strategies.venue_agnostic_signal_observer.runners.legacy_cli.run_paper_refalsification",
+            "examples.strategies.venue_agnostic_signal_observer.run_paper_refalsification",
             "--registry-dir",
             str(registry_dir),
             "--ledger-path",

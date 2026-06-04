@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import argparse
-from ._prog import set_legacy_prog
 import sys
 from pathlib import Path
 
-from ...paper.auto_promotion import evaluate_promotion
-from ...paper.gate_verifier import GateResult
+from .paper.auto_promotion import evaluate_promotion
+from .paper.gate_verifier import GateResult
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluate a precommitment for paper strategy promotion"
     )
-    set_legacy_prog(parser)
     parser.add_argument(
         "--precommitment-hash",
         type=str,
@@ -64,7 +62,7 @@ def main() -> None:
     # Dry-run for paper promotion evaluates and reports without saving.
     # For simplicity, dry-run will skip the full evaluation pathway and just
     # run gate checks.
-    from ...paper.gate_verifier import (
+    from .paper.gate_verifier import (
         FrozenGateDecision,
         check_promotion_frozen,
         verify_promotion_gates,
@@ -81,7 +79,7 @@ def main() -> None:
     if args.dry_run:
         # Also show gate results
         # Read precommitment to extract target group_id for gate checks
-        from ...conductor.atomic_io import read_json
+        from .conductor.atomic_io import read_json
 
         try:
             pc_payload = read_json(

@@ -99,8 +99,8 @@ def test_track_b_targets_are_moved_and_root_removed() -> None:
     assert ledger_validation.stale_paths == ()
     # Global aggregate counts move as later tracks migrate more CLIs
     # (Track C migrated 6 paper/conductor/observer CLIs: root 9->3, moved 56->62).
-    assert len(root_run_files) == 3
-    assert len(moved_run_files) == 62
+    assert len(root_run_files) == 6
+    assert len(moved_run_files) == 59
 
     for key in _WATCHER_TARGETS:
         spec = specs[key]
@@ -130,7 +130,7 @@ def test_track_b_retained_blocker_counts_are_reduced_to_non_watcher_entries() ->
     assert dict(retained_blockers) == {
         "forbidden_behavior_area": 1,
         "shared_infrastructure_not_cli": 1,
-        "scaffold_forbidden_term_collision": 1,
+        "scaffold_forbidden_term_collision": 4,
     }
 
 
