@@ -9,12 +9,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from ._prog import set_legacy_prog
 import json
 import sys
 from pathlib import Path
 from typing import Any
 
-from .conductor.service import ConductorConfig, ConductorRuntimeState, run_conductor_once
+from ...conductor.service import ConductorConfig, ConductorRuntimeState, run_conductor_once
 
 
 def _normalize_config_path(p: str) -> str:
@@ -66,6 +67,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Conductor orchestration for venue-agnostic signal observer"
     )
+    set_legacy_prog(parser)
     parser.add_argument(
         "--config",
         type=str,

@@ -63,14 +63,13 @@ _ROOT_RETAINED_BLOCKERS: dict[str, str] = {
     # inside "recorder"); migrating under runners/ trips the core safety
     # contract scan. Retained at root to avoid weakening that safety test.
     "run_hip3_builder_dex_tradfi_forward_recorder_v0.py": "scaffold_forbidden_term_collision",
-    # Paper/conductor/observer/watcher behavior areas (forbidden to touch).
-    "run_conductor.py": "forbidden_behavior_area",
-    "run_hyperliquid_btc_eth_ml_atr_paper_v0.py": "forbidden_behavior_area",
+    # Paper/conductor/observer behavior area. Retained because the module
+    # imports psutil (unavailable here, so --help parity cannot be verified)
+    # and because it is wired into a live systemd unit
+    # (systemd/nautilus-hyperliquid-observer-v0.service) that must not break.
+    # The other paper/conductor/observer CLIs were migrated under
+    # runners/legacy_cli by Track C (help-safe, no live coupling).
     "run_hyperliquid_observer.py": "forbidden_behavior_area",
-    "run_paper_promotion.py": "forbidden_behavior_area",
-    "run_paper_refalsification.py": "forbidden_behavior_area",
-    "run_signal_observer.py": "forbidden_behavior_area",
-    "run_stage2_gate_watcher.py": "forbidden_behavior_area",
 }
 
 

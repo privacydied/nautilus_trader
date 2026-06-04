@@ -10,6 +10,7 @@ Public-data observer only. No auth, no orders, no private keys, no execution.
 from __future__ import annotations
 
 import argparse
+from ._prog import set_legacy_prog
 import json
 import logging
 import os
@@ -689,6 +690,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Stage 2 Gate Watcher: poll volatility gate and auto-start derivatives v2 pipeline.",
     )
+    set_legacy_prog(p)
     p.add_argument("--interval-seconds", type=int, default=30,
                     help="Seconds between gate checks. Default: 30.")
     p.add_argument("--max-runtime-seconds", type=int, default=0,
