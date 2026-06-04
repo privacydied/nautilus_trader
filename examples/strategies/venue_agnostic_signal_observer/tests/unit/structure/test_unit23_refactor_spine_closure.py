@@ -104,7 +104,9 @@ def test_run_py_entries_remain_canonical_legacy_entrypoints():
 
 def test_remaining_migration_candidates_explicit_and_nonempty():
     candidates = iter_entries_by_status("move_to_hypothesis_candidate")
-    assert len(candidates) == 3
+    # Track D packaged one candidate (hip3_flx_stale_oracle_funding_bias_phase_minus2_v0),
+    # leaving two standalone study-module candidates.
+    assert len(candidates) == 2
     for entry in candidates:
         assert entry.notes.strip()
 
